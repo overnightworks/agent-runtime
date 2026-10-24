@@ -95,10 +95,17 @@ def main(argv: list[str] | None = None) -> int:
     try:
         trust_bundle = config.mcp_trust_bundle()
         tls_context = None if trust_bundle is None else mcp_tls_context(trust_bundle)
+    except OSError as error:
+        print(
+            f"{REFUSAL_PREFIX}mcp.ca_file: cannot be loaded: {shown_text(str(error))}",
+            file=sys.stderr,
+        )
+        return EXIT_BAD_CONFIG
+    try:
         runners = installed_runners(config, tls_context, LoopClock())
     except OSError as error:
         print(
-            f"{REFUSAL_PREFIX}CA bundle cannot be loaded: {shown_text(str(error))}",
+            f"{REFUSAL_PREFIX}api.ca_file: cannot be loaded: {shown_text(str(error))}",
             file=sys.stderr,
         )
         return EXIT_BAD_CONFIG

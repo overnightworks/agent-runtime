@@ -32,7 +32,7 @@ def complete(response):
 @pytest.mark.parametrize("status", [200, 201, 299])
 @pytest.mark.parametrize("message", [{}, {"tool_calls": None}, {"tool_calls": []},
                                      {"function_call": None}])
-@pytest.mark.parametrize("text", ["answer", ""])
+@pytest.mark.parametrize("text", ["answer", " ", "\t\n"])
 def test_complete_text_accepts_only_checked_text(status, message, text):
     assert complete(httpx.Response(status, json=completion(text=text, **message))) == text
 
@@ -51,7 +51,7 @@ def malformed_completions():
     yield from [None, [], {}, {"choices": []}, {"choices": False}, {"choices": [None]},
                 {"choices": [{"message": []}]}, {"choices": [{}]}]
     for field, values in {
-        "content": [None, False, [], {}], "role": [None, "user", False],
+        "content": ["", None, False, [], {}], "role": [None, "user", False],
         "tool_calls": [False, {}, "", [{"function": {"arguments": "private"}}]],
         "function_call": [False, {}, "", {"name": "tool"}],
     }.items():
@@ -143,3 +143,41 @@ def test_released_sync_call_keeps_its_json_and_timeout_contract(monkeypatch):
     assert call_openai_compatible_once(
         provider="gateway", api_url="http://gateway/v1/chat/completions", api_key="synthetic",
         model="model", prompt="question", system="system", timeout=17) == "done"
+
+
+def caller_error():
+    request = httpx.Request("POST", "http://fake", headers={
+        "Authorization": "Bearer synthetic-ambient-secret"})
+    return httpx.ReadError("synthetic-ambient-secret", request=request)
+
+
+def assert_closed_refusal(error):
+    assert error.__context__ is None
+    assert error.__cause__ is None
+    assert "synthetic-ambient-secret" not in str(error)
+
+
+@pytest.mark.parametrize("status,body,reason", [
+    (503, b"unavailable", SafeRouteReasonCode.API_HTTP_ERROR),
+    (200, b"invalid json", SafeRouteReasonCode.API_PROTOCOL_ERROR),
+])
+def test_text_refusal_removes_active_caller_chain(status, body, reason):
+    async def run():
+        transport = httpx.MockTransport(lambda request: httpx.Response(status, content=body))
+        async with httpx.AsyncClient(transport=transport) as client:
+            try:
+                raise caller_error()
+            except httpx.ReadError:
+                with pytest.raises(ProviderUnavailableError) as raised:
+                    await complete_openai_compatible_text(
+                        client=client, provider="gateway", api_url="http://fake/v1/chat/completions",
+                        api_key="synthetic", model="model", system="system", messages=[])
+            assert_closed_refusal(raised.value)
+            assert raised.value.reason.code is reason
+    asyncio.run(run())
+
+
+def test_empty_completed_text_is_a_protocol_refusal():
+    with pytest.raises(ProviderUnavailableError) as raised:
+        complete(httpx.Response(201, json=completion(text="")))
+    assert raised.value.reason.code is SafeRouteReasonCode.API_PROTOCOL_ERROR

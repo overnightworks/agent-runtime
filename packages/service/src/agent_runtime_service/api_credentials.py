@@ -11,6 +11,7 @@ from types import MappingProxyType
 
 from pydantic import SecretStr
 
+from agent_runtime.errors import raise_without_chain
 from agent_runtime.secret_file import UnsoundSecretFile, read_secret_file
 
 
@@ -26,7 +27,8 @@ class ApiCredentials:
     def for_app(self, app: str) -> SecretStr:
         key = self.app_keys.get(app, self.shared_key)
         if key is None:
-            raise InvalidApiCredentials("No API credential is configured for this app.")
+            raise_without_chain(InvalidApiCredentials(
+                "No API credential is configured for this app."))
         return key
 
 
@@ -37,7 +39,7 @@ def read_api_credentials(path: Path, apps: frozenset[str]) -> ApiCredentials:
     except UnsoundSecretFile:
         credentials = None
     if credentials is None:
-        raise InvalidApiCredentials("API credential file is missing or invalid.")
+        raise_without_chain(InvalidApiCredentials("API credential file is missing or invalid."))
     return credentials
 
 

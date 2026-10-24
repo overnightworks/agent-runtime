@@ -13,6 +13,7 @@ from agent_runtime.errors import (
     ProviderUnavailableError,
     SafeRouteReasonCode,
     normalize_route_failure,
+    raise_without_chain,
 )
 from agent_runtime.events import StreamEvent
 from agent_runtime.tool_loop import (
@@ -232,8 +233,7 @@ async def complete_openai_compatible_text(
 ) -> str:
     """Return one completely checked, tool-free reply; the caller owns the client.
 
-    Failure is raised outside the handler so neither a transport exception nor a
-    JSON decoder's document remains reachable through the public exception chain.
+    Refusals discard transport, decoder and active caller exception chains.
     """
     try:
         response = await _request_chat(
@@ -249,7 +249,7 @@ async def complete_openai_compatible_text(
         failure = error.reason.code
     except RecursionError:
         failure = SafeRouteReasonCode.API_PROTOCOL_ERROR
-    raise ProviderUnavailableError(provider, "api", normalize_route_failure(failure))
+    raise_without_chain(ProviderUnavailableError(provider, "api", normalize_route_failure(failure)))
 
 
 def _completed_text(payload: Mapping[str, object], provider: str) -> str:
@@ -261,6 +261,7 @@ def _completed_text(payload: Mapping[str, object], provider: str) -> str:
     if (
         message.get("role") != "assistant"
         or not isinstance(content, str)
+        or not content
         or choices[0].get("finish_reason") != "stop"
         or (tools is not None and (not isinstance(tools, list) or tools))
         or message.get("function_call") is not None

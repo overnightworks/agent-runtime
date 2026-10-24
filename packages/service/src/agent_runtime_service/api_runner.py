@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator
 
 from httpx import AsyncClient
 
-from agent_runtime.errors import ProviderUnavailableError, SafeRouteReasonCode
+from agent_runtime.errors import ProviderUnavailableError, SafeRouteReasonCode, raise_without_chain
 from agent_runtime.events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime.openai_adapter import complete_openai_compatible_text
 from agent_runtime_service.api_credentials import InvalidApiCredentials, read_api_credentials
@@ -31,14 +31,14 @@ class ApiRunner:
     async def run(self, admitted: AdmittedRun) -> AsyncGenerator[StreamEvent, None]:
         assert isinstance(admitted.route, Api)
         if admitted.request.tools:
-            raise ValueError("The API route does not support tools.")
+            raise_without_chain(ValueError("The API route does not support tools."))
         try:
             credentials = read_api_credentials(self._config.credential_file, self._apps)
             key = credentials.for_app(admitted.app)
         except InvalidApiCredentials:
             key = None
         if key is None:
-            raise ApiUnavailable()
+            raise_without_chain(ApiUnavailable())
         failure = None
         try:
             async with AsyncClient(
@@ -57,13 +57,13 @@ class ApiRunner:
             assert error.reason is not None
             failure = error.reason.code
         if failure is SafeRouteReasonCode.API_HTTP_ERROR:
-            raise ApiUnavailable()
+            raise_without_chain(ApiUnavailable())
         if failure is not None:
-            raise ValueError("The API returned an invalid completion.")
+            raise_without_chain(ValueError("The API returned an invalid completion."))
         if key.get_secret_value() in text or (
             admitted.capability is not None and admitted.capability.appears_in(text.encode("utf-8"))
         ):
-            raise ValueError("The API returned protected credentials.")
+            raise_without_chain(ValueError("The API returned protected credentials."))
         if text:
             yield AssistantTextEvent(text=text)
         yield FinalEvent(text=text)

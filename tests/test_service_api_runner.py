@@ -22,7 +22,7 @@ from service_support import (
     without_cli,
 )
 from service_support import logging_state_snapshot as logging_state_snapshot
-from test_openai_adapter import malformed_completions
+from test_openai_adapter import assert_closed_refusal, caller_error, malformed_completions
 
 from agent_runtime.config import reset_config
 from agent_runtime_client.wire import AssistantText, Failed, FailureCode, Succeeded
@@ -600,3 +600,95 @@ def test_process_entry_installs_api_without_a_cli_version_probe(
     monkeypatch.setattr(uvicorn, "run", serve)
     assert cli.main(["--config", str(tmp_path / "service.toml")]) == 0
     assert isinstance(served[-1], Succeeded)
+
+
+@pytest.mark.parametrize("text", ["", " ", "\t\n"])
+def test_completed_text_preserves_the_wire_nonempty_boundary(tmp_path, monkeypatch, text):
+    config = configured(tmp_path)
+    clients = fake_gateway(monkeypatch, lambda request: httpx.Response(201, json=answer(text)))
+    events = decoded_events(asyncio.run(service_response(config)).content)
+    if text:
+        assert [event.type for event in events] == ["run_started", "assistant_text", "succeeded"]
+        assert events[1].text == events[-1].text == text
+    else:
+        assert [event.type for event in events] == ["run_started", "failed"]
+        assert events[-1].code is FailureCode.PROVIDER_ERROR
+    assert clients[0].is_closed
+
+
+@pytest.mark.parametrize("boundary", ["reader", "selection"])
+def test_credential_refusal_removes_active_caller_chain(tmp_path, boundary):
+    from agent_runtime_service.api_credentials import InvalidApiCredentials, read_api_credentials
+
+    path = credentials(tmp_path / "keys.json", {"app_keys": {"other": "synthetic"}})
+    loaded = read_api_credentials(path, frozenset({"app", "other"}))
+    if boundary == "reader":
+        path.write_text("invalid document")
+    try:
+        raise caller_error()
+    except httpx.ReadError:
+        with pytest.raises(InvalidApiCredentials) as raised:
+            if boundary == "reader":
+                read_api_credentials(path, frozenset({"app", "other"}))
+            else:
+                loaded.for_app("app")
+    assert_closed_refusal(raised.value)
+
+
+@pytest.mark.parametrize("scenario", ["tools", "credentials", "http", "protocol", "reflection"])
+@in_loop
+async def test_runner_refusal_removes_active_caller_chain(tmp_path, monkeypatch, scenario):
+    from dataclasses import replace
+    from uuid import uuid4
+
+    from service_support import alice_admitted_run
+
+    from agent_runtime_client.wire import RunRequest
+    from agent_runtime_service.routing import Api
+    from agent_runtime_service.runners import ApiUnavailable
+
+    config = configured(tmp_path)
+    body = run_body(tools={"read_song": "read_only"}) if scenario == "tools" else run_body()
+    admitted = replace(alice_admitted_run(uuid4()), request=RunRequest.model_validate(body),
+                       route=Api("synthetic"))
+    if scenario == "credentials":
+        config.api.credential_file.unlink()
+
+    def upstream(request):
+        assert scenario not in {"tools", "credentials"}
+        if scenario == "http":
+            return httpx.Response(503, content=b"unavailable")
+        if scenario == "protocol":
+            return httpx.Response(200, content=b"not-json")
+        return httpx.Response(200, json=answer("synthetic-gateway-key"))
+
+    clients = fake_gateway(monkeypatch, upstream)
+    events = api_runner.ApiRunner(config).run(admitted)
+    try:
+        expected = ApiUnavailable if scenario in {"credentials", "http"} else ValueError
+        try:
+            raise caller_error()
+        except httpx.ReadError:
+            with pytest.raises(expected) as raised:
+                await anext(events)
+        assert_closed_refusal(raised.value)
+    finally:
+        await events.aclose()
+    assert all(client.is_closed for client in clients)
+
+
+def test_api_ca_startup_refusal_names_its_own_configuration(tmp_path, monkeypatch, capsys):
+    from mcp_app_fake import TestAuthority
+
+    from agent_runtime_service import cli
+    from agent_runtime_service import config as configuration
+    from agent_runtime_service.config import McpConfig
+
+    config = configured(tmp_path, completion_url="https://gateway/v1/chat/completions",
+                        ca_file=str(tmp_path / "absent-api.pem"))
+    config = config.model_copy(update={"mcp": McpConfig(
+        ca_file=str(TestAuthority(tmp_path).ca_file))})
+    monkeypatch.setattr(cli, "harden_process", lambda: None)
+    monkeypatch.setattr(configuration, "load_config", lambda path: config)
+    assert cli.main(["--config", str(tmp_path / "service.toml")]) == cli.EXIT_BAD_CONFIG
+    assert "api.ca_file: cannot be loaded" in capsys.readouterr().err

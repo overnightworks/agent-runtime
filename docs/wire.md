@@ -146,7 +146,7 @@ configured alias, reaches the gateway without fallback or retry. Requested tools
 returned tool calls, incomplete completions and malformed replies end as
 `failed: provider_error`, with no answer text or success. HTTP refusals and
 connection/TLS/read failures, or missing/invalid gateway credentials, end as
-`failed: provider_unavailable`. Empty completed text is valid.
+`failed: provider_unavailable`. Empty completed text is refused; whitespace-only text is preserved.
 
 Only the turn, model and the selected gateway credential reach the gateway.
 User/workload tokens, ticket, capability, identity and correlation metadata do not;
