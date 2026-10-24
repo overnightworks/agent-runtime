@@ -220,7 +220,7 @@ def _ca_bundle(path: object) -> Path:
 
 def _completion_url(url: str) -> str:
     matched = re.fullmatch(
-        r"(?i:https?)://(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::([0-9]+))?/v1/chat/completions",
+        r"[Hh][Tt][Tt][Pp][Ss]?://(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::(\d+))?/v1/chat/completions",
         url, re.ASCII,
     )
     if matched is not None:

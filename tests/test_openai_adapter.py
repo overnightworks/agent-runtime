@@ -40,8 +40,9 @@ def test_complete_text_accepts_only_checked_text(status, message, text):
 @pytest.mark.parametrize("status", [100, 301, 302, 307, 400, 401, 402, 403, 429, 500, 503])
 @pytest.mark.parametrize("body", [b"not json", json.dumps(completion()).encode()])
 def test_http_status_is_checked_before_json(status, body):
+    response = httpx.Response(status, content=body)
     with pytest.raises(ProviderUnavailableError) as raised:
-        complete(httpx.Response(status, content=body))
+        complete(response)
     assert raised.value.reason.code is SafeRouteReasonCode.API_HTTP_ERROR
     assert raised.value.__context__ is None
     assert raised.value.__cause__ is None
@@ -73,8 +74,9 @@ def malformed_completions():
 
 @pytest.mark.parametrize("payload", list(malformed_completions()))
 def test_incomplete_or_tool_output_is_refused_as_a_whole(payload):
+    response = httpx.Response(200, json=payload)
     with pytest.raises(ProviderUnavailableError) as raised:
-        complete(httpx.Response(200, json=payload))
+        complete(response)
     assert raised.value.reason.code is SafeRouteReasonCode.API_PROTOCOL_ERROR
     assert raised.value.__context__ is None
     assert raised.value.__cause__ is None
@@ -82,8 +84,9 @@ def test_incomplete_or_tool_output_is_refused_as_a_whole(payload):
 
 @pytest.mark.parametrize("status,body", [(200, b"secret invalid json"), (204, b"")])
 def test_invalid_json_never_leaves_its_document_in_a_failure_chain(status, body):
+    response = httpx.Response(status, content=body)
     with pytest.raises(ProviderUnavailableError) as raised:
-        complete(httpx.Response(status, content=body))
+        complete(response)
     assert raised.value.reason.code is SafeRouteReasonCode.API_PROTOCOL_ERROR
     assert raised.value.__context__ is None
     assert raised.value.__cause__ is None
@@ -178,6 +181,7 @@ def test_text_refusal_removes_active_caller_chain(status, body, reason):
 
 
 def test_empty_completed_text_is_a_protocol_refusal():
+    response = httpx.Response(201, json=completion(text=""))
     with pytest.raises(ProviderUnavailableError) as raised:
-        complete(httpx.Response(201, json=completion(text="")))
+        complete(response)
     assert raised.value.reason.code is SafeRouteReasonCode.API_PROTOCOL_ERROR

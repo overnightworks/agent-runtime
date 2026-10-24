@@ -178,8 +178,9 @@ def test_bad_credentials_never_fall_back_or_expose_document(tmp_path, document):
     from agent_runtime_service.api_credentials import InvalidApiCredentials, read_api_credentials
 
     path = credentials(tmp_path / "credentials.json", document)
+    registered_apps = frozenset({"songmaker"})
     with pytest.raises(InvalidApiCredentials) as raised:
-        read_api_credentials(path, frozenset({"songmaker"}))
+        read_api_credentials(path, registered_apps)
     assert raised.value.__context__ is None
     assert raised.value.__cause__ is None
 
@@ -193,8 +194,9 @@ def test_invalid_json_or_duplicate_credentials_have_no_parser_chain(tmp_path, co
     path = tmp_path / "credentials.json"
     path.write_bytes(contents)
     path.chmod(0o600)
+    registered_apps = frozenset({"songmaker"})
     with pytest.raises(InvalidApiCredentials) as raised:
-        read_api_credentials(path, frozenset({"songmaker"}))
+        read_api_credentials(path, registered_apps)
     assert raised.value.__context__ is None
     assert raised.value.__cause__ is None
 
@@ -245,7 +247,8 @@ def test_rotation_to_per_app_only_keys_is_a_file_only_change(tmp_path, monkeypat
 
     asyncio.run(run())
     assert sent == ["Bearer first", "Bearer preferred", "Bearer song", "Bearer slides"]
-    assert len(clients) == 4 and all(client.is_closed for client in clients)
+    assert len(clients) == 4
+    assert all(client.is_closed for client in clients)
 
 
 @pytest.mark.parametrize("change", ["missing", "public", "malformed", "no-app", "invalid-app"])
@@ -333,7 +336,8 @@ def test_repeated_submissions_each_send_one_http_request(tmp_path, monkeypatch):
 def test_optional_api_installation_is_independent_and_offer_catalog_stays_empty(tmp_path):
     config = configured(tmp_path)
     runners = installed_runners(config, None, LoopClock())
-    assert runners.cli is None and runners.api is not None
+    assert runners.cli is None
+    assert runners.api is not None
     assert installed_runners(without_cli(service_config()), None, LoopClock()).api is None
 
     async def run():
@@ -395,7 +399,8 @@ async def test_buffered_http_keeps_heartbeats_and_closes_on_every_ending(
     finally:
         response.cancel()
         await asyncio.gather(response, return_exceptions=True)
-    assert closed.is_set() and clients[0].is_closed
+    assert closed.is_set()
+    assert clients[0].is_closed
     events = RunStreamDecoder().feed(socket.body)
     if ending == "answer":
         assert isinstance(events[-1], Succeeded)
@@ -467,7 +472,8 @@ def test_https_uses_only_the_explicit_ca_and_hostname_verification(tmp_path, mon
     def client(**options):
         context = options["verify"]
         assert isinstance(context, ssl.SSLContext)
-        assert context.check_hostname and context.verify_mode == ssl.CERT_REQUIRED
+        assert context.check_hostname
+        assert context.verify_mode == ssl.CERT_REQUIRED
         assert context.get_ca_certs(binary_form=True) == authority.client_context().get_ca_certs(
             binary_form=True)
         verified.append(context)
@@ -484,8 +490,9 @@ def test_https_uses_only_the_explicit_ca_and_hostname_verification(tmp_path, mon
 def test_unreadable_ca_stops_runner_installation(tmp_path):
     config = configured(tmp_path, completion_url="https://gateway/v1/chat/completions",
                         ca_file=str(tmp_path / "missing.pem"))
+    clock = LoopClock()
     with pytest.raises(OSError):
-        installed_runners(config, None, LoopClock())
+        installed_runners(config, None, clock)
 
 
 def test_job_ticket_runs_the_real_api_path(tmp_path, monkeypatch):
@@ -621,16 +628,18 @@ def test_credential_refusal_removes_active_caller_chain(tmp_path, boundary):
     from agent_runtime_service.api_credentials import InvalidApiCredentials, read_api_credentials
 
     path = credentials(tmp_path / "keys.json", {"app_keys": {"other": "synthetic"}})
-    loaded = read_api_credentials(path, frozenset({"app", "other"}))
+    registered_apps = frozenset({"app", "other"})
+    loaded = read_api_credentials(path, registered_apps)
     if boundary == "reader":
         path.write_text("invalid document")
     try:
         raise caller_error()
     except httpx.ReadError:
-        with pytest.raises(InvalidApiCredentials) as raised:
-            if boundary == "reader":
-                read_api_credentials(path, frozenset({"app", "other"}))
-            else:
+        if boundary == "reader":
+            with pytest.raises(InvalidApiCredentials) as raised:
+                read_api_credentials(path, registered_apps)
+        else:
+            with pytest.raises(InvalidApiCredentials) as raised:
                 loaded.for_app("app")
     assert_closed_refusal(raised.value)
 
