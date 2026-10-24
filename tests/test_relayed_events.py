@@ -560,8 +560,9 @@ async def real_tools(
     capability = capability_carrying(CANARY, tools=("edit_note",))
     barrier = barrier_class(RUN_ID, app or RecordingApp(), capability)
     offered = [ToolDefinition.model_validate({"name": "edit_note", "inputSchema": {}})]
-    relay = await Relay.start(RUN_ID, McpRelayOwner(capability, offered, barrier), LoopClock())
-    yield RunTools(RUN_ID, LoopClock(), relay, barrier, AsyncExitStack())
+    owner = McpRelayOwner(capability, offered, barrier)
+    relay = await Relay.start(RUN_ID, owner, LoopClock())
+    yield RunTools(RUN_ID, LoopClock(), owner, barrier, AsyncExitStack(), relay=relay)
 
 
 def a_runner_behind(

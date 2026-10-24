@@ -32,7 +32,6 @@
 "tests/test_service_entrance.py" = 841
 "tests/test_service_quarantine.py" = 870
 "tests/test_service_run_recording.py" = 2268
-"tests/test_service_run_tools.py" = 920
 "tests/test_service_tool_relay.py" = 1309
 "tests/test_service_tool_relay_barrier.py" = 2010
 "tests/test_text_tool_protocol.py" = 888
