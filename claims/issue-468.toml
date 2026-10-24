@@ -1,8 +1,0 @@
-claim_id = "6340603d468e4c9e80c4f94b7f3e9130"
-agent = "Codex agent-runtime-01a16e6f-0057"
-role = "builder"
-base = "d34d3449db9773ae5788bb46ffbcea22a006324c"
-branch = "codex/issue-468-a2-tools-execute-granted-mcp-tools-throu"
-scope = ["docs/ARCHITECTURE.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "docs/wire.md", "packages/service/src/agent_runtime_service/api_runner.py", "packages/service/src/agent_runtime_service/api_tools.py", "packages/service/src/agent_runtime_service/cli.py", "packages/service/src/agent_runtime_service/run_tools.py", "src/agent_runtime/openai_adapter.py", "src/agent_runtime/tools.py", "tests/test_openai_adapter.py", "tests/test_service_api_runner.py", "tests/test_service_api_runner_tools.py"]
-opened_commit = "7e199c8c6e6593ca176acbb375c133f148387582"
-whole_reason = "Strict buffered parsing/history, complete-round checks, accepted asynchronous tools and route installation must meet in one executable path; a smaller landing adds dormant machinery or an unruled limit."
