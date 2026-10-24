@@ -20,6 +20,7 @@ token again at the start of every run.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import tomllib
 from collections.abc import Iterable, Iterator, Mapping
@@ -49,6 +50,7 @@ from agent_runtime.config import PrivateWorkingRoot, WorkingRootNotPrivateError
 from agent_runtime.secret_file import read_token_file, shown_text
 from agent_runtime_client.capability import McpOrigin
 from agent_runtime_client.wire import MAX_EVENT_BYTES, MODEL_PART_PATTERN
+from agent_runtime_service.api_credentials import read_api_credentials
 from agent_runtime_service.capability import CapabilityScope
 from agent_runtime_service.signing import SigningKey, load_signing_key
 
@@ -214,6 +216,49 @@ class CliConfig(_Section):
 
 def _ca_bundle(path: object) -> Path:
     return _absolute_path_to("CA bundle", path)
+
+
+def _completion_url(url: str) -> str:
+    matched = re.fullmatch(
+        r"(?i:https?)://(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::([0-9]+))?/v1/chat/completions",
+        url, re.ASCII,
+    )
+    if matched is not None:
+        host, port = matched.groups()
+        if _gateway_host(host) and (port is None or 1 <= int(port) <= 65535):
+            return url
+    raise ValueError("must be an ASCII HTTP(S) URL ending exactly in /v1/chat/completions")
+
+
+def _gateway_host(host: str) -> bool:
+    if host.startswith("["):
+        try:
+            ipaddress.IPv6Address(host[1:-1])
+        except ValueError:
+            return False
+        return True
+    return len(host) <= 253 and all(
+        re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
+        for label in host.removesuffix(".").split(".")
+    )
+
+
+def _credential_file(path: object) -> Path:
+    return _absolute_path_to("API credential file", path)
+
+
+class ApiConfig(_Section):
+    """The inference-only gateway and the file selecting its credential for each app."""
+
+    completion_url: Annotated[NonEmptyText, AfterValidator(_completion_url)]
+    credential_file: Annotated[Path, BeforeValidator(_credential_file)]
+    ca_file: Annotated[Path, BeforeValidator(_ca_bundle)] | None = None
+
+    @model_validator(mode="after")
+    def _tls_has_explicit_trust(self) -> Self:
+        if self.completion_url.lower().startswith("https:") != (self.ca_file is not None):
+            raise ValueError("api.ca_file: required for HTTPS and forbidden for HTTP")
+        return self
 
 
 class McpConfig(_Section):
@@ -411,6 +456,7 @@ class ServiceConfig(_Section):
     server: ServerConfig = ServerConfig()
     runs: RunConfig = RunConfig()
     cli: CliConfig | None = None
+    api: ApiConfig | None = None
     mcp: McpConfig | None = None
     signing: SigningConfig | None = None
     profiles: dict[NonEmptyText, ProfileConfig] = Field(default_factory=dict)
@@ -432,6 +478,14 @@ class ServiceConfig(_Section):
             raise ValueError("route.api_alias: required because identity.api_groups is set")
         if self.route is not None and not self.identity.api_groups:
             raise ValueError("identity.api_groups: required because route.api_alias is set")
+        return self
+
+    @model_validator(mode="after")
+    def _api_has_routing_and_credentials(self) -> Self:
+        if self.api is not None:
+            if self.route is None:
+                raise ValueError("api: requires identity.api_groups and route.api_alias")
+            read_api_credentials(self.api.credential_file, frozenset(self.apps))
         return self
 
     @model_validator(mode="after")

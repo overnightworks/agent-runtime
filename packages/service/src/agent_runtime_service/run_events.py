@@ -80,7 +80,7 @@ from agent_runtime_service.run_liveness import (
     reported_by_the_quarantine,
 )
 from agent_runtime_service.run_records import RunRecorder, RunRecords
-from agent_runtime_service.runners import AdmittedRun, Runner
+from agent_runtime_service.runners import AdmittedRun, ApiUnavailable, Runner
 
 log = logging.getLogger(__name__)
 
@@ -273,7 +273,9 @@ class _WireRun:
             case RunnerRaised(error=error):
                 if not reported_by_the_quarantine(error):
                     log_failure(log, f"The runner of run {self._run_id} failed", error)
-                self.decide_failure(FailureCode.PROVIDER_ERROR, RUNNER_FAILED_MESSAGE)
+                code = (FailureCode.PROVIDER_UNAVAILABLE if isinstance(error, ApiUnavailable)
+                        else FailureCode.PROVIDER_ERROR)
+                self.decide_failure(code, RUNNER_FAILED_MESSAGE)
             case RunnerYielded(event=FinalEvent() as final):
                 self._decide_success(final)
             case RunnerYielded(event=core_event):

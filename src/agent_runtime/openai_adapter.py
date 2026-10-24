@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 
 import httpx
@@ -190,26 +190,85 @@ async def _post_chat(
     messages: list[dict[str, Any]],
     tool_schemas: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    response = await _request_chat(
+        client, provider, api_url, api_key, model, messages, tool_schemas,
+    )
+    return _response_payload(response, provider)
+
+
+async def _request_chat(
+    client: httpx.AsyncClient,
+    provider: str,
+    api_url: str,
+    api_key: str,
+    model: str,
+    messages: Sequence[Mapping[str, object]],
+    tool_schemas: Sequence[Mapping[str, object]],
+) -> httpx.Response:
     try:
-        response = await client.post(
+        return await client.post(
             api_url,
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
-            json={
-                "model": model,
-                "messages": messages,
-                "tools": tool_schemas,
-            },
+            json={"model": model, "messages": messages, "tools": tool_schemas},
         )
     except httpx.HTTPError as exc:
         raise ProviderUnavailableError(
-            provider,
-            "api",
-            normalize_route_failure(SafeRouteReasonCode.API_HTTP_ERROR),
+            provider, "api", normalize_route_failure(SafeRouteReasonCode.API_HTTP_ERROR),
         ) from exc
-    return _response_payload(response, provider)
+
+
+async def complete_openai_compatible_text(
+    *,
+    client: httpx.AsyncClient,
+    provider: str,
+    api_url: str,
+    api_key: str,
+    model: str,
+    system: str,
+    messages: list[dict[str, str]],
+) -> str:
+    """Return one completely checked, tool-free reply; the caller owns the client.
+
+    Failure is raised outside the handler so neither a transport exception nor a
+    JSON decoder's document remains reachable through the public exception chain.
+    """
+    try:
+        response = await _request_chat(
+            client, provider, api_url, api_key, model,
+            [{"role": "system", "content": system}, *messages], [],
+        )
+        if not 200 <= response.status_code < 300:
+            failure = SafeRouteReasonCode.API_HTTP_ERROR
+        else:
+            return _completed_text(_response_payload(response, provider), provider)
+    except ProviderUnavailableError as error:
+        assert error.reason is not None
+        failure = error.reason.code
+    except RecursionError:
+        failure = SafeRouteReasonCode.API_PROTOCOL_ERROR
+    raise ProviderUnavailableError(provider, "api", normalize_route_failure(failure))
+
+
+def _completed_text(payload: Mapping[str, object], provider: str) -> str:
+    message = _assistant_message(payload, provider)
+    choices = payload["choices"]
+    assert isinstance(choices, list)
+    content = message.get("content")
+    tools = message.get("tool_calls")
+    if (
+        message.get("role") != "assistant"
+        or not isinstance(content, str)
+        or choices[0].get("finish_reason") != "stop"
+        or (tools is not None and (not isinstance(tools, list) or tools))
+        or message.get("function_call") is not None
+    ):
+        raise ProviderUnavailableError(
+            provider, "api", normalize_route_failure(SafeRouteReasonCode.API_PROTOCOL_ERROR),
+        )
+    return content
 
 
 def _response_payload(response: httpx.Response, provider: str) -> dict[str, Any]:

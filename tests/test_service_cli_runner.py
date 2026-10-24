@@ -106,7 +106,7 @@ from agent_runtime_service import cli_runner
 from agent_runtime_service.admission import AdmissionSlot
 from agent_runtime_service.app import create_app
 from agent_runtime_service.capability import Capability
-from agent_runtime_service.cli import main
+from agent_runtime_service.cli import installed_runners, main
 from agent_runtime_service.config import McpConfig, Provider, ServiceConfig
 from agent_runtime_service.quarantine import Quarantine
 from agent_runtime_service.routing import Cli
@@ -165,7 +165,7 @@ def trusting(config: ServiceConfig, authority: TestAuthority) -> ServiceConfig:
 
 
 def tool_free_runners(config: ServiceConfig) -> Runners:
-    return cli_runner.installed_runners(config, None, LoopClock())
+    return installed_runners(config, None, LoopClock())
 
 
 def private_root_of(config: ServiceConfig) -> Path:

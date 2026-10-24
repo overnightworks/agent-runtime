@@ -31,9 +31,10 @@ from agent_runtime.events import StreamEvent
 from agent_runtime.secret_file import read_token_file
 from agent_runtime_service.config import Provider, ServiceConfig
 from agent_runtime_service.relayed_events import RelayedEvents
+from agent_runtime_service.routing import Cli
 from agent_runtime_service.run_liveness import RunClock
 from agent_runtime_service.run_tools import RunTools
-from agent_runtime_service.runners import AdmittedRun, Runners
+from agent_runtime_service.runners import AdmittedRun
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,7 @@ AdapterFactory = Callable[
 def claude_run(
     launch: ProfileLaunch, token: SecretStr, admitted: AdmittedRun, relay: RelayAccess | None
 ) -> CliRunAdapter:
+    assert isinstance(admitted.route, Cli)
     turn = admitted.request.turn
     return ClaudeRun(
         binary=launch.binary,
@@ -107,6 +109,7 @@ class CliRunner:
         self._clock = clock
 
     async def run(self, admitted: AdmittedRun) -> AsyncGenerator[StreamEvent, None]:
+        assert isinstance(admitted.route, Cli)
         tools: RunTools | None = None
         events: RelayedEvents | None = None
         try:
@@ -141,12 +144,3 @@ class CliRunner:
             await reap()
         else:
             await tools.close(reap)
-
-
-def installed_runners(
-    config: ServiceConfig, tls_context: ssl.SSLContext | None, clock: RunClock
-) -> Runners:
-    if config.cli is None:
-        return Runners()
-    runner = CliRunner(config, tls_context=tls_context, clock=clock)
-    return Runners(cli=runner)

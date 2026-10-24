@@ -137,6 +137,22 @@ effect is for the service and never reaches a prompt; it defaults to
 side-effecting, because a tool nobody classified must be assumed to change
 state. The core's `ToolCatalog` builds on the same class.
 
+## API text results
+
+The API route buffers the gateway completion before releasing at most one
+`assistant_text` followed by `succeeded`; heartbeats continue while it waits,
+without resetting the idle timeout. The exact requested model, otherwise the
+configured alias, reaches the gateway without fallback or retry. Requested tools,
+returned tool calls, incomplete completions and malformed replies end as
+`failed: provider_error`, with no answer text or success. HTTP refusals and
+connection/TLS/read failures, or missing/invalid gateway credentials, end as
+`failed: provider_unavailable`. Empty completed text is valid.
+
+Only the turn, model and the selected gateway credential reach the gateway.
+User/workload tokens, ticket, capability, identity and correlation metadata do not;
+the prompt itself is not anonymized. Reflection of the selected credential or
+capability rejects the whole answer before any text is emitted or recorded.
+
 ## App tools through MCP
 
 An app that offers tools declares one canonical https MCP origin in the
