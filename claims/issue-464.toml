@@ -1,0 +1,8 @@
+claim_id = "0c2f58542d3c4a2fa12fd0f66ea2a499"
+agent = "Codex agent-runtime-01a16e6f-0057"
+role = "builder"
+base = "35411353e74f7eeac2ba20ad016c69187b77a5eb"
+branch = "codex/issue-464-a2-text-install-the-buffered-api-runner"
+scope = ["docs/ARCHITECTURE.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "docs/wire.md", "packages/service/src/agent_runtime_service/api_credentials.py", "packages/service/src/agent_runtime_service/api_runner.py", "packages/service/src/agent_runtime_service/cli.py", "packages/service/src/agent_runtime_service/cli_runner.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/src/agent_runtime_service/run_events.py", "packages/service/src/agent_runtime_service/runners.py", "src/agent_runtime/openai_adapter.py", "tests/test_openai_adapter.py", "tests/test_service_api_runner.py", "tests/test_service_cli_runner.py", "tests/test_service_offer.py", "tests/test_service_run_events.py"]
+opened_commit = "84ba3eabe781d42605186deb7ace4ff6fb16fa33"
+whole_reason = "Configuration, credentials, installation and supervised HTTP form the first usable API route; splitting these plumbing changes would leave no service caller."
