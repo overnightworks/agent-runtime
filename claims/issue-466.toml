@@ -3,6 +3,6 @@ agent = "Codex agent-runtime-01a16e6f-0057"
 role = "builder"
 base = "8d551d715c726e4fdba06b46bf8602c163db13a1"
 branch = "codex/issue-466-a2-tools-open-the-app-session-before-att"
-scope = ["packages/service/src/agent_runtime_service/run_tools.py", "tests/test_relayed_events.py", "tests/test_service_run_tools.py", "tests/test_service_run_tools_session.py"]
+scope = ["packages/service/src/agent_runtime_service/run_tools.py", "quality/baseline.toml", "tests/test_relayed_events.py", "tests/test_service_run_tools.py", "tests/test_service_run_tools_session.py"]
 opened_commit = "474081772507f5e32468fc106901f9b59d9df4a6"
 whole_reason = "One session lifetime change, its constructor callers and the relocated opening proof form one executable CLI refactor."
