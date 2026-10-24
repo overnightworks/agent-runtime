@@ -217,8 +217,9 @@ def strict_complete(response):
 def test_buffered_round_rejects_malformed_later_arguments_without_partial_return(arguments):
     payload = tool_completion([provider_call(), provider_call("second", arguments=arguments)],
                               text="must stay buffered")
+    response = httpx.Response(200, json=payload)
     with pytest.raises(ProviderUnavailableError):
-        strict_complete(httpx.Response(200, json=payload))
+        strict_complete(response)
 
 
 @pytest.mark.parametrize("case", ["id", "type", "name", "role", "finish", "duplicate", "empty"])
@@ -237,8 +238,9 @@ def test_buffered_round_requires_complete_function_calls(case):
         message["tool_calls"].append(provider_call())
     else:
         message["tool_calls"] = []
+    response = httpx.Response(200, json=payload)
     with pytest.raises(ProviderUnavailableError):
-        strict_complete(httpx.Response(200, json=payload))
+        strict_complete(response)
 
 
 def test_buffered_history_keeps_only_canonical_calls_and_original_order():
@@ -265,7 +267,8 @@ def test_buffered_history_keeps_only_canonical_calls_and_original_order():
                 ("provider-1", "echo", {"value": 7})]
             final = await conversation.complete(ToolResultBatch((ToolResult(
                 "provider-1", "result", False),)))
-            assert final.text == " done " and not final.calls
+            assert final.text == " done "
+            assert not final.calls
     asyncio.run(run())
     assert "must-not-continue" not in json.dumps(requests)
     assert requests[-1]["messages"][-1] == {
@@ -291,11 +294,12 @@ def test_buffered_refusal_is_closed_even_under_ambient_exception(status, body, r
             conversation = OpenAIConversation(client=client, provider="gateway",
                 api_url="http://fake/v1/chat/completions", api_key="synthetic",
                 model="chosen", tool_schemas=[])
+            initial = InitialTurn("system", [])
             try:
                 raise caller_error()
             except httpx.ReadError:
                 with pytest.raises(ProviderUnavailableError) as raised:
-                    await conversation.complete(InitialTurn("system", []))
+                    await conversation.complete(initial)
             assert raised.value.reason.code is reason
             assert_closed_refusal(raised.value)
     asyncio.run(run())
@@ -303,8 +307,9 @@ def test_buffered_refusal_is_closed_even_under_ambient_exception(status, body, r
 
 @pytest.mark.parametrize("payload", list(malformed_completions()))
 def test_buffered_terminal_round_retains_complete_text_validation(payload):
+    response = httpx.Response(200, json=payload)
     with pytest.raises(ProviderUnavailableError):
-        strict_complete(httpx.Response(200, json=payload))
+        strict_complete(response)
 
 
 @pytest.mark.parametrize("results", [(), ("wrong",), ("provider-1", "extra"),
@@ -324,8 +329,9 @@ def test_buffered_continuation_rejects_an_incomplete_or_mismatched_result_batch(
                 api_url="http://gateway/v1/chat/completions", api_key="synthetic",
                 model="chosen", tool_schemas=[])
             await conversation.complete(InitialTurn("system", []))
+            batch = ToolResultBatch(tuple(
+                ToolResult(identity, "outcome", False) for identity in results))
             with pytest.raises(ProviderUnavailableError):
-                await conversation.complete(ToolResultBatch(tuple(
-                    ToolResult(identity, "outcome", False) for identity in results)))
+                await conversation.complete(batch)
     asyncio.run(run())
     assert len(requests) == 1

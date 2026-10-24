@@ -89,6 +89,32 @@ def test_real_entry_preserves_order_ids_and_model_across_complete_tool_rounds(
     assert all(client.is_closed for client in clients)
 
 
+@pytest.mark.parametrize("cookie_value", ["ordinary-session", "synthetic-gateway-key"])
+def test_gateway_response_cookies_never_continue_outside_authorization(
+    tmp_path, monkeypatch, cookie_value,
+):
+    authority = TestAuthority(tmp_path)
+    requests = []
+
+    def upstream(request):
+        requests.append(request)
+        payload = tool_completion() if len(requests) <= 2 else answer("done")
+        return httpx.Response(200, json=payload,
+                              headers={"Set-Cookie": f"gateway_session={cookie_value}; Path=/"})
+
+    clients = fake_gateway(monkeypatch, upstream)
+    with serving(ScriptedApp(), authority.credentials_for("localhost")) as peer:
+        events = asyncio.run(post_tools(with_origin(configured(tmp_path), peer.origin), authority))
+        assert sum(request.rpc_method == "tools/call" for request in peer.requests) == 2
+    assert isinstance(events[-1], Succeeded)
+    assert events[-1].text == "done"
+    assert len(requests) == 3
+    assert all(request.headers["authorization"] == "Bearer synthetic-gateway-key"
+               for request in requests)
+    assert all("cookie" not in request.headers for request in requests)
+    assert all(client.is_closed for client in clients)
+
+
 @pytest.mark.parametrize("bad", [provider_call("second", arguments="[]"),
                                  provider_call("second", name="not-granted")])
 def test_later_invalid_call_refuses_whole_round_before_text_or_effect(tmp_path, monkeypatch, bad):
@@ -167,8 +193,9 @@ def test_service_budget_or_recording_refusal_preserves_acceptance_boundary(
             "max_tool_calls": 1 if boundary == "call-count" else 30,
             "max_bytes": 3000 if boundary.endswith("bytes") else config.runs.max_bytes})})
         if boundary.endswith("record"):
+            run = post_tools(config, authority)
             with pytest.raises(RuntimeError, match="synthetic recording refusal"):
-                asyncio.run(post_tools(config, authority))
+                asyncio.run(run)
             events = []
         else:
             events = asyncio.run(post_tools(config, authority))
@@ -200,7 +227,8 @@ def test_tool_error_and_lost_response_are_results_without_retry(tmp_path, monkey
         assert sum(request.rpc_method == "tools/call" for request in peer.requests) == 1
     assert isinstance(events[-1], Succeeded)
     results = [event for event in events if event.type == "tool_result"]
-    assert len(results) == 1 and results[0].is_error
+    assert len(results) == 1
+    assert results[0].is_error
     assert requests[1]["messages"][-1]["content"] == results[0].content
 
 
@@ -453,15 +481,62 @@ def test_cancellation_and_composition_failure_close_session_and_http_client(
     assert all(client.is_closed for client in clients)
 
 
+async def assert_supervised_tool_ending(app, socket, mint, ending):
+    from agent_runtime_client.sse import RunStreamDecoder
+    from agent_runtime_client.wire import FailureCode
+
+    events = RunStreamDecoder().feed(socket.body)
+    if ending == "idle":
+        assert events[-1].code is FailureCode.IDLE_TIMEOUT
+    elif ending == "maximum":
+        assert events[-1].code is FailureCode.LIMIT_EXCEEDED
+    if ending in {"idle", "maximum"}:
+        assert sum(event.type in {"succeeded", "failed", "cancelled"}
+                   for event in events) == 1
+    else:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://service") as client:
+            record = await client.get(f"/runs/{socket.run_id}", headers=run_headers(
+                mint.workload(), mint.user(groups=[API_GROUP, SONGMAKER_GROUP])))
+        assert record.json()["state"] == (
+            "cancelled" if ending == "before-call" else "failed")
+        if ending == "disconnect":
+            assert record.json()["failure_code"] == "interrupted"
+
+
+def tool_socket(mint):
+    from service_support import ClientSocket
+
+    class ToolSocket(ClientSocket):
+        first = True
+        async def receive(self):
+            if self.first:
+                self.first = False
+                return {"type": "http.request", "body": json.dumps(run_body(
+                    tools={"echo": "side_effecting"})).encode(), "more_body": False}
+            return await super().receive()
+
+    return ToolSocket(user_token=mint.user(groups=[API_GROUP, SONGMAKER_GROUP]))
+
+
+async def end_tool_run(socket, clock, limits, ending):
+    if ending in {"before-call", "disconnect"}:
+        socket.leave()
+    else:
+        await clock.parked()
+        clock.advance_to(limits.heartbeat_interval_s)
+        await socket.received(b"event: heartbeat")
+        await clock.parked()
+        clock.advance_to(limits.idle_timeout_s if ending == "idle"
+                         else limits.max_duration_s)
+
+
 @pytest.mark.parametrize("ending", ["before-call", "disconnect", "idle", "maximum"])
 def test_service_supervision_closes_tool_run_at_disconnect_or_deadline(
     tmp_path, monkeypatch, ending,
 ):
     from mcp_app_fake import HeldRequests
-    from service_support import ClientSocket, StepClock, SteppedLoop, shared_mint
-
-    from agent_runtime_client.sse import RunStreamDecoder
-    from agent_runtime_client.wire import FailureCode
+    from service_support import StepClock, SteppedLoop, shared_mint
 
     authority = TestAuthority(tmp_path)
     clock = StepClock()
@@ -470,9 +545,8 @@ def test_service_supervision_closes_tool_run_at_disconnect_or_deadline(
     later_wait = asyncio.Event()
     closed = asyncio.Event()
     held = HeldRequests()
-    responder = ScriptedApp()
-    if ending != "maximum":
-        responder = ScriptedApp(overrides={"tools/call": held.responder(responder)})
+    responder = ScriptedApp(overrides={} if ending == "maximum" else {
+        "tools/call": held.responder(ScriptedApp())})
 
     async def upstream(request):
         requests.append(request)
@@ -485,20 +559,11 @@ def test_service_supervision_closes_tool_run_at_disconnect_or_deadline(
         return httpx.Response(200, json=tool_completion())
 
     clients = fake_gateway(monkeypatch, upstream)
-    class ToolSocket(ClientSocket):
-        first = True
-        async def receive(self):
-            if self.first:
-                self.first = False
-                return {"type": "http.request", "body": json.dumps(run_body(
-                    tools={"echo": "side_effecting"})).encode(), "more_body": False}
-            return await super().receive()
-
     with serving(responder, authority.credentials_for("localhost")) as peer:
         config = with_origin(configured(tmp_path), peer.origin)
         async def run():
             mint = shared_mint()
-            socket = ToolSocket(user_token=mint.user(groups=[API_GROUP, SONGMAKER_GROUP]))
+            socket = tool_socket(mint)
             runners = installed_runners(config, authority.client_context(), clock)
             app = create_app(config, runners=runners,
                              fetch_key_set=mint.fetch_key_set)
@@ -509,35 +574,11 @@ def test_service_supervision_closes_tool_run_at_disconnect_or_deadline(
                     await later_wait.wait()
                 else:
                     waiting = (await asyncio.to_thread(held.wait_for, 1))[0]
-                if ending in {"before-call", "disconnect"}:
-                    socket.leave()
-                else:
-                    await clock.parked()
-                    clock.advance_to(config.runs.heartbeat_interval_s)
-                    await socket.received(b"event: heartbeat")
-                    await clock.parked()
-                    clock.advance_to(config.runs.idle_timeout_s if ending == "idle"
-                                     else config.runs.max_duration_s)
+                await end_tool_run(socket, clock, config.runs, ending)
                 await task
                 if waiting is not None:
                     await asyncio.to_thread(waiting.wait_for_peer_left)
-                events = RunStreamDecoder().feed(socket.body)
-                if ending == "idle":
-                    assert events[-1].code is FailureCode.IDLE_TIMEOUT
-                elif ending == "maximum":
-                    assert events[-1].code is FailureCode.LIMIT_EXCEEDED
-                if ending in {"idle", "maximum"}:
-                    assert sum(event.type in {"succeeded", "failed", "cancelled"}
-                               for event in events) == 1
-                else:
-                    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
-                                                 base_url="http://service") as client:
-                        record = await client.get(f"/runs/{socket.run_id}", headers=run_headers(
-                            mint.workload(), mint.user(groups=[API_GROUP, SONGMAKER_GROUP])))
-                    assert record.json()["state"] == (
-                        "cancelled" if ending == "before-call" else "failed")
-                    if ending == "disconnect":
-                        assert record.json()["failure_code"] == "interrupted"
+                await assert_supervised_tool_ending(app, socket, mint, ending)
             finally:
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)

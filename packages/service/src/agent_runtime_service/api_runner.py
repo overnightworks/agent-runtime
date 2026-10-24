@@ -5,6 +5,7 @@ from __future__ import annotations
 import ssl
 from collections.abc import AsyncGenerator
 from contextlib import AsyncExitStack, aclosing
+from http.cookiejar import CookieJar, DefaultCookiePolicy
 
 from httpx import AsyncClient
 
@@ -51,6 +52,7 @@ class ApiRunner:
         try:
             async with AsyncClient(
                 trust_env=False, follow_redirects=False, timeout=self._timeout, verify=self._verify,
+                cookies=CookieJar(policy=DefaultCookiePolicy(allowed_domains=[])),
             ) as client:
                 initial = InitialTurn(admitted.request.turn.system, [
                     {"role": message.role, "content": message.text}
