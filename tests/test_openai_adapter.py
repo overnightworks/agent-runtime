@@ -185,3 +185,153 @@ def test_empty_completed_text_is_a_protocol_refusal():
     with pytest.raises(ProviderUnavailableError) as raised:
         complete(response)
     assert raised.value.reason.code is SafeRouteReasonCode.API_PROTOCOL_ERROR
+
+
+def tool_completion(calls=None, text=None):
+    return {"choices": [{"message": {"role": "assistant", "content": text,
+        "tool_calls": calls if calls is not None else [provider_call()]},
+        "finish_reason": "tool_calls"}]}
+
+
+def provider_call(identity="provider-1", name="echo", arguments='{"value": 7}'):
+    return {"id": identity, "type": "function", "function": {
+        "name": name, "arguments": arguments}}
+
+
+def strict_complete(response):
+    from agent_runtime.openai_adapter import OpenAIConversation
+    from agent_runtime.tool_loop import InitialTurn
+
+    async def run():
+        transport = httpx.MockTransport(lambda request: response)
+        async with httpx.AsyncClient(transport=transport) as client:
+            conversation = OpenAIConversation(client=client, provider="gateway",
+                api_url="http://gateway/v1/chat/completions", api_key="synthetic",
+                model="chosen", tool_schemas=[])
+            return await conversation.complete(InitialTurn("system", []))
+    return asyncio.run(run())
+
+
+@pytest.mark.parametrize("arguments", [None, {}, "", "[]", "null", '{"x":1,"x":2}',
+    '{"x":NaN}', '{"x":Infinity}', '{"x":"\\ud800"}', '[' * 1100])
+def test_buffered_round_rejects_malformed_later_arguments_without_partial_return(arguments):
+    payload = tool_completion([provider_call(), provider_call("second", arguments=arguments)],
+                              text="must stay buffered")
+    response = httpx.Response(200, json=payload)
+    with pytest.raises(ProviderUnavailableError):
+        strict_complete(response)
+
+
+@pytest.mark.parametrize("case", ["id", "type", "name", "role", "finish", "duplicate", "empty"])
+def test_buffered_round_requires_complete_function_calls(case):
+    payload = tool_completion()
+    message = payload["choices"][0]["message"]
+    if case in {"id", "type"}:
+        message["tool_calls"][0][case] = "" if case == "id" else "custom"
+    elif case == "name":
+        message["tool_calls"][0]["function"]["name"] = ""
+    elif case == "role":
+        message["role"] = "user"
+    elif case == "finish":
+        payload["choices"][0]["finish_reason"] = "stop"
+    elif case == "duplicate":
+        message["tool_calls"].append(provider_call())
+    else:
+        message["tool_calls"] = []
+    response = httpx.Response(200, json=payload)
+    with pytest.raises(ProviderUnavailableError):
+        strict_complete(response)
+
+
+def test_buffered_history_keeps_only_canonical_calls_and_original_order():
+    from agent_runtime.openai_adapter import OpenAIConversation
+    from agent_runtime.tool_loop import InitialTurn, ToolResult, ToolResultBatch
+
+    requests = []
+    call = provider_call()
+    call["private_metadata"] = {"token": "must-not-continue"}
+    call["function"]["metadata"] = "must-not-continue"
+    responses = iter([tool_completion([call]), completion(text=" done ")])
+
+    def upstream(request):
+        requests.append(json.loads(request.content))
+        return httpx.Response(200, json=next(responses))
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(upstream)) as client:
+            conversation = OpenAIConversation(client=client, provider="gateway",
+                api_url="http://gateway/v1/chat/completions", api_key="synthetic",
+                model="chosen", tool_schemas=[])
+            first = await conversation.complete(InitialTurn("system", []))
+            assert [(call.tool_use_id, call.name, call.arguments) for call in first.calls] == [
+                ("provider-1", "echo", {"value": 7})]
+            final = await conversation.complete(ToolResultBatch((ToolResult(
+                "provider-1", "result", False),)))
+            assert final.text == " done "
+            assert not final.calls
+    asyncio.run(run())
+    assert "must-not-continue" not in json.dumps(requests)
+    assert requests[-1]["messages"][-1] == {
+        "role": "tool", "tool_call_id": "provider-1", "content": "result"}
+
+
+@pytest.mark.parametrize("status,body,reason", [
+    (302, b"not json", SafeRouteReasonCode.API_HTTP_ERROR),
+    (503, b"not json", SafeRouteReasonCode.API_HTTP_ERROR),
+    (200, b'{"choices":[],"choices":[]}', SafeRouteReasonCode.API_PROTOCOL_ERROR),
+    (200, b'{"x":NaN}', SafeRouteReasonCode.API_PROTOCOL_ERROR),
+    (200, b'[' * 1100, SafeRouteReasonCode.API_PROTOCOL_ERROR),
+    (200, b'"\\ud800"', SafeRouteReasonCode.API_PROTOCOL_ERROR),
+    (200, b'\xff', SafeRouteReasonCode.API_PROTOCOL_ERROR),
+])
+def test_buffered_refusal_is_closed_even_under_ambient_exception(status, body, reason):
+    from agent_runtime.openai_adapter import OpenAIConversation
+    from agent_runtime.tool_loop import InitialTurn
+
+    async def run():
+        transport = httpx.MockTransport(lambda request: httpx.Response(status, content=body))
+        async with httpx.AsyncClient(transport=transport) as client:
+            conversation = OpenAIConversation(client=client, provider="gateway",
+                api_url="http://fake/v1/chat/completions", api_key="synthetic",
+                model="chosen", tool_schemas=[])
+            initial = InitialTurn("system", [])
+            try:
+                raise caller_error()
+            except httpx.ReadError:
+                with pytest.raises(ProviderUnavailableError) as raised:
+                    await conversation.complete(initial)
+            assert raised.value.reason.code is reason
+            assert_closed_refusal(raised.value)
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("payload", list(malformed_completions()))
+def test_buffered_terminal_round_retains_complete_text_validation(payload):
+    response = httpx.Response(200, json=payload)
+    with pytest.raises(ProviderUnavailableError):
+        strict_complete(response)
+
+
+@pytest.mark.parametrize("results", [(), ("wrong",), ("provider-1", "extra"),
+                                     ("provider-1", "provider-1")])
+def test_buffered_continuation_rejects_an_incomplete_or_mismatched_result_batch(results):
+    from agent_runtime.openai_adapter import OpenAIConversation
+    from agent_runtime.tool_loop import InitialTurn, ToolResult, ToolResultBatch
+
+    requests = []
+    def upstream(request):
+        requests.append(request)
+        return httpx.Response(200, json=tool_completion())
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(upstream)) as client:
+            conversation = OpenAIConversation(client=client, provider="gateway",
+                api_url="http://gateway/v1/chat/completions", api_key="synthetic",
+                model="chosen", tool_schemas=[])
+            await conversation.complete(InitialTurn("system", []))
+            batch = ToolResultBatch(tuple(
+                ToolResult(identity, "outcome", False) for identity in results))
+            with pytest.raises(ProviderUnavailableError):
+                await conversation.complete(batch)
+    asyncio.run(run())
+    assert len(requests) == 1

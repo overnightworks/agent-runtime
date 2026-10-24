@@ -139,19 +139,33 @@ state. The core's `ToolCatalog` builds on the same class.
 
 ## API text results
 
-The API route buffers the gateway completion before releasing at most one
-`assistant_text` followed by `succeeded`; heartbeats continue while it waits,
+The API route buffers each complete gateway round before releasing its text or
+tool calls. Calls run sequentially in provider order: a call starts only after
+its event is accepted, and its result reaches the next gateway request only
+after the result event is accepted. The final `succeeded` text concatenates the
+rounds without trimming whitespace. Heartbeats continue while HTTP or tools wait,
 without resetting the idle timeout. The exact requested model, otherwise the
-configured alias, reaches the gateway without fallback or retry. Requested tools,
-returned tool calls, incomplete completions and malformed replies end as
-`failed: provider_error`, with no answer text or success. HTTP refusals and
-connection/TLS/read failures, or missing/invalid gateway credentials, end as
-`failed: provider_unavailable`. Empty completed text is refused; whitespace-only text is preserved.
+configured alias, reaches the gateway unchanged across rounds, without fallback
+or retry. The service's usual time, call and byte limits apply; there is no
+additional eight-round limit.
 
-Only the turn, model and the selected gateway credential reach the gateway.
-User/workload tokens, ticket, capability, identity and correlation metadata do not;
-the prompt itself is not anonymized. Reflection of the selected credential or
-capability rejects the whole answer before any text is emitted or recorded.
+Only requested and granted names present in the app's checked MCP offer reach
+the gateway. A malformed or ungranted call refuses its whole round before text
+or effects. Event budgets and recording remain per-event: a later refused call
+never executes, but earlier accepted effects remain. A refused result never
+reaches a further gateway request. Ordinary tool errors are returned to the model.
+Malformed/incomplete replies end as `failed: provider_error`; HTTP refusals and
+connection/TLS/read failures, or missing/invalid gateway credentials, end as
+`failed: provider_unavailable`. Empty terminal text is refused; whitespace is preserved.
+
+The turn, model, granted definitions and accepted results reach the gateway.
+Only gateway Authorization carries the selected gateway credential; only app MCP
+Authorization carries the capability. User/workload tokens, ticket, identity and
+correlation metadata are not added; arbitrary app/user content is not anonymized.
+Protected values in initial content, definitions or a decoded round are refused.
+The accumulated assistant text is checked before releasing each round, so a
+protected value completed across rounds refuses the completing round too.
+The service's byte limit does not bound the buffered HTTP response.
 
 ## App tools through MCP
 
@@ -174,9 +188,9 @@ the capability's token or signature is replaced by an empty 500.
 ## What a run keeps
 
 The service has no database. The messages, the tool calls and results, and the
-answer pass through its memory only. The service writes the system prompt and,
-when the run offers tools, the tool relay's connection file with its per-run secret
-into the run's private tree ([host.md](host.md), "A subscription run's
+answer pass through its memory only. For subscription runs, the service writes
+the system prompt and, when the run offers tools, the tool relay's connection file
+with its per-run secret into the run's private tree ([host.md](host.md), "A subscription run's
 directories", owns the layout, the modes and when the tree is removed). What the
 CLI may write, inside the tree or outside it, is under "What the CLI writes" below.
 When the service cannot confirm that the run's process group is gone, it

@@ -234,9 +234,11 @@ def test_rotation_to_per_app_only_keys_is_a_file_only_change(tmp_path, monkeypat
                 ({"shared_key": "first"}, "songmaker", SONGMAKER_CLIENT),
                 ({"shared_key": "shared", "app_keys": {"songmaker": "preferred"}},
                  "songmaker", SONGMAKER_CLIENT),
-                ({"app_keys": {"songmaker": "song", "presentator": "slides"}},
+                ({"app_keys": {"songmaker": "synthetic-song-key",
+                               "presentator": "synthetic-slides-key"}},
                  "songmaker", SONGMAKER_CLIENT),
-                ({"app_keys": {"songmaker": "song", "presentator": "slides"}},
+                ({"app_keys": {"songmaker": "synthetic-song-key",
+                               "presentator": "synthetic-slides-key"}},
                  "presentator", PRESENTATOR_CLIENT),
             ]:
                 credentials(config.api.credential_file, document)
@@ -246,7 +248,8 @@ def test_rotation_to_per_app_only_keys_is_a_file_only_change(tmp_path, monkeypat
                 assert isinstance(decoded_events(response.content)[-1], Succeeded)
 
     asyncio.run(run())
-    assert sent == ["Bearer first", "Bearer preferred", "Bearer song", "Bearer slides"]
+    assert sent == ["Bearer first", "Bearer preferred",
+                    "Bearer synthetic-song-key", "Bearer synthetic-slides-key"]
     assert len(clients) == 4
     assert all(client.is_closed for client in clients)
 
@@ -266,18 +269,6 @@ def test_invalid_rotated_credentials_refuse_before_http(tmp_path, monkeypatch, c
                     change == "no-app" else {"shared_key": "good", "app_keys": {"songmaker": ""}})
     events = decoded_events(asyncio.run(service_response(config)).content)
     assert events[-1].code is FailureCode.PROVIDER_UNAVAILABLE
-    assert not clients
-
-
-def test_requested_tools_refuse_before_http(tmp_path, monkeypatch):
-    from agent_runtime_client.tools import ToolEffect
-
-    config = configured(tmp_path)
-    clients = fake_gateway(monkeypatch, lambda request: pytest.fail("tool request sent HTTP"))
-    events = decoded_events(asyncio.run(service_response(config, tools={
-        "read_song": ToolEffect.READ_ONLY})).content)
-    assert [event.type for event in events] == ["run_started", "failed"]
-    assert events[-1].code is FailureCode.PROVIDER_ERROR
     assert not clients
 
 
@@ -644,7 +635,7 @@ def test_credential_refusal_removes_active_caller_chain(tmp_path, boundary):
     assert_closed_refusal(raised.value)
 
 
-@pytest.mark.parametrize("scenario", ["tools", "credentials", "http", "protocol", "reflection"])
+@pytest.mark.parametrize("scenario", ["credentials", "http", "protocol", "reflection"])
 @in_loop
 async def test_runner_refusal_removes_active_caller_chain(tmp_path, monkeypatch, scenario):
     from dataclasses import replace
@@ -657,14 +648,14 @@ async def test_runner_refusal_removes_active_caller_chain(tmp_path, monkeypatch,
     from agent_runtime_service.runners import ApiUnavailable
 
     config = configured(tmp_path)
-    body = run_body(tools={"read_song": "read_only"}) if scenario == "tools" else run_body()
+    body = run_body()
     admitted = replace(alice_admitted_run(uuid4()), request=RunRequest.model_validate(body),
                        route=Api("synthetic"))
     if scenario == "credentials":
         config.api.credential_file.unlink()
 
     def upstream(request):
-        assert scenario not in {"tools", "credentials"}
+        assert scenario != "credentials"
         if scenario == "http":
             return httpx.Response(503, content=b"unavailable")
         if scenario == "protocol":
@@ -672,7 +663,7 @@ async def test_runner_refusal_removes_active_caller_chain(tmp_path, monkeypatch,
         return httpx.Response(200, json=answer("synthetic-gateway-key"))
 
     clients = fake_gateway(monkeypatch, upstream)
-    events = api_runner.ApiRunner(config).run(admitted)
+    events = api_runner.ApiRunner(config, tls_context=None, clock=LoopClock()).run(admitted)
     try:
         expected = ApiUnavailable if scenario in {"credentials", "http"} else ValueError
         try:

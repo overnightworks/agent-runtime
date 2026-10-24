@@ -10,6 +10,7 @@ from typing import Any, Final, Self
 from agent_runtime.cli_run import RelayAccess
 from agent_runtime.outlasting import outlast, wait_outlasting_cancellation
 from agent_runtime_client.capability import McpOrigin
+from agent_runtime_client.mcp_wire import HttpAnswer
 from agent_runtime_service.app_tools import open_app_tools
 from agent_runtime_service.capability import Capability
 from agent_runtime_service.run_liveness import (
@@ -21,7 +22,9 @@ from agent_runtime_service.tool_relay import (
     McpRelayOwner,
     Relay,
     RelayOwner,
+    RelayRequest,
     ToolCallBarrier,
+    Unanswered,
 )
 
 log = logging.getLogger(__name__)
@@ -210,6 +213,9 @@ class RunTools:
     @property
     def calls(self) -> ToolCallBarrier:
         return self._barrier
+
+    async def answer(self, request: RelayRequest) -> HttpAnswer | Unanswered:
+        return await self._owner.answer(request)
 
     async def close(self, reap: Callable[[], Awaitable[None]]) -> None:
         await outlast(

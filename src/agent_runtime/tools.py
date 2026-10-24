@@ -17,6 +17,7 @@ from here keeps working.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -85,14 +86,15 @@ def anthropic_tool_schemas(catalog: ToolCatalog) -> list[dict[str, Any]]:
 
 def openai_tool_schemas(catalog: ToolCatalog) -> list[dict[str, Any]]:
     """Render a catalog in the shape OpenAI-compatible chat APIs expect."""
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": tool.name,
-                "description": tool.description,
-                "parameters": tool.parameters,
-            },
-        }
-        for tool in catalog.tools
-    ]
+    return [openai_tool_schema(tool.name, tool.description, tool.parameters)
+            for tool in catalog.tools]
+
+
+def openai_tool_schema(
+    name: str, description: str | None, parameters: Mapping[str, object],
+) -> dict[str, Any]:
+    """Project one declared function, preserving an absent description."""
+    function = {"name": name, "parameters": parameters}
+    if description is not None:
+        function["description"] = description
+    return {"type": "function", "function": function}
