@@ -4227,14 +4227,21 @@ unique canary absent from stores, stdout and callbacks is the live activation
 proof owned by overnightworks/edge#299. Repository tests use only fake HTTP and
 synthetic keys; they do not establish the deployed gateway's authority or retention.
 
-**Service boundary.** The core owns OpenAI JSON parsing; its explicit-client text
-entry accepts only a 2xx response with an assistant string and `stop` completion,
-and refuses tool output. Existing public tool-loop and synchronous callers retain
-their contracts. The API runner buffers the response, checks gateway-credential
-and capability reflection before yielding, and closes its fresh HTTP client on
-completion or cancellation. HTTP failures map to `provider_unavailable`; malformed
-or incomplete responses map to `provider_error`, without upstream exception chains.
-The host's environment contributes no HTTP proxy, cookies, redirect or retry policy.
+**Service boundary.** The core owns OpenAI JSON parsing and conversation history.
+Its strict buffered entry checks complete assistant rounds and canonicalizes call
+history; existing public streaming, synchronous and text-only callers retain their
+contracts. The service owns the asynchronous conversation with granted MCP tools,
+using the existing run session, MCP parser and call/result acceptance barrier.
+Whole-round protocol, rights and protected-value checks precede that round's text
+or effects; budgets remain the existing event-level limits, not an atomic round
+reservation. Prospective accumulated text is checked too, so splitting a protected
+value across rounds cannot disclose its completing fragment. No extra core-loop
+round ceiling or CLI listener is introduced. Session shutdown stops the barrier
+before cancelling the conversation and settles app forwards within the existing
+bounds. The fresh HTTP client closes on completion, refusal and cancellation.
+HTTP failures map to `provider_unavailable`; malformed or incomplete responses map
+to `provider_error`, without upstream exception chains. The host's environment
+contributes no HTTP proxy, cookies, redirect or retry policy.
 The [operator guide](../operations.md#configure-the-api-text-route) owns configuration
 and file rotation; [wire.md](../wire.md#api-text-results) owns observable results.
 

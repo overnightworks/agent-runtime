@@ -36,7 +36,7 @@ def installed_runners(
 
     return Runners(
         cli=CliRunner(config, tls_context=tls_context, clock=clock) if config.cli else None,
-        api=ApiRunner(config) if config.api else None,
+        api=ApiRunner(config, tls_context=tls_context, clock=clock) if config.api else None,
     )
 
 

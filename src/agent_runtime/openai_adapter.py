@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -29,6 +30,7 @@ from agent_runtime.tool_loop import (
     TransportResponse,
     stream_tool_loop,
 )
+from agent_runtime_client.mcp_wire import read_strict_json
 
 
 async def stream_openai_compatible_turn(
@@ -46,7 +48,7 @@ async def stream_openai_compatible_turn(
     """Stream one OpenAI-compatible turn through the host's tool catalog."""
     try:
         async with httpx.AsyncClient(timeout=TURN_TIMEOUT_SECONDS) as client:
-            transport = _OpenAITransport(
+            transport = OpenAIConversation(
                 client=client,
                 provider=provider,
                 api_url=api_url,
@@ -95,7 +97,13 @@ async def stream_openai_compatible_turn(
         ) from exc
 
 
-class _OpenAITransport:
+@dataclass(frozen=True)
+class BufferedOpenAIRound:
+    text: str
+    calls: tuple[ToolCall, ...]
+
+
+class OpenAIConversation:
     """OpenAI chat-completions wire format behind the shared loop contract."""
 
     def __init__(
@@ -164,6 +172,65 @@ class _OpenAITransport:
                 _parse_tool_call(call, self._provider) for call in tool_calls
             )
         ))
+
+    async def complete(self, message: InitialTurn | ToolResultBatch) -> BufferedOpenAIRound:
+        """Buffer and validate one entire round before making any of it available."""
+        failure = SafeRouteReasonCode.API_PROTOCOL_ERROR
+        try:
+            if isinstance(message, ToolResultBatch):
+                expected = (() if self._assistant_message is None else tuple(
+                    call["id"] for call in self._assistant_message["tool_calls"]
+                ))
+                if (not expected
+                    or tuple(result.tool_use_id for result in message.results) != expected):
+                    raise ToolLoopProtocolError()
+            self._append_message(message)
+            assert self._messages is not None
+            response = await _request_chat(
+                self._client, self._provider, self._api_url, self._api_key,
+                self._model, self._messages, self._tool_schemas,
+            )
+            if not 200 <= response.status_code < 300:
+                failure = SafeRouteReasonCode.API_HTTP_ERROR
+            else:
+                payload = read_strict_json(response.content.decode("utf-8"))
+                # Re-encoding validates Unicode even in unknown nested provider fields.
+                json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
+                if isinstance(payload, dict):
+                    return self._completed_round(payload)
+        except ProviderUnavailableError as error:
+            assert error.reason is not None
+            failure = error.reason.code
+        except (ValueError, RecursionError, ToolLoopProtocolError):
+            pass
+        raise_without_chain(ProviderUnavailableError(
+            self._provider, "api", normalize_route_failure(failure),
+        ))
+
+    def _completed_round(self, payload: Mapping[str, object]) -> BufferedOpenAIRound:
+        message = _assistant_message(payload, self._provider)
+        calls = message.get("tool_calls")
+        if not calls:
+            return BufferedOpenAIRound(_completed_text(payload, self._provider), ())
+        choices = payload["choices"]
+        assert isinstance(choices, list)
+        content = message.get("content")
+        if (message.get("role") != "assistant" or not isinstance(calls, list)
+            or choices[0].get("finish_reason") != "tool_calls"
+            or message.get("function_call") is not None
+            or (content is not None and not isinstance(content, str))):
+            raise ValueError("invalid tool round")
+        parsed = tuple(ToolCall(*_parse_tool_call(call, self._provider, strict=True))
+                       for call in calls)
+        if len({call.tool_use_id for call in parsed}) != len(parsed):
+            raise ValueError("repeated call identifier")
+        self._assistant_message = {
+            "role": "assistant", "content": content,
+            "tool_calls": [{"id": call.tool_use_id, "type": "function", "function": {
+                "name": call.name, "arguments": json.dumps(call.arguments, allow_nan=False),
+            }} for call in parsed],
+        }
+        return BufferedOpenAIRound(content or "", parsed)
 
     def _append_message(self, message: InitialTurn | ToolResultBatch) -> None:
         if isinstance(message, InitialTurn):
@@ -364,7 +431,9 @@ def call_openai_compatible_once(
     return content
 
 
-def _parse_tool_call(call: object, provider: str) -> tuple[str, str, dict[str, Any]]:
+def _parse_tool_call(
+    call: object, provider: str, *, strict: bool = False,
+) -> tuple[str, str, dict[str, Any]]:
     if not isinstance(call, dict):
         raise ProviderUnavailableError(
             provider,
@@ -386,6 +455,10 @@ def _parse_tool_call(call: object, provider: str) -> tuple[str, str, dict[str, A
             "api",
             normalize_route_failure(SafeRouteReasonCode.TOOL_PROTOCOL_ERROR),
         )
+    if strict:
+        if call.get("type") != "function":
+            raise ValueError("invalid function call")
+        return call_id, name, _strict_arguments(function.get("arguments"))
     raw_args = function.get("arguments") or "{}"
     if isinstance(raw_args, str):
         try:
@@ -411,3 +484,13 @@ def _parse_tool_call(call: object, provider: str) -> tuple[str, str, dict[str, A
             normalize_route_failure(SafeRouteReasonCode.TOOL_PROTOCOL_ERROR),
         )
     return call_id, name, arguments
+
+
+def _strict_arguments(raw: object) -> dict[str, Any]:
+    if not isinstance(raw, str):
+        raise ValueError("arguments must be a JSON string")
+    arguments = read_strict_json(raw)
+    if not isinstance(arguments, dict):
+        raise ValueError("arguments must be an object")
+    json.dumps(arguments, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    return arguments

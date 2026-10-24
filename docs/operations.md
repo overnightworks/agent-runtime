@@ -50,9 +50,9 @@ principal (`agent_runtime_service.identity`). The checks run in this order:
 At most `[runs] max_parallel_cli_runs` (default 5) CLI runs are admitted; one
 beyond gets 429 `busy` with `Retry-After` and never falls back to the API
 route. The CLI runner serves Claude and checks its pinned version at startup.
-The optional API runner serves buffered text through the configured gateway;
-it takes no subscription place. API runs requesting tools fail before contacting
-the gateway. The CLI and API runners are installed independently.
+The optional API runner serves buffered text and granted app tools through the
+configured gateway; it takes no subscription place. Both routes use the app's
+MCP origin and trust configuration. The CLI and API runners are installed independently.
 
 ## Configure the API text route
 
