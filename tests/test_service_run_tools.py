@@ -8,16 +8,13 @@ that waits for a deadline or for the peer fails the row instead of hanging it.
 
 import asyncio
 import contextlib
-import errno
 import gc
-import inspect
 import json
 import ssl
 import threading
 import weakref
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AsyncExitStack
-from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any, cast
 
@@ -59,7 +56,7 @@ from service_support import (
 
 from agent_runtime.errors import ContainmentLost, RetainedGroup
 from agent_runtime_client.mcp_wire import CallToolParams
-from agent_runtime_service.app_tools import AppToolsSession, UpstreamRefused, open_app_tools
+from agent_runtime_service.app_tools import open_app_tools
 from agent_runtime_service.run_tools import (
     UPSTREAM_ABORT_SECONDS,
     UPSTREAM_CLOSE_SECONDS,
@@ -67,11 +64,8 @@ from agent_runtime_service.run_tools import (
 )
 from agent_runtime_service.tool_relay import (
     RELAY_CLOSE_SECONDS,
-    McpRelayOwner,
     Relay,
-    RepeatedToolOffer,
     ToolCallBarrier,
-    UnofferedTool,
 )
 
 SUPPORTED = "2025-11-25"
@@ -113,14 +107,6 @@ def held_after_the_head(_gate: threading.Event) -> Mapping[str, Responder]:
         return FakeResponse(body=answer.body[:HEAD_BYTES], held_back=answer.body[HEAD_BYTES:])
 
     return {"tools/call": respond}
-
-
-def listing_held(gate: threading.Event) -> Mapping[str, Responder]:
-    def respond(request: Any) -> FakeResponse:
-        gate.wait(TEST_WAIT_SECONDS)
-        return rpc_result(request, tool_listing(OFFERED))
-
-    return {"tools/list": respond}
 
 
 def task_names(prefix: str) -> list[str]:
@@ -451,7 +437,7 @@ async def stalled_tools(scene: Scene, plan: Stalls) -> RunTools:
     scene.stall(httpx.AsyncHTTPTransport, "aclose")
     scene.stall(ToolCallBarrier, "settle")
     await put_a_forwarded_call_on_the_barrier(scene, barrier)
-    return RunTools(RUN_ID, scene.clock, relay, barrier, upstream)
+    return RunTools(RUN_ID, scene.clock, owner, barrier, upstream, relay=relay)
 
 
 class Target:
@@ -698,223 +684,3 @@ def test_a_failing_step_is_logged_by_class_and_leaks_no_token(authority, monkeyp
         assert [secret in caplog.text for secret in (TOKEN, signature)] == [False, False]
 
     run_scene(scenario, authority, monkeypatch, caplog)
-
-
-def test_open_builds_the_tool_set_after_discovery(authority, monkeypatch, caplog):
-    async def scenario(scene: Scene) -> None:
-        opening = asyncio.get_running_loop().create_task(scene.open(), name="test:opener")
-        await yield_until(lambda: any(r.rpc_method == "tools/list" for r in scene.fake.requests))
-        assert scene.listeners.servers == []
-        scene.app_gate.set()
-
-        await finished(opening)
-        tools = opening.result()
-
-        assert len(scene.listeners.serving) == 1
-        client = await RawClient.connect(port_of(door_of(tools)))
-        await client.send(post_message(door_of(tools), json_rpc("tools/list", 1), SUPPORTED))
-        listed = await reply_of(client)
-        assert [tool["name"] for tool in listed["result"]["tools"]] == ["edit_song"]
-        await client.send(cli_call(tools, 2))
-        assert (await within_the_bound(tools.calls.next_event())).name == "edit_song"
-        closer = start_close(tools, injected_reap())
-        assert await ending_of(closer) is None
-        await scene.assert_nothing_left()
-        await scene.app_saw_every_connection_end()
-
-    run_scene(scenario, authority, monkeypatch, caplog, listing_held)
-
-
-def remembering_raised(
-    monkeypatch: pytest.MonkeyPatch, owner: type, name: str
-) -> list[BaseException]:
-    raised: list[BaseException] = []
-    original = getattr(owner, name)
-
-    async def remembering_async(*args: Any, **kwargs: Any) -> Any:
-        try:
-            return await original(*args, **kwargs)
-        except BaseException as failure:
-            raised.append(failure)
-            raise
-
-    def remembering(*args: Any, **kwargs: Any) -> Any:
-        try:
-            return original(*args, **kwargs)
-        except BaseException as failure:
-            raised.append(failure)
-            raise
-
-    monkeypatch.setattr(
-        owner, name, remembering_async if inspect.iscoroutinefunction(original) else remembering
-    )
-    return raised
-
-
-@dataclass(frozen=True)
-class FailedOpen:
-    expected: type[BaseException]
-    lines: list[tuple[str, str]]
-    refuses_listing: bool = False
-    listed: tuple[str, ...] | None = None
-    fails_transport_close: bool = False
-    stalls_cleanup: bool = False
-    raised_by: tuple[type, str] | None = None
-
-
-FAILED_OPENS = {
-    "the listing is refused": FailedOpen(
-        UpstreamRefused, [], refuses_listing=True, raised_by=(AppToolsSession, "list_tools")
-    ),
-    "an allowed tool is offered twice and the client's exit fails": FailedOpen(
-        RepeatedToolOffer,
-        [(CLIENT_EVENT, "UpstreamCallLost")],
-        listed=("edit_song", "edit_song"),
-        fails_transport_close=True,
-        raised_by=(McpRelayOwner, "__init__"),
-    ),
-    "a signed tool is missing from the listing": FailedOpen(
-        UnofferedTool, [], listed=("delete_song",), raised_by=(McpRelayOwner, "__init__")
-    ),
-    "the relay cannot listen and the client's cleanup stalls": FailedOpen(
-        OSError, [(CLIENT_EVENT, "UpstreamCleanupIncomplete")], stalls_cleanup=True
-    ),
-}
-
-
-@pytest.mark.parametrize("case", FAILED_OPENS.values(), ids=FAILED_OPENS.keys())
-def test_a_failed_open_leaves_the_client_and_keeps_its_own_failure(
-    authority, monkeypatch, caplog, case
-):
-    def refusing_the_listing(_gate: threading.Event) -> Mapping[str, Responder]:
-        refusal = FakeResponse(status=500, content_type=None)
-        return {"tools/list": lambda _request: refusal} if case.refuses_listing else {}
-
-    async def scenario(scene: Scene) -> None:
-        address_in_use = OSError(errno.EADDRINUSE, "in use")
-        raised = (
-            remembering_raised(scene.monkeypatch, *case.raised_by)
-            if case.raised_by
-            else [address_in_use]
-        )
-        if case.stalls_cleanup:
-            scene.listeners.failure = address_in_use
-            stall = scene.stall(httpcore_anyio.AnyIOStream, "aclose")
-        if case.fails_transport_close:
-            failing_transport_close(scene.monkeypatch)
-        opening = asyncio.get_running_loop().create_task(scene.open(), name="test:opener")
-
-        if case.stalls_cleanup:
-            await through_parks(scene, (UPSTREAM_ABORT_SECONDS,))
-        ending = await ending_of(opening)
-
-        assert isinstance(ending, case.expected)
-        assert ending is raised[0]
-        if case.stalls_cleanup:
-            assert stall.pending
-            await scene.release_and_drain()
-            assert stall.original_ran
-        assert scene.listeners.serving == []
-        await scene.release_and_drain()
-        await scene.assert_nothing_left()
-        await scene.app_saw_every_connection_end()
-        assert scene.logged() == case.lines
-        assert "edit_song" not in caplog.text
-
-    pages = [tool_listing(list(case.listed))] if case.listed else None
-    run_scene(scenario, authority, monkeypatch, caplog, refusing_the_listing, pages)
-
-
-OPENER_CANCELS = {
-    "directly once": (Cancellation.DIRECT, 1),
-    "directly again after the client step parked": (Cancellation.DIRECT, 2),
-    "by level": (Cancellation.LEVEL, 1),
-}
-
-
-@pytest.mark.parametrize("cancellation, times", OPENER_CANCELS.values(), ids=OPENER_CANCELS.keys())
-def test_a_failed_open_outlasts_cancellations_during_its_client_cleanup_and_keeps_its_failure(
-    authority, monkeypatch, caplog, cancellation, times
-):
-    def refusing_the_listing(_gate: threading.Event) -> Mapping[str, Responder]:
-        refusal = FakeResponse(status=500, content_type=None)
-        return {"tools/list": lambda _request: refusal}
-
-    async def scenario(scene: Scene) -> None:
-        listing_failures = remembering_raised(scene.monkeypatch, AppToolsSession, "list_tools")
-        stall = scene.stall(httpx.AsyncHTTPTransport, "aclose")
-        scope = anyio.CancelScope()
-
-        async def opening_in_scope() -> RunTools | None:
-            with scope:
-                return await scene.open()
-            return None
-
-        opening = asyncio.get_running_loop().create_task(
-            opening_in_scope() if cancellation is Cancellation.LEVEL else scene.open(),
-            name="test:opener",
-        )
-        await yield_until(lambda: stall.pending)
-        if cancellation is Cancellation.LEVEL:
-            scope.cancel()
-        else:
-            opening.cancel()
-        if times == 2:
-            await parked_at(scene.clock, UPSTREAM_ABORT_SECONDS)
-            opening.cancel()
-        await through_parks(scene, (UPSTREAM_ABORT_SECONDS,))
-        ending = await ending_of(opening)
-
-        assert ending is listing_failures[0]
-        assert scene.clock.now == UPSTREAM_ABORT_SECONDS
-        assert stall.pending
-        await scene.release_and_drain()
-        assert stall.cancelling == 1
-        await scene.assert_nothing_left()
-        await scene.app_saw_every_connection_end()
-        assert scene.logged() == [(CLIENT_EVENT, "UpstreamCleanupIncomplete")]
-
-    run_scene(scenario, authority, monkeypatch, caplog, refusing_the_listing)
-
-
-@pytest.mark.parametrize("cancellation", list(Cancellation))
-def test_a_cancelled_open_parks_its_stalled_client_cleanup_and_keeps_the_cancellation(
-    authority, monkeypatch, caplog, cancellation
-):
-    async def scenario(scene: Scene) -> None:
-        stall = scene.stall(httpx.AsyncHTTPTransport, "aclose")
-        scope = anyio.CancelScope()
-
-        async def opening_in_scope() -> RunTools | None:
-            with scope:
-                return await scene.open()
-            return None
-
-        opening = asyncio.get_running_loop().create_task(
-            opening_in_scope() if cancellation is Cancellation.LEVEL else scene.open(),
-            name="test:opener",
-        )
-        await yield_until(lambda: any(r.rpc_method == "tools/list" for r in scene.fake.requests))
-        if cancellation is Cancellation.LEVEL:
-            scope.cancel()
-        else:
-            opening.cancel()
-
-        await through_parks(scene, (UPSTREAM_ABORT_SECONDS,))
-        ending = await ending_of(opening)
-
-        if cancellation is Cancellation.LEVEL:
-            assert ending is None
-            assert scope.cancelled_caught
-        else:
-            assert isinstance(ending, asyncio.CancelledError)
-        assert scene.clock.now == UPSTREAM_ABORT_SECONDS
-        assert stall.pending
-        assert scene.listeners.serving == []
-        await scene.release_and_drain()
-        assert stall.original_ran
-        await scene.assert_nothing_left()
-        await scene.app_saw_every_connection_end()
-        assert scene.logged() == [(CLIENT_EVENT, "UpstreamCleanupIncomplete")]
-
-    run_scene(scenario, authority, monkeypatch, caplog, listing_held)

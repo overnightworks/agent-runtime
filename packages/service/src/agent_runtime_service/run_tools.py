@@ -1,10 +1,10 @@
-"""A run's tool set: the app's client, the barrier and the relay, opened once and closed once."""
+"""A run's tool set: the app's client, the barrier and an optional relay, closed once."""
 
 import asyncio
 import logging
 import ssl
-from collections.abc import Awaitable, Callable, Coroutine
-from contextlib import AsyncExitStack
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Any, Final, Self
 
 from agent_runtime.cli_run import RelayAccess
@@ -20,6 +20,7 @@ from agent_runtime_service.run_liveness import (
 from agent_runtime_service.tool_relay import (
     McpRelayOwner,
     Relay,
+    RelayOwner,
     ToolCallBarrier,
 )
 
@@ -99,23 +100,39 @@ async def _leave_client(run_id: str, clock: RunClock, upstream: AsyncExitStack) 
     )
 
 
-class RunTools:
-    """The tool set of one run, opened by ``open`` and closed once by ``close``.
+@asynccontextmanager
+async def _leave_on_failed_open(
+    run_id: str, clock: RunClock, upstream: AsyncExitStack
+) -> AsyncIterator[None]:
+    try:
+        yield
+    except BaseException:
+        leaving = asyncio.get_running_loop().create_task(
+            _leave_client(run_id, clock, upstream), name=f"run-tools:{run_id}:failed-open"
+        )
+        await wait_outlasting_cancellation(leaving)
+        leaving.result()
+        raise
 
-    ``open`` enters ``open_app_tools``, lists the app's tools, builds the ``ToolCallBarrier``
-    and the ``McpRelayOwner`` and starts the relay; ``access`` and ``calls`` are what the
-    runner uses. A failure after the client was entered, a cancellation included, leaves the
+
+class RunTools:
+    """The tool set of one run, opened by ``open_session`` and closed once by ``close``.
+
+    ``open_session`` enters ``open_app_tools``, lists the app's tools and builds the
+    ``ToolCallBarrier`` and ``McpRelayOwner``. ``open`` immediately attaches the relay;
+    ``access`` and ``calls`` are what the runner uses. A failure after the client was entered,
+    a cancellation included, leaves the
     client within ``UPSTREAM_ABORT_SECONDS`` and propagates as the same object: no cancellation
     of the opener, direct or AnyIO's level one, cuts that leaving short or replaces the failure.
 
     ``close(reap)`` is one attempt of five steps, in this order:
 
-    1. the relay stops listening and the barrier stops, with no await between them;
+    1. the relay, if attached, stops listening and the barrier stops, without awaiting;
     2. the injected ``reap`` runs to its own bound; its exception is kept, not logged;
     3. the forwards are cancelled once and ``settle()`` is awaited within
        ``UPSTREAM_CLOSE_SECONDS``;
     4. the app's client is left within ``UPSTREAM_ABORT_SECONDS``;
-    5. the relay's connections are closed within ``RELAY_CLOSE_SECONDS``.
+    5. an attached relay's connections are closed within ``RELAY_CLOSE_SECONDS``.
 
     Each deadline is read on the run's ``RunClock`` when its step starts, so an early end gives
     nothing to a later step and an overrun takes nothing from it. The bound is the owner's wait
@@ -139,18 +156,21 @@ class RunTools:
         self,
         run_id: str,
         clock: RunClock,
-        relay: Relay,
+        owner: RelayOwner,
         barrier: ToolCallBarrier,
         upstream: AsyncExitStack,
+        *,
+        relay: Relay | None = None,
     ) -> None:
         self._run_id = run_id
         self._clock = clock
+        self._owner = owner
         self._relay = relay
         self._barrier = barrier
         self._upstream = upstream
 
     @classmethod
-    async def open(
+    async def open_session(
         cls,
         run_id: str,
         origin: McpOrigin,
@@ -162,21 +182,29 @@ class RunTools:
         session = await upstream.enter_async_context(
             open_app_tools(origin, capability, tls_context)
         )
-        try:
+        async with _leave_on_failed_open(run_id, clock, upstream):
             offered = await session.list_tools()
             barrier = ToolCallBarrier(run_id, session, capability)
-            relay = await Relay.start(run_id, McpRelayOwner(capability, offered, barrier), clock)
-        except BaseException:
-            leaving = asyncio.get_running_loop().create_task(
-                _leave_client(run_id, clock, upstream), name=f"run-tools:{run_id}:failed-open"
-            )
-            await wait_outlasting_cancellation(leaving)
-            leaving.result()
-            raise
-        return cls(run_id, clock, relay, barrier, upstream)
+            owner = McpRelayOwner(capability, offered, barrier)
+            return cls(run_id, clock, owner, barrier, upstream)
+
+    @classmethod
+    async def open(
+        cls,
+        run_id: str,
+        origin: McpOrigin,
+        capability: Capability,
+        tls_context: ssl.SSLContext,
+        clock: RunClock,
+    ) -> Self:
+        tools = await cls.open_session(run_id, origin, capability, tls_context, clock)
+        async with _leave_on_failed_open(run_id, clock, tools._upstream):
+            tools._relay = await Relay.start(run_id, tools._owner, clock)
+        return tools
 
     @property
     def access(self) -> RelayAccess:
+        assert self._relay is not None
         return self._relay.access
 
     @property
@@ -191,14 +219,16 @@ class RunTools:
         )
 
     async def _close_once(self, reap: Callable[[], Awaitable[None]]) -> None:
-        self._relay.stop_listening()
+        if self._relay is not None:
+            self._relay.stop_listening()
         self._barrier.stop()
         try:
             await reap()
         finally:
             await self._close_upstream_calls()
             await _leave_client(self._run_id, self._clock, self._upstream)
-            await self._close_relay()
+            if self._relay is not None:
+                await self._close_relay()
 
     async def _close_upstream_calls(self) -> None:
         self._barrier.abort_forwards()
@@ -211,6 +241,7 @@ class RunTools:
         )
 
     async def _close_relay(self) -> None:
+        assert self._relay is not None
         failure = await _failure_of(self._relay.close(), f"run-tools:{self._run_id}:relay-close")
         if failure is not None:
             log_failure(log, f"Closing the relay of run {self._run_id} failed", failure)
