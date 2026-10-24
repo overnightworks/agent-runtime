@@ -76,7 +76,7 @@ flowchart TB
     slot -->|yes| cli["CLI route<br/>claude under the subscription profile<br/>(a ticket: only profiles with background = true)"]
     slot -->|no| busy["429 busy"]
     subscription -->|no| api{"API group member<br/>and route.api_alias set?"}
-    api -->|yes| paid["API route<br/>paid, no runner built"]
+    api -->|yes| paid["API route<br/>buffered gateway text"]
     api -->|no| notenabled["403 not_enabled"]
     cli --> size{"app has an MCP origin and<br/>capability over 8,192 characters?"}
     paid --> size
@@ -92,8 +92,13 @@ marked `background = true`; the picture is otherwise the same.*
 
 Keycloak decides who may use the subscription and who the paid route, through
 groups; the service holds no user list. A requested model is never replaced by
-another. The API runner is not built, so
-an admitted run on the paid route ends `failed: provider_unavailable`.
+another. The independently installed API runner sends the selected model (or
+configured alias) through the core's OpenAI-compatible text adapter. The adapter
+checks the entire buffered completion before the runner releases text; service
+supervision continues heartbeats and time limits while HTTP waits. It refuses tools
+and credential reflection. Without `[api]`, an admitted paid run ends
+`failed: provider_unavailable`. Credential selection and rotation are described in
+[operations.md](operations.md#configure-the-api-text-route).
 
 ## Crosscutting concepts
 

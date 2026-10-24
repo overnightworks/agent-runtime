@@ -4,7 +4,7 @@ A platform other than Linux, a root process, a process that cannot be made non-d
 Claude program and anything it starts could read the service's memory), a configuration the
 service refuses, or a pinned program that does not report its version ends the process
 with exit status 2 and one line naming the reason; nothing is served. Otherwise it serves the
-app with the CLI runner installed when a ``[cli]`` section is set. The runner trusts exactly the
+app with CLI and API runners installed independently from their sections. The CLI trusts the
 CA bundle ``[mcp] ca_file`` names for the apps' MCP origins, loaded only when an app declares
 one; a bundle that cannot be loaded ends the process the same way.
 """
@@ -13,11 +13,32 @@ from __future__ import annotations
 
 import argparse
 import logging
+import ssl
 import sys
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from agent_runtime_service.process_hardening import StartupHardeningRefused, harden_process
+
+if TYPE_CHECKING:
+    from agent_runtime_service.config import ServiceConfig
+    from agent_runtime_service.run_liveness import RunClock
+    from agent_runtime_service.runners import Runners
+
+
+def installed_runners(
+    config: ServiceConfig, tls_context: ssl.SSLContext | None, clock: RunClock
+) -> Runners:
+    """Install each configured route independently after process hardening."""
+    from agent_runtime_service.api_runner import ApiRunner
+    from agent_runtime_service.cli_runner import CliRunner
+    from agent_runtime_service.runners import Runners
+
+    return Runners(
+        cli=CliRunner(config, tls_context=tls_context, clock=clock) if config.cli else None,
+        api=ApiRunner(config) if config.api else None,
+    )
+
 
 EXIT_BAD_CONFIG: Final = 2
 PROGRAM_NAME: Final = "agent-runtime-service"
@@ -52,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from agent_runtime.secret_file import shown_text
     from agent_runtime_service.app import create_app
-    from agent_runtime_service.cli_runner import installed_runners, mcp_tls_context
+    from agent_runtime_service.cli_runner import mcp_tls_context
     from agent_runtime_service.cli_version import ProgramVersionRefused, require_pinned_versions
     from agent_runtime_service.config import ConfigError, load_config
     from agent_runtime_service.run_liveness import LoopClock
@@ -80,7 +101,14 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return EXIT_BAD_CONFIG
-    runners = installed_runners(config, tls_context, LoopClock())
+    try:
+        runners = installed_runners(config, tls_context, LoopClock())
+    except OSError as error:
+        print(
+            f"{REFUSAL_PREFIX}api.ca_file: cannot be loaded: {shown_text(str(error))}",
+            file=sys.stderr,
+        )
+        return EXIT_BAD_CONFIG
     close_transport_loggers()
     uvicorn.run(
         create_app(config, runners=runners),

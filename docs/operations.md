@@ -18,7 +18,7 @@ otherwise. The restriction names the service only. The image must run it as a
 non-root user with `cap_drop: ALL`.
 
 The configuration is read once; a restart applies a change. The signing key
-file and the Claude token file are read and checked with it.
+file, the Claude token file and any API credential file are read and checked with it.
 
 ## Who may run what
 
@@ -49,10 +49,43 @@ principal (`agent_runtime_service.identity`). The checks run in this order:
 
 At most `[runs] max_parallel_cli_runs` (default 5) CLI runs are admitted; one
 beyond gets 429 `busy` with `Retry-After` and never falls back to the API
-route. The service has a runner for the CLI route only, with Claude as its
-provider, and checks the version of each pinned CLI at startup. The API runner
-is not built: a run admitted to the API route ends as `failed:
-provider_unavailable`.
+route. The CLI runner serves Claude and checks its pinned version at startup.
+The optional API runner serves buffered text through the configured gateway;
+it takes no subscription place. API runs requesting tools fail before contacting
+the gateway. The CLI and API runners are installed independently.
+
+## Configure the API text route
+
+Set `[identity] api_groups` and `[route] api_alias` together, then add `[api]`
+with `completion_url` and an absolute `credential_file`. The URL must be an ASCII
+HTTP or HTTPS URL with a DNS, IPv4 or bracketed IPv6 host, optional port 1–65535,
+and exactly `/v1/chat/completions`: no user information, query, fragment, escapes
+or whitespace. HTTP is for the isolated gateway network; edge owns its isolation.
+HTTPS requires an absolute `ca_file`, the only trusted CA bundle, and verifies
+the hostname. HTTP forbids `ca_file`; there is no TLS-disable option.
+
+The credential file is UTF-8 JSON with only `shared_key` and/or `app_keys`.
+`app_keys` maps registered app names to credentials. Every credential is nonempty
+Bearer-token text (`[A-Za-z0-9._~+/-]+=*`); duplicate fields, unknown apps and
+invalid entries reject the entire file. The existing secret-file rules apply
+(regular file, no group/other permissions, at most 16 KiB). Store only gateway
+inference credentials here, never provider keys or a gateway administration key.
+The gateway's authority and retention proof belong to
+[H10](decisions/0001-agent-service.md#h10-gateway-proof).
+
+Replace this file to rotate credentials: startup validates it, and each run
+reads it afresh. The authenticated app's entry wins over `shared_key`; without
+either, the run fails before HTTP. Replacing a shared key with keys for each
+registered app needs no service or app code change. An invalid replacement
+fails closed and does not fall back to the old or shared credential.
+
+Removing `[api]` leaves group/alias routing enabled but makes admitted API runs
+fail `provider_unavailable`. To disable paid entitlement entirely, remove
+`api_groups`, `[route]` and `[api]` together; API-only callers then get
+`not_enabled`. A contradictory partial configuration is a startup error.
+Without CLI model configuration, `/offer` lists no models even with API installed;
+apps may still submit explicit models. Gateway activation and paid testing require
+the operator's separate approval; this route's repository proof uses fakes.
 
 ## App tools
 

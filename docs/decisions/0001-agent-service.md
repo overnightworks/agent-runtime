@@ -40,9 +40,9 @@ flowchart LR
         Svc["Agent service<br/>verify user + app, policy (subscription and API groups, owner binding), route"]
         CLI["CLI route<br/>isolated claude -p, one profile"]
         Relay["per-run relay (loopback)"]
-        API["API route<br/>service tool loop"]
+        API["API route<br/>buffered text completion"]
     end
-    LLM["LiteLLM (edge)<br/>upstream keys, budgets, aliases"]
+    LLM["LiteLLM (edge)<br/>upstream keys, aliases"]
     Up["Anthropic API (DPA), local models"]
     MCP["App's MCP endpoint<br/>(optional per app)"]
 
@@ -50,11 +50,10 @@ flowchart LR
     KC -. "issues both tokens" .-> App
     Svc --> CLI
     Svc --> API
-    API -- "LiteLLM alias<br/>(per-app virtual key)" --> LLM
+    API -- "model or alias<br/>app or shared inference key" --> LLM
     LLM --> Up
     CLI -- "tool calls, no capability" --> Relay
     Relay -- "capability token" --> MCP
-    API -- "capability token" --> MCP
     Svc -- "SSE events, GET /runs/{id}" --> App
 ```
 
@@ -265,8 +264,9 @@ body rules be fixed before the build.
 - **The stream.** A runner is a port per route. Production installs the
   CLI runner when `[cli]` is set; it serves every app, with or without tools
   (A1b-11b2); a run on a route or for an app without a runner ends as
-  `failed: provider_unavailable`, never as a success. The API runner arrives
-  with A2b. `agent_service.run_events`
+  `failed: provider_unavailable`, never as a success. An optional `[api]` independently
+  installs the buffered API text runner; requested or returned tools are refused.
+  `agent_service.run_events`
   owns the mapping from the core's turn events onto the wire: a tool call's
   input is deep-copied into its event, and an event that `encode_event` cannot
   write (a non-JSON value, too deep, too large) or that the service's own
@@ -4213,23 +4213,44 @@ is a display filter, not a boundary; the service's role check is.
 
 **Context.** LiteLLM holds the upstream keys and could leak prompts.
 
-**Decision.** Postgres-backed virtual keys per app; the master key is never used
-for inference. Budget reservation, plus provider-side spending caps. Content
-callbacks, prompt and error persistence and debug logging are off, proven by a
-unique canary that is absent from the DB, stdout and callbacks.
+**Decision (operator ruling, 24.10.2026).** Start with LiteLLM without a database.
+Provider credentials are read only by LiteLLM from `~/.secrets/litellm/`; the
+service uses its own inference credential file. The authority boundary is the
+isolated gateway network plus that credential, not an administration key.
+The file can select a credential by authenticated app, falling back to a shared
+credential only when no app entry exists. Postgres and per-app virtual keys can
+therefore be introduced through gateway/edge configuration and this file alone.
+No app protocol or service code change is needed for that replacement.
 
-**Consequence.** The gateway is accepted only with that canary proof (A2a).
+Content callbacks, prompt/error persistence and debug logging must be off. A
+unique canary absent from stores, stdout and callbacks is the live activation
+proof owned by overnightworks/edge#299. Repository tests use only fake HTTP and
+synthetic keys; they do not establish the deployed gateway's authority or retention.
+
+**Service boundary.** The core owns OpenAI JSON parsing; its explicit-client text
+entry accepts only a 2xx response with an assistant string and `stop` completion,
+and refuses tool output. Existing public tool-loop and synchronous callers retain
+their contracts. The API runner buffers the response, checks gateway-credential
+and capability reflection before yielding, and closes its fresh HTTP client on
+completion or cancellation. HTTP failures map to `provider_unavailable`; malformed
+or incomplete responses map to `provider_error`, without upstream exception chains.
+The host's environment contributes no HTTP proxy, cookies, redirect or retry policy.
+The [operator guide](../operations.md#configure-the-api-text-route) owns configuration
+and file rotation; [wire.md](../wire.md#api-text-results) owns observable results.
 
 ## H10b Budget overrun
 
-**Context.** A budget checked after the fact can be overrun by requests in
-flight.
+**Context.** A budget checked after the fact can be overrun by requests in flight.
 
-**Decision.** Fail-closed worst-case reservation: a request is admitted only if
-its maximum cost still fits the budget. Provider-side caps sit behind it.
+**Decision (operator ruling, 24.10.2026).** The lean gateway uses prepaid provider
+credit with automatic reload off as its intended exposure limit. Per-person
+limits and Postgres-backed budgeting are not service admission rules. A repeated
+submission is another run; a finished or cancelled run costs what it consumed.
 
-**Consequence.** No in-flight overrun is possible; some requests that would have
-fit are refused.
+**Consequence.** No hard ceiling or worst-case reservation is claimed by this
+implementation. Actual provider cutoff delay and possible overdraft require the
+operator's spoken ruling before live activation, owned by #463 and
+`overnightworks/edge#299`. Fake billing refusals prove only the named service failure.
 
 ## H11 Subscription use outside the service
 
