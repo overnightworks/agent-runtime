@@ -83,7 +83,8 @@ def claude_run(launch: ProfileLaunch) -> LoggedInRun:
 
 
 def _codex_run(launch: ProfileLaunch, login: CodexLogin, inputs: RunInputs) -> CliRunAdapter:
-    assert inputs.relay is None, "admission refuses tools for a provider without the relay"
+    if inputs.relay is not None:
+        raise ValueError("a Codex run has no tool relay; admission refuses tools before this point")
     return CodexRun(
         launch.binary,
         login,

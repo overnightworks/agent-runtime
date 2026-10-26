@@ -131,7 +131,7 @@ value, stops the service at startup (exit 2, naming `profiles.<name>.background`
 lets the profile serve runs started by a job ticket; `false` keeps it to live runs. `true`
 also needs the `[signing]` section, because a ticket is signed with its key.
 
-**Provide it.** The file holds one line, the token `claude setup-token` prints,
+**Provide it (Claude).** The file holds one line, the token `claude setup-token` prints,
 at a mode that gives nothing to group or others (0600 or 0400), at most 16 KiB.
 JSON (a credentials file) and API keys (`sk-ant-api...`) are refused; a link is
 followed and its target checked. Run `claude setup-token` once, sign in with the
@@ -145,11 +145,12 @@ An API key (`OPENAI_API_KEY`), a bare key line and a Claude setup token are refu
 service hands the program only a copy without the renewal token. Only the file's content is
 named here; how the dedicated login is made is not.
 
-**Renew it.** The token lasts a year and renewing it is the operator's. Run
+**Renew it (Claude).** The token lasts a year and renewing it is the operator's. Run
 `uv run python scripts/replace_token_file.py PATH` from a checkout: it reads
 the new token on standard input, checks it by the service's rules and swaps it
 in atomically; a refused token leaves the old file untouched. The next run
-reads the file again, so no restart is needed.
+reads the file again, so no restart is needed. Renewing a Codex login is not shipped yet:
+that script reads a Claude token and refuses the Codex sign-in document.
 
 **When it fails.** A missing or refused file stops the service at startup, naming
 `profiles.<name>.token_file` and the kind of fault, never the content, or fails a later run as

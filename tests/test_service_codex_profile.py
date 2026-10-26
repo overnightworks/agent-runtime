@@ -43,6 +43,7 @@ from service_support import (
     _service_config_document,
     _toml_lines,
     assert_rejected,
+    decoded_events,
     everything_a_refusal_holds,
     failure_lines,
     fake_app_authority,  # noqa: F401 - a fixture, requested by name
@@ -70,16 +71,27 @@ from test_service_cli_runner import (
     status_of,
 )
 from test_service_config import _refused_on_one_line
+from test_service_ticket_runs import minted_ticket
+from ticket_run_support import running_service, ticket_headers
 
 import agent_runtime_service.cli_runner as cli_runner
+from agent_runtime.cli_run import RelayAccess
 from agent_runtime.codex.run import CODEX_CLI_PROCESS_POOL
 from agent_runtime.config import reset_config
 from agent_runtime.secret_file import MAX_SECRET_FILE_BYTES
-from agent_runtime_client.wire import FailureCode, Offer, OfferRoute, RejectionCode, parse_offer
+from agent_runtime_client.wire import (
+    FailureCode,
+    Offer,
+    OfferRoute,
+    RejectionCode,
+    Turn,
+    parse_offer,
+)
 from agent_runtime_service.capability import Capability
 from agent_runtime_service.cli import main
 from agent_runtime_service.cli_runner import CliRunner, mcp_tls_context
 from agent_runtime_service.config import Provider, ServiceConfig
+from agent_runtime_service.routing import Api, Cli
 from agent_runtime_service.run_events import RUNNER_FAILED_MESSAGE
 from agent_runtime_service.run_liveness import LoopClock
 from agent_runtime_service.runners import AdmittedRun, Runners
@@ -248,7 +260,9 @@ def test_a_codex_profile_without_its_login_or_program_table_is_refused_before_an
     else:
         del document["cli"]["codex"]
 
-    assert refusal in the_refusal_of(document)
+    shown_refusal = the_refusal_of(document)
+    assert refusal in shown_refusal
+    assert "open to group" not in shown_refusal
 
 
 def a_directory_instead(directory: Path) -> Path:
@@ -411,10 +425,13 @@ def test_a_lone_profile_is_the_default_whether_or_not_it_is_marked(tmp_path: Pat
             f"profiles.{CODEX_PROFILE}.default: only one profile may be marked default = true",
             id="two",
         ),
+        pytest.param(
+            (False, "yes"), f"profiles.{CODEX_PROFILE}.default", id="not-a-boolean-is-named"
+        ),
     ],
 )
 def test_two_profiles_need_exactly_one_default(
-    tmp_path: Path, marks: tuple[bool, bool], refusal: str
+    tmp_path: Path, marks: tuple[bool, bool | str], refusal: str
 ) -> None:
     document = a_document_with_both(tmp_path)
     document["profiles"][CLI_PROFILE]["default"], document["profiles"][CODEX_PROFILE]["default"] = (
@@ -662,16 +679,80 @@ def test_a_tool_request_on_a_codex_profile_is_refused_before_any_place_capabilit
         assert (newly_signed, app.fake.accepted_connections) == (0, 0)
 
 
-def test_the_same_codex_request_without_tools_runs(
-    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
+def test_the_same_codex_request_without_tools_runs_even_for_an_app_with_a_tool_origin(
+    tmp_path: Path,
+    authority: TestAuthority,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config, _capture = a_codex_service(tmp_path)
+    with a_tool_app(authority) as app:
+        config = a_config(
+            codex_document(
+                tmp_path,
+                a_service_fake(tmp_path, (THREAD, a_message("one"), DONE)),
+                a_login_file(tmp_path),
+                songmaker={"mcp_origin": app.origin},
+            )
+        )
+        runners = Runners(
+            cli=CliRunner(config, tls_context=mcp_tls_context(authority.ca_file), clock=LoopClock())
+        )
 
-    def scenario(base_url: str) -> Any:
-        body = run_body(turn=THREE_MESSAGE_TURN, tools={})
-        return post_run(base_url, headers(), body).status_code
+        def scenario(base_url: str) -> Any:
+            body = run_body(turn=THREE_MESSAGE_TURN, tools={})
+            return shown(decoded_events(post_run(base_url, headers(), body).content))[-1]
 
-    assert drive_over_http(child_cleanup, monkeypatch, config, scenario) == 200
+        assert drive_over_http(child_cleanup, monkeypatch, config, scenario, runners) == (
+            "succeeded",
+            "one",
+        )
+
+
+SUBSCRIBER = (SUBSCRIPTION_GROUP, SONGMAKER_GROUP)
+
+
+@pytest.mark.parametrize(
+    ("codex_is_default", "groups", "route"),
+    [
+        pytest.param(True, SUBSCRIBER, Cli(CODEX_PROFILE), id="default-is-background"),
+        pytest.param(False, (*SUBSCRIBER, API_GROUP), Api("assistant-api"), id="api-fallback"),
+        pytest.param(False, SUBSCRIBER, None, id="not-enabled-without-api-rights"),
+    ],
+)
+def test_a_ticket_run_on_two_profiles_takes_only_the_background_one(
+    tmp_path: Path, codex_is_default: bool, groups: tuple[str, ...], route: Cli | Api | None
+) -> None:
+    config = a_config(a_document_with_both(tmp_path, codex_is_default=codex_is_default))
+    with running_service(config, MINT.fetch_key_set) as service:
+        ticket = minted_ticket(service.base_url, MINT, groups)
+
+        response = post_run(service.base_url, ticket_headers(MINT.workload(), ticket), run_body())
+
+        if route is None:
+            assert_rejected(response, RejectionCode.NOT_ENABLED, 403)
+        else:
+            assert response.status_code == 200
+            assert [run.route for run in (*service.admitted(), *service.api.admitted)] == [route]
+
+
+def test_a_codex_run_given_a_relay_is_refused_by_an_exception_not_an_assert(
+    tmp_path: Path,
+) -> None:
+    launch = cli_runner.ProfileLaunch(
+        Provider.CODEX,
+        a_service_fake(tmp_path),
+        a_login_file(tmp_path),
+        max_tool_calls=1,
+        tool_timeout_seconds=1.0,
+    )
+    inputs = cli_runner.RunInputs(
+        Turn.model_validate(THREE_MESSAGE_TURN),
+        None,
+        RelayAccess(url="https://relay.test", secret="secret"),
+    )
+
+    with pytest.raises(ValueError, match="no tool relay"):
+        cli_runner.codex_run(launch)(inputs)
 
 
 def test_no_run_adapter_factory_sees_the_admitted_run_or_its_capability() -> None:

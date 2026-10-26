@@ -418,7 +418,7 @@ def _refuse_a_second_profile_for_one_provider(document: object) -> None:
             )
 
 
-SERVED_PROVIDERS: Final = (Provider.CLAUDE, Provider.CODEX)
+SERVED_PROVIDERS: Final = tuple(LOGIN_READERS)
 RELAY_ATTACHED_PROVIDERS: Final = frozenset({Provider.CLAUDE})
 
 
@@ -450,6 +450,9 @@ def _refuse_a_served_profile_without_its_program_table(document: object) -> None
 def _refuse_two_profiles_without_exactly_one_default(document: object) -> None:
     profiles = [(name, table) for name, table, _provider in _raw_profiles(document)]
     if len(profiles) < 2:
+        return
+    defaults = [_value(table, "default") for _name, table in profiles]
+    if any(value is not None and not isinstance(value, bool) for value in defaults):
         return
     marked = [name for name, table in profiles if _value(table, "default") is True]
     if not marked:
