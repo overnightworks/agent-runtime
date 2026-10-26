@@ -75,6 +75,7 @@ _TOOL_ITEM_TYPES: Final = frozenset(
         "web_search",
         "collab_agent_tool_call",
         "image_generation",
+        "image_gen",
     }
 )
 _SILENT_ITEM_TYPES: Final = frozenset({"reasoning", "todo_list", "error"})
@@ -181,8 +182,9 @@ class CodexStreamDecoder:
 
 
 def _toml_basic_string(value: str) -> str:
-    # JSON string escapes are a subset of TOML basic string escapes.
-    return json.dumps(value, ensure_ascii=False)
+    # JSON string escapes are a subset of TOML basic string escapes, except that TOML also
+    # forbids the raw DEL character, which JSON leaves as it is.
+    return json.dumps(value, ensure_ascii=False).replace("\x7f", "\\u007f")
 
 
 @dataclass(frozen=True)

@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 from anchored_leaders import spawn_warnings
 from anchored_support import GONE, ChildCleanup
+from descendant_support import DescendantRow, Handshake, lingering_descendant
 from provider_test_support import (
     CANARY_ACCESS_TOKEN,
     CANARY_ID_TOKEN,
@@ -41,7 +42,7 @@ from agent_runtime.codex.run import (
 from agent_runtime.codex_login import assess_codex_login
 from agent_runtime.config import PrivateWorkingRoot, reset_config
 from agent_runtime.events import AssistantTextEvent, FinalEvent, StreamEvent
-from agent_runtime.spawn import ChildProcessSpecificationError
+from agent_runtime.spawn import ChildProcessSpecificationError, closed_environment
 from agent_runtime_client.wire import TurnMessage
 
 BINARY = Path("/opt/codex/bin/codex")
@@ -49,6 +50,7 @@ SYSTEM_TEXT = "system-canary-7d2e"
 HISTORY_TEXT = "history-canary-91ab"
 CLI_TEXT = "cli-text-canary-5c30"
 MODEL_OPTION = "--model=listed-model"
+PRECONDITIONS_MARKER = "preconditions-passed"
 TOOL_ITEM_TYPES = (
     "command_execution",
     "file_change",
@@ -56,6 +58,7 @@ TOOL_ITEM_TYPES = (
     "web_search",
     "collab_agent_tool_call",
     "image_generation",
+    "image_gen",
 )
 ITEM_EVENT_TYPES = ("item.started", "item.updated", "item.completed")
 
@@ -109,41 +112,45 @@ def decoded_and_ended(lines: tuple[bytes, ...], returncode: int = 0) -> list[Str
     return [*events, decoder.ending(returncode)]
 
 
-def expected_arguments(home: Path, model_option: tuple[str, ...]) -> tuple[str, ...]:
-    switches = (
-        'approval_policy="never"',
-        "mcp_servers={}",
-        *(
-            f"features.{name}=false"
-            for name in (
-                "shell_tool",
-                "unified_exec",
-                "browser_use",
-                "computer_use",
-                "multi_agent",
-                "image_generation",
-                "plugins",
-                "hooks",
-            )
-        ),
-        'web_search="disabled"',
-        *(f"features.{name}=false" for name in ("code_mode_host", "code_mode", "code_mode_only")),
-        f"model_instructions_file={json.dumps(str(home / 'system-prompt'))}",
-    )
-    return (
-        "exec",
-        "--json",
-        "--sandbox",
-        "read-only",
-        "--skip-git-repo-check",
-        "--ignore-user-config",
-        "--ignore-rules",
-        "--ephemeral",
-        "--strict-config",
-        *(part for switch in switches for part in ("-c", switch)),
-        *model_option,
-        "-",
-    )
+BASE_ARGUMENTS = (
+    "exec",
+    "--json",
+    "--sandbox",
+    "read-only",
+    "--skip-git-repo-check",
+    "--ignore-user-config",
+    "--ignore-rules",
+    "--ephemeral",
+    "--strict-config",
+    "-c",
+    'approval_policy="never"',
+    "-c",
+    "mcp_servers={}",
+    "-c",
+    "features.shell_tool=false",
+    "-c",
+    "features.unified_exec=false",
+    "-c",
+    "features.browser_use=false",
+    "-c",
+    "features.computer_use=false",
+    "-c",
+    "features.multi_agent=false",
+    "-c",
+    "features.image_generation=false",
+    "-c",
+    "features.plugins=false",
+    "-c",
+    "features.hooks=false",
+    "-c",
+    'web_search="disabled"',
+    "-c",
+    "features.code_mode_host=false",
+    "-c",
+    "features.code_mode=false",
+    "-c",
+    "features.code_mode_only=false",
+)
 
 
 @pytest.mark.parametrize(
@@ -158,10 +165,21 @@ def test_the_argv_is_the_measured_base_plus_the_system_file_and_the_model(
 ) -> None:
     start = a_run(model=model).start(tmp_path / "home", tmp_path / "work")
 
-    assert start.child.arguments == expected_arguments(tmp_path / "home", model_option)
+    arguments = start.child.arguments
+    flag, system_switch, *tail = arguments[len(BASE_ARGUMENTS) :]
+    assert (arguments[: len(BASE_ARGUMENTS)], flag, tuple(tail)) == (
+        BASE_ARGUMENTS,
+        "-c",
+        (*model_option, "-"),
+    )
+    assert tomllib.loads(system_switch) == {
+        "model_instructions_file": str(tmp_path / "home" / "system-prompt")
+    }
 
 
-@pytest.mark.parametrize("name", ['we"ird', "back\\slash", 'both"\\', "grüße-😀", "line\nbreak"])
+@pytest.mark.parametrize(
+    "name", ['we"ird', "back\\slash", 'both"\\', "grüße-😀", "line\nbreak", "del\x7fchar"]
+)
 def test_a_home_path_with_special_characters_stays_one_toml_string(
     tmp_path: Path, name: str
 ) -> None:
@@ -178,7 +196,7 @@ def test_the_environment_adds_only_the_run_home_as_codex_home(tmp_path: Path) ->
 
     environment = start.child.environment
     assert (environment["CODEX_HOME"], environment["HOME"]) == (str(home), str(home))
-    assert [name for name in environment if name.startswith(("CODEX", "OPENAI"))] == ["CODEX_HOME"]
+    assert set(environment) == {*closed_environment(home), "CODEX_HOME"}
 
 
 def test_no_login_system_or_history_text_is_in_argv_environment_or_repr(tmp_path: Path) -> None:
@@ -326,7 +344,7 @@ def test_a_run_without_a_completed_answered_clean_turn_ends_with_no_answer(
         decoded_and_ended(stream, returncode)
 
 
-def test_every_failure_class_has_a_fixed_message_naming_no_cli_text() -> None:
+def test_every_failure_class_has_its_own_fixed_message() -> None:
     failures = (
         CodexToolItem(),
         CodexUnknownStreamPart(),
@@ -340,7 +358,7 @@ def test_every_failure_class_has_a_fixed_message_naming_no_cli_text() -> None:
 
 
 def a_fake_codex(directory: Path, stream: tuple[bytes, ...], then: str = "exit 0") -> Path:
-    """A stand-in for the pinned CLI that exits with a distinct code on a wrong run."""
+    """A stand-in for the pinned CLI: a distinct exit code on a wrong run, else a marker file."""
     stream_file = directory / "stream.jsonl"
     stream_file.write_bytes(b"".join(stream))
     expected_stdin = f"User: first question\n\nAssistant: first answer\n\nUser: {HISTORY_TEXT}"
@@ -353,6 +371,7 @@ def a_fake_codex(directory: Path, stream: tuple[bytes, ...], then: str = "exit 0
         f'[ "$(cat "$CODEX_HOME/system-prompt")" = {shlex.quote(SYSTEM_TEXT)} ] || exit 13\n'
         f'[ "$(cat)" = {shlex.quote(expected_stdin)} ] || exit 14\n'
         'case " $* " in *" --ephemeral "*) ;; *) exit 15;; esac\n'
+        f": > {shlex.quote(str(directory / PRECONDITIONS_MARKER))}\n"
         f"cat {shlex.quote(str(stream_file))}\n"
         f"{then}\n"
     )
@@ -406,6 +425,32 @@ def test_a_run_through_the_neutral_entry_streams_in_order_and_leaves_nothing_beh
     assert list(private_root.iterdir()) == []
 
 
+def test_the_group_is_gone_and_the_tree_removed_before_the_final_event(
+    drive,
+    tmp_path: Path,
+    private_root: Path,
+    handshake: Handshake,
+    child_cleanup: ChildCleanup,
+) -> None:
+    lingering = lingering_descendant(
+        "", exit_code=0, blocks=False, escapes=False, handshake=handshake
+    )
+    run = a_run(binary=a_fake_codex(tmp_path, HAPPY_STREAM, lingering))
+    at_the_final_event: list[tuple[bool, int, list[Path]]] = []
+
+    async def scenario() -> None:
+        async for event in astream_cli_run(PrivateWorkingRoot(private_root), run):
+            if isinstance(event, FinalEvent):
+                at_the_final_event.append(
+                    (row.descendant_is_dead(), held_slots(run.pool), list(private_root.iterdir()))
+                )
+
+    with DescendantRow(handshake, child_cleanup) as row:
+        row.run_beside(lambda: drive(scenario()))
+
+    assert at_the_final_event == [(True, 0, [])]
+
+
 @pytest.mark.parametrize(
     ("stream", "then", "failure"),
     [
@@ -421,8 +466,12 @@ def test_a_run_through_the_neutral_entry_streams_in_order_and_leaves_nothing_beh
             CodexTurnFailed,
             id="failed-turn",
         ),
-        pytest.param((a_message("answer"), DONE), "exit 3", CodexAnswerMissing, id="bad-exit"),
-        pytest.param((a_message("answer"),), "exit 0", CodexAnswerMissing, id="not-completed"),
+        pytest.param(
+            (NOTICE, a_message("answer"), DONE), "exit 3", CodexAnswerMissing, id="bad-exit"
+        ),
+        pytest.param(
+            (NOTICE, a_message("answer")), "exit 0", CodexAnswerMissing, id="not-completed"
+        ),
     ],
 )
 def test_a_failed_run_raises_its_closed_class_and_still_reaps_and_removes_the_tree(
@@ -440,6 +489,7 @@ def test_a_failed_run_raises_its_closed_class_and_still_reaps_and_removes_the_tr
     with pytest.raises(failure) as ended:
         events_of_run(drive, private_root, run)
 
+    assert (tmp_path / PRECONDITIONS_MARKER).exists()
     assert CLI_TEXT not in f"{ended.value} {caplog.text}"
     assert list(private_root.iterdir()) == []
 
