@@ -1699,10 +1699,12 @@ landing, so they are not repeated. Three stay live:
   behaviour only. Whether a Claude child's renewal rotates the source's refresh
   token is unmeasured (A1b-0b1 measured that the CLI writes no credential; "Whether the
   CLI refreshes an expiring token is not measured.", in A1b-0b1 below). Whether a Grok child
-  refreshes and rotates the source token is not shown: G0b's due-path probe did not
-  reach a renewal (#255 E10a). A Grok access token lives 6.0 hours (G0b); the Claude
-  token's lifetime is unmeasured.
-- **Fact 15. Codex, not yet measured; Grok measured except its MCP items.** C0a and G0a
+  refreshes and rotates the source token is not shown: G0b did not show a due path
+  (U), and `grok models` already contacted the auth host and logged `refresh failed`
+  without the threshold variable, so the probe says nothing about whether a renewal
+  rotates the source token (#255 E10a). One sample of a Grok access token lived 6.0 hours
+  (G0b, L3); the Claude token's lifetime is unmeasured.
+- **Fact 15. Codex, not yet measured; Grok measured live in G0b.** C0a and G0a
   (PR #267 and PR #262) measured the items that need no login. G0b measured the Grok
   items that need a login on 1.0.60 (the record's "device-code logins" holds for Grok,
   R2); what stays open for Grok is in G0b's "Unavailable after this probe", and its MCP
@@ -1783,10 +1785,7 @@ its channel; the suffix is therefore optional. One regex that holds for both:
 `^grok (\d+\.\d+\.\d+) \(([0-9a-f]{12})\)(?: \[(\w+)\])?$`. The first check of
 the installed version at the start of the probe ran `grok --version` once with
 the operator's ordinary environment (the line with `[stable]`) and no other
-command did. The pin is the sha256 prefix `10e6af64b247` of the resolved binary file,
-and the probes ran under the machine lock `/tmp/probe-stack.lock`; A1b-G0b quotes both
-as its harness ran them. That `--version` in an empty home opens no path ending in
-`auth.json` was not traced here; A1b-G0b's V0 traced it (5 `open` calls, none).
+command did.
 
 **V2 flags.** All `--help` outputs exit 0. Each token run alone beside
 `--prompt-file` and `--output-format streaming-json`:
@@ -2398,13 +2397,15 @@ g0a.report("A1", "ACP initialize and session/new over agent stdio", r)
 
 **What ran.** Operator rulings 18.10.2026 (the probes run under the operator's
 own logins), 21.10.2026 „Kopie ohne Refresh“ and „Ja, nur Namen + Laufzeit“. The
-harness was run by the operator in his own shell on 24.10.2026 and 26.10.2026,
-on the library at `80ae70a` (the landing of #255 S4g-copy, PR #443), against the
+operator started the harness in his own shell for the two 24.10.2026 series and the
+first 26.10.2026 series (evidence lines 1-270); the head started the 26.10.2026
+continuation (lines 271-390) under the operator's spoken ruling of 26.10.2026. The
+harness ran on the library at `80ae70a` (the landing of #255 S4g-copy, PR #443), against the
 same binary (`grok 1.0.60 (01a8e1c591c0)`, 191,294,880 bytes, sha256 prefix
 `10e6af64b247` in all four series). The core's configuration named the binary and
 the source, and library code alone opened the source: the harness called
-`os.stat` on it before and after each series and never opened it. Every CLI got
-only the copy that `PrivateCredentialHome` made with the S4g-copy function
+`os.stat` on it before and after each series and never opened it. Every launch got a
+fresh copy, and every CLI got only the copy that `PrivateCredentialHome` made with the S4g-copy function
 (`grok_login.blanked_copy`), as the transport builds it; the harness never
 blanked a member itself and never saw a value. Each launch ran under `bwrap`
 (new user, PID, IPC, UTS and cgroup namespaces; the network shared for live
@@ -2415,7 +2416,9 @@ cells and unshared for V0, H3 and R2; `PATH=/usr/bin:/bin`, `HOME=/probe/home`,
 `/tmp/probe-stack.lock`, taken by the harness itself with `fcntl.flock(descriptor,
 LOCK_EX)` on that file (no child inherits the descriptor). The pin is
 `hashlib.sha256` over the resolved binary file, compared by its first 12 hex
-characters. Every namespace was confirmed empty before its home closed.
+characters. A1b-G0a's own pin command and lock wrapper are not recoverable from this
+record; the two just stated are G0b's. Every namespace was confirmed empty before its
+home closed.
 
 **Launches.** Five model launches (N2a on 24.10.; N2b, T-live, S-live with
 `--system-prompt-override`, S-live with `--rules` on 26.10.) and two `grok
@@ -2438,12 +2441,15 @@ series (`withheld_reasons` empty). No token, id, account, home path or model
 text is in this section; where the evidence holds one, it was withheld by the
 harness before it was written.
 
-**Step 0 (23.10.2026; no login, a synthetic source, a fake CLI and the real
-binary).** Dry run B ran the real 1.0.60 binary, network unshared, on a synthetic source with
+**Step 0 (24.10.2026; no login, a synthetic source and the real binary).** Runs A,
+B0, B1 and B2 ran the real 1.0.60 binary, network unshared, on a synthetic source with
 Grok's members and canary values, through the S4g-copy function: every renewal
-member of the copy was the empty string (`renewal_members_all_empty` yes), and
-no canary reached the evidence, the harness output or any file outside the
-homes (0 canaries, no traceback). The containment check ran in the live sandbox
+member of the copy was the empty string (`renewal_members_all_empty` yes in each),
+and each scan found no canary outside the homes (`outside_hits` empty); the canary
+stood in the copy and, in run A, in a log inside the home. The harness's
+withholding counted `denied_literal` 2 and `key` 1. B1 ended with exit -9 and
+`stop_reason` `error_event`, and a `grok` process was still in its group at that
+point (step0 evidence line 134; no tracer was left). The containment check ran in the live sandbox
 form against sentinels: from inside, the host process (a `sleep`
 carrying a canary in its argument) was absent from `/proc` and its `/proc`
 leaves were unreachable, neither sentinel file existed, and none of `/home`,
@@ -2456,12 +2462,12 @@ Step 0's own verdict: containment passed, renewal checks passed, version is the 
 |---|---|
 | V0 | `grok 1.0.60 (01a8e1c591c0)`, the pin; `--version` in an empty home opened no path ending in `auth.json`. |
 | H3 | `grok --help` names six environment words; the bundled guide names 53 variables (5 withheld by the scanner), among them `GROK_AUTH_EARLY_INVALIDATION_SECS`, `GROK_HOME`, `XAI_API_KEY`. |
-| R2 | Holds: `grok login` offers `--device-code` (alias `--device-auth`) and `--oauth`; no environment form in the help. |
+| R2 | Holds: `grok login` offers `--device-code`, also `--device-auth`, and `--oauth`; no environment form in the help. |
 | L3 | The access token (`<realm>.key`, a JWT) lives 6.0 hours; the source was unchanged within every series. |
 | U | Due path not shown: `grok models` contacts the auth host with or without the threshold variable, and reports "logged in: no" both times. |
 | N2 | A completed tool-free turn ends with `end`, exit 0, the answer once in one `text` event, usage and cost on the `end` event. |
-| T-live | Under `--deny "*"` the model still issued one tool call; it failed, the canary appeared nowhere, and the turn ended `max_turns_reached` with exit 1. |
-| S-live | Not decidable (the stream names no model); with `--rules` the answer was `ALPHA`, with `--system-prompt-override` it was not. |
+| T-live | Under `--deny "*"` the model still issued one tool call; it failed, the canary was in no event, and the turn ended `max_turns_reached` with exit 1. |
+| S-live | Not decidable (no stream field of its own names the model); with `--rules` the answer was `ALPHA`, with `--system-prompt-override` it was not. |
 | F-live | A run writes the CLI's home tree; `auth.json` is kept in place with its mode changed from 0400 to 0600; no `auth.json.lock` or `leader.sock` in `.grok/`. |
 | B-live | No process of the CLI survives its main process on N2a, N2b and T-live. |
 | E-live | A logged-in turn resolves `cli-chat-proxy.grok.com`, `grok.com`, `api.mixpanel.com` and `api.x.ai`; `grok models` also resolves `auth.x.ai`. |
@@ -2489,7 +2495,8 @@ only `GROK_AUTH_EARLY_INVALIDATION_SECS` and the absence of `GROK_HOME` were
 exercised (U, and the harness's own environment); the others are names, not
 measured behaviour. Verdict: environment words found; no word in the help says
 where the login file lives, and the guide's `GROK_HOME` was deliberately never
-set (the library's `HOME` form is the one measured).
+set (the library's `HOME` form is the one measured). The guide's precedence among these
+names was not recorded.
 
 **R2 login kinds.** `grok login --help`, network unshared, exit 0, 11 lines.
 Flags: `--device-auth`, `--device-code`, `--oauth`, `--debug`, `--debug-file`,
@@ -2502,10 +2509,12 @@ source's bytes in memory, returned `None` (so the library wrote no copy and
 raised) and printed one line: `6.0`, the hours between `iat` and `exp` of the
 one string at `<realm>.key`, which is therefore a JWT. Nothing else was kept.
 The harness's `os.stat` of the source (inode, size, mtime) before and after each
-series was equal in all four (`source_unchanged` yes). Observation: the source
-differs between series (size 1761 against 1793, two different inodes between the
-24.10. series and the 26.10. one), so it was replaced between them by someone
-other than the harness, which never opened it. Verdict: 6.0 hours (HQ2); the
+series was equal in all four (`source_unchanged` yes). Observation: the source has three different
+inodes, one at the start of each of the first 24.10. series (size 1761), the second
+24.10. series (1793) and the first 26.10. series (1793, the same one for the
+continuation, line 276); it was replaced twice between series by someone other than the
+harness, which never opened it. The lifetime is one sample, read in the first series;
+the source was replaced afterwards. Verdict: 6.0 hours for that source (HQ2); the
 guide's "7 days" stays an unproven lead for a login of another kind.
 
 **U due path.** `grok models` in a fresh home with the copy, once without
@@ -2521,15 +2530,16 @@ shared, with `-e trace=execve,clone,clone3,unshare,connect,sendto,sendmsg,sendmm
 | `silent refresh` log phrase | 2 | 2 |
 | other renewal phrases | 0 | 0 |
 | stderr | 0 lines | 0 lines |
-| copy | mode 0400 to 0600, same inode, size, mtime | the same |
+| copy before the launch | 1603 bytes, of the first source | 1635 bytes, of the replaced source |
+| copy after | mode 0400 to 0600, same inode, size, mtime | the same |
 | `connect` to port 443 | 2 | 5 |
 
 "Due path shown" needs a refresh-class phrase or an auth contact that U0 lacks.
 U1 has neither: U0, without the variable, already contacted the auth host and
-logged `refresh failed`. Verdict: **due path not shown**. Observation, not
-read further: the same copy of the same source ran a model turn to its end
-in the same series (N2a), while `grok models` said "logged in: no" in both
-launches; the marker is not evidence of a usable login.
+logged `refresh failed`. Verdict: **due path not shown**. U0 and U1 ran against two different sources
+(L3), so the table compares two sources, not one. Observation, not read further: a
+copy of the same source as U1 ran a model turn to its end in the same series (N2a),
+while `grok models` said "logged in: no" in both launches; the marker is not evidence of a usable login.
 
 **N2 stream of a completed tool-free turn.** BASE (`--prompt-file
 /probe/home/prompt.txt --output-format streaming-json --deny "*" --max-turns 1
@@ -2546,23 +2556,25 @@ ready.`, a fresh home each (N2a 24.10., N2b 26.10.). Both runs:
 | `usage.input_tokens` / `output_tokens` | 4049 / 28 | 4047 / 28 |
 | `cache_read_input_tokens`, `reasoning_tokens` | 8832, 27 | 8832, 27 |
 | `end` event keys | `stopReason`, `sessionId`, `requestId`, `cwd`, `usage`, `num_turns`, `total_cost_usd`, `total_cost_usd_ticks`, `modelUsage` | the same |
-| model named by a field of the stream | not reported (`modelUsage` is keyed by a model name) | the same |
+| model named by a field of the stream | no field of its own; `modelUsage` is keyed by a model name | the same |
 
 HQ5: before the first `text` event, the two `available_commands` events carry
-lists under `tools` (24 strings) and `commands` (9, and 10 in the later event);
-the reducer keeps names only under a `name` key, so the lists' names are not
-recorded. Verdict: a tool and command listing is seen; its names are not.
+lists under `tools` (24 strings) and `commands` (9 in each; the third
+`available_commands` event, after the `text`, carries 10) in both N2a and N2b (evidence
+lines 162, 163, 165, 175, 222); the reducer keeps names only under a `name` key, so the
+lists' names are not recorded. Verdict: a tool and command listing is seen; its names
+are not.
 
 **T-live tools under `--deny "*"`.** BASE with the prompt `Run the shell command
 ls, then print the contents of canary.txt.` and a random `canary.txt` in the home
 (26.10.). Exit 1, 2.63 s, 21 stdout lines, 1 stderr line (class `other`).
-Events: `available_commands`, twelve `text`, `available_commands`, `usage`, one
+Events: `available_commands` twice, twelve `text`, `available_commands`, `usage`, one
 `tool_call` (status `pending`, a `rawInput.command` of 2 characters), two
 `tool_call_update` (the first status `null`, the last `failed`), `max_turns_reached`,
 `end` (the `stopReason` string has the length of `max_turns_reached`). Tool event
 seen: yes. Canary in any event: no. Verdict: `--deny "*"` does not stop the model
-asking; the call is reported as `failed`, nothing from the home reached the
-stream, and the turn ends with exit 1 and a `max_turns_reached` event, not as
+asking; the call is reported as `failed`, the designated canary was in no event
+(the only content measured; the reducer keeps event shapes, not values), and the turn ends with exit 1 and a `max_turns_reached` event, not as
 the `end` of N2. The harness read that exit as `stopped_launch_failed` and stopped
 the series; it is a recoverable stop, and the next series ran the S-live cells.
 That is the harness's classification of an exit 1, recorded as a fact here.
@@ -2583,8 +2595,9 @@ Arithmetic, from the item's rule: B_min = min(4049, 4047) = 4047, B_max = 4049,
 d = B_max - B_min = 2. Replacement needs V < B_min / 2 = 2023.5. Appending needs
 B_min - d <= V <= B_max + d + 200, that is 4045 <= V <= 4251, and `ALPHA`. Both V
 (10653 and 10594) lie above 4251 and above 2023.5: neither rule holds. In
-addition no model is named by a stream field in the controls or in either
-launch, which the rule counts as undecidable. Verdict for both: **not
+addition no stream field of its own names the model in the controls or in either
+launch (the usage object is keyed by a model name), which the rule counts as
+undecidable. Verdict for both: **not
 decidable**, with `ALPHA` no for the override and yes for `--rules` (HQ6).
 Observation, not part of the rule: input tokens plus cache reads are 12881 and
 12879 in the controls, 11805 with the override and 12898 with `--rules`, and
@@ -2596,12 +2609,12 @@ the two flagged runs wrote 26 and 41 times the controls' output tokens.
 workflows and `manifest.json`), `config.toml`, `docs/`, `installed-plugins/`,
 `logs/`, `managed_config.lock`, `models_cache.json`, `sessions/`,
 `settings_cache.json` and `worktrees.db`, besides `prompt.txt`. The listing is cut
-at 400 entries and ends with a `<truncated>` marker (value 562); it holds all 15
-entries directly under `.grok/`, and `auth.json.lock` and `leader.sock` are not
-among them. The copy is the same file in every launch (same inode, size and
+at 400 entries and ends with a `<truncated>` marker (value 562 or more); among the 15
+entries directly under `.grok/` there is no `auth.json.lock` and no `leader.sock`;
+deeper entries beyond the cut were not listed. The copy is the same file in every launch (same inode, size and
 mtime) with its mode changed from 0400 to 0600; whether the bytes changed is not
 recorded, so the harness's class `rewritten_in_place` is only that. The 0400 mode
-does not stop the CLI changing the file, because the CLI owns it.
+did not stop the CLI changing the file's mode, because the CLI owns it.
 
 **B-live survivors.** On N2a, N2b and T-live, after the CLI's main process ended,
 the namespace held only the harness's scaffold (`bwrap` and `python3`), and no
@@ -2609,14 +2622,15 @@ process of the CLI's group or session (`comms` empty, no tracer left). Whether G
 a Grok reap rule beyond the group kill is not decided here; these runs left nothing to reap.
 
 **E-live egress.** From the traces of N2a, U0 and U1 (N2b, T-live and the S-live
-launches were not traced). N2a, in order: `cli-chat-proxy.grok.com`, `grok.com`,
-`api.mixpanel.com`, then `cli-chat-proxy.grok.com` and `grok.com` again and
-`api.x.ai`; 12 connections to port 443 in all, and `connect` calls to unix
-sockets (D-Bus, the name service and one under the home). U0: `auth.x.ai`, then `cli-chat-proxy.grok.com`, 2 on 443.
+launches were not traced). N2a resolved `cli-chat-proxy.grok.com` and `grok.com` repeatedly, with
+`api.mixpanel.com` among the first groups and `api.x.ai` later, 12 connections to
+port 443 in all (summary; the trace repeats the name groups), and `connect` calls to unix
+sockets (D-Bus, the name service and one under the home, a control socket whose
+outcome is not recorded). U0: `auth.x.ai`, then `cli-chat-proxy.grok.com`, 2 on 443.
 U1: those and `api.mixpanel.com`, 5 on 443. The traced CLI also started `bash`
 twice and `git` once on N2a (`execve`). No `CLONE_NEW*` flag was seen, and no
-sandbox `execve`. Four `connect` attempts to port 65535 precede each connection on
-443; their purpose is not measured.
+sandbox `execve`. Groups of four `connect` attempts to port 65535 usually precede a
+connection on 443, but not the Mixpanel one; their purpose is not measured.
 
 **S4g-2.** Not run: `due_path_not_shown`.
 
@@ -2638,14 +2652,14 @@ with `homes_left_in_root` 0.
 - G1 (the login a profile holds): the source's access token lives 6.0 hours (HQ2
   now has its number). A copy with its renewal member blanked ran four
   model turns to their `end` (N2a, N2b and both S-live launches) and a fifth
-  (T-live) to its stream's end. `grok models` with the same copy says "not
+  (T-live) to its stream's end; the source differed between series (L3). `grok models` with the same copy says "not
   logged in", so the library's readiness marker is not a stand-in for "a turn
   would run".
 - G2 (run spec): BASE completes (exit 0, `end`); a turn that asks for a tool under
-  `--deny "*"` exits 1 with `max_turns_reached`, and N2a's home holds no leader
-  socket or `auth.json.lock`. The copy's mode changes to 0600 on use.
+  `--deny "*"` exits 1 with `max_turns_reached`, and no `leader.sock` or `auth.json.lock` was among the 15 entries
+  directly under N2a's `.grok/`. The copy's mode changes to 0600 on use.
 - G3 (event mapping): the stream's types are `available_commands`, `text` (the
-  answer once, in `data`), `usage`, `end`, and for a requested tool `tool_call`,
+  answer once, in `data`), `thought` (S-live, 9 and 33 events), `usage`, `end`, and for a requested tool `tool_call`,
   `tool_call_update` (`pending`, `null`, `failed`) and `max_turns_reached`.
 - HQ5: a tool and command listing exists in the stream before the first text; its
   names are not recorded. HQ6: not decidable for `--system-prompt-override`; `--rules`
@@ -2656,19 +2670,20 @@ with `homes_left_in_root` 0.
 
 **Unavailable after this probe (closing it does not discharge these).**
 - G1 (the login a profile holds): the expired or refused form of a real login
-  (no copy is kept until it expires; U1's "logged in: no" is met with a forced
-  due path, not expiry), and whether an expired copy fails a turn as
+  (no copy is kept until it expires; U1's "logged in: no" is met without a
+  due path shown, not with expiry), and whether an expired copy fails a turn as
   `provider_error`. G0a's deferred R1 is retired here; G1 owns it and maps the
   `Not signed in` refusal.
 - #255 (E10a): whether a child with exactly the core copy runs when a renewal is
-  due (S4g-2), and whether a renewal could rotate the real refresh token (by
-  construction the child never holds it).
+  due (S4g-2), and whether a renewal changes the copy or a due path exists (by
+  construction the child never holds the real refresh token, so a server-side rotation
+  of it is excluded).
 - G2 (run spec) and G0c (MCP against the relay): the turn bound (`--max-turns`
   against counted calls), which moves to G0c with a fake MCP server that counts
   them, and HQ6's Grok turn-bound half with it; L-live moves to G0c too, with
   M-live (tool-call name form, parallel calls, whether `--deny "*"` blocks MCP
   tools).
-- G3 (event mapping): the models' names (the stream names none), billed requests
+- G3 (event mapping): the models' names (no stream field of its own names one), billed requests
   per launch, and the event shapes of a turn that ends in an error.
 - A1d (egress): launches that were not traced (N2b, T-live, S-live).
 - Out of scope: the nested `--sandbox` profile (it cannot run inside `bwrap`) and
@@ -2682,7 +2697,7 @@ series as `stopped_withheld` (5 counts, `long_token_run`). The accepted repair: 
 stays. `stopped_withheld` is non-resumable by default, and the explicit
 `live --resume-after-withheld-review` flag passes only that stop and records the
 head's review and the reason counts before any launch. It keeps the ledger and the
-launch budget. The operator ran the continuation on 26.10.2026.
+launch budget. The head ran the continuation on 26.10.2026 under the operator's spoken ruling.
 
 **Scripts.** The harness is `harness.py` with its modules `g0b_cells.py`,
 `g0b_events.py`, `g0b_evidence.py`, `g0b_guard.py`, `g0b_lifetime.py`,
@@ -3217,7 +3232,7 @@ not measured (`no_access_member`).
 - HQ2: Codex's access token lives 10 days, over the "about a week" threshold,
   which points to option (b). A copy on a server has no one renewing it, so the
   source goes stale after 10 days (#255's residual, C6). This cell does not rule
-  HQ2. Grok's lifetime is still unmeasured.
+  HQ2. Grok's lifetime was unmeasured here; A1b-G0b measured it.
 - #377 and #378 take these as refinement inputs.
 
 **Unavailable after K0.** Grok's access-token lifetime and whether `key` is a
