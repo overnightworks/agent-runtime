@@ -2,8 +2,8 @@
 
 Rows serve the real app on a loopback socket and run a stand-in for the pinned CLI as a real
 child, with no installed core configuration; ``test_service_codex_startup`` holds the config and
-startup rows and takes its builders from here. Test values: one Codex profile ``codex-main``, the listed model
-``gpt-5.5`` and the pinned version 0.163.0.
+startup rows and takes its builders from here. Test values: one Codex profile ``codex-main``, the
+listed model ``gpt-5.5`` and the pinned version 0.163.0.
 """
 
 from __future__ import annotations
