@@ -14,7 +14,7 @@ from agent_runtime.anchored_turn import CliProcessPool, ReapBounds
 from agent_runtime.cli_run import CliRunStart, StepEvent
 from agent_runtime.codex_login import CodexLogin, CodexLoginVerdict
 from agent_runtime.constants import CLI_GROUP_CONFIRMATION_SECONDS, CLI_TERMINATION_GRACE_SECONDS
-from agent_runtime.errors import raise_without_chain
+from agent_runtime.errors import CliLoginRefusedError, raise_without_chain
 from agent_runtime.events import AssistantTextEvent, FinalEvent
 from agent_runtime.spawn import ChildProcess, ChildProcessSpecificationError, closed_environment
 from agent_runtime.transcript import flatten_messages
@@ -82,6 +82,10 @@ _SILENT_ITEM_TYPES: Final = frozenset({"reasoning", "todo_list", "error"})
 _SILENT_EVENT_TYPES: Final = frozenset({"thread.started", "turn.started", "error"})
 _ITEM_EVENT_TYPES: Final = frozenset({"item.started", "item.updated", "item.completed"})
 _AGENT_MESSAGE: Final = "agent_message"
+CODEX_CLI_LOGIN_REFUSED_DETAIL: Final = "Codex CLI login was refused."
+# codex 0.163.0's `turn.failed` carries the HTTP status only inside its message text (ADR A1b-C0a
+# N1); a bare `401` is not enough because the text also holds a request id.
+_LOGIN_REFUSED_STATUS: Final = "401 Unauthorized"
 
 
 class CodexRunFailure(Exception):
@@ -134,6 +138,19 @@ class _ItemEvent(BaseModel):
     item: _Item
 
 
+class _TurnError(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    message: str = ""
+
+
+class _TurnFailedEvent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    type: str
+    error: _TurnError | None = None
+
+
 def _fail(failure: CodexRunFailure) -> NoReturn:
     raise_without_chain(failure)
 
@@ -152,10 +169,16 @@ class CodexStreamDecoder:
         if event.type == "turn.completed":
             self._completed = True
         elif event.type == "turn.failed":
-            _fail(CodexTurnFailed())
+            self._fail_turn(self._parsed(line, _TurnFailedEvent))
         elif event.type not in _SILENT_EVENT_TYPES:
             _fail(CodexUnknownStreamPart())
         return []
+
+    @staticmethod
+    def _fail_turn(event: _TurnFailedEvent) -> NoReturn:
+        if event.error is not None and _LOGIN_REFUSED_STATUS in event.error.message:
+            raise_without_chain(CliLoginRefusedError(CODEX_CLI_LOGIN_REFUSED_DETAIL))
+        _fail(CodexTurnFailed())
 
     def ending(self, returncode: int) -> FinalEvent:
         if not self._completed or returncode != 0 or not self._answer:

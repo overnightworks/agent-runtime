@@ -330,7 +330,18 @@ def test_a_login_file_gone_bad_fails_its_run_before_the_program_and_a_repair_ser
             (line(type="turn.failed", error={"message": f"401 {CANARY}"}),),
             "exit 1",
             "CodexTurnFailed",
-            id="failed-turn",
+            id="failed-turn-with-a-bare-401",
+        ),
+        pytest.param(
+            (
+                line(
+                    type="turn.failed",
+                    error={"message": f"unexpected status 401 Unauthorized: {CANARY}"},
+                ),
+            ),
+            "exit 1",
+            "CliLoginRefusedError",
+            id="login-refused",
         ),
         pytest.param(
             (an_item("item.started", "command_execution", command=CANARY),),

@@ -42,7 +42,14 @@ from agent_runtime.claude.provider import (
 )
 from agent_runtime.config import current_claude_runtime
 from agent_runtime.constants import CLAUDE_OAUTH_TOKEN_VARIABLE
-from agent_runtime.errors import ContainmentLost, ProviderUnavailableError, SafeRouteReasonCode
+from agent_runtime.errors import (
+    CliLoginRefusedError as NeutralCliLoginRefusedError,
+)
+from agent_runtime.errors import (
+    ContainmentLost,
+    ProviderUnavailableError,
+    SafeRouteReasonCode,
+)
 from agent_runtime.events import AssistantTextEvent, StreamEvent
 from agent_runtime.process import CliEnvironmentUnavailableError, CliLoginUnusableError
 from agent_runtime.tool_loop import ToolOutcome
@@ -250,6 +257,14 @@ def test_claude_api_turn_fails_with_a_safe_code_when_the_sdk_is_unusable(
         asyncio.run(turn)
 
     assert failure.value.reason.code is safe_code
+
+
+@pytest.mark.parametrize("catching", [UnavailableError, NeutralCliLoginRefusedError])
+def test_claude_login_refusal_is_caught_as_unavailable_and_as_the_neutral_cause(
+    catching: type[Exception],
+) -> None:
+    with pytest.raises(catching):
+        raise CliLoginRefusedError("refused")
 
 
 @pytest.mark.parametrize(

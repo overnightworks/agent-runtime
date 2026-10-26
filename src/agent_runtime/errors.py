@@ -20,6 +20,13 @@ if TYPE_CHECKING:
 _Reduction = tuple["Callable[..., BaseException]", tuple[object, ...], dict[str, Any]]
 
 
+class CliLoginRefusedError(Exception):
+    """A provider CLI refused the run's login: one closed cause for every provider.
+
+    The message is the raiser's fixed text; the CLI's own words never reach a caller or a log.
+    """
+
+
 class SafeRouteReasonCode(StrEnum):
     API_KEY_NOT_SET = "api_key_not_set"
     CLI_LOGIN_NOT_CONFIGURED = "cli_login_not_configured"
