@@ -1,15 +1,18 @@
 """The CLI route's runner: the profile a route names, run through the core with its tools.
 
-``CliRunner.run`` builds the provider run of the route's profile. It first reads the profile's
-token file, so a swapped file takes effect on the next run without a restart, and a file gone
-bad fails that run as an ``UnsoundSecretFile`` before any tool connection or child (decision
-record 0001, lines 2 and 14); the secret file's size limit bounds that read, so it stays on the
-event loop. When the run's capability grants tools it then opens the run's tool set
-(``RunTools``), hands the adapter only the relay's address and secret, and merges the relay's
-tool events with the core's text and ending (``RelayedEvents``); the CLI's own tool lines are
-dropped. Its one exit path closes the tool set once, with the core's reap, so a login refusal,
-a failed exit, a barrier refusal or a lost containment reaches the service's run supervision as
-it was raised. It reads no installed core configuration: each fact arrives as an argument.
+``CliRunner.run`` builds the provider run of the route's profile, Claude's or Codex's. It first
+reads the profile's login file with that provider's reader, so a swapped file takes effect on the
+next run without a restart, and a file gone bad fails that run as an ``UnsoundSecretFile`` before
+any tool connection or child (decision record 0001, lines 2 and 14); the secret file's size limit
+bounds that read, so it stays on the event loop. The provider's factory takes the launch and
+reads the login; the run it returns takes only the turn, the route's model and the relay's
+access, so no factory sees the admitted run or its capability. When the run's capability grants
+tools it then opens the run's tool set (``RunTools``), hands the adapter only the relay's address
+and secret, and merges the relay's tool events with the core's text and ending
+(``RelayedEvents``); the CLI's own tool lines are dropped. Its one exit path closes the tool set
+once, with the core's reap, so a login refusal, a failed exit, a barrier refusal or a lost
+containment reaches the service's run supervision as it was raised. It reads no installed core
+configuration: each fact arrives as an argument.
 """
 
 from __future__ import annotations
@@ -26,10 +29,13 @@ from pydantic import SecretStr
 
 from agent_runtime.claude.provider import ClaudeRun
 from agent_runtime.cli_run import CliRunAdapter, RelayAccess, astream_cli_run
+from agent_runtime.codex.run import CodexRun
+from agent_runtime.codex_login import CodexLogin
 from agent_runtime.config import PrivateWorkingRoot
 from agent_runtime.events import StreamEvent
 from agent_runtime.secret_file import read_token_file
-from agent_runtime_service.config import Provider, ServiceConfig
+from agent_runtime_client.wire import Turn
+from agent_runtime_service.config import Provider, ServiceConfig, read_codex_login
 from agent_runtime_service.relayed_events import RelayedEvents
 from agent_runtime_service.routing import Cli
 from agent_runtime_service.run_liveness import RunClock
@@ -46,29 +52,56 @@ class ProfileLaunch:
     tool_timeout_seconds: float
 
 
-AdapterFactory = Callable[
-    [ProfileLaunch, SecretStr, AdmittedRun, RelayAccess | None], CliRunAdapter
-]
+@dataclass(frozen=True)
+class RunInputs:
+    """All of a run an adapter may see: its turn, the route's model and the relay's access."""
+
+    turn: Turn
+    model: str | None
+    relay: RelayAccess | None
 
 
-def claude_run(
-    launch: ProfileLaunch, token: SecretStr, admitted: AdmittedRun, relay: RelayAccess | None
-) -> CliRunAdapter:
-    assert isinstance(admitted.route, Cli)
-    turn = admitted.request.turn
+LoggedInRun = Callable[[RunInputs], CliRunAdapter]
+AdapterFactory = Callable[[ProfileLaunch], LoggedInRun]
+
+
+def _claude_run(launch: ProfileLaunch, token: SecretStr, inputs: RunInputs) -> CliRunAdapter:
     return ClaudeRun(
         binary=launch.binary,
         token=token,
-        system=turn.system,
+        system=inputs.turn.system,
         max_tool_calls=launch.max_tool_calls,
-        history=tuple(turn.messages),
-        relay=relay,
+        history=tuple(inputs.turn.messages),
+        relay=inputs.relay,
         tool_timeout_seconds=launch.tool_timeout_seconds,
-        model=admitted.route.model,
+        model=inputs.model,
     )
 
 
-RUN_ADAPTERS: Final[Mapping[Provider, AdapterFactory]] = {Provider.CLAUDE: claude_run}
+def claude_run(launch: ProfileLaunch) -> LoggedInRun:
+    return partial(_claude_run, launch, SecretStr(read_token_file(launch.token_file)))
+
+
+def _codex_run(launch: ProfileLaunch, login: CodexLogin, inputs: RunInputs) -> CliRunAdapter:
+    if inputs.relay is not None:
+        raise ValueError("a Codex run has no tool relay; admission refuses tools before this point")
+    return CodexRun(
+        launch.binary,
+        login,
+        inputs.turn.system,
+        tuple(inputs.turn.messages),
+        model=inputs.model,
+    )
+
+
+def codex_run(launch: ProfileLaunch) -> LoggedInRun:
+    return partial(_codex_run, launch, read_codex_login(launch.token_file))
+
+
+RUN_ADAPTERS: Final[Mapping[Provider, AdapterFactory]] = {
+    Provider.CLAUDE: claude_run,
+    Provider.CODEX: codex_run,
+}
 
 
 def _launches_of(config: ServiceConfig) -> Mapping[str, ProfileLaunch]:
@@ -114,10 +147,14 @@ class CliRunner:
         events: RelayedEvents | None = None
         try:
             launch = self._launches[admitted.route.profile]
-            token = SecretStr(read_token_file(launch.token_file))
+            logged_in = RUN_ADAPTERS[launch.provider](launch)
             tools = await self._opened_tools(admitted)
-            adapter = RUN_ADAPTERS[launch.provider](
-                launch, token, admitted, None if tools is None else tools.access
+            adapter = logged_in(
+                RunInputs(
+                    admitted.request.turn,
+                    admitted.route.model,
+                    None if tools is None else tools.access,
+                )
             )
             events = RelayedEvents(
                 astream_cli_run(self._working_root, adapter),

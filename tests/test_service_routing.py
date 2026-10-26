@@ -21,7 +21,9 @@ IDENTITY = IdentityConfig(
     api_groups=frozenset({"/api-members"}),
     group_claim="groups",
 )
-PROFILES = {"claude-main": ProfileConfig(provider=Provider.CLAUDE, background=False)}
+PROFILES = {
+    "claude-main": ProfileConfig(provider=Provider.CLAUDE, background=False, default=True)
+}
 ROUTE = RouteConfig(api_alias="assistant-api")
 CLI = Cli("claude-main")
 API = Api("assistant-api")
@@ -117,3 +119,36 @@ def test_a_named_model_runs_on_the_subscription_only_when_it_is_listed(
     groups, model, listed, expected
 ):
     assert _routed(groups, model=model, listed=listed) == expected
+
+
+CLAUDE = ProfileConfig(provider=Provider.CLAUDE, background=False)
+CODEX = ProfileConfig(provider=Provider.CODEX, background=True, default=True)
+TWO_PROFILES = {"claude-main": CLAUDE, "codex-main": CODEX}
+BOTH_LISTED = {**SONNET_LISTED, Provider.CODEX: frozenset({"gpt-5.5"})}
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        pytest.param(None, Cli("codex-main"), id="no-model-goes-to-the-default"),
+        pytest.param("claude/sonnet", Cli("claude-main", "sonnet"), id="claude-model"),
+        pytest.param("codex/gpt-5.5", Cli("codex-main", "gpt-5.5"), id="codex-model"),
+    ],
+)
+def test_a_run_with_no_model_goes_to_the_default_profile_not_the_first(model, expected):
+    assert _routed(SUBSCRIBER, profiles=TWO_PROFILES, model=model, listed=BOTH_LISTED) == expected
+
+
+@pytest.mark.parametrize(
+    ("groups", "expected"),
+    [
+        pytest.param(SUBSCRIBER, OFF, id="subscriber-gets-no-profile"),
+        pytest.param(BOTH, API, id="api-member-goes-to-the-api"),
+    ],
+)
+def test_a_subset_without_the_default_profile_gives_a_model_less_run_no_subscription_route(
+    groups, expected
+):
+    only_the_other = {"claude-main": CLAUDE}
+
+    assert _routed(groups, profiles=only_the_other, listed=BOTH_LISTED) == expected

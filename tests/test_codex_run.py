@@ -8,16 +8,17 @@ from __future__ import annotations
 
 import json
 import logging
-import shlex
-import stat
 import tomllib
 from collections.abc import Callable, Coroutine, Iterator
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 import pytest
 from anchored_leaders import spawn_warnings
 from anchored_support import GONE, ChildCleanup
+from codex_support import PRECONDITIONS_MARKER
+from codex_support import a_fake_codex as a_fake_codex_expecting
 from descendant_support import DescendantRow, Handshake, lingering_descendant
 from provider_test_support import (
     CANARY_ACCESS_TOKEN,
@@ -50,7 +51,6 @@ SYSTEM_TEXT = "system-canary-7d2e"
 HISTORY_TEXT = "history-canary-91ab"
 CLI_TEXT = "cli-text-canary-5c30"
 MODEL_OPTION = "--model=listed-model"
-PRECONDITIONS_MARKER = "preconditions-passed"
 TOOL_ITEM_TYPES = (
     "command_execution",
     "file_change",
@@ -99,6 +99,12 @@ TURN = line(type="turn.started")
 NOTICE = an_item("item.completed", "error", message=CLI_TEXT)
 DONE = line(type="turn.completed", usage={})
 HAPPY_STREAM = (THREAD, NOTICE, TURN, a_message("first"), a_message("second"), DONE)
+
+
+EXPECTED_STDIN = f"User: first question\n\nAssistant: first answer\n\nUser: {HISTORY_TEXT}"
+a_fake_codex = partial(
+    a_fake_codex_expecting, system_text=SYSTEM_TEXT, expected_stdin=EXPECTED_STDIN
+)
 
 
 def decoded(lines: tuple[bytes, ...]) -> list[StreamEvent]:
@@ -357,28 +363,6 @@ def test_every_failure_class_has_its_own_fixed_message() -> None:
 
     assert len({str(failure) for failure in failures}) == len(failures)
     assert all(isinstance(failure, CodexRunFailure) for failure in failures)
-
-
-def a_fake_codex(directory: Path, stream: tuple[bytes, ...], then: str = "exit 0") -> Path:
-    """A stand-in for the pinned CLI: a distinct exit code on a wrong run, else a marker file."""
-    stream_file = directory / "stream.jsonl"
-    stream_file.write_bytes(b"".join(stream))
-    expected_stdin = f"User: first question\n\nAssistant: first answer\n\nUser: {HISTORY_TEXT}"
-    binary = directory / "codex"
-    binary.write_text(
-        "#!/bin/sh\n"
-        '[ "$CODEX_HOME" = "$HOME" ] || exit 10\n'
-        '[ "$(stat -c %a "$CODEX_HOME/auth.json")" = 600 ] || exit 11\n'
-        "grep -q '\"refresh_token\": \"\"' \"$CODEX_HOME/auth.json\" || exit 12\n"
-        f'[ "$(cat "$CODEX_HOME/system-prompt")" = {shlex.quote(SYSTEM_TEXT)} ] || exit 13\n'
-        f'[ "$(cat)" = {shlex.quote(expected_stdin)} ] || exit 14\n'
-        'case " $* " in *" --ephemeral "*) ;; *) exit 15;; esac\n'
-        f": > {shlex.quote(str(directory / PRECONDITIONS_MARKER))}\n"
-        f"cat {shlex.quote(str(stream_file))}\n"
-        f"{then}\n"
-    )
-    binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
-    return binary
 
 
 @pytest.fixture

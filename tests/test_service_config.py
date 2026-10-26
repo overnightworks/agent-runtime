@@ -949,7 +949,7 @@ def served_apps(monkeypatch, logging_state_restored):
     return served
 
 
-def _with_profile_of(provider: str, name: str = '"codex-main"', token: bool = False) -> str:
+def _with_profile_of(provider: str, name: str = '"grok-main"', token: bool = False) -> str:
     extra = TOKEN_FILE_LINE + "\n" if token else ""
     return NO_PROFILE.replace(
         "[route]", f'[profiles.{name}]\nprovider = "{provider}"\n{extra}\n[route]', 1
@@ -1000,22 +1000,20 @@ PROFILE_RULE_REFUSALS = [
         id="claude-without-a-token-file-nor-cli-section",
     ),
     pytest.param(
-        _with_profile_of("codex"),
-        "profiles.codex-main.provider: codex has no subscription route yet;"
-        " only claude can have a profile",
-        id="codex",
+        _with_profile_of("codex", '"codex-main"'),
+        "profiles.codex-main.token_file: required for a codex profile",
+        id="codex-without-a-token-file",
     ),
     pytest.param(
-        _with_profile_of("grok", '"grok-main"'),
+        _with_profile_of("grok"),
         "profiles.grok-main.provider: grok has no subscription route yet;"
-        " only claude can have a profile",
+        " only claude and codex can have a profile",
         id="grok",
     ),
     pytest.param(
-        _with_profile_of("codex", token=True),
-        "profiles.codex-main.provider: codex has no subscription route yet;"
-        " only claude can have a profile",
-        id="codex-with-a-token-file",
+        _with_profile_of("codex", '"codex-main"', token=True),
+        "cli.codex: required for a codex profile",
+        id="codex-without-a-program-table",
     ),
     pytest.param(
         VALID_CONFIG + SECOND_CLAUDE_PROFILE,
@@ -1023,10 +1021,10 @@ PROFILE_RULE_REFUSALS = [
         id="two-claude-profiles",
     ),
     pytest.param(
-        VALID_CONFIG + '\n[profiles.codex-main]\nprovider = "codex"\n',
-        "profiles.codex-main.provider: codex has no subscription route yet;"
-        " only claude can have a profile",
-        id="claude-and-codex",
+        VALID_CONFIG + '\n[profiles.grok-main]\nprovider = "grok"\n',
+        "profiles.grok-main.provider: grok has no subscription route yet;"
+        " only claude and codex can have a profile",
+        id="claude-and-grok",
     ),
 ]
 
@@ -1088,8 +1086,8 @@ def test_a_refused_relationship_holds_no_token_or_key_in_what_the_refusal_holds(
     ("arrange", "field"),
     [
         pytest.param(
-            lambda name: _with_profile_of("codex", name),
-            "provider: codex has no subscription route yet",
+            lambda name: _with_profile_of("grok", name),
+            "provider: grok has no subscription route yet",
             id="provider",
         ),
         pytest.param(
@@ -1124,9 +1122,9 @@ def test_a_name_with_a_control_character_is_refused_on_one_line_with_no_raw_cont
             id="missing-token-and-missing-origin",
         ),
         pytest.param(
-            _with_profile_of("codex").replace(SONGMAKER_ORIGIN_LINE, ""),
-            ("profiles.codex-main.provider", "apps.songmaker.mcp_origin"),
-            id="codex-and-missing-origin",
+            _with_profile_of("grok").replace(SONGMAKER_ORIGIN_LINE, ""),
+            ("profiles.grok-main.provider", "apps.songmaker.mcp_origin"),
+            id="grok-and-missing-origin",
         ),
         pytest.param(
             _with("port = 8099", "port = 8099\nworkers = 4").replace(SONGMAKER_ORIGIN_LINE, ""),
@@ -1499,7 +1497,7 @@ def test_the_former_flat_program_keys_stop_the_start_naming_each_key(
     assert _the_probe_never_started(probe_log)
 
 
-@pytest.mark.parametrize("provider", ["codex", "grok"])
+@pytest.mark.parametrize("provider", ["grok"])
 def test_a_program_table_for_a_provider_without_a_version_reader_stops_the_start(
     tmp_path, capsys, provider
 ):
@@ -1559,7 +1557,7 @@ def _profiles_edit(profiles: dict[Any, Any]) -> Callable[[dict[str, Any]], None]
     return lambda document: document.update(profiles=profiles)
 
 
-NO_ROUTE_REFUSAL = "has no subscription route yet; only claude can have a profile"
+NO_ROUTE_REFUSAL = "has no subscription route yet; only claude and codex can have a profile"
 UNIQUE_CLAUDE_PROFILE_REFUSAL = "claude already has profile"
 
 _OFF_CLAUDE = ProfileConfig(provider=Provider.CLAUDE, background=False)
@@ -1575,9 +1573,9 @@ REFUSED_REPRESENTATIONS = [
         id="tokenless-claude-instance",
     ),
     pytest.param(
-        _profiles_edit({"codex-main": ProfileConfig(provider=Provider.CODEX, background=False)}),
+        _profiles_edit({"grok-main": ProfileConfig(provider=Provider.GROK, background=False)}),
         NO_ROUTE_REFUSAL,
-        id="codex-instance",
+        id="grok-instance",
     ),
     pytest.param(
         _profiles_edit({"first": _OFF_CLAUDE, "second": _OFF_CLAUDE}),

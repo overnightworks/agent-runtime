@@ -1,9 +1,10 @@
 """Which route serves one caller (decision record 0001, H5).
 
 ``route`` is the one decider: the CLI route under the subscription profile for
-members of a subscription group, else the API route under the installation's alias
-for members of an API group, else not enabled. Membership of the app is the caller
-check's gate (``agent_runtime_service.identity``), before any route is chosen.
+members of a subscription group (a run that names no model gets the profile marked ``default``
+among those the caller may use, never another one), else the API route under the
+installation's alias for members of an API group, else not enabled. Membership of the app is
+the caller check's gate (``agent_runtime_service.identity``), before any route is chosen.
 """
 
 from __future__ import annotations
@@ -49,7 +50,7 @@ def _subscription_route(
     if identity.subscription_groups.isdisjoint(groups):
         return None
     if model is None:
-        return Cli(next(iter(profiles)), None) if profiles else None
+        return next((Cli(name) for name, facts in profiles.items() if facts.default), None)
     provider, _separator, name = model.partition("/")
     for profile, facts in profiles.items():
         if facts.provider == provider and name in listed_models.get(facts.provider, frozenset()):

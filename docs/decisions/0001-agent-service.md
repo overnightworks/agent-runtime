@@ -345,15 +345,16 @@ edge#357: „ja a … ich bin ALS ADMIN dafür verantwortlich das n ich über ke
 **Decision.** A profile is one subscription login, with a name, a provider,
 whether background purposes may use it (H12), and its login. A Claude profile's
 login is one `claude setup-token` token read from the profile's `token_file`
-(A1b ruling, Q2 a). Until the additional provider routes arrive, the service
-accepts at most one subscription profile, for Claude. It requires a `token_file`
-and a `[cli.claude]` table: at startup the service runs that table's `binary --version` in a
+(A1b ruling, Q2 a); a Codex profile's is the Codex sign-in document in its `token_file`,
+read by `read_secret_file` and judged by `assess_codex_login`. Until the Grok route arrives,
+the service accepts at most one subscription profile per provider, for Claude and for Codex.
+With two profiles exactly one has `default = true` and serves a run that names no model; a lone
+profile is the default. Each requires a `token_file` and a `[cli.<provider>]` table: at startup the service runs that table's `binary --version` in a
 run tree below `[cli] working_root`, kept until its spawn fails or its process group is
 confirmed gone, and a version other than its `version`, or none its reader accepts,
 exits 2 naming both versions (A1b-7a; one table and reader per provider since A1b-P1);
 a root that is not private exits 2 naming only its violation (A1b-4b2).
-Codex and Grok profiles are refused at startup; their login contracts are decided
-with their routes. The profile list is service configuration, kept as code
+A Grok profile is refused at startup; its login contract is decided with its route. The profile list is service configuration, kept as code
 in edge; the login files live in `~/.secrets`, never in a repository.
 
 **Consequence.** Nothing in the code is tied to the operator; another
