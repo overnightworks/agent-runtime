@@ -286,8 +286,10 @@ def test_the_final_text_is_the_last_message_stripped() -> None:
 @pytest.mark.parametrize("event_type", ITEM_EVENT_TYPES)
 @pytest.mark.parametrize("item_type", TOOL_ITEM_TYPES)
 def test_a_tool_item_ends_the_run_at_its_first_event(event_type: str, item_type: str) -> None:
+    stream = (an_item(event_type, item_type, command=CLI_TEXT),)
+
     with pytest.raises(CodexToolItem) as ended:
-        decoded((an_item(event_type, item_type, command=CLI_TEXT),))
+        decoded(stream)
 
     assert CLI_TEXT not in str(ended.value)
 
@@ -398,17 +400,8 @@ def drive(
     assert (held_slots(a_run().pool), thread_failures, spawn_warnings(caplog)) == (0, [], [])
 
 
-async def collected(root: PrivateWorkingRoot, run: CodexRun, seen: list[StreamEvent]) -> None:
-    async for event in astream_cli_run(root, run):
-        seen.append(event)
-
-
-def events_of_run(
-    drive: Callable[[Coroutine[Any, Any, Any]], Any], private_root: Path, run: CodexRun
-) -> list[StreamEvent]:
-    seen: list[StreamEvent] = []
-    drive(collected(PrivateWorkingRoot(private_root), run, seen))
-    return seen
+async def collected(root: PrivateWorkingRoot, run: CodexRun) -> list[StreamEvent]:
+    return [event async for event in astream_cli_run(root, run)]
 
 
 def test_a_run_through_the_neutral_entry_streams_in_order_and_leaves_nothing_behind(
@@ -417,7 +410,7 @@ def test_a_run_through_the_neutral_entry_streams_in_order_and_leaves_nothing_beh
     reset_config()
     run = a_run(binary=a_fake_codex(tmp_path, HAPPY_STREAM))
 
-    assert events_of_run(drive, private_root, run) == [
+    assert drive(collected(PrivateWorkingRoot(private_root), run)) == [
         AssistantTextEvent(text="first"),
         AssistantTextEvent(text="second"),
         FinalEvent(text="second"),
@@ -485,9 +478,10 @@ def test_a_failed_run_raises_its_closed_class_and_still_reaps_and_removes_the_tr
 ) -> None:
     run = a_run(binary=a_fake_codex(tmp_path, stream, then))
     caplog.set_level(logging.DEBUG)
+    scenario = collected(PrivateWorkingRoot(private_root), run)
 
     with pytest.raises(failure) as ended:
-        events_of_run(drive, private_root, run)
+        drive(scenario)
 
     assert (tmp_path / PRECONDITIONS_MARKER).exists()
     assert CLI_TEXT not in f"{ended.value} {caplog.text}"
@@ -499,9 +493,10 @@ def test_a_line_over_the_limit_ends_the_run_and_the_tree_is_removed(
 ) -> None:
     oversized = (b"a" * (run_limit() + 1) + b"\n",)
     run = a_run(binary=a_fake_codex(tmp_path, oversized))
+    scenario = collected(PrivateWorkingRoot(private_root), run)
 
     with pytest.raises(CliStreamLineTooLong):
-        events_of_run(drive, private_root, run)
+        drive(scenario)
 
     assert list(private_root.iterdir()) == []
 
