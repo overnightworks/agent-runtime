@@ -1,0 +1,7 @@
+claim_id = "f184cfa1ebd34e1782b0bd32f4d73650"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "74654b1be51f5ab3d76fb685592a6b6d4f69208a"
+branch = "claude/issue-475-codex-run-adapter"
+scope = ["src/agent_runtime/codex/run.py", "tests/test_codex_run.py"]
+opened_commit = "7f231b9d47dc47bc758fc24a57c3403a3853799e"
