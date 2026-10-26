@@ -155,7 +155,7 @@ that script reads a Claude token and refuses the Codex sign-in document.
 **When it fails.** A missing or refused file stops the service at startup, naming
 `profiles.<name>.token_file` and the kind of fault, never the content, or fails a later run as
 `provider_error` before any child starts. An expired token also fails the run as
-`provider_error`. A login the CLI refuses, or an expired token, names `CliLoginRefusedError` in
+`provider_error`. A login the CLI refuses names `CliLoginRefusedError` in
 the log line; for Codex that is a `turn.failed` whose text carries `401 Unauthorized`, the only
 signal codex 0.163.0 gives, so a version bump re-checks it.
 

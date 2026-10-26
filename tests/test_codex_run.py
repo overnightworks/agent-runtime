@@ -385,9 +385,9 @@ def test_a_run_without_a_completed_answered_clean_turn_ends_with_no_answer(
 
 
 def test_a_notice_of_a_refused_login_does_not_fail_a_turn_that_completes() -> None:
-    events = decoded((RECONNECTING, TURN, a_message("answer"), DONE))
+    events = decoded_and_ended((RECONNECTING, TURN, a_message("answer"), DONE))
 
-    assert [type(event) for event in events] == [AssistantTextEvent]
+    assert [type(event) for event in events] == [AssistantTextEvent, FinalEvent]
 
 
 def test_a_refused_login_has_its_own_fixed_message_without_cli_text() -> None:

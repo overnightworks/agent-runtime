@@ -85,7 +85,7 @@ adapter)`, with `claude.provider.ClaudeRun` as Claude's adapter and `codex.run.C
 from `process.run_directories`) takes every fact as an explicit argument and reads
 no installed configuration. A login the provider's CLI refuses ends the run with
 `errors.CliLoginRefusedError`, for every provider; Claude's
-`claude.provider.CliLoginRefusedError` is that class.
+`claude.provider.CliLoginRefusedError` is a subclass of it.
 
 **The working root.** `configure()` refuses a `cli_working_directory_root` that is
 not private: an absolute path written without `..`, to an existing directory, not
