@@ -3251,8 +3251,8 @@ recoverable stop, not an unsafe one. Series 2 began with the review the repair b
 (`withheld_review` at line 72 records the reviewed stop and its count); the
 H3 cells were not re-run, so the withheld entry stays in the record. Lines 109,
 232 and 266 record `withheld_reasons` empty. No token, id, account, home path,
-model name or answer text is in this section; the harness withheld any such value
-before writing, and the evidence holds only the marker `<withheld>` in its place.
+model name or answer text is in this section. Sensitive values are omitted or masked
+before recording; the H3 flag entry remains `<withheld>`.
 
 **Step 0 (no login, a synthetic source).** Run A used a fake CLI, B0 to B2 the
 real executable, the network unshared, on a synthetic source with canary values
@@ -3376,8 +3376,9 @@ Controls: N2a and N2b.
 
 Verdict by the item's rule. A control count is missing: N2a has no `usage`, so the
 two-control baseline (B_min, B_max, d) the rule needs does not exist, and the harness
-leaves both bounds unset. For `model_instructions_file` V is 5905; for the other two
-keys V is missing as well. Verdict for all three: **not decidable** (HQ6), with
+would leave both bounds unset (`conclude_system_text`); the evidence holds no recorded
+verdict line, so the verdicts here are computed from the stored counts. For `model_instructions_file` V is 5905; for the other
+two keys V is missing as well. Verdict for all three: **not decidable** (HQ6), with
 `ALPHA` yes for `model_instructions_file`. Only as a hypothetical comparison with the
 single count N2b gives (10043, not the ruled baseline): 5905 is above half of it
 (5021.5) and below 10043, so even there neither the replacement nor the appending
@@ -3432,7 +3433,7 @@ the reducer's output: 14 DNS queries for `chatgpt.com`; 28 `connect` attempts to
 port 65535 and 7 to 443; 4 to the name-service cache socket and 2 to a
 name-service pipe. T-live: 76 entries: 18 DNS queries for `chatgpt.com` and 2 (after the others)
 for `ab.chatgpt.com`; 40 attempts to 65535, 10 to 443; the same 6 unix sockets. In each
-resolution round the attempts to 65535 come before the connection to 443 (the traces
+resolution round the attempts to 65535 come before its connections to 443 (the traces
 interleave the rounds); their purpose is not measured, and the destination addresses
 are not listed here. No name in either list
 carries an auth word, and `api.openai.com` (the host C0a's logged-out turn
@@ -3478,8 +3479,8 @@ stat 6 of 6 and the source 4 of 4 series.
   `output_tokens`, `reasoning_output_tokens`). The model is not named by any field.
 - HQ3: environment words exist in the help (above); their use by `exec` is open.
 - HQ5: no listing before the first text (N2a, N2b). HQ6: not decidable for any key;
-  `model_instructions_file` produced `ALPHA`. HQ9: no sandbox start in two traced
-  turns without a tool use.
+  `model_instructions_file` produced `ALPHA`. HQ9: no sandbox start seen in the parsed
+  trace lines in two traced turns without a tool use.
 - A1d (egress): `chatgpt.com` and `ab.chatgpt.com`, from the two traced launches.
 - C0c: reuses this harness; M-live is its own.
 
