@@ -127,6 +127,13 @@ class _StreamEvent(BaseModel):
     item: _Item | None = None
 
 
+class _ItemEvent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    type: str
+    item: _Item
+
+
 def _fail(failure: CodexRunFailure) -> NoReturn:
     raise_without_chain(failure)
 
@@ -139,9 +146,9 @@ class CodexStreamDecoder:
         self._answer = ""
 
     def events_of(self, line: bytes) -> Sequence[StepEvent]:
-        event = self._parsed(line)
+        event = self._parsed(line, _StreamEvent)
         if event.type in _ITEM_EVENT_TYPES:
-            return self._item_events(event)
+            return self._item_events(self._parsed(line, _ItemEvent))
         if event.type == "turn.completed":
             self._completed = True
         elif event.type == "turn.failed":
@@ -156,16 +163,14 @@ class CodexStreamDecoder:
         return FinalEvent(text=self._answer)
 
     @staticmethod
-    def _parsed(line: bytes) -> _StreamEvent:
+    def _parsed[EventModel: BaseModel](line: bytes, model: type[EventModel]) -> EventModel:
         try:
-            return _StreamEvent.model_validate_json(line)
+            return model.model_validate_json(line)
         except ValidationError:
             _fail(CodexUnreadableLine())
 
-    def _item_events(self, event: _StreamEvent) -> list[StepEvent]:
+    def _item_events(self, event: _ItemEvent) -> list[StepEvent]:
         item = event.item
-        if item is None:
-            _fail(CodexUnreadableLine())
         if item.type in _TOOL_ITEM_TYPES:
             _fail(CodexToolItem())
         if item.type == _AGENT_MESSAGE:
