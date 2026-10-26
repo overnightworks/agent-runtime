@@ -751,8 +751,9 @@ def test_a_codex_run_given_a_relay_is_refused_by_an_exception_not_an_assert(
         RelayAccess(url="https://relay.test", secret="secret"),
     )
 
+    build = cli_runner.codex_run(launch)
     with pytest.raises(ValueError, match="no tool relay"):
-        cli_runner.codex_run(launch)(inputs)
+        build(inputs)
 
 
 def test_no_run_adapter_factory_sees_the_admitted_run_or_its_capability() -> None:
