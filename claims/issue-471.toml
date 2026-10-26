@@ -1,0 +1,7 @@
+claim_id = "558c197c9c7e4ae88af6514a63ebd484"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "84e4835814bce59862ee932bdf9cab8ce3125a4e"
+branch = "claude/issue-471-quality-v0-6-1-einbinden-pins-heben-requ"
+scope = [".github/workflows/ci.yml", ".github/workflows/code-scanning.yml", "tests/keycloak/requirements.txt"]
+opened_commit = "00c0533b2a254d327febf546ae24951a12e35469"
