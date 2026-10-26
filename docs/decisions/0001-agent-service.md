@@ -3220,10 +3220,12 @@ only its `stat`. Each launch ran under `bwrap` (new user, PID, IPC, UTS and cgro
 namespaces; the network shared for the six model launches and unshared for P0 and
 H3; `PATH=/usr/bin:/bin`, `HOME=/probe/home`, `TMPDIR=/probe/home` and
 `CODEX_HOME=/probe/home/codex-home`; the executable bound read-only as `/opt/codex`;
-only that cell's home writable, with `work/` in it as the working directory). A
+the only writable host-directory bind is that cell's home, with `work/` in it as the
+working directory, beside the sandbox's private `/tmp` and `/dev`). A
 model launch had a 120 s deadline and the machine lock `/tmp/probe-stack.lock`,
 taken by the harness itself; the 1-minute load recorded before each launch was
-between 1.74 and 5.85 on 12 cores. The pin is `hashlib.sha256` over the executable,
+between 1.74 and 5.85 (the machine has 12 cores, by `nproc`; not an evidence
+field). The pin is `hashlib.sha256` over the executable,
 compared by its first 12 hex characters. Every namespace was confirmed empty
 before its home closed (`namespace_confirmed` yes and `home_removal`
 `closed_after_confirmed_teardown` in all nine launches).
@@ -3249,8 +3251,8 @@ recoverable stop, not an unsafe one. Series 2 began with the review the repair b
 (`withheld_review` at line 72 records the reviewed stop and its count); the
 H3 cells were not re-run, so the withheld entry stays in the record. Lines 109,
 232 and 266 record `withheld_reasons` empty. No token, id, account, home path,
-model name or answer text is in this section; where the evidence holds one, the
-harness withheld it before writing.
+model name or answer text is in this section; the harness withheld any such value
+before writing, and the evidence holds only the marker `<withheld>` in its place.
 
 **Step 0 (no login, a synthetic source).** Run A used a fake CLI, B0 to B2 the
 real executable, the network unshared, on a synthetic source with canary values
@@ -3274,11 +3276,11 @@ answer.
 | N2 | One completed tool-free turn (N2b, exit 0, 5.743 s): five events, the answer once in one `agent_message` item (`item.text`), `usage` on `turn.completed`. The other planned sample (N2a) did not complete. |
 | T-live | No tool item (`command_execution`, `file_change`, `mcp_tool_call`, `web_search`: no each) and the canary in no event; the turn completed. |
 | S-live | All three keys not decidable. With `model_instructions_file` the answer was `ALPHA`; the other two launches reached `turn.started`, hit the 120 s deadline and gave no answer. |
-| F-live | The copy was unchanged by stat in 6 of 6 model launches; the source was unchanged in 4 of 4 series. A run writes the CLI's tree under `codex-home` (99 entries after N2a, which did not complete). |
-| B-live | No `bwrap`, `codex-linux-sandbox` or `CLONE_NEW*` seen in the two traced launches; neither ran a tool. N2a left `strace` and `codex` in the namespace at the listing. |
+| F-live | The copy was unchanged by stat in 6 of 6 model launches; the source was unchanged in 4 of 4 series. A run writes the CLI's tree under `codex-home` (after N2a, which did not complete, the home holds 99 entries, 97 of them inside `codex-home`). |
+| B-live | No `bwrap`, `codex-linux-sandbox` or `CLONE_NEW*` seen in the two traced launches; neither ran a tool. N2a left `strace` and `codex` in the namespace at the listing, both in one process group that is not the scaffold's. |
 | E-live | Traced N2a and T-live resolve `chatgpt.com` (T-live also `ab.chatgpt.com`) and connect to port 443; no auth-word name and no `api.openai.com` among the parsed lines. |
 | P0 | Accepted: `-c sandbox_mode="read-only"` under `--strict-config` started a thread. |
-| H3 | Environment words found: `CODEX_ACCESS_TOKEN` and `OPENAI_API_KEY` in `codex login --help`; their role is not recorded. |
+| H3 | Environment words found: `CODEX_ACCESS_TOKEN` and `OPENAI_API_KEY` in `codex login --help` (their role is not recorded), and `CODEX_HOME`, `CONFIG_PROFILE_V2`, `OSS_PROVIDER` and `SANDBOX_MODE` in `codex exec --help`. |
 
 **P0 `sandbox_mode` under `--strict-config`.** `exec --json --skip-git-repo-check
 --ignore-user-config --ignore-rules --ephemeral --strict-config -c
@@ -3372,14 +3374,15 @@ Controls: N2a and N2b.
 | answer `ALPHA` | yes | no (no answer) | no (no answer) |
 | model named | not reported | not reported | not reported |
 
-Arithmetic, from the item's rule. N2a has no `usage`, so the controls give one
-count: B_min = B_max = 10043 (N2b) and d = 0. Replacement needs V < B_min / 2 =
-5021.5. Appending needs B_min - d <= V <= B_max + d + 200, that is 10043 <= V <=
-10243, and `ALPHA`. For `model_instructions_file`, V = 5905 is above 5021.5 and
-below 10043: neither rule holds, so neither does "no effect seen". For the other two
-keys V is missing. In addition a control count is missing (N2a) and no stream field
-names the model in any launch, which the rule counts as undecidable. Verdict for
-all three: **not decidable** (HQ6), with `ALPHA` yes for `model_instructions_file`.
+Verdict by the item's rule. A control count is missing: N2a has no `usage`, so the
+two-control baseline (B_min, B_max, d) the rule needs does not exist, and the harness
+leaves both bounds unset. For `model_instructions_file` V is 5905; for the other two
+keys V is missing as well. Verdict for all three: **not decidable** (HQ6), with
+`ALPHA` yes for `model_instructions_file`. Only as a hypothetical comparison with the
+single count N2b gives (10043, not the ruled baseline): 5905 is above half of it
+(5021.5) and below 10043, so even there neither the replacement nor the appending
+bound would hold. No stream field names the model in any launch; that is an
+observation, not the rule's reason.
 Observation, not part of the rule: V is 4138 below N2b's (41.2 %), and its
 `cached_input_tokens` is 4224 against 8448. The other two launches show the same
 three events as N2a, which ended after 2 s with no key; the evidence does not say
@@ -3414,9 +3417,11 @@ T-live (`-e trace=execve,clone,clone3,unshare,connect,sendto,sendmsg,sendmmsg`).
 T-live: `codex` and 13 of the same. No `bwrap`, no `codex-linux-sandbox`
 (`sandbox_execve_seen` no); no `CLONE_NEW*` flag
 (`newuser_or_newns_seen` no). T-live asked for a command and ran none, so the model
-never used a tool in a traced turn. Processes left in the namespace after the CLI's
-main process was gone, by name: N2a `strace` and `codex` (each in its own process
-group, state S) beside the harness's `bwrap` and `python3`; T-live only `bwrap` and
+never used a tool in a traced turn. The absence holds for the parsed trace lines only
+(N2a: 153 of 357 lines unparsed; T-live: 115 of 399); an `execve` without a result
+counts as unparsed, so a `bwrap` start among them cannot be excluded. Processes left in the namespace after the CLI's
+main process was gone, by name: N2a `strace` and `codex` (both in one process group and
+session, which is not the one of the harness's `bwrap` and `python3`; state S); T-live only `bwrap` and
 `python3`. The two deadline launches (untraced) listed only the scaffold after the
 group kill. Verdict: the CLI's own sandbox was not seen in a turn without a tool;
 HQ9's second half (a model turn that runs a tool) was not driven.
@@ -3426,14 +3431,17 @@ S-live-developer and S-live-instructions were not traced. N2a: 55 entries in
 the reducer's output: 14 DNS queries for `chatgpt.com`; 28 `connect` attempts to
 port 65535 and 7 to 443; 4 to the name-service cache socket and 2 to a
 name-service pipe. T-live: 76 entries: 18 DNS queries for `chatgpt.com` and 2 (after the others)
-for `ab.chatgpt.com`; 40 attempts to 65535, 10 to 443; the same 6 unix sockets. The
-attempts to 65535 come before the connections to 443; their purpose is not
-measured, and the destination addresses are not listed here. No name in either list
+for `ab.chatgpt.com`; 40 attempts to 65535, 10 to 443; the same 6 unix sockets. In each
+resolution round the attempts to 65535 come before the connection to 443 (the traces
+interleave the rounds); their purpose is not measured, and the destination addresses
+are not listed here. No name in either list
 carries an auth word, and `api.openai.com` (the host C0a's logged-out turn
 contacted) is not among them. The reducer read 357 trace lines for N2a and dropped
 133 and could not parse 153; for T-live 399, dropped 194, could not parse 115, so
-the absence of a host holds for the parsed lines only. Whether an auth host is
-contacted by a renewal that was not due: not observed.
+the absence of a host holds for the parsed lines only. No due renewal
+was forced, and neither the unchanged file stats nor the recorded error classes show
+the CLI's renewal decision: whether an auth host is contacted by a renewal is not
+observed.
 
 **Harness repair (24.10.2026, before series 2).** H3's flag list contained one flag
 name that the scan's 32-character token rule withheld, which stopped series 1 as
@@ -3445,14 +3453,6 @@ flag passes only that stop and records the head's review and the reason counts
 before any launch; it keeps the ledger and the launch budget. A later repair
 (26.10.2026, after N2a) records an `error_class` per error message, from fixed
 closed classes (never the text); series 3 and 4 carry it, N2a does not.
-
-**Named gaps (follow-up, from gate 1 of the error-class repair, 26.10.2026).**
-- The guard test `test_guard_lets_only_library_frames_open_the_named_source_and_a_copy`
-  fails before and after the repair; its fake package lacks isolation and the test
-  does not capture the child's stderr or status, so it cannot tell a setup failure
-  from failed protection. Step 0 evidence record 143 proves the guard separately.
-- `step0.py` prints scanned synthetic stderr samples and error-message prefixes;
-  synthetic Step 0 only, not the live path.
 
 **Fresh and repeated.** Every launch ran in a fresh throwaway home. The completed
 turn repeated three times with the same event skeleton (N2b, S-live-model, and T-live
@@ -3468,8 +3468,9 @@ stat 6 of 6 and the source 4 of 4 series.
   was unchanged by stat in all six. The access token lives 240 hours (A1b-K0).
 - C2 (run spec): BASE completed turns with exit 0 in 5.743 s (N2b), 6.444 s
   (S-live-model) and 16.509 s (T-live, which asked for a command).
-  `CODEX_HOME` as a per-run directory holds 99 entries after one launch (4.8 MB,
-  mostly `cache/` and the `-wal` of `state_5`); C2 must budget for this.
+  A per-run home holds 99 entries after one launch, 97 of them inside `CODEX_HOME`
+  (N2a, which did not complete; 4.8 MB, mostly `cache/` and the `-wal` of `state_5`);
+  C2 must budget for this.
 - C3 (event mapping): the stream's types are `thread.started` (`thread_id`),
   `item.completed` with `item.type` `error` (`message`) or `agent_message`
   (`text`, once), `turn.started` and `turn.completed` (`usage` with
@@ -3480,8 +3481,7 @@ stat 6 of 6 and the source 4 of 4 series.
   `model_instructions_file` produced `ALPHA`. HQ9: no sandbox start in two traced
   turns without a tool use.
 - A1d (egress): `chatgpt.com` and `ab.chatgpt.com`, from the two traced launches.
-- C0c: reuses this harness; M-live, L-live (no turn-limit key, C0a L1) and the tool
-  turns are its own.
+- C0c: reuses this harness; M-live is its own.
 
 **Unavailable after this probe (closing it does not discharge these).**
 - **The expired or refused form of a real login.** No copy is kept until it
@@ -3496,31 +3496,34 @@ stat 6 of 6 and the source 4 of 4 series.
   before the 240 hours are up, if the CLI decides a renewal is due that the blanked
   copy cannot perform. C1 records the first such failure seen in operation, and the
   remedy is the operator's new login. Under (a), C6 also owns the renewal itself.
-  C1's choice between 0600 and 0400 is not decided by F-live (no renewal was due and
-  no 0400 copy ran). The Codex copy's lifetime (240 hours) is held by A1b-K0.
+  C1's choice between 0600 and 0400 is not decided by F-live (no due renewal was forced
+  and no 0400 copy ran). The Codex copy's lifetime (240 hours) is held by A1b-K0.
 - **Billed requests per launch, and the model identity when the stream does not name
   it.**
 - **Egress on untraced launches.**
 - **Why N2a ended with exit -9 after 2 s and why two launches reached the deadline
-  after `turn.started`.** The evidence shows only the three events. Owner: C3 (the
-  event shapes of a turn that ends without `turn.completed` or `turn.failed`) and
-  C0c, which reuses the harness.
+  after `turn.started`.** The evidence shows only the three events. For N2a (traced)
+  the recorded exit is the traced launch's, which the driver takes from `strace`;
+  whether it was pending is not recorded.
 
-**Scripts.** The harness is `harness.py` (sha256 prefix `c26d217fd6fc`) with its
-modules `c0b_cells.py`, `c0b_events.py`, `c0b_evidence.py`, `c0b_guard.py`,
-`c0b_sandbox.py` and `c0b_trace.py`, the inner driver `inner.py`, the no-login check
-`step0.py` and its fake CLI `fake_codex.py`. They stay in the operator's probe
-directory outside the repository, like the A1b-K0 script. sha256 prefixes (12 hex
-characters), as read when this section was written: `c0b_cells.py` `ad246a0d3a2e`,
-`c0b_events.py` `651e1ff852a9`, `c0b_evidence.py` `569062b5151f`, `c0b_guard.py`
-`00e5e7473885`, `c0b_sandbox.py` `8208b14c26d9`, `c0b_trace.py` `77181f73e4ee`,
-`inner.py` `48049c5a2e23`, `step0.py` `742d6064ca6d`, `fake_codex.py`
-`517a2172186b`. By file time, `c0b_cells.py`, `c0b_events.py`, `c0b_evidence.py` and
+**Scripts.** The harness is `harness.py` with its modules `c0b_cells.py`,
+`c0b_events.py`, `c0b_evidence.py`, `c0b_guard.py`, `c0b_sandbox.py` and
+`c0b_trace.py`, the inner driver `inner.py`, the no-login check `step0.py` and its
+fake CLI `fake_codex.py`. They stay in the operator's probe directory outside the
+repository, like the A1b-K0 script, and are not reproduced here: verbatim they run to
+thousands of lines and the harness hard-codes a home path. Their sha256 prefixes (12
+hex characters), as read when this section was written: `harness.py` `c26d217fd6fc`,
+`c0b_cells.py` `ad246a0d3a2e`, `c0b_events.py` `651e1ff852a9`, `c0b_evidence.py`
+`569062b5151f`, `c0b_guard.py` `00e5e7473885`, `c0b_sandbox.py` `8208b14c26d9`,
+`c0b_trace.py` `77181f73e4ee`, `inner.py` `48049c5a2e23`, `step0.py`
+`742d6064ca6d`, `fake_codex.py` `517a2172186b`. The evidence records the executable's
+identity and the library revision, not script hashes, so the hashes that ran are not
+recorded. By file time, `c0b_cells.py`, `c0b_events.py`, `c0b_evidence.py` and
 `c0b_sandbox.py` were last changed on 26.10.2026 after N2a ran (the `error_class`
 repair), `harness.py` on 24.10.2026 (the first repair), and `c0b_guard.py`,
-`c0b_trace.py`, `inner.py`, `step0.py` and `fake_codex.py` on 23.10.2026. The hashes
-of the versions that ran in series 1 and 2 were not recorded, so this record does
-not hold them; series 3 and 4 started after those file times, so they ran on the hashes above.
+`c0b_trace.py`, `inner.py`, `step0.py` and `fake_codex.py` on 23.10.2026. It is an
+inference from those file times, not a record, that series 3 and 4, which started
+after them, ran on the hashes above.
 
 #### A1b-K0 the shape of the two logins' copies (Codex and Grok)
 
