@@ -2441,8 +2441,8 @@ series (`withheld_reasons` empty). No token, id, account, home path or model
 text is in this section; where the evidence holds one, it was withheld by the
 harness before it was written.
 
-**Step 0 (24.10.2026; no login, a synthetic source and the real binary).** Runs A,
-B0, B1 and B2 ran the real 1.0.60 binary, network unshared, on a synthetic source with
+**Step 0 (24.10.2026; no login, a synthetic source and the real binary).** Run A used
+the fake CLI; B0, B1 and B2 ran the real 1.0.60 binary, network unshared, on a synthetic source with
 Grok's members and canary values, through the S4g-copy function: every renewal
 member of the copy was the empty string (`renewal_members_all_empty` yes in each),
 and each scan found no canary outside the homes (`outside_hits` empty); the canary
@@ -2560,7 +2560,7 @@ ready.`, a fresh home each (N2a 24.10., N2b 26.10.). Both runs:
 
 HQ5: before the first `text` event, the two `available_commands` events carry
 lists under `tools` (24 strings) and `commands` (9 in each; the third
-`available_commands` event, after the `text`, carries 10) in both N2a and N2b (evidence
+`available_commands` event, after the `text`, carries 10 in N2a and 9 in N2b) in both runs (evidence
 lines 162, 163, 165, 175, 222); the reducer keeps names only under a `name` key, so the
 lists' names are not recorded. Verdict: a tool and command listing is seen; its names
 are not.
@@ -2596,7 +2596,7 @@ d = B_max - B_min = 2. Replacement needs V < B_min / 2 = 2023.5. Appending needs
 B_min - d <= V <= B_max + d + 200, that is 4045 <= V <= 4251, and `ALPHA`. Both V
 (10653 and 10594) lie above 4251 and above 2023.5: neither rule holds. In
 addition no stream field of its own names the model in the controls or in either
-launch (the usage object is keyed by a model name), which the rule counts as
+launch (`modelUsage` is keyed by a model name), which the rule counts as
 undecidable. Verdict for both: **not
 decidable**, with `ALPHA` no for the override and yes for `--rules` (HQ6).
 Observation, not part of the rule: input tokens plus cache reads are 12881 and
