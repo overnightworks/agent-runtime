@@ -1,0 +1,8 @@
+claim_id = "328d2ed5eb4646f0ab36423839b7af12"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "d96ef6d3225e1903a03a215fc89a105cebe1ab72"
+branch = "claude/issue-481-c-causes"
+scope = ["docs/host.md", "docs/operations.md", "src/agent_runtime/claude/provider.py", "src/agent_runtime/codex/run.py", "src/agent_runtime/errors.py", "tests/test_claude_adapter.py", "tests/test_claude_run.py", "tests/test_codex_run.py", "tests/test_service_codex_profile.py"]
+opened_commit = "99f49c5e0aa24dee629385e0ef1050bb3676cd57"
+whole_reason = "One closed cause spans its neutral owner, Claude's subclass, the Codex decoder, the two doc sentences and their proofs; split, the subclass and the mapping would land without each other's test."
