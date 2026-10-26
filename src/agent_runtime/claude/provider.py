@@ -70,6 +70,9 @@ from agent_runtime.constants import (
     PROBE_TIMEOUT_SECONDS,
 )
 from agent_runtime.errors import (
+    CliLoginRefusedError as NeutralCliLoginRefusedError,
+)
+from agent_runtime.errors import (
     ProviderUnavailableError,
     SafeRouteReasonCode,
     normalize_route_failure,
@@ -195,11 +198,8 @@ class CliLoginNotConfiguredError(UnavailableError):
     """Raised when the configured Claude CLI credential is missing or unusable."""
 
 
-class CliLoginRefusedError(UnavailableError):
-    """Raised when the Claude CLI reports that its login was refused.
-
-    The message is fixed: the CLI's own words never reach a caller or a log.
-    """
+class CliLoginRefusedError(UnavailableError, NeutralCliLoginRefusedError):
+    """Raised when the Claude CLI reports that its login was refused."""
 
 
 class CliToolSurfaceError(UnavailableError):

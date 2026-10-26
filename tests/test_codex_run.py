@@ -31,6 +31,7 @@ from provider_test_support import (
 
 from agent_runtime.cli_run import CliStreamLineTooLong, astream_cli_run
 from agent_runtime.codex.run import (
+    CODEX_CLI_LOGIN_REFUSED_DETAIL,
     CodexAnswerMissing,
     CodexRun,
     CodexRunFailure,
@@ -42,6 +43,7 @@ from agent_runtime.codex.run import (
 )
 from agent_runtime.codex_login import assess_codex_login
 from agent_runtime.config import PrivateWorkingRoot, reset_config
+from agent_runtime.errors import CliLoginRefusedError
 from agent_runtime.events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime.spawn import ChildProcessSpecificationError, closed_environment
 from agent_runtime_client.wire import TurnMessage
@@ -98,6 +100,14 @@ THREAD = line(type="thread.started", thread_id="thread")
 TURN = line(type="turn.started")
 NOTICE = an_item("item.completed", "error", message=CLI_TEXT)
 DONE = line(type="turn.completed", usage={})
+REFUSED_TURN = line(
+    type="turn.failed",
+    error={
+        "message": f"unexpected status 401 Unauthorized: {CLI_TEXT}, url: https://x.test/, "
+        "request id: 401-abc"
+    },
+)
+RECONNECTING = line(type="error", message=f"Reconnecting... 1/5 (401 Unauthorized {CLI_TEXT})")
 HAPPY_STREAM = (THREAD, NOTICE, TURN, a_message("first"), a_message("second"), DONE)
 
 
@@ -318,12 +328,34 @@ def test_a_tool_item_ends_the_run_at_its_first_event(event_type: str, item_type:
         pytest.param(
             CodexTurnFailed,
             (line(type="turn.failed", error={"message": f"401 {CLI_TEXT}"}),),
-            id="failed-turn",
+            id="failed-turn-with-a-bare-401",
+        ),
+        pytest.param(
+            CodexTurnFailed,
+            (line(type="turn.failed", error={"message": f"usage limit reached {CLI_TEXT}"}),),
+            id="failed-turn-usage-limit",
+        ),
+        pytest.param(CodexTurnFailed, (line(type="turn.failed"),), id="failed-turn-no-error"),
+        pytest.param(
+            CodexUnreadableLine,
+            (line(type="turn.failed", error=CLI_TEXT),),
+            id="failed-turn-error-not-an-object",
+        ),
+        pytest.param(
+            CodexUnreadableLine,
+            (line(type="turn.failed", error={"message": [CLI_TEXT]}),),
+            id="failed-turn-message-not-a-string",
+        ),
+        pytest.param(CliLoginRefusedError, (REFUSED_TURN,), id="failed-turn-login-refused"),
+        pytest.param(
+            CliLoginRefusedError,
+            (RECONNECTING, RECONNECTING, REFUSED_TURN),
+            id="failed-turn-login-refused-after-reconnecting-notices",
         ),
     ],
 )
 def test_a_stream_that_is_unknown_unreadable_or_failed_ends_closed_without_cli_text(
-    failure: type[CodexRunFailure], stream: tuple[bytes, ...]
+    failure: type[Exception], stream: tuple[bytes, ...]
 ) -> None:
     with pytest.raises(failure) as ended:
         decoded(stream)
@@ -350,6 +382,23 @@ def test_a_run_without_a_completed_answered_clean_turn_ends_with_no_answer(
 ) -> None:
     with pytest.raises(CodexAnswerMissing):
         decoded_and_ended(stream, returncode)
+
+
+def test_a_notice_of_a_refused_login_does_not_fail_a_turn_that_completes() -> None:
+    events = decoded_and_ended((RECONNECTING, TURN, a_message("answer"), DONE))
+
+    assert [type(event) for event in events] == [AssistantTextEvent, FinalEvent]
+
+
+def test_a_refused_login_has_its_own_fixed_message_without_cli_text() -> None:
+    with pytest.raises(CliLoginRefusedError) as refused:
+        decoded((REFUSED_TURN,))
+
+    assert (str(refused.value), refused.value.__cause__, refused.value.__context__) == (
+        CODEX_CLI_LOGIN_REFUSED_DETAIL,
+        None,
+        None,
+    )
 
 
 def test_every_failure_class_has_its_own_fixed_message() -> None:
@@ -441,7 +490,10 @@ def test_the_group_is_gone_and_the_tree_removed_before_the_final_event(
             (line(type="turn.failed", error={"message": f"401 {CLI_TEXT}"}),),
             "exit 1",
             CodexTurnFailed,
-            id="failed-turn",
+            id="failed-turn-with-a-bare-401",
+        ),
+        pytest.param(
+            (RECONNECTING, REFUSED_TURN), "exit 1", CliLoginRefusedError, id="login-refused"
         ),
         pytest.param(
             (NOTICE, a_message("answer"), DONE), "exit 3", CodexAnswerMissing, id="bad-exit"
@@ -458,7 +510,7 @@ def test_a_failed_run_raises_its_closed_class_and_still_reaps_and_removes_the_tr
     caplog: pytest.LogCaptureFixture,
     stream: tuple[bytes, ...],
     then: str,
-    failure: type[CodexRunFailure],
+    failure: type[Exception],
 ) -> None:
     run = a_run(binary=a_fake_codex(tmp_path, stream, then))
     caplog.set_level(logging.DEBUG)
