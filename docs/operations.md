@@ -39,17 +39,22 @@ principal (`agent_runtime_service.identity`). The checks run in this order:
    [ARCHITECTURE.md](ARCHITECTURE.md) owns the order. The keys that feed it: the
    subscription groups (`[identity]
    subscription_groups`), the profiles (`[profiles.<name>]`), the names the
-   subscription lists (`[cli.claude] models`), and the API groups (`api_groups`,
+   subscription lists (`[cli.<provider>] models`), and the API groups (`api_groups`,
    set together with `[route] api_alias`). A model name the subscription does not
    list sends that agent to the paid API for every caller with API rights and
    gives subscription-only callers `not_enabled`. The app chooses the model per
-   agent and sends it on each run; the service stores nothing of the choice. A ticket run
-   reads only the profiles with `background = true`; without one that serves it, it goes
-   on over the API when the ticket's groups carry API rights, else `not_enabled`.
+   agent and sends it on each run; the service stores nothing of the choice. A run that
+   names no model goes to the profile marked `default = true`; with one profile that is
+   the profile, marked or not, and with two exactly one must be marked. A run that names
+   tools and whose profile's provider has no tool relay yet (Codex) gets 403 `not_enabled`
+   before any place, capability or program, never a silent drop and never another route.
+   A ticket run reads only the profiles with `background = true`; without one that serves
+   it (a model-less run needs the default profile among them), it goes on over the API when
+   the ticket's groups carry API rights, else `not_enabled`.
 
 At most `[runs] max_parallel_cli_runs` (default 5) CLI runs are admitted; one
 beyond gets 429 `busy` with `Retry-After` and never falls back to the API
-route. The CLI runner serves Claude and checks its pinned version at startup.
+route. The CLI runner serves Claude and Codex and checks each pinned version at startup.
 The optional API runner serves buffered text and granted app tools through the
 configured gateway; it takes no subscription place. Both routes use the app's
 MCP origin and trust configuration. The CLI and API runners are installed independently.
@@ -106,15 +111,20 @@ else reaches the API route only as a member of `api_groups`; a person in neither
 group is refused `not_enabled` ([ARCHITECTURE.md](ARCHITECTURE.md)).
 The file is the operator's to make and to keep
 fresh, named as `profiles.<name>.token_file`; the library never creates, renews
-or rewrites it. Claude is the only profile today: the service refuses a profile
-for another provider.
+or rewrites it. Claude and Codex have a profile, one each; the service refuses a
+profile for another provider (Grok) and a second one for the same provider.
 
 ```toml
 [profiles.subscription]
 provider = "claude"
 token_file = "/run/secrets/claude-token"
 background = false
+default = true
 ```
+
+`default` serves a run that names no model. A lone profile is the default, marked or not;
+with two profiles exactly one is marked `default = true`, else the service stops at startup
+(exit 2, naming `profiles.<name>.default`).
 
 `background` is required, `true` or `false`; a profile without it, or with another
 value, stops the service at startup (exit 2, naming `profiles.<name>.background`). `true`
@@ -127,15 +137,24 @@ JSON (a credentials file) and API keys (`sk-ant-api...`) are refused; a link is
 followed and its target checked. Run `claude setup-token` once, sign in with the
 subscription, and write the printed token into the file.
 
+**A Codex profile.** `provider = "codex"` needs `token_file` and a `[cli.codex]` table
+(`binary`, `version`, `models`). The program must print exactly `codex-cli <version>` for
+`--version`. The file is the Codex sign-in document: JSON with the sign-in's tokens, at a mode
+that gives nothing to group or others, at most 16 KiB, a link followed and its target checked.
+An API key (`OPENAI_API_KEY`), a bare key line and a Claude setup token are refused. The
+service hands the program only a copy without the renewal token. Only the file's content is
+named here; how the dedicated login is made is not.
+
 **Renew it.** The token lasts a year and renewing it is the operator's. Run
 `uv run python scripts/replace_token_file.py PATH` from a checkout: it reads
 the new token on standard input, checks it by the service's rules and swaps it
 in atomically; a refused token leaves the old file untouched. The next run
 reads the file again, so no restart is needed.
 
-**When it fails.** A missing or refused file stops the service at startup, or
-fails a later run as `provider_error` before any child starts. An expired token
-also fails the run as `provider_error`.
+**When it fails.** A missing or refused file stops the service at startup, naming
+`profiles.<name>.token_file` and the kind of fault, never the content, or fails a later run as
+`provider_error` before any child starts. An expired token also fails the run as
+`provider_error`.
 
 An app that still calls the core directly names the same file in the provider's
 block of its `ProviderRuntimeConfig`; that interim path reads Codex and Grok

@@ -21,7 +21,8 @@ answers:
 4. tools named by an app without an MCP origin answer ``forbidden``, before the route;
 5. the route (``agent_runtime_service.routing``), which reads the request's model and the
    installation's listed models, and for a ticket run only the profiles marked
-   ``background``;
+   ``background``; a run that names tools and whose route is a profile of a provider without
+   the tool relay (Codex) answers ``not_enabled`` here, before a place, a capability or a child;
 6. for the CLI route, the service's admission limit (``agent_runtime_service.admission``): a
    subscription run beyond it answers ``busy`` with ``Retry-After`` before anything is
    signed;
@@ -232,7 +233,11 @@ def _admitted(
         run_request.model,
         config.subscription_models(),
     )
-    if isinstance(served, NotEnabled):
+    if isinstance(served, NotEnabled) or (
+        isinstance(served, Cli)
+        and run_request.tools
+        and not config.profile_takes_tools(served.profile)
+    ):
         return rejection(RejectionCode.NOT_ENABLED)
     lease = None
     if isinstance(served, Cli):

@@ -18,8 +18,8 @@ proves it. The traps it cannot show:
   `ProviderRuntimeConfig` per process with `configure()`, and those paths read it
   back with `current_config()`; they gain no explicit-argument twin that skips
   it. The agent service installs no core runtime: it reads its own config file
-  and passes each fact as an argument to the subscription run (`ClaudeRun`,
-  which validates at construction; `run_directories`, whose root is a
+  and passes each fact as an argument to the subscription run (`ClaudeRun` and
+  `CodexRun`, which validate at construction; `run_directories`, whose root is a
   `PrivateWorkingRoot` validated at construction and whose file names are
   checked on entry), none of which reads installed configuration — a test pins
   each such entry working after `reset_config()`. No path invents a default for a

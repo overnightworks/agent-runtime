@@ -1,9 +1,10 @@
 """The service's one configuration: identity, listener, profiles, the route and apps.
 
-The service accepts at most one subscription profile, for Claude, which needs its
-token file and a ``[cli.claude]`` table naming the absolute program, the exact version it
-must report and the models it serves, beside the ``[cli]`` section's private
-``working_root``, checked at load. An
+The service accepts at most one subscription profile per provider, for Claude and for Codex.
+Each needs its token file (a Claude setup token, or a Codex sign-in document) and a
+``[cli.<provider>]`` table naming the absolute program, the exact version it must report and the
+models it serves, beside the ``[cli]`` section's private ``working_root``, checked at load. With
+two profiles exactly one is marked ``default = true``: it serves a run that names no model. An
 app that offers tools names its one https MCP origin, and the service signs a capability for
 each run that grants the tools its request names; an origin is never shared between apps and
 needs the signing key. The ``[mcp]`` section names the one CA bundle (``ca_file``, an absolute
@@ -23,7 +24,7 @@ from __future__ import annotations
 import ipaddress
 import re
 import tomllib
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from enum import StrEnum
 from functools import cached_property
 from pathlib import Path
@@ -41,13 +42,20 @@ from pydantic import (
     StrictFloat,
     StrictInt,
     ValidationError,
+    ValidationInfo,
     model_validator,
 )
 from webauth.https_client import is_https_url
 from webauth.oidc_login import AdmissionConfig
 
+from agent_runtime.codex_login import CodexLogin, CodexLoginVerdict, assess_codex_login
 from agent_runtime.config import PrivateWorkingRoot, WorkingRootNotPrivateError
-from agent_runtime.secret_file import read_token_file, shown_text
+from agent_runtime.secret_file import (
+    UnsoundSecretFile,
+    read_secret_file,
+    read_token_file,
+    shown_text,
+)
 from agent_runtime_client.capability import McpOrigin
 from agent_runtime_client.wire import MAX_EVENT_BYTES, MODEL_PART_PATTERN
 from agent_runtime_service.api_credentials import read_api_credentials
@@ -128,14 +136,44 @@ def _signing_key_in_file(key_file: object) -> SigningKey:
     return load_signing_key(_absolute_path_to("signing key file", key_file))
 
 
-def _sound_token_file(token_file: object) -> Path:
-    """The absolute path, once its token reads soundly; a refusal stops startup as a field error.
+CODEX_LOGIN_REFUSALS: Final = {
+    CodexLoginVerdict.MALFORMED: "is not a Codex login document",
+    CodexLoginVerdict.INCOMPLETE: (
+        "is not a complete Codex sign-in; an API key (OPENAI_API_KEY) is not a subscription login"
+    ),
+}
 
-    The token read here is dropped: a swapped file takes effect on the next run without a
+
+def _judged_codex_login(path: Path) -> CodexLogin:
+    """The verdict on the file, returned: this frame holds the file's bytes and must not raise."""
+    return assess_codex_login(read_secret_file(path, "login file"))
+
+
+def read_codex_login(path: Path) -> CodexLogin:
+    """The usable Codex login the file holds; any other verdict is an ``UnsoundSecretFile``."""
+    login = _judged_codex_login(path)
+    if login.verdict is not CodexLoginVerdict.USABLE:
+        raise UnsoundSecretFile(f"{shown_text(str(path))} {CODEX_LOGIN_REFUSALS[login.verdict]}")
+    return login
+
+
+LOGIN_READERS: Final[Mapping[Provider, Callable[[Path], object]]] = {
+    Provider.CLAUDE: read_token_file,
+    Provider.CODEX: read_codex_login,
+}
+
+
+def _sound_token_file(token_file: object, info: ValidationInfo) -> Path:
+    """The absolute path, once its provider's reader accepts the file; a refusal is a field error.
+
+    The login read here is dropped: a swapped file takes effect on the next run without a
     restart (decision record 0001, line 2), so only the runner's read at each run's start counts.
+    A provider that failed its own field has no reader, and its file is never read.
     """
     path = _absolute_path_to("token file", token_file)
-    read_token_file(path)
+    read_login = LOGIN_READERS.get(info.data.get("provider"))
+    if read_login is not None:
+        read_login(path)
     return path
 
 
@@ -207,11 +245,12 @@ class CliConfig(_Section):
         exclude=True, repr=False
     )
     claude: ProgramPin | None = None
+    codex: ProgramPin | None = None
 
     def programs(self) -> Mapping[Provider, ProgramPin]:
         """The pinned programs this installation sets, in ``Provider`` order."""
-        pinned = {Provider.CLAUDE: self.claude}
-        return {provider: pin for provider, pin in pinned.items() if pin is not None}
+        tables = {provider: getattr(self, provider.value, None) for provider in Provider}
+        return {provider: pin for provider, pin in tables.items() if isinstance(pin, ProgramPin)}
 
 
 def _ca_bundle(path: object) -> Path:
@@ -323,6 +362,7 @@ class ProfileConfig(_Section):
     provider: Annotated[Provider, BeforeValidator(_text_only)]
     token_file: Annotated[Path, BeforeValidator(_sound_token_file)] | None = None
     background: StrictBool
+    default: StrictBool = False
 
 
 class RouteConfig(_Section):
@@ -378,29 +418,50 @@ def _refuse_a_second_profile_for_one_provider(document: object) -> None:
             )
 
 
+SERVED_PROVIDERS: Final = (Provider.CLAUDE, Provider.CODEX)
+RELAY_ATTACHED_PROVIDERS: Final = frozenset({Provider.CLAUDE})
+
+
 def _refuse_a_profile_for_a_provider_without_a_route(document: object) -> None:
     for name, _table, provider in _raw_profiles(document):
-        if provider not in (None, Provider.CLAUDE):
+        if provider not in (None, *SERVED_PROVIDERS):
             raise ValueError(
-                f"profiles.{shown_text(name)}.provider: {provider} has no"
-                " subscription route yet; only claude can have a profile"
+                f"profiles.{shown_text(name)}.provider: {provider} has no subscription route yet;"
+                f" only {' and '.join(SERVED_PROVIDERS)} can have a profile"
             )
 
 
-def _refuse_a_claude_profile_without_its_token_file(document: object) -> None:
+def _refuse_a_served_profile_without_its_token_file(document: object) -> None:
     for name, table, provider in _raw_profiles(document):
-        if provider is Provider.CLAUDE and _value(table, "token_file") is None:
+        if provider in SERVED_PROVIDERS and _value(table, "token_file") is None:
             raise ValueError(
-                f"profiles.{shown_text(name)}.token_file: required for a claude profile"
+                f"profiles.{shown_text(name)}.token_file: required for a {provider} profile"
             )
 
 
-def _refuse_a_claude_profile_without_its_program_table(document: object) -> None:
+def _refuse_a_served_profile_without_its_program_table(document: object) -> None:
     cli = _value(document, "cli")
-    if isinstance(cli, Mapping | CliConfig) and _value(cli, "claude") is not None:
+    tabled = isinstance(cli, Mapping | CliConfig)
+    for _name, _table, provider in _raw_profiles(document):
+        if provider in SERVED_PROVIDERS and not (tabled and _value(cli, provider) is not None):
+            raise ValueError(f"cli.{provider}: required for a {provider} profile")
+
+
+def _refuse_two_profiles_without_exactly_one_default(document: object) -> None:
+    profiles = [(name, table) for name, table, _provider in _raw_profiles(document)]
+    if len(profiles) < 2:
         return
-    if any(provider is Provider.CLAUDE for _name, _table, provider in _raw_profiles(document)):
-        raise ValueError("cli.claude: required for a claude profile")
+    marked = [name for name, table in profiles if _value(table, "default") is True]
+    if not marked:
+        raise ValueError(
+            f"profiles.{shown_text(profiles[0][0])}.default:"
+            " one profile must be marked default = true"
+        )
+    if len(marked) > 1:
+        raise ValueError(
+            f"profiles.{shown_text(marked[1])}.default: only one profile may be marked"
+            f" default = true; {shown_text(marked[0])!r} is already"
+        )
 
 
 def _refuse_an_origin_without_signing(document: object) -> None:
@@ -443,8 +504,9 @@ def _refuse_an_origin_without_a_ca_bundle(document: object) -> None:
 RULES_ON_THE_RAW_DOCUMENT: Final = (
     _refuse_a_second_profile_for_one_provider,
     _refuse_a_profile_for_a_provider_without_a_route,
-    _refuse_a_claude_profile_without_its_token_file,
-    _refuse_a_claude_profile_without_its_program_table,
+    _refuse_a_served_profile_without_its_token_file,
+    _refuse_a_served_profile_without_its_program_table,
+    _refuse_two_profiles_without_exactly_one_default,
     _refuse_an_origin_without_signing,
     _refuse_a_background_profile_without_signing,
     _refuse_an_origin_without_a_ca_bundle,
@@ -471,6 +533,13 @@ class ServiceConfig(_Section):
         for refuse_if_broken in RULES_ON_THE_RAW_DOCUMENT:
             refuse_if_broken(document)
         return document
+
+    @model_validator(mode="after")
+    def _a_lone_profile_is_the_default(self) -> Self:
+        if len(self.profiles) == 1:
+            ((name, profile),) = self.profiles.items()
+            self.profiles[name] = profile.model_copy(update={"default": True})
+        return self
 
     @model_validator(mode="after")
     def _api_groups_and_alias_come_together(self) -> Self:
@@ -539,6 +608,10 @@ class ServiceConfig(_Section):
         if self.cli is None:
             return {}
         return {provider: pin.models for provider, pin in self.cli.programs().items()}
+
+    def profile_takes_tools(self, name: str) -> bool:
+        """Whether the profile's provider has the tool relay attached."""
+        return self.profiles[name].provider in RELAY_ATTACHED_PROVIDERS
 
     def background_profiles(self) -> Mapping[str, ProfileConfig]:
         """The profiles a job ticket's run may use: those marked ``background = true``."""

@@ -71,9 +71,11 @@ flowchart TB
     role -->|yes| tools{"tools named but app<br/>has no MCP origin?"}
     tools -->|yes| forbidden
     tools -->|no| model["the request's model,<br/>or none"]
-    model --> subscription{"subscription group member,<br/>and a profile serves it?<br/>(no model asked: any profile;<br/>model asked: a profile of that<br/>provider exists and<br/>[cli.&lt;provider&gt;] models lists it)"}
-    subscription -->|yes| slot{"CLI place free?"}
-    slot -->|yes| cli["CLI route<br/>claude under the subscription profile<br/>(a ticket: only profiles with background = true)"]
+    model --> subscription{"subscription group member,<br/>and a profile serves it?<br/>(no model asked: the default profile;<br/>model asked: a profile of that<br/>provider exists and<br/>[cli.&lt;provider&gt;] models lists it)"}
+    subscription -->|yes| relay{"tools named, and the profile's<br/>provider has no relay yet?"}
+    relay -->|yes| notenabled
+    relay -->|no| slot{"CLI place free?"}
+    slot -->|yes| cli["CLI route<br/>the profile's provider under its profile<br/>(a ticket: only profiles with background = true)"]
     slot -->|no| busy["429 busy"]
     subscription -->|no| api{"API group member<br/>and route.api_alias set?"}
     api -->|yes| paid["API route<br/>buffered gateway rounds"]

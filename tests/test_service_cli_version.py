@@ -52,7 +52,13 @@ from agent_runtime.procfs import GroupCensus
 from agent_runtime.spawn import KillUntilGoneResult
 from agent_runtime_service import cli_version
 from agent_runtime_service.cli import EXIT_BAD_CONFIG, main
-from agent_runtime_service.cli_version import claude_version_output
+from agent_runtime_service.cli_version import (
+    ProgramVersionRefused,
+    claude_version_output,
+    codex_version_output,
+    require_pinned_versions,
+)
+from agent_runtime_service.config import CliConfig, ProgramPin
 
 PRINTS_THE_PIN = f"{PINNED_CLAUDE_VERSION} (Claude Code)\n"
 WORKING_ROOT_NAME = "working-root"
@@ -436,6 +442,51 @@ def test_a_run_tree_that_cannot_be_made_refuses_the_start_as_unstarted(
 )
 def test_claude_reads_only_its_exact_version_line(stdout, version):
     assert claude_version_output(stdout) == version
+
+
+@pytest.mark.parametrize(
+    ("stdout", "version"),
+    [
+        pytest.param("codex-cli 0.163.0\n", "0.163.0", id="one-terminal-newline"),
+        pytest.param("codex-cli 0.163.0", "0.163.0", id="no-newline"),
+        pytest.param("codex-cli 0.163.0\n\n", None, id="two-newlines"),
+        pytest.param("codex-cli 0.163.0\r\n", None, id="carriage-return"),
+        pytest.param("codex-cli 0.163.0 \n", None, id="trailing-space"),
+        pytest.param("codex-cli  0.163.0\n", None, id="two-spaces"),
+        pytest.param("codex-cli v0.163.0\n", None, id="v-prefix"),
+        pytest.param("codex-cli 0.163.0-beta\n", None, id="prerelease"),
+        pytest.param("codex-cli 0.163.00\n", None, id="leading-zero"),
+        pytest.param("0.163.0\n", None, id="no-prefix"),
+        pytest.param("banner\ncodex-cli 0.163.0\n", None, id="banner-line"),
+        pytest.param("", None, id="empty"),
+        pytest.param("codex-cli 0.163.\u0660\n", None, id="non-ascii-digit"),
+    ],
+)
+def test_codex_reads_only_its_exact_version_line(stdout, version):
+    assert codex_version_output(stdout) == version
+
+
+def _a_pin(directory: Path, printed: str, version: str) -> tuple[ProgramPin, Path]:
+    directory.mkdir()
+    calls = directory / "calls"
+    program = fake_cli_executable(directory, {("--version",): printed}, calls_log=calls)
+    return ProgramPin(binary=str(program), version=version, models=frozenset()), calls
+
+
+def test_with_both_programs_pinned_both_are_probed_and_the_first_miss_refuses_naming_it(
+    tmp_path, working_root
+):
+    claude, claude_calls = _a_pin(tmp_path / "claude", PRINTS_THE_PIN, PINNED_CLAUDE_VERSION)
+    codex, codex_calls = _a_pin(tmp_path / "codex", "codex-cli 0.163.1\n", "0.163.0")
+    cli = CliConfig(working_root=str(working_root), claude=claude, codex=codex)
+
+    with pytest.raises(ProgramVersionRefused) as refused:
+        require_pinned_versions(cli)
+
+    assert str(refused.value) == (
+        f"cli.codex.version: {codex.binary} reports 0.163.1, not the pinned 0.163.0"
+    )
+    assert (claude_calls.exists(), codex_calls.exists()) == (True, True)
 
 
 def _the_unstarted_refusal(program: Path) -> str:

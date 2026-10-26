@@ -42,6 +42,7 @@ from provider_test_support import (
     a_child_that_outlives_sigkill,
     a_claude_cli_child,
     a_claude_stdin_line,
+    a_codex_login,
     a_fake_claude,
     a_private_root,
     an_init,
@@ -52,7 +53,7 @@ from provider_test_support import (
     own_real_children,
     the_only_tree,
 )
-from pydantic import SecretStr, ValidationError
+from pydantic import ValidationError
 from service_support import (
     ALICE,
     CLI_PROFILE,
@@ -76,6 +77,7 @@ from service_support import (
     instant,
     logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
     post_run,
+    process_token_file,
     record_signed_tokens,
     respond_through,
     run_body,
@@ -109,7 +111,6 @@ from agent_runtime_service.capability import Capability
 from agent_runtime_service.cli import installed_runners, main
 from agent_runtime_service.config import McpConfig, Provider, ServiceConfig
 from agent_runtime_service.quarantine import Quarantine
-from agent_runtime_service.routing import Cli
 from agent_runtime_service.run_events import (
     INVALID_EVENT_MESSAGE,
     NO_RUNNER_MESSAGE,
@@ -309,16 +310,13 @@ def test_the_cli_run_gets_the_listed_model_as_one_argument_or_none(
 
 
 def test_the_run_adapter_passes_the_routes_model_and_not_the_requests(tmp_path: Path) -> None:
-    admitted = dataclasses.replace(
-        alice_admitted_run(uuid.uuid4()),
-        request=RunRequest.model_validate(run_body(model="claude/opus")),
-        route=Cli("claude-main", LISTED_MODEL),
-    )
+    turn = RunRequest.model_validate(run_body(model="claude/opus")).turn
     launch = cli_runner.ProfileLaunch(
-        Provider.CLAUDE, tmp_path / "claude", tmp_path / "token", 7, 600.0
+        Provider.CLAUDE, tmp_path / "claude", process_token_file(), 7, 600.0
     )
 
-    adapter = cli_runner.RUN_ADAPTERS[Provider.CLAUDE](launch, SecretStr("token"), admitted, None)
+    build = cli_runner.RUN_ADAPTERS[Provider.CLAUDE](launch)
+    adapter = build(cli_runner.RunInputs(turn, LISTED_MODEL, None))
 
     arguments = adapter.start(tmp_path / "home", tmp_path / "work").child.arguments
     assert [a for a in arguments if a.startswith("--model")] == [f"--model={LISTED_MODEL}"]
@@ -1134,17 +1132,19 @@ def test_the_service_entry_installs_the_cli_runner(
 
 
 @pytest.mark.parametrize("provider", list(Provider))
-def test_a_profile_loads_only_for_a_provider_with_a_run_adapter(provider: Provider) -> None:
+def test_a_profile_loads_only_for_a_provider_with_a_run_adapter(
+    provider: Provider, tmp_path: Path
+) -> None:
     document = _service_config_document(TEST_ISSUER, None, None)
-    document["profiles"][CLI_PROFILE]["provider"] = provider.value
-
+    login = tmp_path / "login"
+    login.write_bytes(a_codex_login() if provider is Provider.CODEX else PROCESS_TOKEN.encode())
+    login.chmod(0o600)
+    document["cli"]["codex"] = {"binary": str(login), "version": "0.163.0", "models": []}
+    document["profiles"][CLI_PROFILE].update(provider=provider.value, token_file=str(login))
+    loads = True
     try:
         ServiceConfig.model_validate(document)
     except ValidationError as refusal:
-        refusal_names_the_provider = provider.value in str(refusal)
+        assert provider.value in str(refusal)
         loads = False
-    else:
-        refusal_names_the_provider = True
-        loads = True
-
-    assert (loads, refusal_names_the_provider) == (provider in cli_runner.RUN_ADAPTERS, True)
+    assert loads == (provider in cli_runner.RUN_ADAPTERS)

@@ -81,7 +81,7 @@ with `include_input=False`, which matters to a host that logs configuration erro
 the reference.
 
 The subscription run the agent service drives (`cli_run.astream_cli_run(root,
-adapter)`, with `claude.provider.ClaudeRun` as Claude's adapter, in directories
+adapter)`, with `claude.provider.ClaudeRun` as Claude's adapter and `codex.run.CodexRun` as Codex's, in directories
 from `process.run_directories`) takes every fact as an explicit argument and reads
 no installed configuration.
 

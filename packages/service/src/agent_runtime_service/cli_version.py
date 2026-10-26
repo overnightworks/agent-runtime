@@ -18,6 +18,7 @@ from agent_runtime.spawn import ChildProcess, closed_environment
 from agent_runtime_service.config import VERSION_PATTERN, CliConfig, ProgramPin, Provider
 
 CLAUDE_VERSION_SUFFIX: Final = " (Claude Code)"
+CODEX_VERSION_PREFIX: Final = "codex-cli "
 
 VersionReader = Callable[[str], str | None]
 
@@ -35,8 +36,16 @@ def claude_version_output(stdout: str) -> str | None:
     return version if VERSION_PATTERN.fullmatch(version) else None
 
 
+def codex_version_output(stdout: str) -> str | None:
+    """The version ``codex --version`` printed, or ``None`` when the output is anything else."""
+    text = stdout.removesuffix("\n")
+    version = text.removeprefix(CODEX_VERSION_PREFIX)
+    return version if version != text and VERSION_PATTERN.fullmatch(version) else None
+
+
 VERSION_READERS: Final[Mapping[Provider, VersionReader]] = {
     Provider.CLAUDE: claude_version_output,
+    Provider.CODEX: codex_version_output,
 }
 
 
