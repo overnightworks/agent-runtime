@@ -36,6 +36,7 @@ from service_support import (
     LISTED_MODEL,
     PINNED_CLAUDE_VERSION,
     SONGMAKER_GROUP,
+    SONGMAKER_ORIGIN,
     SONGMAKER_TOOLS,
     SUBSCRIPTION_GROUP,
     TEST_ISSUER,
@@ -154,40 +155,41 @@ def codex_document(
     return document
 
 
-def with_claude_beside(
-    document: dict[str, Any], claude: Path, *, codex_is_default: bool = True
-) -> dict[str, Any]:
+def with_claude_beside(document: dict[str, Any], claude: Path) -> dict[str, Any]:
     document["cli"]["claude"] = {
         "binary": str(claude),
         "version": PINNED_CLAUDE_VERSION,
         "models": [LISTED_MODEL],
     }
-    codex = {**document["profiles"][CODEX_PROFILE], "default": codex_is_default}
     document["profiles"] = {
-        CLI_PROFILE: {
-            "provider": "claude",
-            "token_file": str(process_token_file()),
-            "default": not codex_is_default,
-        },
-        CODEX_PROFILE: codex,
+        CLI_PROFILE: {"provider": "claude", "token_file": str(process_token_file())},
+        CODEX_PROFILE: document["profiles"][CODEX_PROFILE],
     }
     return document
 
 
-def a_document_with_both(
-    tmp_path: Path, stream: tuple[bytes, ...] = ANSWER, *, codex_is_default: bool = True
-) -> dict[str, Any]:
+def a_document_with_both(tmp_path: Path, stream: tuple[bytes, ...] = ANSWER) -> dict[str, Any]:
     """Claude and Codex profiles, each with a stand-in program of its own under ``tmp_path``."""
     claude_directory = tmp_path / "claude-directory"
     claude_directory.mkdir()
     codex = codex_document(tmp_path, a_service_fake(tmp_path, stream), a_login_file(tmp_path))
-    return with_claude_beside(
-        codex, a_fake_claude(claude_directory), codex_is_default=codex_is_default
-    )
+    return with_claude_beside(codex, a_fake_claude(claude_directory))
 
 
 def a_config(document: dict[str, Any]) -> ServiceConfig:
     return ServiceConfig.model_validate(document)
+
+
+UNPROFILED = f"{Provider.CODEX}/{CODEX_MODEL}"
+
+
+def a_config_whose_codex_table_has_no_profile(tmp_path: Path) -> ServiceConfig:
+    """``service_config`` plus a listed ``[cli.codex]`` table that no profile uses."""
+    document = a_document_with_both(tmp_path)
+    del document["profiles"][CODEX_PROFILE]
+    document["defaults"] = {"model": f"{Provider.CLAUDE}/{LISTED_MODEL}"}
+    document["apps"]["songmaker"]["mcp_origin"] = SONGMAKER_ORIGIN
+    return a_config(document)
 
 
 def written(tmp_path: Path, document: dict[str, Any]) -> Path:

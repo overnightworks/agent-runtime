@@ -51,9 +51,8 @@ in this order for a person's run:
 4. `agent_runtime_service.routing.route` decides the route; the second picture in
    [ARCHITECTURE.md](ARCHITECTURE.md) owns the order. The keys that feed it: the
    subscription groups (`[identity]
-   subscription_groups`), the profiles (`[profiles.<name>]`), the names the
-   subscription lists (`[cli.<provider>] models`), and the API groups (`api_groups`,
-   set together with `[route] api_alias`). The app sends no model: admission takes the
+   subscription_groups`), the profiles (`[profiles.<name>]`), and the API groups (`api_groups`,
+   set together with `[api]`). The app sends no model: admission takes the
    run's model from the configuration, the agent's `model` in
    `[apps.<app>.agents.<agent>]`, else the app's, else `[defaults] model`. A configured model whose
    provider has no `[profiles.<name>]` entry sends that agent to the paid API for every caller with API
@@ -75,8 +74,8 @@ MCP origin and trust configuration. The CLI and API runners are installed indepe
 
 ## Configure the API text route
 
-Set `[identity] api_groups` and `[route] api_alias` together, then add `[api]`
-with `completion_url` and an absolute `credential_file`. The URL must be an ASCII
+Set `[identity] api_groups` and `[api]` together; either alone stops startup.
+`[api]` takes `completion_url` and an absolute `credential_file`. The URL must be an ASCII
 HTTP or HTTPS URL with a DNS, IPv4 or bracketed IPv6 host, optional port 1–65535,
 and exactly `/v1/chat/completions`: no user information, query, fragment, escapes
 or whitespace. HTTP is for the isolated gateway network; edge owns its isolation.
@@ -98,10 +97,9 @@ either, the run fails before HTTP. Replacing a shared key with keys for each
 registered app needs no service or app code change. An invalid replacement
 fails closed and does not fall back to the old or shared credential.
 
-Removing `[api]` leaves group/alias routing enabled but makes admitted API runs
-fail `provider_unavailable`. To disable paid entitlement entirely, remove
-`api_groups`, `[route]` and `[api]` together; API-only callers then get
-`not_enabled`. A contradictory partial configuration is a startup error.
+To disable paid entitlement entirely, remove `api_groups` and `[api]` together;
+API-only callers then get `not_enabled`. Either one alone is a startup error
+(exit 2, naming `api` or `identity.api_groups`).
 The API route is installed beside the CLI program, whose `[cli.<provider>] models` the
 configuration must list. Gateway activation and paid testing require
 the operator's separate approval; this route's repository proof uses fakes.
@@ -138,12 +136,7 @@ profile for another provider (Grok) and a second one for the same provider.
 [profiles.subscription]
 provider = "claude"
 token_file = "/run/secrets/claude-token"
-default = true
 ```
-
-`default` is checked at startup and decides no route. A lone profile is the default, marked or
-not; with two profiles exactly one is marked `default = true`, else the service stops at
-startup (exit 2, naming `profiles.<name>.default`).
 
 **Provide it (Claude).** The file holds one line, the token `claude setup-token` prints,
 at a mode that gives nothing to group or others (0600 or 0400), at most 16 KiB.
