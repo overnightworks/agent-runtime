@@ -52,13 +52,8 @@ from webauth.https_client import KeySetFetchError
 from webauth.jwt_verification import KEY_SET_REFRESH_COOLDOWN_SECONDS
 
 from agent_runtime.events import AssistantTextEvent, FinalEvent
-from agent_runtime_client.wire import (
-    PROTOCOL_VERSION,
-    Failed,
-    FailureCode,
-    RejectionCode,
-    RunRejection,
-)
+from agent_runtime_client.wire import PROTOCOL_VERSION as V
+from agent_runtime_client.wire import Failed, FailureCode, RejectionCode, RunRejection
 from agent_runtime_service.app import create_app, rejection
 from agent_runtime_service.config import load_config
 from agent_runtime_service.routing import Api, Cli
@@ -591,12 +586,7 @@ def _too_large() -> bytes:
 
 
 BODY_REJECTIONS = [
-    pytest.param(
-        f'{{"v": {PROTOCOL_VERSION}, "purpose": NaN}}'.encode(),
-        RejectionCode.INVALID_REQUEST,
-        422,
-        id="nan",
-    ),
+    pytest.param(b'{"v": 2, "purpose": NaN}', RejectionCode.INVALID_REQUEST, 422, id="nan"),
     pytest.param(
         json.dumps(run_body())[:-1].encode() + b', "purpose": "cowriter"}',
         RejectionCode.INVALID_REQUEST,
@@ -604,9 +594,7 @@ BODY_REJECTIONS = [
         id="a-member-named-twice",
     ),
     pytest.param(b"[1]", RejectionCode.INVALID_REQUEST, 422, id="not-an-object"),
-    pytest.param(
-        f'{{"v": {PROTOCOL_VERSION},'.encode(), RejectionCode.INVALID_REQUEST, 422, id="not-json"
-    ),
+    pytest.param(b'{"v": 2,', RejectionCode.INVALID_REQUEST, 422, id="not-json"),
     pytest.param(_too_large(), RejectionCode.INVALID_REQUEST, 422, id="over-256-kib"),
     *(
         pytest.param(
@@ -625,18 +613,12 @@ BODY_REJECTIONS = [
     ),
     *(
         pytest.param(
-            json.dumps(run_body(v=version)).encode(),
-            RejectionCode.UNSUPPORTED_VERSION,
-            400,
-            id=label,
+            json.dumps(run_body(v=v)).encode(), RejectionCode.UNSUPPORTED_VERSION, 400, id=i
         )
-        for label, version in (
-            ("version-1", 1),
-            ("older-version", 2),
-            ("newer-version", PROTOCOL_VERSION + 1),
-            ("version-as-a-numeric-string", str(PROTOCOL_VERSION)),
-            ("version-as-a-float", float(PROTOCOL_VERSION)),
-            ("version-as-a-boolean", True),
+        for i, v in (
+            ("version-1", 1), ("older-version", 2), ("newer-version", V + 1),
+            ("version-as-a-numeric-string", str(V)), ("version-as-a-boolean", True),
+            ("version-as-a-float", float(V)),
         )
     ),
     pytest.param(
@@ -676,17 +658,12 @@ BODY_REJECTIONS = [
         400,
         id="no-version",
     ),
-    pytest.param(
-        f'{{"v": {PROTOCOL_VERSION + 1}, "purpose": NaN}}'.encode(),
-        RejectionCode.INVALID_REQUEST,
-        422,
-        id="strict-json-is-checked-before-the-version",
-    ),
-    pytest.param(
-        f'{{"v": {PROTOCOL_VERSION + 1}, "v": {PROTOCOL_VERSION + 1}}}'.encode(),
-        RejectionCode.INVALID_REQUEST,
-        422,
-        id="a-member-named-twice-is-checked-before-the-version",
+    *(
+        pytest.param(b, RejectionCode.INVALID_REQUEST, 422, id=f"{n}-is-checked-before-the-version")
+        for n, b in (
+            ("strict-json", b'{"v": %d, "purpose": NaN}' % (V + 1)),
+            ("a-member-named-twice", b'{"v": %d, "v": %d}' % (V + 1, V + 1)),
+        )
     ),
     *(
         pytest.param(
@@ -709,7 +686,7 @@ def test_a_body_that_is_not_an_allowed_run_request_is_refused(service, content, 
 
 def test_an_oversized_body_without_a_declared_length_is_refused_while_read(service):
     def chunks() -> Iterator[bytes]:
-        yield f'{{"v": {PROTOCOL_VERSION}, "purpose": "'.encode()
+        yield b'{"v": 2, "purpose": "'
         for _ in range(MAX_REQUEST_BYTES // 1024 + 1):
             yield b"x" * 1024
         yield b'"}'

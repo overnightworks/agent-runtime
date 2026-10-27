@@ -114,7 +114,6 @@ from agent_runtime_client.mcp_wire import (
 from agent_runtime_client.sse import RunStreamDecoder
 from agent_runtime_client.wire import (
     MAX_EVENT_BYTES,
-    PROTOCOL_VERSION,
     ClientLoss,
     Failed,
     FailureCode,
@@ -705,15 +704,7 @@ def leave_when(
         "POST",
         f"{base_url}/runs",
         headers={"Content-Type": "application/json", **headers()},
-        content=json.dumps(
-            {
-                "v": PROTOCOL_VERSION,
-                "purpose": "cowriter",
-                "turn": {"system": "s", "messages": [{"role": "user", "text": "a"}]},
-                "roles": ["admin", "user"],
-                "tools": dict(tools),
-            }
-        ),
+        content=json.dumps(run_body(tools=dict(tools))),
         timeout=HELD_RUN_CLIENT_TIMEOUT_SECONDS,
     ) as response:
         for chunk in response.iter_bytes():
