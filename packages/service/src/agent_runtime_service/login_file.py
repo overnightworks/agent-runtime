@@ -30,6 +30,14 @@ class SwapRefused:
     sibling_remains: bool
 
 
+def swap_sibling_or_refusal(path: Path) -> Path | SwapRefused:
+    """The sibling beside ``path``, or the refusal when ``path`` has no file name to derive it."""
+    try:
+        return swap_sibling(path)
+    except ValueError:
+        return SwapRefused(f"{shown_text(str(path))} has no file name to swap in beside", False)
+
+
 def swap_in_login_file(
     path: Path, content: bytes, read_back: Callable[[Path], object]
 ) -> SwapRefused | None:
@@ -41,7 +49,9 @@ def swap_in_login_file(
     The rename is the commit point; nothing after it can fail the swap. The swap is atomic, not
     durable: neither the file nor its directory is synced.
     """
-    sibling = swap_sibling(path)
+    sibling = swap_sibling_or_refusal(path)
+    if isinstance(sibling, SwapRefused):
+        return sibling
     try:
         descriptor = os.open(
             sibling, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, LOGIN_FILE_MODE
@@ -70,12 +80,21 @@ def _reason_not_swapped(
         read_back(sibling)
         os.replace(sibling, path)
     except UnsoundSecretFile as refusal:
-        return str(refusal)
+        return _refusal_about_the_login_file(path, sibling, str(refusal))
     except OSError as error:
         return f"{shown_text(str(path))} cannot be swapped in: {error.strerror}"
     except Exception as error:
         return f"failed: {type(error).__name__}"
     return None
+
+
+def _refusal_about_the_login_file(path: Path, sibling: Path, reader_text: str) -> str:
+    """The reader names the sibling it read; the operator is told about the login file instead."""
+    about_sibling = f"{shown_text(str(sibling))} "
+    return (
+        f"the new document for {shown_text(str(path))} was refused: "
+        f"{reader_text.removeprefix(about_sibling)}"
+    )
 
 
 def _with_sibling_removed(sibling: Path, reason: str) -> SwapRefused:

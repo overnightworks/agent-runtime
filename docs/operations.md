@@ -155,7 +155,8 @@ reading anything (the platform, the configuration, an unknown profile, or a left
 `.<file>.new` beside the login file, which is removed by hand), and 3 when it is not written and
 its own `.<file>.new`, which may hold the new login, is not confirmed gone: it names the path.
 It needs what the service's own start reads except the logins, and write access to the login
-file's directory. A failure before the swap leaves the old file untouched. `--check` runs the
+file's directory, so run it as the service's own user: the new file is created 0600 and owned by
+whoever runs the command. A failure before the swap leaves the old file untouched. `--check` runs the
 service's reader on the file as it stands and reads no input; exit 0 means the reader accepts
 the file, not that the provider does.
 
