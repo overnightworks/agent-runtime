@@ -69,7 +69,7 @@ API_SCRIPT = (AssistantTextEvent(text="via the API"), FinalEvent(text="API answe
 
 LISTED = f"claude/{LISTED_MODEL}"
 UNLISTED = f"claude/{UNLISTED_MODEL}"
-CLI_ON_SONNET = Cli("claude-main", LISTED_MODEL)
+CLI_ON_SONNET = Cli("claude-main")
 MINT = TokenMint()
 OTHER_MINT = TokenMint()
 
@@ -136,7 +136,7 @@ def test_an_api_group_member_of_the_app_runs_on_the_api_route(service, runners):
     )
 
     assert decoded_events(response.content)[-1].text == "API answer"
-    assert runners.api.admitted[-1].route == Api(LISTED)
+    assert (runners.api.admitted[-1].route, runners.api.admitted[-1].model) == (Api(), LISTED)
 
 
 def _loaded_service_run(tmp_path, subscription_groups, user_groups):
@@ -525,7 +525,7 @@ def test_h2_an_unlisted_model_reaches_an_api_only_caller_by_its_full_name():
     response, runners = _routed_run(service_config(), API_MEMBER, model=UNLISTED)
 
     assert _admitted_events(response)
-    assert runners.api.admitted[-1].route == Api(UNLISTED)
+    assert (runners.api.admitted[-1].route, runners.api.admitted[-1].model) == (Api(), UNLISTED)
 
 
 @pytest.mark.parametrize(
@@ -548,7 +548,7 @@ def test_a_named_model_without_subscription_facts_goes_to_the_api_or_is_refused(
 
     if api_route:
         assert _admitted_events(response)
-        assert runners.api.admitted[-1].route == Api(LISTED)
+        assert (runners.api.admitted[-1].route, runners.api.admitted[-1].model) == (Api(), LISTED)
     else:
         assert_rejected(response, RejectionCode.NOT_ENABLED, 403)
         assert runners.cli.admitted == runners.api.admitted == []
@@ -766,7 +766,7 @@ def test_s3_a_run_without_a_listed_subscription_model_is_routed_on_exactly_the_c
 
     assert _admitted_events(response)
     admitted = runners.cli.admitted + runners.api.admitted
-    assert [run.route for run in admitted] == [Api(OPUS)]
+    assert [(run.route, run.model) for run in admitted] == [(Api(), OPUS)]
 
 
 def _run_on_the_file(tmp_path, subscription_groups):
@@ -797,4 +797,4 @@ def test_x_the_file_is_read_at_startup_and_a_restart_reads_it_again(tmp_path):
 
     edited = _run_on_the_file(tmp_path, ["/not-a-subscriber-group"])
     assert _post_both_rights(running, running_runners) == CLI_ON_SONNET  # X2
-    assert _post_both_rights(*_app_from(edited)) == Api(LISTED)  # X3
+    assert _post_both_rights(*_app_from(edited)) == Api()  # X3

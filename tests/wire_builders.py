@@ -13,6 +13,7 @@ from agent_runtime_client.wire import (
     Failed,
     FailureCode,
     Heartbeat,
+    RouteKind,
     RunStarted,
     Succeeded,
     ToolCall,
@@ -29,7 +30,14 @@ def wire(type_: str, seq: int, **payload: object) -> dict[str, object]:
 
 
 def started(run_id: UUID = RUN_ID) -> RunStarted:
-    return RunStarted(v=PROTOCOL_VERSION, run_id=run_id, seq=0, heartbeat_interval_s=15)
+    return RunStarted(
+        v=PROTOCOL_VERSION,
+        run_id=run_id,
+        seq=0,
+        model="claude/sonnet",
+        route=RouteKind.CLI,
+        heartbeat_interval_s=15,
+    )
 
 
 def text(seq: int, words: str) -> AssistantText:

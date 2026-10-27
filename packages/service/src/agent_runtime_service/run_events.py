@@ -203,6 +203,8 @@ class _WireRun:
                 v=PROTOCOL_VERSION,
                 run_id=self._run_id,
                 seq=self._seq,
+                model=self._admitted.model,
+                route=self._admitted.route.kind,
                 heartbeat_interval_s=self._runs.heartbeat_interval_s,
             )
         )

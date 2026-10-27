@@ -37,7 +37,7 @@ from agent_runtime.secret_file import read_token_file
 from agent_runtime_client.wire import Turn
 from agent_runtime_service.config import Provider, ServiceConfig, read_codex_login
 from agent_runtime_service.relayed_events import RelayedEvents
-from agent_runtime_service.routing import Cli
+from agent_runtime_service.routing import Cli, split_model
 from agent_runtime_service.run_liveness import RunClock
 from agent_runtime_service.run_tools import RunTools
 from agent_runtime_service.runners import AdmittedRun
@@ -152,7 +152,7 @@ class CliRunner:
             adapter = logged_in(
                 RunInputs(
                     admitted.request.turn,
-                    admitted.route.model,
+                    split_model(admitted.model)[1],
                     None if tools is None else tools.access,
                 )
             )

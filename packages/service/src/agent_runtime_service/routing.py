@@ -11,23 +11,31 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import ClassVar
 
+from agent_runtime_client.wire import RouteKind
 from agent_runtime_service.config import IdentityConfig, ProfileConfig, Provider
 
 
 @dataclass(frozen=True)
 class Cli:
-    """The subscription route; ``model`` is the listed name the run must use."""
+    """The subscription route under one profile."""
 
+    kind: ClassVar[RouteKind] = RouteKind.CLI
     profile: str
-    model: str
 
 
 @dataclass(frozen=True)
 class Api:
-    """The paid route; ``model`` is the full configured ``<provider>/<model>``."""
+    """The paid route."""
 
-    model: str
+    kind: ClassVar[RouteKind] = RouteKind.API
+
+
+def split_model(model: str) -> tuple[str, str]:
+    """The provider and the bare name of a full ``<provider>/<model>``."""
+    provider, _separator, name = model.partition("/")
+    return provider, name
 
 
 @dataclass(frozen=True)
@@ -48,10 +56,10 @@ def _subscription_route(
 ) -> Cli | None:
     if identity.subscription_groups.isdisjoint(groups):
         return None
-    provider, _separator, name = model.partition("/")
+    provider, name = split_model(model)
     for profile, facts in profiles.items():
         if facts.provider == provider and name in listed_models.get(facts.provider, frozenset()):
-            return Cli(profile, name)
+            return Cli(profile)
     return None
 
 
@@ -66,5 +74,5 @@ def route(
     if subscription is not None:
         return subscription
     if not identity.api_groups.isdisjoint(groups):
-        return Api(model)
+        return Api()
     return NotEnabled()
