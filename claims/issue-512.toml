@@ -1,0 +1,8 @@
+claim_id = "f0acdd5fd22846f5aef4154a614059fd"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "b5dc16b5b9bce8f5c395a6c6646676c7734194da"
+branch = "claude/issue-512-remove-default-and-route"
+scope = ["docs/ARCHITECTURE.md", "docs/MIGRATING.md", "docs/operations.md", "packages/service/src/agent_runtime_service/app.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/src/agent_runtime_service/routing.py", "quality/baseline.toml", "tests/service_support.py", "tests/test_service_admission.py", "tests/test_service_api_runner.py", "tests/test_service_app_runs.py", "tests/test_service_codex_profile.py", "tests/test_service_codex_startup.py", "tests/test_service_config.py", "tests/test_service_entrance.py", "tests/test_service_routing.py"]
+opened_commit = "8fc7b85efad34dc793be1ae86e4ddaa411dc7106"
+whole_reason = "One configuration contract: the removed keys, the api_groups/[api] pairing, routing without listed models and the shared test configurations every service test loads agree in one commit, or no service test loads a configuration."
