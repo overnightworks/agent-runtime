@@ -392,14 +392,14 @@ class RunFailures:
         keep the frames of the step it left. The positions are taken first, when
         it is converted.
         """
-        known = self._converted.get(id(cancelled))
-        if known is not None and known[0]() is cancelled:
-            converted = known[1]
-        else:
-            converted = RunStepCancelled(part, cancelled)
-            self._converted[id(cancelled)] = (weakref.ref(cancelled), converted)
+        key = id(cancelled)
+        known = self._converted.get(key)
+        if known is None:
+            # The entry leaves with its stray, before the identity can be reused.
+            stray = weakref.ref(cancelled, lambda _, forget=self._converted.pop: forget(key, None))
+            known = self._converted[key] = (stray, RunStepCancelled(part, cancelled))
         _make_inert(cancelled)
-        return converted
+        return known[1]
 
     @property
     def met_any(self) -> bool:
