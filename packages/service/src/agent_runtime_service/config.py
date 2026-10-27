@@ -476,7 +476,7 @@ class ServiceConfig(_Section):
     defaults: DefaultsConfig
     server: ServerConfig = ServerConfig()
     runs: RunConfig = RunConfig()
-    cli: CliConfig | None = None
+    cli: CliConfig
     api: ApiConfig | None = None
     mcp: McpConfig | None = None
     signing: SigningConfig | None = None
@@ -581,9 +581,7 @@ class ServiceConfig(_Section):
         return CapabilityScope(app.mcp_origin, tuple(sorted(tools)), self.signing.key)
 
     def subscription_models(self) -> Mapping[Provider, frozenset[str]]:
-        """The model names each provider's subscription program serves; empty without ``[cli]``."""
-        if self.cli is None:
-            return {}
+        """The model names each provider's subscription program serves."""
         return {provider: pin.models for provider, pin in self.cli.programs().items()}
 
     def mcp_trust_bundle(self) -> Path | None:

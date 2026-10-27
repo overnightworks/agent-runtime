@@ -334,7 +334,7 @@ class _FailingRecorderOver:
         self._monkeypatch.setattr("agent_runtime_service.run_records.RunRecorder.over", over)
 
 
-def _consumed(runner: Runner | None, lease, *, recorder_fails: bool = False) -> None:
+def _consumed(runner: Runner, lease, *, recorder_fails: bool = False) -> None:
     tolerated = (RuntimeError,) if recorder_fails else ()
 
     async def collected() -> None:
@@ -354,18 +354,15 @@ def _consumed(runner: Runner | None, lease, *, recorder_fails: bool = False) -> 
 
 
 @pytest.mark.parametrize("recorder_fails", [False, True], ids=["ends-normally", "recorder-fails"])
-@pytest.mark.parametrize(
-    "runner", [ScriptedRunner(FINAL), None], ids=["with-a-runner", "no-runner"]
-)
 def test_a_run_that_is_over_releases_its_lease_even_when_its_record_fails(
-    monkeypatch, runner, recorder_fails
+    monkeypatch, recorder_fails
 ):
     if recorder_fails:
         _FailingRecorderOver(monkeypatch)()
     slot = AdmissionSlot(places=1)
     lease = slot.try_take()
 
-    _consumed(runner, lease, recorder_fails=recorder_fails)
+    _consumed(ScriptedRunner(FINAL), lease, recorder_fails=recorder_fails)
 
     assert slot.try_take() is not None
 

@@ -32,6 +32,7 @@ from service_support import (
     post_run,
     run_body,
     run_headers,
+    runners_that_start_no_run,
     served,
     service_config,
     with_placeholder_run_id,
@@ -245,6 +246,7 @@ def test_only_the_user_who_started_a_run_reads_it_with_real_tokens(verify):  # n
     )
     app = create_app(
         service_config(issuer=_realm_url()),
+        runners=runners_that_start_no_run(),
         records=records,
         fetch_key_set=_fetch_key_set_from_test_keycloak,
     )
@@ -275,7 +277,7 @@ def test_only_the_user_who_started_a_run_reads_it_with_real_tokens(verify):  # n
     assert_rejected(non_member_reading_alices_run, RejectionCode.FORBIDDEN, 403)
 
 
-def test_a_token_of_an_unpublished_key_is_unavailable_once_the_key_set_origin_stops():
+def test_a_token_of_an_unpublished_key_is_unavailable_once_the_key_set_origin_stops(runners):
     clock = StepClock()
     origin_stopped = False
 
@@ -286,6 +288,7 @@ def test_a_token_of_an_unpublished_key_is_unavailable_once_the_key_set_origin_st
 
     app = create_app(
         service_config(issuer=_realm_url()),
+        runners=runners,
         fetch_key_set=key_set_origin,
         monotonic_clock=clock,
     )

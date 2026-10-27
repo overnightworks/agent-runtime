@@ -21,9 +21,9 @@ non-root user with `cap_drop: ALL`.
 `model` may also be set in `[apps.<app>]` and in `[apps.<app>.agents.<agent>]`. Startup exits
 2 and names the field (`defaults.model`,
 `apps.<app>.model` or `apps.<app>.agents.<agent>.model`) for a name outside the wire's grammar
-or one that no `[cli.<provider>] models` lists. An installation without a `[cli]` table that
-lists its models therefore no longer starts; the paid route gets its own list with the paid-route
-work (#463).
+or one that no `[cli.<provider>] models` lists. An installation without a `[cli]` table is
+refused naming `cli`, because it has no list to check a model against; the paid route gets its own list with the
+paid-route work (#463).
 
 `agent-runtime-service --config PATH --check` runs every step of a start up to serving,
 including the configuration with its credential files, the pinned program versions and the

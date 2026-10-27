@@ -183,7 +183,7 @@ def main(argv: Sequence[str] | None = None, standard_input: BinaryIO | None = No
         _say(str(error))
         return EXIT_BAD_CONFIG
     provider = Provider(arguments.provider)
-    table = config.cli.programs().get(provider) if config.cli is not None else None
+    table = config.cli.programs().get(provider)
     if table is None:
         _say(f"cli.{arguments.provider}: no such table")
         return EXIT_BAD_CONFIG

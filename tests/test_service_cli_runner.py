@@ -145,7 +145,6 @@ def a_config(
         claude_binary=binary,
         token_file=token_file,
     )
-    assert config.cli is not None
     private_root = PrivateWorkingRoot(a_private_root(tmp_path))
     return config.model_copy(
         update={"cli": config.cli.model_copy(update={"working_root": private_root})}
@@ -161,7 +160,6 @@ def tool_free_runners(config: ServiceConfig) -> Runners:
 
 
 def private_root_of(config: ServiceConfig) -> Path:
-    assert config.cli is not None
     return config.cli.working_root.path
 
 

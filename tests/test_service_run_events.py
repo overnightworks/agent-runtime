@@ -2,8 +2,7 @@
 
 S5: run_started, the mapped events, then exactly one terminal, decoded by the
 client with no violation. S6: tool input that is not JSON, or cannot be
-written, never reaches the wire. S7: a route with no runner fails as
-``provider_unavailable``, never as a success.
+written, never reaches the wire.
 """
 
 from __future__ import annotations
@@ -33,6 +32,7 @@ from service_support import (
     reaches_text,
     run_body,
     run_headers,
+    runners_that_start_no_run,
     served,
     service_config,
     with_placeholder_run_id,
@@ -73,7 +73,7 @@ from agent_runtime_service.run_records import RunRecords
 from agent_runtime_service.runners import AdmittedRun, Runner
 
 
-def _streamed(runner: Runner | None, records: RunRecords | None = None) -> bytes:
+def _streamed(runner: Runner, records: RunRecords | None = None) -> bytes:
     admitted = AdmittedRun(
         run_id=uuid.uuid4(),
         app="songmaker",
@@ -259,13 +259,6 @@ def test_an_empty_text_fragment_is_not_sent():
     assert [event.type for event in events] == ["run_started", "succeeded"]
 
 
-def test_a_route_without_a_runner_fails_as_provider_unavailable_never_succeeds():
-    raw = _streamed(None)
-
-    assert [event.type for event in decoded_events(raw)] == ["run_started", "failed"]
-    _failed_with(raw, FailureCode.PROVIDER_UNAVAILABLE)
-
-
 def test_a_refused_tool_call_reaches_neither_the_frames_nor_the_service_log(monkeypatch, caplog):
     monkeypatch.setattr(
         grok_cli_adapter,
@@ -313,7 +306,12 @@ def test_the_run_record_of_a_refused_tool_call_holds_the_failed_ending_but_not_t
 
     run_id = decoded_events(_streamed(ScriptedRunner([refused]), records))[0].run_id
 
-    app = create_app(service_config(), records=records, fetch_key_set=MINT.fetch_key_set)
+    app = create_app(
+        service_config(),
+        runners=runners_that_start_no_run(),
+        records=records,
+        fetch_key_set=MINT.fetch_key_set,
+    )
     with served(app) as base_url:
         response = get_run(base_url, run_headers(MINT.workload(), MINT.user()), str(run_id))
     status = RunStatus.model_validate_json(response.content)

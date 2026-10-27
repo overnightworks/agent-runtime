@@ -734,6 +734,10 @@ class ScriptedRunner:
             yield event
 
 
+def runners_that_start_no_run() -> Runners:
+    return Runners(cli=ScriptedRunner([]))
+
+
 class _ReadyServer(uvicorn.Server):
     """A uvicorn server that says when its startup ended, or how the thread running it failed."""
 
@@ -1180,8 +1184,7 @@ class ClientSocket:
     """The client end of one ASGI response: the request it posts, what it takes, when it leaves.
 
     ``send`` blocks on the second body chunk until ``released`` is set, as
-    uvicorn's drain does, or raises ``second_chunk_raises`` there;
-    ``blocks_the_first_chunk`` blocks the first one forever. ``user_token`` replaces
+    uvicorn's drain does, or raises ``second_chunk_raises`` there. ``user_token`` replaces
     the default user, who is on the CLI route. With
     ``suspends_the_start`` the start message never completes. ``receive`` answers
     the request first and ``http.disconnect`` once the client ``leave``s.
@@ -1191,7 +1194,6 @@ class ClientSocket:
         self,
         *,
         spec_version: str = "2.3",
-        blocks_the_first_chunk: bool = False,
         blocks_the_second_chunk: bool = False,
         second_chunk_raises: Exception | None = None,
         suspends_the_start: bool = False,
@@ -1204,7 +1206,6 @@ class ClientSocket:
         self.blocked = asyncio.Event()
         self.answering = asyncio.Event()
         self._sent = asyncio.Event()
-        self._blocks_the_first_chunk = blocks_the_first_chunk
         self._blocks_the_second_chunk = blocks_the_second_chunk
         self._second_chunk_raises = second_chunk_raises
         self._suspends_the_start = suspends_the_start
@@ -1229,9 +1230,6 @@ class ClientSocket:
         if message["type"] == "http.response.start" and self._suspends_the_start:
             self._suspends_the_start = False
             await asyncio.Event().wait()
-        if message["type"] == "http.response.body" and self._bodies() == 0:
-            if self._blocks_the_first_chunk:
-                await asyncio.Event().wait()
         if message["type"] == "http.response.body" and self._bodies() == 1:
             if self._second_chunk_raises is not None:
                 raise self._second_chunk_raises
@@ -1293,7 +1291,7 @@ def the_app_on(
 ) -> FastAPI:
     """The real app on the drive's runner, clock and store.
 
-    ``runners`` replace the drive's runner, as ``Runners()`` serves a run without one.
+    ``runners`` replace the drive's runner.
     ``config`` replaces the default one.
 
     The app builds its own quarantine on ``drive.clock`` with its own
@@ -1325,14 +1323,10 @@ async def respond_through(app: FastAPI, client: ClientSocket) -> asyncio.Task[No
 
 
 async def respond_through_the_app(
-    drive: Drive,
-    client: ClientSocket,
-    monkeypatch: pytest.MonkeyPatch,
-    runners: Runners | None = None,
-    config: ServiceConfig | None = None,
+    drive: Drive, client: ClientSocket, monkeypatch: pytest.MonkeyPatch
 ) -> asyncio.Task[None]:
     """Post a run to a fresh ``the_app_on`` the drive; its response task."""
-    return await respond_through(the_app_on(drive, monkeypatch, runners, config), client)
+    return await respond_through(the_app_on(drive, monkeypatch), client)
 
 
 async def status_through(app: FastAPI, run_id: uuid.UUID) -> RunStatus:

@@ -69,7 +69,7 @@ from agent_runtime_client.capability import (
     MAX_CAPABILITY_CHARACTERS,
     CapabilityClaims,
 )
-from agent_runtime_client.wire import Failed, FailureCode, RejectionCode, RunStarted
+from agent_runtime_client.wire import RejectionCode, RunStarted
 from agent_runtime_service.app import create_app
 from agent_runtime_service.capability import (
     CapabilityScope,
@@ -545,23 +545,6 @@ def test_an_app_without_an_origin_gets_no_capability_and_signs_nothing(serving):
         assert service.signed == []
         assert with_placeholder_run_id(with_origins.content) == with_placeholder_run_id(
             without_origins.content
-        )
-
-
-def test_the_production_path_without_runners_mints_one_capability_and_streams_as_without_origins(
-    serving,
-):
-    with serving(runners=Runners()) as service, serving(capable=False, runners=Runners()) as plain:
-        with_origin = service.run()
-        without_origin = plain.run()
-
-        events = decoded_events(with_origin.content)
-        assert [event.type for event in events] == ["run_started", "failed"]
-        assert isinstance(events[-1], Failed)
-        assert events[-1].code is FailureCode.PROVIDER_UNAVAILABLE
-        assert len(service.signed) == 1
-        assert with_placeholder_run_id(with_origin.content) == with_placeholder_run_id(
-            without_origin.content
         )
 
 

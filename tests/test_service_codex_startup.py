@@ -195,14 +195,12 @@ def test_a_claude_and_a_codex_table_load_together_and_list_their_programs_in_ord
 ) -> None:
     config = a_config(a_document_with_both(tmp_path))
 
-    assert config.cli is not None
     assert list(config.cli.programs()) == [Provider.CLAUDE, Provider.CODEX]
 
 
 def test_a_codex_only_installation_lists_only_its_codex_program(tmp_path: Path) -> None:
     config = a_config(codex_document(tmp_path, a_service_fake(tmp_path), a_login_file(tmp_path)))
 
-    assert config.cli is not None
     assert list(config.cli.programs()) == [Provider.CODEX]
 
 
