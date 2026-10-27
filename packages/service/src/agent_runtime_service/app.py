@@ -73,7 +73,13 @@ from agent_runtime_service.capability import (
     signed_capability,
 )
 from agent_runtime_service.config import ServiceConfig
-from agent_runtime_service.identity import Caller, CallerCheck, build_verifier
+from agent_runtime_service.identity import (
+    AppCaller,
+    Caller,
+    CallerCheck,
+    PersonCaller,
+    build_verifier,
+)
 from agent_runtime_service.offer import offered_models
 from agent_runtime_service.quarantine import GroupConfirmation, Quarantine
 from agent_runtime_service.routing import Cli, NotEnabled, ServedRoute, route
@@ -108,8 +114,9 @@ _MESSAGE: Final[Mapping[RejectionCode, str]] = {
     RejectionCode.NOT_ENABLED: "AI is not enabled for this request.",
     RejectionCode.BUSY: "The service is busy; retry later.",
     RejectionCode.UNSUPPORTED_VERSION: f"This service speaks protocol version {PROTOCOL_VERSION}.",
-    RejectionCode.UNAUTHORIZED: "A workload token and a user token are required and must be valid;"
-    f" an {JOB_TICKET_HEADER} header is refused.",
+    RejectionCode.UNAUTHORIZED: "A workload token is required, and a user token unless the app"
+    " runs one of its own agents; every token sent must be valid, and an"
+    f" {JOB_TICKET_HEADER} header is refused.",
     RejectionCode.FORBIDDEN: "The tokens do not permit this request.",
     RejectionCode.INVALID_REQUEST: "The body is not a valid request for the route.",
     RejectionCode.UNAVAILABLE: "The service cannot check tokens right now; retry later.",
@@ -205,7 +212,7 @@ def _admitted(
     caller: Caller,
     run_request: RunRequest,
 ) -> Response:
-    if caller.role not in run_request.roles:
+    if not _may_run(config, caller, run_request):
         return rejection(RejectionCode.FORBIDDEN)
     scope = config.capability_scope(caller.app, run_request.tools)
     if run_request.tools and scope is None:
@@ -249,6 +256,12 @@ def _admitted(
         _release(lease)
         return rejection(response)
     return response
+
+
+def _may_run(config: ServiceConfig, caller: Caller, run_request: RunRequest) -> bool:
+    if isinstance(caller, AppCaller):
+        return config.apps[caller.app].runs_as_itself(run_request.purpose)
+    return caller.role in run_request.roles
 
 
 def _release(lease: Lease | None) -> None:
@@ -384,7 +397,7 @@ def rejection(code: RejectionCode) -> Response:
     )
 
 
-async def _caller_of(callers: CallerCheck, request: Request) -> Caller | RejectionCode:
+async def _caller_of(callers: CallerCheck, request: Request) -> PersonCaller | RejectionCode:
     return await callers.caller(
         request.headers.get(WORKLOAD_TOKEN_HEADER),
         _bearer_token(request.headers.get("Authorization")),
@@ -392,10 +405,17 @@ async def _caller_of(callers: CallerCheck, request: Request) -> Caller | Rejecti
 
 
 async def _run_caller_of(callers: CallerCheck, request: Request) -> Caller | RejectionCode:
-    """The caller of a run route; a job-ticket header is refused, whatever its value."""
+    """The caller of a run route, chosen by which headers are present, never by their validity.
+
+    A job-ticket header is refused whatever its value. Any ``Authorization`` header, even an
+    empty or malformed one, is the person's path and never falls through; without one, the
+    workload token alone is the app's own run.
+    """
     if JOB_TICKET_HEADER in request.headers:
         return RejectionCode.UNAUTHORIZED
-    return await _caller_of(callers, request)
+    if "Authorization" in request.headers:
+        return await _caller_of(callers, request)
+    return await callers.app_caller(request.headers.get(WORKLOAD_TOKEN_HEADER))
 
 
 def _run_id_from(segment: str) -> UUID | None:

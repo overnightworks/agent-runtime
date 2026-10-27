@@ -220,6 +220,8 @@ CLIENT_NAMING_CLAIMS = {"azp", "client_id"}
 # username, which no registry knows beforehand.
 SERVICE_ACCOUNT_USER_CLAIMS = {"sub", "preferred_username"}
 CLIENT_WEB_ORIGIN_CLAIMS = {"allowed-origins"}
+# songmaker's service account joins a group and presentator's does not.
+SERVICE_ACCOUNT_GROUP_CLAIMS = {"groups"}
 
 
 def test_service_account_tokens_differ_in_the_client_its_user_and_its_web_origins(
@@ -234,7 +236,26 @@ def test_service_account_tokens_differ_in_the_client_its_user_and_its_web_origin
     }
     print(f"service-account claims: {sorted(songmaker.keys() | presentator.keys())}")
     print(f"differing between the two workload clients: {sorted(differing)}")
-    expected = CLIENT_NAMING_CLAIMS | SERVICE_ACCOUNT_USER_CLAIMS | CLIENT_WEB_ORIGIN_CLAIMS
+    expected = (
+        CLIENT_NAMING_CLAIMS
+        | SERVICE_ACCOUNT_USER_CLAIMS
+        | CLIENT_WEB_ORIGIN_CLAIMS
+        | SERVICE_ACCOUNT_GROUP_CLAIMS
+    )
     assert differing == expected, (
         f"service-account tokens differ in {sorted(differing)}, not {sorted(expected)}"
+    )
+
+
+def test_service_account_token_lists_its_groups_as_full_paths_and_may_omit_an_empty_claim(
+    service_account_claims,
+):
+    songmaker = service_account_claims["songmaker-test"]
+    presentator = service_account_claims["presentator-test"]
+    print(f"presentator's token carries a groups claim: {'groups' in presentator}")
+    assert songmaker.get("groups") == ["/api-members"], (
+        f"groups of songmaker's service account are {songmaker.get('groups')!r}"
+    )
+    assert presentator.get("groups", []) == [], (
+        f"groups of presentator's service account are {presentator.get('groups')!r}"
     )

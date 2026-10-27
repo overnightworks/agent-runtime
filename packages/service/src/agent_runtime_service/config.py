@@ -57,7 +57,7 @@ from agent_runtime.secret_file import (
     shown_text,
 )
 from agent_runtime_client.capability import McpOrigin
-from agent_runtime_client.wire import MAX_EVENT_BYTES, MODEL_PART_PATTERN
+from agent_runtime_client.wire import MAX_EVENT_BYTES, MODEL_PART_PATTERN, Purpose
 from agent_runtime_service.api_credentials import read_api_credentials
 from agent_runtime_service.capability import CapabilityScope
 from agent_runtime_service.signing import SigningKey, load_signing_key
@@ -370,8 +370,14 @@ class RouteConfig(_Section):
     api_alias: NonEmptyText
 
 
+class AgentConfig(_Section):
+    """One of an app's agents; ``runs_as_app`` lets it run on the app's workload token alone."""
+
+    runs_as_app: StrictBool = False
+
+
 class AppConfig(_Section):
-    """One app: its workload client and its MCP origin.
+    """One app: its workload client, its MCP origin and the agents the operator names.
 
     The app's tools and their effects arrive with each run request, and so does its choice
     of model.
@@ -379,6 +385,15 @@ class AppConfig(_Section):
 
     workload_client: NonEmptyText
     mcp_origin: McpOrigin | None = None
+    agents: Mapping[Purpose, AgentConfig] = {}
+
+    def runs_as_itself(self, purpose: str) -> bool:
+        agent = self.agents.get(purpose)
+        return agent is not None and agent.runs_as_app
+
+    @property
+    def has_an_agent_that_runs_as_itself(self) -> bool:
+        return any(agent.runs_as_app for agent in self.agents.values())
 
 
 def _named_tables(

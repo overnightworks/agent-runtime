@@ -597,6 +597,9 @@
       "serviceAccountClientId": "songmaker-test",
       "realmRoles": [
         "agent-workload"
+      ],
+      "groups": [
+        "/api-members"
       ]
     },
     {

@@ -19,6 +19,7 @@ from uuid import uuid4
 import pytest
 from service_support import (
     API_ALIAS,
+    COWRITER,
     PRESENTATOR_CLIENT,
     SONGMAKER_CLIENT,
     ScriptedRunner,
@@ -52,6 +53,7 @@ from wire_builders import started
 from agent_runtime.events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import RejectionCode, RunState, RunStatus
 from agent_runtime_service.app import create_app
+from agent_runtime_service.config import AgentConfig
 from agent_runtime_service.identity import Principal
 from agent_runtime_service.routing import Api, Cli
 from agent_runtime_service.run_records import RunRecords
@@ -117,6 +119,35 @@ def service(runners) -> Iterator[str]:
     )
     with served(app) as base_url:
         yield base_url
+
+
+@pytest.fixture(scope="module")
+def own_agents_service(runners) -> Iterator[str]:
+    config = service_config(
+        issuer=_realm_url(), songmaker={"agents": {COWRITER: {"runs_as_app": True}}}
+    )
+    enabled = {COWRITER: AgentConfig(runs_as_app=True)}
+    presentator = config.apps["presentator"].model_copy(update={"agents": enabled})
+    config = config.model_copy(update={"apps": {**config.apps, "presentator": presentator}})
+    app = create_app(config, runners=runners, fetch_key_set=_fetch_key_set_from_test_keycloak)
+    with served(app) as base_url:
+        yield base_url
+
+
+def test_k1_a_real_client_credentials_token_alone_runs_an_enabled_agent_on_its_groups_route(
+    own_agents_service, runners
+):
+    response = post_run(own_agents_service, run_headers(_songmaker_workload(), None))
+
+    assert response.status_code == 200, response.text
+    assert runners.api.admitted[-1].route == Api(API_ALIAS)
+    assert runners.api.admitted[-1].app == "songmaker"
+
+
+def test_k2_a_real_token_of_a_service_account_in_no_route_group_is_not_enabled(own_agents_service):
+    response = post_run(own_agents_service, run_headers(_workload_token(PRESENTATOR_CLIENT), None))
+
+    assert_rejected(response, RejectionCode.NOT_ENABLED, 403)
 
 
 @pytest.mark.parametrize(

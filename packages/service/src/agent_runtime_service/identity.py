@@ -59,13 +59,25 @@ _AGENT_ROLE_OF: Final[Mapping[AppRole, AgentRole]] = {
 
 
 @dataclass(frozen=True)
-class Caller:
+class PersonCaller:
     """A verified app acting for a verified end user, who holds ``role`` in that app."""
 
     app: str
     principal: Principal
     groups: frozenset[str]
     role: AgentRole
+
+
+@dataclass(frozen=True)
+class AppCaller:
+    """A verified app running its own agent: its service account is the principal, in no role."""
+
+    app: str
+    principal: Principal
+    groups: frozenset[str]
+
+
+Caller = PersonCaller | AppCaller
 
 
 def build_verifier(
@@ -98,13 +110,33 @@ class CallerCheck:
 
     async def caller(
         self, workload_token: str | None, user_token: str | None
-    ) -> Caller | RejectionCode:
+    ) -> PersonCaller | RejectionCode:
         try:
             return await self._checked_caller(workload_token, user_token)
         except _Refused as refusal:
             return refusal.code
 
-    async def _checked_caller(self, workload_token: str | None, user_token: str | None) -> Caller:
+    async def app_caller(self, workload_token: str | None) -> AppCaller | RejectionCode:
+        """The app behind a workload token that runs one of its own agents, else the refusal."""
+        try:
+            return await self._checked_app_caller(workload_token)
+        except _Refused as refusal:
+            return refusal.code
+
+    async def _checked_app_caller(self, workload_token: str | None) -> AppCaller:
+        workload = await self._verified(workload_token)
+        app = self._workload_app(workload)
+        assert workload.subject is not None  # _workload_app refused a token without one
+        if not _is_unicode_text(workload.subject):
+            raise _Refused(RejectionCode.UNAUTHORIZED)
+        groups = self._groups(workload.claims)
+        if not self._config.apps[app].has_an_agent_that_runs_as_itself:
+            raise _Refused(RejectionCode.UNAUTHORIZED)
+        return AppCaller(app, Principal(workload.issuer, workload.subject), groups)
+
+    async def _checked_caller(
+        self, workload_token: str | None, user_token: str | None
+    ) -> PersonCaller:
         workload = await self._verified(workload_token)
         user = await self._verified(user_token)
         if user.subject is None or not _is_unicode_text(user.subject):
@@ -115,7 +147,7 @@ class CallerCheck:
             raise _Refused(RejectionCode.FORBIDDEN)
         if user.subject == workload.subject:
             raise _Refused(RejectionCode.FORBIDDEN)
-        return Caller(
+        return PersonCaller(
             app=app,
             principal=Principal(user.issuer, user.subject),
             groups=groups,
