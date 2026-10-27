@@ -677,13 +677,13 @@ BODY_REJECTIONS = [
         id="no-version",
     ),
     pytest.param(
-        f'{{"v": {PROTOCOL_VERSION}, "purpose": NaN}}'.encode(),
+        f'{{"v": {PROTOCOL_VERSION + 1}, "purpose": NaN}}'.encode(),
         RejectionCode.INVALID_REQUEST,
         422,
         id="strict-json-is-checked-before-the-version",
     ),
     pytest.param(
-        f'{{"v": {PROTOCOL_VERSION}, "v": {PROTOCOL_VERSION}}}'.encode(),
+        f'{{"v": {PROTOCOL_VERSION + 1}, "v": {PROTOCOL_VERSION + 1}}}'.encode(),
         RejectionCode.INVALID_REQUEST,
         422,
         id="a-member-named-twice-is-checked-before-the-version",
