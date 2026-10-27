@@ -31,7 +31,6 @@ from service_support import (
     SONGMAKER_GROUP,
     SONGMAKER_TOOLS,
     SUBSCRIPTION_GROUP,
-    UNLISTED_MODEL,
     ScriptedRunner,
     StepClock,
     TokenMint,
@@ -45,9 +44,9 @@ from service_support import (
     served,
     service_config,
     service_config_file,
-    with_listed_models,
     without_profiles,
 )
+from test_service_codex_profile import UNPROFILED, a_config_whose_codex_table_has_no_profile
 from webauth.https_client import KeySetFetchError
 from webauth.jwt_verification import KEY_SET_REFRESH_COOLDOWN_SECONDS
 
@@ -67,7 +66,6 @@ CLI_SCRIPT = (AssistantTextEvent(text="via the CLI"), FinalEvent(text="CLI answe
 API_SCRIPT = (AssistantTextEvent(text="via the API"), FinalEvent(text="API answer"))
 
 LISTED = f"claude/{LISTED_MODEL}"
-UNLISTED = f"claude/{UNLISTED_MODEL}"
 CLI_ROUTE = Cli("claude-main")
 MINT = TokenMint()
 OTHER_MINT = TokenMint()
@@ -511,11 +509,12 @@ def test_h1_a_listed_model_reaches_the_cli_route_by_name():
     assert (runners.cli.admitted[-1].route, runners.cli.admitted[-1].model) == (CLI_ROUTE, LISTED)
 
 
-def test_h2_an_unlisted_model_reaches_an_api_only_caller_by_its_full_name():
-    response, runners = _routed_run(service_config(), API_MEMBER, model=UNLISTED)
+def test_h2_a_model_without_a_profile_reaches_an_api_only_caller_by_its_full_name(tmp_path):
+    config = a_config_whose_codex_table_has_no_profile(tmp_path)
+    response, runners = _routed_run(config, API_MEMBER, model=UNPROFILED)
 
     assert _admitted_events(response)
-    assert (runners.api.admitted[-1].route, runners.api.admitted[-1].model) == (Api(), UNLISTED)
+    assert (runners.api.admitted[-1].route, runners.api.admitted[-1].model) == (Api(), UNPROFILED)
 
 
 @pytest.mark.parametrize(
@@ -523,12 +522,6 @@ def test_h2_an_unlisted_model_reaches_an_api_only_caller_by_its_full_name():
     [
         pytest.param(without_profiles, API_MEMBER, True, id="H6-no-profiles-api"),
         pytest.param(without_profiles, SUBSCRIBER, False, id="H7-no-profiles-subscriber"),
-        pytest.param(
-            lambda config: with_listed_models(config, []),
-            SUBSCRIBER,
-            False,
-            id="H8-nothing-listed-subscriber",
-        ),
     ],
 )
 def test_a_named_model_without_subscription_facts_goes_to_the_api_or_is_refused(
@@ -749,16 +742,16 @@ def test_a_capability_too_large_rejection_is_422_with_its_own_message_and_no_ret
     assert "retry-after" not in response.headers
 
 
-OPUS = "claude/opus"
 BOTH_RIGHTS = [SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP]
 
 
-def test_s3_a_run_without_a_listed_subscription_model_is_routed_on_exactly_the_configured_one():
-    response, runners = _routed_run(service_config(), BOTH_RIGHTS, model=OPUS)
+def test_s3_a_run_without_a_profile_is_routed_on_exactly_the_configured_model(tmp_path):
+    config = a_config_whose_codex_table_has_no_profile(tmp_path)
+    response, runners = _routed_run(config, BOTH_RIGHTS, model=UNPROFILED)
 
     assert _admitted_events(response)
     admitted = runners.cli.admitted + runners.api.admitted
-    assert [(run.route, run.model) for run in admitted] == [(Api(), OPUS)]
+    assert [(run.route, run.model) for run in admitted] == [(Api(), UNPROFILED)]
 
 
 def _run_on_the_file(tmp_path, subscription_groups):

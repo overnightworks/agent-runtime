@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 
 import httpx
 import pytest
+from api_support import write_api_credentials
 from pydantic import ValidationError
 from service_support import (
     API_GROUP,
@@ -32,20 +32,21 @@ from agent_runtime_service.config import AgentConfig, DefaultsConfig, Provider, 
 from agent_runtime_service.run_liveness import LoopClock
 
 
-def credentials(path: Path, document):
-    path.write_text(json.dumps(document), encoding="utf-8")
-    path.chmod(0o600)
-    return path
-
-
 def configured(tmp_path, **api):
-    path = credentials(tmp_path / "gateway.json", {"shared_key": "synthetic-gateway-key"})
+    path = write_api_credentials(tmp_path / "gateway.json", {"shared_key": "synthetic-gateway-key"})
     base = service_config()
     return ServiceConfig.model_validate({
         **{name: getattr(base, name) for name in ServiceConfig.model_fields},
         "api": {"completion_url": "http://gateway/v1/chat/completions",
                 "credential_file": str(path), **api},
     })
+
+
+def without_the_api(config):
+    fields = {name: getattr(config, name) for name in ServiceConfig.model_fields}
+    fields["api"] = None
+    fields["identity"] = config.identity.model_copy(update={"api_groups": frozenset()})
+    return ServiceConfig.model_validate(fields)
 
 
 PAID_AGENT = "paid-agent"
@@ -184,7 +185,7 @@ def test_body_errors_are_classified_after_status_without_exposing_body(
 def test_bad_credentials_never_fall_back_or_expose_document(tmp_path, document):
     from agent_runtime_service.api_credentials import InvalidApiCredentials, read_api_credentials
 
-    path = credentials(tmp_path / "credentials.json", document)
+    path = write_api_credentials(tmp_path / "credentials.json", document)
     registered_apps = frozenset({"songmaker"})
     with pytest.raises(InvalidApiCredentials) as raised:
         read_api_credentials(path, registered_apps)
@@ -211,7 +212,7 @@ def test_invalid_json_or_duplicate_credentials_have_no_parser_chain(tmp_path, co
 def test_credentials_are_hidden_and_selected_by_app(tmp_path):
     from agent_runtime_service.api_credentials import read_api_credentials
 
-    path = credentials(tmp_path / "credentials.json", {
+    path = write_api_credentials(tmp_path / "credentials.json", {
         "shared_key": "synthetic-shared", "app_keys": {"songmaker": "synthetic-app"}})
     loaded = read_api_credentials(path, frozenset({"songmaker", "presentator"}))
     assert loaded.for_app("songmaker").get_secret_value() == "synthetic-app"
@@ -248,7 +249,7 @@ def test_rotation_to_per_app_only_keys_is_a_file_only_change(tmp_path, monkeypat
                                "presentator": "synthetic-slides-key"}},
                  "presentator", PRESENTATOR_CLIENT),
             ]:
-                credentials(config.api.credential_file, document)
+                write_api_credentials(config.api.credential_file, document)
                 response = await client.post("/runs", json=run_body(), headers=run_headers(
                     mint.workload(workload), mint.user(groups=[API_GROUP, f"/apps/{name}"],
                                                      azp=workload)))
@@ -272,7 +273,7 @@ def test_invalid_rotated_credentials_refuse_before_http(tmp_path, monkeypatch, c
     elif change == "malformed":
         config.api.credential_file.write_bytes(b"invalid secret")
     else:
-        credentials(config.api.credential_file, {"app_keys": {"presentator": "key"}} if
+        write_api_credentials(config.api.credential_file, {"app_keys": {"presentator": "key"}} if
                     change == "no-app" else {"shared_key": "good", "app_keys": {"songmaker": ""}})
     events = decoded_events(asyncio.run(service_response(config)).content)
     assert events[-1].code is FailureCode.PROVIDER_UNAVAILABLE
@@ -335,7 +336,7 @@ def test_the_api_runner_is_installed_beside_the_cli_runner(tmp_path):
     runners = installed_runners(configured(tmp_path), None, LoopClock())
     assert runners.cli is not None
     assert runners.api is not None
-    assert installed_runners(service_config(), None, LoopClock()).api is None
+    assert installed_runners(without_the_api(service_config()), None, LoopClock()).api is None
 
 
 @pytest.mark.parametrize("ending", ["answer", "idle", "maximum", "disconnect"])
@@ -396,22 +397,16 @@ async def test_buffered_http_keeps_heartbeats_and_closes_on_every_ending(
 
 
 def test_a_disabled_api_entitlement_is_refused_as_not_enabled(tmp_path):
-    config = configured(tmp_path)
-    fields = {name: getattr(config, name) for name in ServiceConfig.model_fields}
-    fields["api"] = None
-    fields["identity"] = config.identity.model_copy(update={"api_groups": frozenset()})
-    fields["route"] = None
-    response = asyncio.run(service_response(ServiceConfig.model_validate(fields)))
+    response = asyncio.run(service_response(without_the_api(configured(tmp_path))))
     assert response.status_code == 403
     assert response.json()["code"] == "not_enabled"
 
 
-def test_api_requires_routing_and_valid_startup_credentials(tmp_path):
+def test_api_requires_its_groups_and_valid_startup_credentials(tmp_path):
     config = configured(tmp_path)
     fields = {name: getattr(config, name) for name in ServiceConfig.model_fields}
     fields["identity"] = config.identity.model_copy(update={"api_groups": frozenset()})
-    fields["route"] = None
-    with pytest.raises(ValidationError, match="requires identity.api_groups"):
+    with pytest.raises(ValidationError, match=r"identity\.api_groups: required because \[api\]"):
         ServiceConfig.model_validate(fields)
     fields = {name: getattr(config, name) for name in ServiceConfig.model_fields}
     config.api.credential_file.write_bytes(b"invalid-synthetic-key-document")
@@ -583,7 +578,7 @@ def test_completed_text_preserves_the_wire_nonempty_boundary(tmp_path, monkeypat
 def test_credential_refusal_removes_active_caller_chain(tmp_path, boundary):
     from agent_runtime_service.api_credentials import InvalidApiCredentials, read_api_credentials
 
-    path = credentials(tmp_path / "keys.json", {"app_keys": {"other": "synthetic"}})
+    path = write_api_credentials(tmp_path / "keys.json", {"app_keys": {"other": "synthetic"}})
     registered_apps = frozenset({"app", "other"})
     loaded = read_api_credentials(path, registered_apps)
     if boundary == "reader":

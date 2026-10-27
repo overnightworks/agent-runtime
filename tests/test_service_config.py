@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 import uvicorn
+from api_support import API_SECTION
 from mcp_app_fake import TestAuthority
 from provider_test_support import fake_cli_executable
 from pydantic import ValidationError
@@ -94,9 +95,7 @@ port = 8099
 provider = "claude"
 {TOKEN_FILE_LINE}
 
-[route]
-api_alias = "assistant-api"
-
+{API_SECTION}
 [apps.songmaker]
 workload_client = "songmaker-test"
 {SONGMAKER_ORIGIN_LINE}"""
@@ -139,7 +138,7 @@ def test_a_valid_file_loads_with_its_configured_identity_and_the_documented_defa
         "/subscription-members",
     }
     assert config.identity.api_groups == {"/api-members"}
-    assert config.route.api_alias == "assistant-api"
+    assert config.api is not None
     assert config.identity.group_claim == "member-groups"
     assert config.profiles["claude-main"].provider is Provider.CLAUDE
     assert (config.runs.heartbeat_interval_s, config.runs.idle_timeout_s) == (15, 120.0)
@@ -261,7 +260,7 @@ def assert_startup_refuses(tmp_path, capsys, text, named_field):
             id="second-profile-for-a-provider",
         ),
         pytest.param(
-            _with("[route]", '[purposes.chat]\napi_alias = "assistant-api"\n\n[route]'),
+            _with("[api]", '[purposes.chat]\napi_alias = "assistant-api"\n\n[api]'),
             "purposes",
             id="C1-leftover-purposes-table",
         ),
@@ -294,14 +293,14 @@ def assert_startup_refuses(tmp_path, capsys, text, named_field):
             id="an-api-group-without-a-slash",
         ),
         pytest.param(
-            _with('[route]\napi_alias = "assistant-api"\n', ""),
-            "route.api_alias: required because identity.api_groups is set",
-            id="C5-api-groups-without-an-alias",
+            _with(API_SECTION, ""),
+            "api: required because identity.api_groups is set",
+            id="C5-api-groups-without-an-api-section",
         ),
         pytest.param(
             _with('api_groups = ["/api-members"]\n', ""),
-            "identity.api_groups: required because route.api_alias is set",
-            id="C5-an-alias-without-api-groups",
+            "identity.api_groups: required because [api] is set",
+            id="C5-an-api-section-without-api-groups",
         ),
         pytest.param(
             VALID_CONFIG + SECOND_APP_WITH_SAME_CLIENT,
@@ -952,7 +951,7 @@ def served_apps(monkeypatch, logging_state_restored):
 def _with_profile_of(provider: str, name: str = '"grok-main"', token: bool = False) -> str:
     extra = TOKEN_FILE_LINE + "\n" if token else ""
     return NO_PROFILE.replace(
-        "[route]", f'[profiles.{name}]\nprovider = "{provider}"\n{extra}\n[route]', 1
+        "[api]", f'[profiles.{name}]\nprovider = "{provider}"\n{extra}\n[api]', 1
     )
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from functools import reduce
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +21,6 @@ from provider_test_support import (
 )
 from pydantic import ValidationError
 from service_support import (
-    CLI_PROFILE,
     TEST_ISSUER,
     _service_config_document,
     everything_a_refusal_holds,
@@ -233,42 +233,30 @@ def test_a_codex_only_installation_lists_only_its_codex_program(tmp_path: Path) 
     assert list(config.cli.programs()) == [Provider.CODEX]
 
 
-# The default profile (ruled 26.10.2026, line "no model asked").
-
-
-def test_a_lone_profile_is_the_default_whether_or_not_it_is_marked(tmp_path: Path) -> None:
-    document = codex_document(tmp_path, a_service_fake(tmp_path), a_login_file(tmp_path))
-    marked_off = dict(document["profiles"][CODEX_PROFILE], default=False)
-    unmarked = a_config(document).profiles[CODEX_PROFILE].default
-    document["profiles"][CODEX_PROFILE] = marked_off
-
-    assert (unmarked, a_config(document).profiles[CODEX_PROFILE].default) == (True, True)
-
-
 @pytest.mark.parametrize(
-    ("marks", "refusal"),
+    ("table_path", "key", "value", "refused_field"),
     [
         pytest.param(
-            (False, False),
-            f"profiles.{CLI_PROFILE}.default: one profile must be marked default = true",
-            id="none",
+            ("profiles", CODEX_PROFILE),
+            "default",
+            True,
+            f"profiles.{CODEX_PROFILE}.default",
+            id="profile-default",
         ),
-        pytest.param(
-            (True, True),
-            f"profiles.{CODEX_PROFILE}.default: only one profile may be marked default = true",
-            id="two",
-        ),
-        pytest.param(
-            (False, "yes"), f"profiles.{CODEX_PROFILE}.default", id="not-a-boolean-is-named"
-        ),
+        pytest.param((), "route", {"api_alias": "assistant-api"}, "route", id="route-table"),
     ],
 )
-def test_two_profiles_need_exactly_one_default(
-    tmp_path: Path, marks: tuple[bool, bool | str], refusal: str
+def test_a_leftover_profile_default_or_route_stops_the_start_naming_its_field(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    table_path: tuple[str, ...],
+    key: str,
+    value: object,
+    refused_field: str,
 ) -> None:
-    document = a_document_with_both(tmp_path)
-    document["profiles"][CLI_PROFILE]["default"], document["profiles"][CODEX_PROFILE]["default"] = (
-        marks
-    )
+    document = codex_document(tmp_path, a_service_fake(tmp_path), a_login_file(tmp_path))
+    reduce(lambda table, name: table[name], table_path, document)[key] = value
 
-    assert refusal in the_refusal_of(document)
+    refusal = _refused_on_one_line(written(tmp_path, document), capsys)
+
+    assert refusal.startswith(f"{refused_field}:")

@@ -29,7 +29,6 @@ from collections.abc import (
     Awaitable,
     Callable,
     Coroutine,
-    Iterable,
     Iterator,
     Mapping,
     Sequence,
@@ -45,6 +44,7 @@ import httpx
 import jwt
 import pytest
 import uvicorn
+from api_support import API_COMPLETION_URL, process_api_credential_file
 from bounds import TEST_WAIT_SECONDS
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
@@ -93,7 +93,6 @@ AUDIENCE: Final = "agent-service"
 GROUP_CLAIM: Final = "groups"
 SONGMAKER_GROUP: Final = "/apps/songmaker"
 CLI_PROFILE: Final = "claude-main"
-API_ALIAS: Final = "assistant-api"
 SONGMAKER_ORIGIN: Final = "https://songmaker.internal"
 PROCESS_TOKEN: Final = "setup-token-for-the-test-process"
 PINNED_CLAUDE_VERSION: Final = "2.1.302"
@@ -206,12 +205,6 @@ LISTED_MODEL: Final = "sonnet"
 UNLISTED_MODEL: Final = "opus"
 
 
-def with_listed_models(config: ServiceConfig, models: Iterable[str]) -> ServiceConfig:
-    """``config`` whose Claude program serves exactly ``models`` on the subscription."""
-    claude = config.cli.claude.model_copy(update={"models": frozenset(models)})
-    return config.model_copy(update={"cli": config.cli.model_copy(update={"claude": claude})})
-
-
 def without_profiles(config: ServiceConfig) -> ServiceConfig:
     return config.model_copy(update={"profiles": {}})
 
@@ -250,7 +243,10 @@ def _service_config_document(
                 "token_file": str(token_file or process_token_file()),
             }
         },
-        "route": {"api_alias": API_ALIAS},
+        "api": {
+            "completion_url": API_COMPLETION_URL,
+            "credential_file": str(process_api_credential_file()),
+        },
         "apps": {
             "songmaker": {
                 "workload_client": SONGMAKER_CLIENT,

@@ -28,12 +28,8 @@ API = Api()
 OFF = NotEnabled()
 
 
-SONNET_LISTED = {Provider.CLAUDE: frozenset({"sonnet"})}
-NOTHING_LISTED = {Provider.CLAUDE: frozenset()}
-
-
-def _routed(groups, *, profiles=PROFILES, identity=IDENTITY, model=MODEL, listed=SONNET_LISTED):
-    return route(identity, profiles, frozenset(groups), model, listed)
+def _routed(groups, *, profiles=PROFILES, identity=IDENTITY, model=MODEL):
+    return route(identity, profiles, frozenset(groups), model)
 
 
 @pytest.mark.parametrize(
@@ -71,48 +67,24 @@ BOTH = {"/new-sub", "/api-members"}
 
 
 @pytest.mark.parametrize(
-    ("groups", "model", "listed", "expected"),
+    ("groups", "model", "expected"),
     [
-        pytest.param(
-            SUBSCRIBER, "claude/sonnet", SONNET_LISTED, Cli("claude-main"), id="R-a-S"
-        ),
-        pytest.param(
-            API_ONLY,
-            "claude/sonnet",
-            SONNET_LISTED,
-            Api(),
-            id="R-a-A",
-        ),
-        pytest.param(
-            BOTH, "claude/sonnet", SONNET_LISTED, Cli("claude-main"), id="R-a-D"
-        ),
-        pytest.param(SUBSCRIBER, "claude/opus", SONNET_LISTED, OFF, id="R-b-S"),
-        pytest.param(
-            API_ONLY, "claude/opus", SONNET_LISTED, Api(), id="R-b-A"
-        ),
-        pytest.param(
-            BOTH, "claude/opus", SONNET_LISTED, Api(), id="R-b-D"
-        ),
-        pytest.param(SUBSCRIBER, "claude/sonnet", NOTHING_LISTED, OFF, id="R-c-S"),
-        pytest.param(
-            BOTH, "claude/sonnet", NOTHING_LISTED, Api(), id="R-c-D"
-        ),
-        pytest.param(SUBSCRIBER, "xai/sonnet", SONNET_LISTED, OFF, id="R-d-S"),
-        pytest.param(
-            BOTH, "xai/sonnet", SONNET_LISTED, Api(), id="R-d-D"
-        ),
-        pytest.param(set(), "claude/sonnet", SONNET_LISTED, OFF, id="R-e-N"),
+        pytest.param(SUBSCRIBER, "claude/sonnet", Cli("claude-main"), id="R-a-S"),
+        pytest.param(API_ONLY, "claude/sonnet", Api(), id="R-a-A"),
+        pytest.param(BOTH, "claude/sonnet", Cli("claude-main"), id="R-a-D"),
+        pytest.param(SUBSCRIBER, "xai/sonnet", OFF, id="R-d-S"),
+        pytest.param(BOTH, "xai/sonnet", Api(), id="R-d-D"),
+        pytest.param(set(), "claude/sonnet", OFF, id="R-e-N"),
     ],
 )
-def test_a_named_model_runs_on_the_subscription_only_when_it_is_listed(
-    groups, model, listed, expected
+def test_a_named_model_runs_on_the_subscription_only_when_a_profile_has_its_provider(
+    groups, model, expected
 ):
-    assert _routed(groups, model=model, listed=listed) == expected
+    assert _routed(groups, model=model) == expected
 
 
 CLAUDE = ProfileConfig(provider=Provider.CLAUDE)
 CODEX = ProfileConfig(provider=Provider.CODEX)
-BOTH_LISTED = {**SONNET_LISTED, Provider.CODEX: frozenset({"gpt-5.5"})}
 
 
 @pytest.mark.parametrize(
@@ -125,4 +97,4 @@ BOTH_LISTED = {**SONNET_LISTED, Provider.CODEX: frozenset({"gpt-5.5"})}
 def test_a_model_goes_to_the_profile_of_its_provider(model, expected):
     profiles = {"claude-main": CLAUDE, "codex-main": CODEX}
 
-    assert _routed(SUBSCRIBER, profiles=profiles, model=model, listed=BOTH_LISTED) == expected
+    assert _routed(SUBSCRIBER, profiles=profiles, model=model) == expected
