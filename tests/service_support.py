@@ -842,22 +842,22 @@ def post_run(
 
 
 async def asgi_post_status(
-    app: Any, headers: Mapping[str, str], receive: Callable[[], Awaitable[dict[str, object]]]
+    app: Any,
+    headers: Mapping[str, str],
+    receive: Callable[[], Awaitable[dict[str, object]]],
+    request_line: tuple[str, str] = ("POST", "/runs"),
 ) -> int:
-    """The status ``app`` answers a ``POST /runs`` driven in-process, body read from ``receive``."""
+    """The status ``app`` answers a request driven in-process, body read from ``receive``."""
     scope = {
         "type": "http",
         "asgi": {"version": "3.0"},
         "http_version": "1.1",
-        "method": "POST",
+        "method": request_line[0],
         "scheme": "http",
-        "path": "/runs",
-        "raw_path": b"/runs",
+        "path": request_line[1],
+        "raw_path": request_line[1].encode(),
         "query_string": b"",
-        "root_path": "",
         "headers": [(name.lower().encode(), value.encode()) for name, value in headers.items()],
-        "client": ("127.0.0.1", 50000),
-        "server": ("127.0.0.1", 80),
     }
     sent: list[dict[str, object]] = []
 

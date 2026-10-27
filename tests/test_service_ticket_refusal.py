@@ -7,6 +7,7 @@ leftover ``background`` key stops startup.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import Iterator
 
@@ -15,6 +16,7 @@ import pytest
 from service_support import (
     ScriptedRunner,
     TokenMint,
+    asgi_post_status,
     assert_rejected,
     get_run,
     post_run,
@@ -79,14 +81,11 @@ def _send(base_url: str, route: str, headers: dict[str, str]) -> httpx.Response:
 
 
 @pytest.mark.parametrize("ticket", ["", "garbage"], ids=["empty", "garbage"])
-@pytest.mark.parametrize("with_authorization", [False, True], ids=["bare", "with-authorization"])
 @pytest.mark.parametrize("route", ["post-runs", "get-run"])
-def test_a_job_ticket_header_is_unauthorized_on_both_run_routes(
-    service, route, with_authorization, ticket
-):
-    user_headers = run_headers(MINT.workload(), MINT.user() if with_authorization else None)
+def test_a_job_ticket_header_is_unauthorized_on_both_run_routes(service, route, ticket):
+    headers = {**run_headers(MINT.workload(), MINT.user()), "Agent-Job-Ticket": ticket}
 
-    response = _send(service, route, {**user_headers, "Agent-Job-Ticket": ticket})
+    response = _send(service, route, headers)
 
     assert_rejected(response, RejectionCode.UNAUTHORIZED, 401)
 
@@ -99,9 +98,12 @@ def test_a_job_ticket_header_is_unauthorized_on_both_run_routes(
         pytest.param(None, RejectionCode.UNAVAILABLE, 503, id="no-header"),
     ],
 )
+@pytest.mark.parametrize("with_authorization", [False, True], ids=["bare", "with-authorization"])
 @pytest.mark.parametrize("route", ["post-runs", "get-run"])
-def test_the_header_is_refused_before_any_token_is_verified(route, ticket, code, status):
-    headers = run_headers(MINT.workload(), MINT.user())
+def test_the_header_is_refused_before_any_token_is_verified(
+    route, with_authorization, ticket, code, status
+):
+    headers = run_headers(MINT.workload(), MINT.user() if with_authorization else None)
     if ticket is not None:
         headers["Agent-Job-Ticket"] = ticket
     app = create_app(service_config(), fetch_key_set=_unreachable_issuer)
@@ -110,6 +112,29 @@ def test_the_header_is_refused_before_any_token_is_verified(route, ticket, code,
         response = _send(base_url, route, headers)
 
     assert_rejected(response, code, status)
+
+
+@pytest.mark.parametrize("ticket", ["", "garbage"], ids=["empty", "garbage"])
+@pytest.mark.parametrize("with_authorization", [False, True], ids=["bare", "with-authorization"])
+@pytest.mark.parametrize(
+    ("method", "path"), [("POST", "/runs"), ("GET", f"/runs/{UNKNOWN_RUN}")], ids=["post", "get"]
+)
+def test_the_header_is_refused_without_reading_the_request_body(
+    method, path, with_authorization, ticket
+):
+    headers = {
+        **run_headers(MINT.workload(), MINT.user() if with_authorization else None),
+        "Agent-Job-Ticket": ticket,
+    }
+
+    async def receive() -> dict[str, object]:
+        pytest.fail("the request body was read")
+
+    app = create_app(service_config(), fetch_key_set=MINT.fetch_key_set)
+
+    status = asyncio.run(asgi_post_status(app, headers, receive, (method, path)))
+
+    assert status == 401
 
 
 @pytest.mark.parametrize("ticket", ["", "garbage"], ids=["empty", "garbage"])
