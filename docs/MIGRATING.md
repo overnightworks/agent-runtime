@@ -5,7 +5,8 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 ## Migrating to 0.9.0
 
 Job tickets are retired, and the profile flag `background` goes with them. No app is known to use
-either; the wire stays version 2.
+either. The service now also serves a Codex profile and an optional API route, and a profile's login is
+installed by a command instead of a script. The wire stays version 2.
 
 | Before (0.8.0) | Now |
 | --- | --- |
@@ -14,6 +15,11 @@ either; the wire stays version 2.
 | `POST /runs` and `GET /runs/{id}` took the `Agent-Job-Ticket` header in place of a user token | Both answer a request carrying the header, whatever its value, with `401 unauthorized` before the body is read. Send the workload token and the user token. |
 | `OfferedModel.background` said whether a ticket run got the model on the same route | The field stays and is always `false`. |
 | A run always needed a user token | `[apps.<app>.agents.<purpose>] runs_as_app` is new and optional (default `false`). A workload token alone, with no `Authorization` header, runs an agent whose table says `true`, as the app's service account and routed by that account's groups; for every other agent nothing changes. |
+| `uv run python scripts/replace_token_file.py PATH` renewed a profile's token file from a checkout | The script is removed. Run `agent-runtime-service-login --config PATH --profile NAME` as the service's own user; it is a console script of the service distribution. It reads the new login on standard input, checks it with the service's reader for that profile and swaps it in; no restart is needed. It exits 0 when written, 1 when not written (the old file stays), 2 when it refused before reading, 3 when its own `.<file>.new` is not confirmed gone. `--check` runs the reader on the file as it stands. See [operations.md](operations.md). |
+| The service served Claude profiles only; `[cli]` held only `[cli.claude]` | `provider = "codex"` is a profile too: it needs `token_file`, the Codex sign-in document, and a `[cli.codex]` table (`binary`, `version`, `models`), beside `[cli]`'s `working_root`. A configuration that names a Codex profile without either stops startup with exit 2 and the refusal names `profiles.<name>.token_file` or `cli.codex`. The Codex route is tool-free: a run that names tools there gets 403 `not_enabled`. Nothing changes for a configuration with Claude profiles only ([operations.md](operations.md), "A Codex profile"). |
+| `[profiles.<name>]` had no `default` key | `default` is new and optional (default `false`). At most one profile per provider. With two profiles exactly one carries `default = true` and serves a run that names no model; none or two stop startup with exit 2 and the refusal names `profiles.<name>.default`. A lone profile is the default without the key. |
+| A run admitted to the API route always ended `failed: provider_unavailable`; no API runner existed | `[api]` is new and optional: `completion_url` (exactly `…/v1/chat/completions`), an absolute `credential_file` (JSON with `shared_key` and/or `app_keys`, read again by each run, so replacing the file renews it) and, for HTTPS only, `ca_file` (forbidden for HTTP). It needs `[identity] api_groups` and `[route] api_alias`; a bad or incomplete section, or a `ca_file` that cannot be loaded, stops startup with exit 2. With it, an admitted API run returns the gateway's text, buffered per round, and runs the tools the app granted through the app's MCP origin; the service's usual time, call and byte limits apply, and a later refused call never undoes the effects of an earlier accepted one. Switching `[api]` on sends people's data through the gateway to the providers it forwards to, so a deployment's privacy notice must name those recipients first. Without `[api]` nothing changes ([operations.md](operations.md), "Configure the API text route"; [wire.md](wire.md), "API text results"). |
+| The Codex turn runner is new, so no Codex run had a login-refusal cause | A Codex `turn.failed` whose message holds `401 Unauthorized` raises the new neutral `agent_runtime.errors.CliLoginRefusedError`, which Claude's `claude.provider.CliLoginRefusedError` now also subclasses; any other `turn.failed` stays `CodexTurnFailed`. Catch the neutral class to install a fresh login; not every expiry is reported this way. |
 
 ## Migrating to 0.8.0
 

@@ -17,3 +17,7 @@ allow = [
 [[root.allow]]
 entry = "packages/"
 reason = "the uv workspace's member distributions"
+
+[[root.allow]]
+entry = "legal/"
+reason = "the privacy section the service ships from its release tag"

@@ -1,0 +1,54 @@
+<h2 id="agent-dienst">Agent-Dienst</h2>
+<p>Der Agent-Dienst ist ein Dienst auf unserem Server. Über ihn lassen Apps eine Aufgabe von einem KI-Modell bearbeiten, zum Beispiel eine Frage in einem Gespräch beantworten. Nur Apps rufen ihn auf, nie Ihr Browser direkt. Welche Ihrer Daten eine App an ihn schickt, steht im Abschnitt der App. Hier steht, was der Dienst selbst damit tut.</p>
+<section id="agent-dienst-zugang">
+<h3>Wer den Dienst nutzen kann</h3>
+<ul>
+<li>Für Sie bearbeitet der Dienst eine Aufgabe nur, wenn die App ihr eigenes Token und Ihres mitschickt, beide gültig sind und zusammengehören und Sie Mitglied der Gruppe dieser App in unserem Anmeldedienst sind (siehe <a href="#anmeldung">Anmeldung (Keycloak)</a>). Sonst weist er die Anfrage ab, bevor er ihren Inhalt liest.</li>
+<li>Ihr Token prüft der Dienst bei jeder Anfrage. Er speichert es nicht und gibt es nicht weiter.</li>
+<li>Aus Ihren Gruppen leitet der Dienst auch Ihre Rolle in der App ab. Sie entscheidet, welche Aufgaben Sie starten dürfen. Fragt die App, welche Modelle Ihnen offenstehen, filtert der Dienst die Liste nach Ihren Gruppen.</li>
+<li>Außerdem braucht Ihr Konto das Recht für den Zugang über die Programmierschnittstelle (API) eines KI-Anbieters. Dieses Recht vergibt der Betreiber in Keycloak.</li>
+<li>Dieser Zugang ist auf unserem Server derzeit nicht eingerichtet. Deshalb weist der Dienst Ihre Anfrage ab, bevor sie einen KI-Anbieter erreicht.</li>
+</ul>
+</section>
+<section id="agent-dienst-app">
+<h3>Aufgaben, die eine App selbst startet</h3>
+<p>Eine App kann den Dienst auch ohne angemeldete Person aufrufen, etwa für Arbeit im Hintergrund. Das geht nur für Aufgaben, die der Betreiber für diese App freigegeben hat, und nur mit dem Recht für den API-Zugang, das der Betreiber dem Konto der App in Keycloak gibt. Derzeit ist keine solche Aufgabe freigegeben.</p>
+<p>Eine solche Aufgabe läuft unter dem Konto der App, nicht unter Ihrem. Der Dienst ordnet sie der App zu und vermerkt keine Person. Schickt die App dabei Daten von Ihnen mit, etwa Inhalte, die Sie in der App angelegt haben, gilt für sie dasselbe wie für Ihre eigenen Aufgaben; welche Daten das sind, steht im Abschnitt der App.</p>
+</section>
+<section id="agent-dienst-empfaenger">
+<h3>Wer die Daten erhält</h3>
+<p>Solange der API-Zugang nicht eingerichtet ist, erreicht keine Ihrer Aufgaben einen KI-Anbieter. Ist er eingerichtet, gilt:</p>
+<ul>
+<li>Der Dienst gibt Ihre Aufgabe über ein Gateway auf unserem Server an die API von Anthropic, das mit seinem Modell Claude die Antwort erzeugt. Nennt die App ein Modell, ersetzt der Dienst es nie durch ein anderes.</li>
+<li>Gateway und Anthropic erhalten: die Anweisungen der App an das Modell, die Nachrichten, den Namen des Modells, die Beschreibungen der Werkzeuge der App und die Ergebnisse der Werkzeuge, die das Modell aufruft. Bei jeder weiteren Runde einer Aufgabe schickt der Dienst die bisherigen Antworten des Modells und seine Werkzeugaufrufe erneut mit. Auch Anweisungen und Werkzeugbeschreibungen können Angaben zu Personen enthalten.</li>
+<li>Der Dienst fügt nichts hinzu, woran das Gateway oder Anthropic Sie erkennen könnte: weder Ihre Kennung noch Ihre Gruppen, Ihr Token oder die Kennung der Aufgabe. Der Dienst anonymisiert nichts. Was die App selbst in die Nachrichten oder Werkzeugergebnisse schreibt, erreicht Anthropic daher unverändert.</li>
+<li>Beim Gateway weist sich der Dienst mit einem eigenen Schlüssel aus, nicht mit Ihren Zugangsdaten. Dieser Schlüssel kann für jede App ein eigener sein; dann erkennt das Gateway, von welcher App eine Aufgabe kommt. Die Zugangsdaten für Anthropic hält nur das Gateway. Das Gateway speichert weder Nachrichten noch Antworten.</li>
+<li>Anthropic verarbeitet die Daten nach seinen <a href="https://www.anthropic.com/legal/commercial-terms">Commercial Terms of Service</a> als Auftragsverarbeiter für uns. Bestandteil dieser Bedingungen ist ein Auftragsverarbeitungsvertrag (Art. 28 DSGVO), das <a href="https://www.anthropic.com/legal/data-processing-addendum">Data Processing Addendum</a>; Vertragspartner im EWR ist Anthropic Ireland, Limited. Nach diesen Bedingungen darf Anthropic die Inhalte nicht zum Training seiner Modelle verwenden. Was Anthropic speichert und wie lange, richtet sich nach diesen Bedingungen, nicht nach diesem Dienst.</li>
+<li>Anthropic verarbeitet Daten auch in den USA und stützt die Übermittlung nach diesem Vertrag auf die Standardvertragsklauseln der EU-Kommission (Art. 46 Abs. 2 lit. c DSGVO).</li>
+</ul>
+</section>
+<section id="agent-dienst-werkzeuge">
+<h3>Werkzeuge der App</h3>
+<p>Bietet eine App dem Modell Werkzeuge an, etwa um Ihre Inhalte in der App zu lesen oder zu ändern, laufen diese Werkzeuge in der App, nicht im Dienst. Ruft das Modell ein Werkzeug auf, gibt der Dienst den Aufruf an die App weiter und das Ergebnis an das Modell zurück.</p>
+<p>Für Aufgaben, bei denen die App Werkzeuge bereitstellt, schickt der Dienst ihr einen signierten Nachweis. Er nennt die App, Ihr Konto (bei einer Aufgabe ohne Person das Konto der App), die Aufgabe, ihren Zweck, die erlaubten Werkzeuge sowie Ausstellungs- und Ablaufzeit. Er geht nur an diese App, nie an das Gateway oder an Anthropic, und gilt bis zur höchsten erlaubten Dauer einer Aufgabe.</p>
+</section>
+<section id="agent-dienst-speicherung">
+<h3>Was der Dienst aufbewahrt</h3>
+<ul>
+<li>Der Dienst hat keine Datenbank. Nachrichten, Werkzeugaufrufe, Ergebnisse und Antwort laufen nur durch seinen Arbeitsspeicher; er legt davon keine Datei an.</li>
+<li>Zu jeder gestarteten Aufgabe führt der Dienst im Arbeitsspeicher einen Eintrag: eine zufällige Kennung der Aufgabe, wem sie gehört (die App sowie Aussteller und Kennung Ihres Kontos, bei einer Aufgabe ohne Person des Kontos der App), Beginn und Ende, die Zahl der Ereignisse, den Ausgang mit einem Fehlercode, falls sie scheiterte, und ob die Verbindung zur App abbrach. Dabei vermerkt er, ob die App die Verbindung selbst beendete oder der Dienst sie trennte, weil die App nicht mehr mitkam. Eingabe, Antwort, Werkzeugdaten und Tokens stehen nicht darin.</li>
+<li>Den Eintrag kann nur die App zusammen mit dem Konto abrufen, dem die Aufgabe gehört. Eine Stunde nach dem Ende gibt der Dienst ihn nicht mehr heraus und löscht ihn, sobald er das nächste Mal einen Eintrag bearbeitet. Er hält höchstens 10.000 beendete Einträge; die ältesten fallen zuerst weg. Ein Neustart des Dienstes löscht alle.</li>
+</ul>
+</section>
+<section id="agent-dienst-protokolle">
+<h3>Protokolle</h3>
+<ul>
+<li>Die eigenen Meldungen des Dienstes, etwa Fehlermeldungen, enthalten keine Eingabe, keine Antwort, keine Kennung Ihres Kontos und kein Token. Sie nennen Fehlerarten, Zahlen, die Kennung einer Aufgabe und den Namen der App.</li>
+<li>Der Webserver des Dienstes schreibt je Anfrage eine Zeile: die Adresse des Aufrufers, also der App in unserem internen Netz, die Methode, den Pfad samt Abfrage, die Protokollversion und den Statuscode. Was eine App in Pfad oder Abfrage schreibt, steht dort so, wie sie es schreibt.</li>
+<li>Wie lange diese Protokolle aufbewahrt werden, bestimmt der Betrieb des Servers, nicht der Dienst.</li>
+</ul>
+</section>
+<section id="agent-dienst-rechtsgrundlage">
+<h3>Rechtsgrundlage</h3>
+<p>Dass der Dienst eine Aufgabe für Sie über die App bearbeitet, gehört zu dem Dienst, den Sie nach den Nutzungsbedingungen nutzen: Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung). Die Prüfung der Berechtigung, die Abweisung von Anfragen ohne Berechtigung, der Eintrag zu jeder Aufgabe und die Protokolle dienen dem sicheren Betrieb des Dienstes: Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse am sicheren Betrieb).</p>
+</section>
