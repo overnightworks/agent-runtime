@@ -93,7 +93,7 @@ def test_a_file_that_sets_the_model_at_all_three_levels_loads(tmp_path):
 def test_the_model_of_a_run_is_the_agents_else_the_apps_else_the_defaults(tmp_path):
     by_level = {level: f"{Provider.ANTHROPIC}/{level}" for level in LEVELS}
     document = _document()
-    document["cli"]["anthropic"]["models"] = list(LEVELS)
+    document["cli"][Provider.ANTHROPIC]["models"] = list(LEVELS)
     for level, (setter, _field) in LEVELS.items():
         setter(document, by_level[level])
     document["apps"]["songmaker"]["agents"]["other"] = {}
@@ -136,6 +136,6 @@ def test_a_file_without_a_cli_table_is_refused_naming_cli(tmp_path):
 
 def test_a_cli_table_that_lists_no_models_is_refused_naming_the_default_model(tmp_path):
     document = _document()
-    document["cli"]["anthropic"]["models"] = []
+    document["cli"][Provider.ANTHROPIC]["models"] = []
 
     assert DEFAULTS in _refusal(tmp_path, document)

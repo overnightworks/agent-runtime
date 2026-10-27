@@ -335,7 +335,7 @@ def _songmaker_workload() -> str:
         ),
         pytest.param(
             _songmaker_workload,
-            run_body(model="anthropic/sonnet"),
+            run_body(model=f"{Provider.ANTHROPIC}/sonnet"),
             RejectionCode.INVALID_REQUEST,
             422,
             id="model-refused",

@@ -284,7 +284,9 @@ def test_a_provider_without_a_table_is_refused_before_anything_is_read(
     stream = Stream(GOOD_DOCUMENTS[Provider.OPENAI])
 
     with said.watching():
-        status = main(["--config", str(installation.config), "--provider", "openai"], stream)
+        status = main(
+            ["--config", str(installation.config), "--provider", Provider.OPENAI.value], stream
+        )
 
     assert (status, stream.was_read, installation.unchanged()) == (2, False, True)
     assert "cli.openai: no such table" in said.descriptor

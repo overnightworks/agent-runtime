@@ -65,7 +65,7 @@ def cli_section(
 ) -> str:
     root_lines = f"{root}\n" if root else ""
     program_lines = "".join(f"{line}\n" for line in (binary, version, models, token) if line)
-    program_table = f"[cli.anthropic]\n{program_lines}\n" if program_lines else ""
+    program_table = f"[cli.{Provider.ANTHROPIC}]\n{program_lines}\n" if program_lines else ""
     return f"[cli]\n{root_lines}\n{program_table}"
 
 
@@ -157,7 +157,7 @@ def test_a_leftover_tools_table_of_an_app_stops_startup_naming_the_field(tmp_pat
 
 
 def test_o11_a_leftover_models_table_of_an_app_stops_startup_naming_the_field(tmp_path, capsys):
-    text = VALID_CONFIG + '\n[apps.songmaker.models]\ncowriter = "anthropic/sonnet"\n'
+    text = VALID_CONFIG + f'\n[apps.songmaker.models]\ncowriter = "{Provider.ANTHROPIC}/sonnet"\n'
 
     assert _refused_on_one_line(_written(tmp_path, text), capsys).startswith(
         "apps.songmaker.models"
@@ -925,7 +925,7 @@ def served_apps(monkeypatch, logging_state_restored):
 
 
 CODEX_TABLE = (
-    f"[cli.openai]\n{CLAUDE_BINARY_LINE}\nversion = \"0.163.0\"\nmodels = [\"gpt-5.5\"]\n"
+    f'[cli.{Provider.OPENAI}]\n{CLAUDE_BINARY_LINE}\nversion = "0.163.0"\nmodels = ["gpt-5.5"]\n'
 )
 
 
@@ -1376,7 +1376,7 @@ WITH_ROOT_AND_FLAT_KEYS = f"[cli]\n{WORKING_ROOT_LINE}\n{FORMER_FLAT_KEYS}\n"
             id="unchanged-v030",
         ),
         pytest.param(
-            f"[cli]\n{WORKING_ROOT_LINE}\n{FORMER_FLAT_KEYS}\n[cli.anthropic]\n"
+            f"[cli]\n{WORKING_ROOT_LINE}\n{FORMER_FLAT_KEYS}\n[cli.{Provider.ANTHROPIC}]\n"
             f"{CLAUDE_BINARY_LINE}\n{CLAUDE_VERSION_LINE}\n{MODELS_LINE}\n{TOKEN_FILE_LINE}\n\n",
             FORMER_FLAT_KEYS_REFUSED,
             id="beside-a-program-table",
@@ -1397,7 +1397,7 @@ def test_the_former_flat_program_keys_stop_the_start_naming_each_key(
 
 
 @pytest.mark.parametrize("provider", ["claude", "codex", "grok"])
-def test_a_program_table_for_a_provider_without_a_version_reader_stops_the_start(
+def test_a_table_for_an_obsolete_or_unknown_provider_stops_the_start(
     tmp_path, capsys, provider
 ):
     probe_log = tmp_path / "probe-starts"
@@ -1438,7 +1438,7 @@ def _edited(edit: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
 
 
 def _claude_table_edit(**members: Any) -> Callable[[dict[str, Any]], None]:
-    return lambda document: document["cli"]["anthropic"].update(members)
+    return lambda document: document["cli"][Provider.ANTHROPIC].update(members)
 
 
 REFUSED_REPRESENTATIONS = [

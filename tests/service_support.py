@@ -224,7 +224,7 @@ def _service_config_document(
         "defaults": {"model": f"{Provider.ANTHROPIC}/{LISTED_MODEL}"},
         "cli": {
             "working_root": str(process_working_root().path),
-            "anthropic": {
+            Provider.ANTHROPIC.value: {
                 "binary": str(claude_binary or process_claude_cli()),
                 "version": PINNED_CLAUDE_VERSION,
                 "models": [LISTED_MODEL],

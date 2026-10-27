@@ -67,12 +67,12 @@ BOTH = {"/new-sub", "/api-members"}
 @pytest.mark.parametrize(
     ("groups", "model", "expected"),
     [
-        pytest.param(SUBSCRIBER, "anthropic/sonnet", CLI, id="R-a-S"),
-        pytest.param(API_ONLY, "anthropic/sonnet", Api(), id="R-a-A"),
-        pytest.param(BOTH, "anthropic/sonnet", CLI, id="R-a-D"),
+        pytest.param(SUBSCRIBER, f"{Provider.ANTHROPIC}/sonnet", CLI, id="R-a-S"),
+        pytest.param(API_ONLY, f"{Provider.ANTHROPIC}/sonnet", Api(), id="R-a-A"),
+        pytest.param(BOTH, f"{Provider.ANTHROPIC}/sonnet", CLI, id="R-a-D"),
         pytest.param(SUBSCRIBER, "xai/sonnet", OFF, id="R-d-S"),
         pytest.param(BOTH, "xai/sonnet", Api(), id="R-d-D"),
-        pytest.param(set(), "anthropic/sonnet", OFF, id="R-e-N"),
+        pytest.param(set(), f"{Provider.ANTHROPIC}/sonnet", OFF, id="R-e-N"),
     ],
 )
 def test_a_named_model_runs_on_the_subscription_only_when_a_table_has_its_provider(
@@ -84,8 +84,8 @@ def test_a_named_model_runs_on_the_subscription_only_when_a_table_has_its_provid
 @pytest.mark.parametrize(
     ("model", "expected"),
     [
-        pytest.param("anthropic/sonnet", CLI, id="claude-model"),
-        pytest.param("openai/gpt-5.5", Cli(Provider.OPENAI), id="codex-model"),
+        pytest.param(f"{Provider.ANTHROPIC}/sonnet", CLI, id="anthropic-model"),
+        pytest.param(f"{Provider.OPENAI}/gpt-5.5", Cli(Provider.OPENAI), id="openai-model"),
     ],
 )
 def test_a_model_goes_to_the_table_of_its_provider(model, expected):

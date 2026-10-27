@@ -145,14 +145,18 @@ def codex_document(
     document["defaults"] = {"model": f"{Provider.OPENAI}/{CODEX_MODEL}"}
     document["cli"] = {
         "working_root": str(a_private_root(tmp_path)),
-        "openai": {"binary": str(binary), "version": CODEX_PIN, "models": [CODEX_MODEL]},
+        Provider.OPENAI.value: {
+            "binary": str(binary),
+            "version": CODEX_PIN,
+            "models": [CODEX_MODEL],
+        },
     }
-    document["cli"]["openai"]["token_file"] = str(login_file)
+    document["cli"][Provider.OPENAI]["token_file"] = str(login_file)
     return document
 
 
 def with_claude_beside(document: dict[str, Any], claude: Path) -> dict[str, Any]:
-    document["cli"]["anthropic"] = {
+    document["cli"][Provider.ANTHROPIC] = {
         "binary": str(claude),
         "version": PINNED_CLAUDE_VERSION,
         "models": [LISTED_MODEL],

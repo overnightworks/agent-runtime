@@ -65,7 +65,7 @@ def test_a_program_reporting_another_version_stops_the_start_naming_both(
 ) -> None:
     binary = a_service_fake(tmp_path)
     document = codex_document(tmp_path, binary, a_login_file(tmp_path))
-    document["cli"]["openai"]["version"] = "0.164.0"
+    document["cli"][Provider.OPENAI]["version"] = "0.164.0"
 
     refusal = _refused_on_one_line(written(tmp_path, document), capsys)
 
@@ -76,7 +76,7 @@ def test_a_codex_table_without_its_login_is_refused_before_any_read(tmp_path: Pa
     open_login = a_login_file(tmp_path)
     open_login.chmod(0o644)
     document = codex_document(tmp_path, a_service_fake(tmp_path), open_login)
-    del document["cli"]["openai"]["token_file"]
+    del document["cli"][Provider.OPENAI]["token_file"]
 
     shown_refusal = the_refusal_of(document)
     assert "cli.openai.token_file\n  Field required" in shown_refusal
@@ -185,7 +185,7 @@ def test_a_claude_table_whose_file_holds_a_codex_document_is_refused_as_json(
 
 def test_a_grok_table_is_refused_as_an_unknown_key(tmp_path: Path) -> None:
     document = codex_document(tmp_path, a_service_fake(tmp_path), a_login_file(tmp_path))
-    document["cli"]["grok"] = document["cli"]["openai"]
+    document["cli"]["grok"] = document["cli"][Provider.OPENAI]
 
     assert "cli.grok" in the_refusal_of(document)
 
