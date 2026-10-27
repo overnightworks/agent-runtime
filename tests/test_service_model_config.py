@@ -25,7 +25,7 @@ MALFORMED = "Claude/Sonnet"
 
 DEFAULTS = "defaults.model"
 APP = "apps.songmaker.model"
-AGENT = "apps.songmaker.agents.vocalist.model"
+AGENT = "apps.songmaker.agents.notes.model"
 
 
 def _document() -> dict[str, Any]:
@@ -41,7 +41,7 @@ def _set_app(document: dict[str, Any], name: str) -> None:
 
 
 def _set_agent(document: dict[str, Any], name: str) -> None:
-    document["apps"]["songmaker"]["agents"] = {"vocalist": {"model": name}}
+    document["apps"]["songmaker"]["agents"] = {"notes": {"model": name}}
 
 
 LEVELS: dict[str, tuple[Callable[[dict[str, Any], str], None], str]] = {
@@ -84,7 +84,7 @@ def test_a_file_that_sets_the_model_at_all_three_levels_loads(tmp_path):
 
     assert config.defaults.model == LISTED
     assert config.apps["songmaker"].model == LISTED
-    assert config.apps["songmaker"].agents["vocalist"].model == LISTED
+    assert config.apps["songmaker"].agents["notes"].model == LISTED
 
 
 def test_a_file_without_defaults_is_refused_naming_defaults(tmp_path):
