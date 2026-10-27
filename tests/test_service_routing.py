@@ -1,6 +1,6 @@
 """H5 routing from the caller's groups (decision record 0001).
 
-The subscription groups and the API groups decide the route; the purpose never does, and
+The subscription groups and the API groups decide the route; the agent never does, and
 membership of the app is the caller check's gate, before any route is chosen. Test values:
 subscription groups ``/old-sub`` and ``/new-sub``, API group ``/api-members`` and one Claude
 profile; every run names the model the configuration chose for it.

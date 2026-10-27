@@ -168,7 +168,7 @@ def test_empty_prompt_is_refused(tmp_path: Path, body: str) -> None:
 @pytest.mark.parametrize(
     "stem", ["Notes", "notes.assistant", "notes_assistant", "a" + "b" * 64, "1notes", "-notes"]
 )
-def test_stem_that_is_not_a_purpose_is_refused(tmp_path: Path, stem: str) -> None:
+def test_stem_that_is_not_an_agent_is_refused(tmp_path: Path, stem: str) -> None:
     path = write(tmp_path, agent_text(name=stem), stem=stem)
 
     with pytest.raises(AgentFileError, match=stem):
@@ -423,14 +423,14 @@ def test_offered_to_refuses_a_role_outside_the_two(tmp_path: Path, role: str) ->
         agent.offered_to(role)  # type: ignore[arg-type]
 
 
-def test_request_is_the_current_protocol_body_with_purpose_prompt_and_tool_effects(
+def test_request_is_the_current_protocol_body_with_agent_prompt_and_tool_effects(
     tmp_path: Path,
 ) -> None:
     agent = load(tmp_path, agent_text())
 
     request = agent.request([TurnMessage(role=TurnRole.USER, text="hi")])
 
-    assert request.purpose == "notes-assistant"
+    assert request.agent == "notes-assistant"
     assert request.turn.system == PROMPT
     assert [message.text for message in request.turn.messages] == ["hi"]
     assert RunRequest.model_validate(request.model_dump(mode="json")) == request
@@ -439,7 +439,7 @@ def test_request_is_the_current_protocol_body_with_purpose_prompt_and_tool_effec
         "read_note": ToolEffect.READ_ONLY,
         "edit_note": ToolEffect.SIDE_EFFECTING,
     }
-    assert set(request.model_dump()) == {"v", "purpose", "turn", "roles", "tools"}
+    assert set(request.model_dump()) == {"v", "agent", "turn", "roles", "tools"}
 
 
 @pytest.mark.parametrize("roles", ["[admin]", "[admin, user]"])

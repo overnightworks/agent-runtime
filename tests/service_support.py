@@ -61,7 +61,7 @@ from agent_runtime.events import AssistantTextEvent, StreamEvent, ToolCallEvent
 from agent_runtime_client.run_stream import StreamViolation, ViolationKind
 from agent_runtime_client.sse import RunStreamDecoder
 from agent_runtime_client.wire import (
-    MAX_PURPOSE_LENGTH,
+    MAX_AGENT_LENGTH,
     PROTOCOL_VERSION,
     RejectionCode,
     RunEvent,
@@ -97,9 +97,9 @@ API_ALIAS: Final = "assistant-api"
 SONGMAKER_ORIGIN: Final = "https://songmaker.internal"
 PROCESS_TOKEN: Final = "setup-token-for-the-test-process"
 PINNED_CLAUDE_VERSION: Final = "2.1.302"
-ADMITTED_PURPOSES: Final = ("a", "assistant", "notes-2", "a" + "b" * 63)
-LONGEST_PURPOSE: Final = "a" * MAX_PURPOSE_LENGTH
-MALFORMED_PURPOSES: Final = (
+ADMITTED_AGENTS: Final = ("a", "assistant", "notes-2", "a" + "b" * 63)
+LONGEST_AGENT: Final = "a" * MAX_AGENT_LENGTH
+MALFORMED_AGENTS: Final = (
     "a" * 65,
     "notes.assistant",
     "Assistant",
@@ -327,7 +327,7 @@ def capable_service_config(
 def run_body(**overrides: object) -> dict[str, Any]:
     return {
         "v": PROTOCOL_VERSION,
-        "purpose": COWRITER,
+        "agent": COWRITER,
         "turn": {"system": "You help write songs.", "messages": [{"role": "user", "text": "Hi"}]},
         "roles": ["admin", "user"],
         "tools": {},

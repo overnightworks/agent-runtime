@@ -18,9 +18,9 @@ otherwise. The restriction names the service only. The image must run it as a
 non-root user with `cap_drop: ALL`.
 
 `[defaults] model` is required. It names a default model as `<provider>/<model>`;
-`model` may also be set in `[apps.<app>]` and in `[apps.<app>.agents.<purpose>]`. Startup exits
+`model` may also be set in `[apps.<app>]` and in `[apps.<app>.agents.<agent>]`. Startup exits
 2 and names the field (`defaults.model`,
-`apps.<app>.model` or `apps.<app>.agents.<purpose>.model`) for a name outside the wire's grammar
+`apps.<app>.model` or `apps.<app>.agents.<agent>.model`) for a name outside the wire's grammar
 or one that no `[cli.<provider>] models` lists. An installation without a `[cli]` table that
 lists its models therefore no longer starts; the paid route gets its own list with the paid-route
 work (#463).
@@ -55,13 +55,13 @@ in this order for a person's run:
    subscription lists (`[cli.<provider>] models`), and the API groups (`api_groups`,
    set together with `[route] api_alias`). The app sends no model: admission takes the
    run's model from the configuration, the agent's `model` in
-   `[apps.<app>.agents.<purpose>]`, else the app's, else `[defaults] model`. A configured model whose
+   `[apps.<app>.agents.<agent>]`, else the app's, else `[defaults] model`. A configured model whose
    provider has no `[profiles.<name>]` entry sends that agent to the paid API for every caller with API
    rights, under its full name, and gives subscription-only callers `not_enabled`. A run that names
    tools and whose profile's provider has no tool relay yet (Codex) gets 403 `not_enabled`
    before any place, capability or program, never a silent drop and never another route.
 
-An app's own run skips steps 1 and 2: its agent's table `[apps.<app>.agents.<purpose>]` must say
+An app's own run skips steps 1 and 2: its agent's table `[apps.<app>.agents.<agent>]` must say
 `runs_as_app = true`, else 403 `forbidden`; its route comes from the groups of the app's Keycloak
 service account, and which groups that account holds is a rights decision (decision record H2).
 The list is an aid for a cooperative app and no boundary; the groups are the boundary.
@@ -116,8 +116,8 @@ bundle `[mcp] ca_file` names for these origins alone. The service never makes
 its key; generation and rotation are the A1a4 ruling in the decision record.
 
 An app may also run its own agent on its workload token alone. Name each such agent in
-`[apps.<app>.agents.<purpose>]` with `runs_as_app = true`; an absent table or `false` means the
-agent never runs as the app, and a table name that is no valid purpose, a non-boolean value or an
+`[apps.<app>.agents.<agent>]` with `runs_as_app = true`; an absent table or `false` means the
+agent never runs as the app, and a table name that is no valid agent name, a non-boolean value or an
 unknown key stops startup (exit 2, naming the field). Changing the list is a configuration change
 and a restart; it revokes nothing already admitted.
 

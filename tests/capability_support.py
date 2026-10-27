@@ -37,7 +37,7 @@ def capability_carrying(token: str, tools: Sequence[str] = ("echo",)) -> Capabil
         iat=_ISSUED_AT,
         exp=_ISSUED_AT + 600,
         app="example-app",
-        purpose="assist",
+        agent="assist",
         principal=CapabilityPrincipal(iss="https://issuer.example", sub="user-alice"),
         tools=tuple(tools),
     )

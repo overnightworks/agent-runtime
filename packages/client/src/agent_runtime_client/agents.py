@@ -30,9 +30,9 @@ from ruamel.yaml import YAML, YAMLError
 from agent_runtime_client.tools import ToolDeclaration
 from agent_runtime_client.wire import (
     PROTOCOL_VERSION,
+    AgentName,
     AgentRole,
     AgentRoles,
-    Purpose,
     RunRequest,
     Turn,
     TurnMessage,
@@ -41,7 +41,7 @@ from agent_runtime_client.wire import (
 _AGENT_FILE_SUFFIX: Final = ".md"
 _FRONT_MATTER_FENCE: Final = "---"
 _AGENT_ROLES: Final = TypeAdapter(AgentRole)
-_PURPOSE: Final = TypeAdapter(Purpose)
+_AGENT_NAME: Final = TypeAdapter(AgentName)
 _YAML: Final = YAML(typ="safe", pure=True)
 _DUPLICATE_KEY: Final = re.compile(r'found duplicate key "(.*?)" with value')
 
@@ -59,7 +59,7 @@ def _refuse_non_single_line(text: str) -> str:
 class _FrontMatter(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
-    name: Purpose
+    name: AgentName
     description: Annotated[StrictStr, AfterValidator(_refuse_non_single_line)]
     tools: list[StrictStr] = Field(default_factory=list)
     roles: AgentRoles = Field(alias="appRoles")
@@ -79,7 +79,7 @@ class AgentDefinition(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    name: Purpose
+    name: AgentName
     description: str
     roles: AgentRoles
     tools: tuple[ToolDeclaration, ...]
@@ -97,7 +97,7 @@ class AgentDefinition(BaseModel):
         """The body that starts a run of this agent over these messages."""
         return RunRequest(
             v=PROTOCOL_VERSION,
-            purpose=self.name,
+            agent=self.name,
             turn=Turn(system=self.prompt, messages=messages),
             roles=self.roles,
             tools={declaration.name: declaration.effect for declaration in self.tools},
@@ -133,7 +133,7 @@ def _checked_stem(file_name: str) -> str:
     if stem == file_name:
         raise AgentFileError(f"{file_name}: an agent file must end in {_AGENT_FILE_SUFFIX}")
     try:
-        _PURPOSE.validate_python(stem)
+        _AGENT_NAME.validate_python(stem)
     except ValidationError as error:
         raise AgentFileError(
             f"{file_name}: file name stem {stem!r}: {_first_message(error)}"

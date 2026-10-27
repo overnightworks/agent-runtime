@@ -213,7 +213,7 @@ def _admitted(
     scope = config.capability_scope(caller.app, run_request.tools)
     if run_request.tools and scope is None:
         return rejection(RejectionCode.FORBIDDEN)
-    model = config.model_for(caller.app, run_request.purpose)
+    model = config.model_for(caller.app, run_request.agent)
     served = route(
         config.identity,
         config.profiles,
@@ -257,7 +257,7 @@ def _admitted(
 
 def _may_run(config: ServiceConfig, caller: Caller, run_request: RunRequest) -> bool:
     if isinstance(caller, AppCaller):
-        return config.apps[caller.app].runs_as_itself(run_request.purpose)
+        return config.apps[caller.app].runs_as_itself(run_request.agent)
     return caller.role in run_request.roles
 
 
@@ -329,7 +329,7 @@ def _capability_of(
         app=caller.app,
         issuer=caller.principal.issuer,
         subject=caller.principal.subject,
-        purpose=run_request.purpose,
+        agent=run_request.agent,
         now=wall_clock().timestamp(),
         max_duration_s=config.runs.max_duration_s,
     )
