@@ -5067,17 +5067,19 @@ service setting, so `GET /offer` is removed; an app learns which model answered 
 `run_started`, which names the model and the route it was given, as names and not proof of who
 answered. Built-in tools (#488) take the same three levels; `runs_as_app` stays a grant in the
 agent's own table and limits stay global in `[runs]`. Protocol 3 replaces protocol 2 on one
-switch day, with no coexistence and no backwards compatibility; 0.10.0 implements it. This
-supersedes #444's split (the request names the model, the service checks it), H5's `GET /offer`
-and "the wire stays version 2". Authority: the operator's rulings on #494 (27.10.2026) and its
-cards D1 to D6, each ruled A:
+switch day, with no coexistence and no backwards compatibility; 0.10.0 implements this
+amendment. This supersedes #444's split (the request names the model, the service checks it),
+H5's `GET /offer` and "Wire version 2 stays". Authority: the operator's rulings on #494
+(27.10.2026) and its cards D1 to D6, each ruled A, and the default applied for `run_started`
+(former card 4, a):
 - D1: no `choices` and no pick in the request, the agent file or the configuration.
 - D2: model prefixes and `[cli.<provider>]` tables name the vendor, `anthropic` and `openai`.
 - D3: one name means one model on both routes; the paid route's name mapping is a named gap, owned
   by #463 and edge#299, and the paid route stays off until it is proven.
 - D4: profiles fold into `[cli.<provider>]`.
 - D5: the wire word `purpose` becomes `agent`.
-- D6: an installation without a `[cli]` model list does not start.
+- D6: an installation without a `[cli]` model list does not start until the paid route brings
+  its own model list.
 
 ## Out of scope at this size
 
