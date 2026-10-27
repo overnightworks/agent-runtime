@@ -17,9 +17,9 @@ operator's configuration ([operations.md](operations.md)).
 `POST /runs` takes a `RunRequest` and answers with the run's event stream
 (SSE), ending every run with exactly one terminal event except the cut stream
 of a dropped client. A call carries two tokens: the end user's, and the app's
-workload token in the `Agent-Workload-Token` header. A background job that has no live user
-token sends the app's workload token and a [job ticket](#job-tickets) in the `Agent-Job-Ticket`
-header instead, with no `Authorization` header; the body is the same `RunRequest`.
+workload token in the `Agent-Workload-Token` header. `POST /runs` and `GET /runs/{id}` answer a
+request carrying an `Agent-Job-Ticket` header, even an empty one, with `401` before the body is
+read; the header's value is never read.
 
 `RunRequest`, wire version 2:
 
@@ -45,9 +45,9 @@ A request the service refuses answers a `RunRejection` with one `RejectionCode`:
 
 | Code | Status | Meaning |
 |---|---|---|
-| `unauthorized` | 401 | A workload token and either a user token or a job ticket are required and must be valid; a ticket beside an `Authorization` header is refused too. |
-| `forbidden` | 403 | The user is no member of the app, the request's `roles` lack the caller's role, the request names a tool while the app has no MCP origin, the two tokens do not belong together (`agent_runtime_service.identity` lists every cause), or a ticket is another app's, another workload client's or another issuer's, or its agent (`purpose`) is not the body's. |
-| `not_enabled` | 403 | No route is enabled for this caller and model, the run names tools and the chosen subscription profile's provider cannot take tools yet, or a job ticket was asked for and the installation has no `[signing]` section. |
+| `unauthorized` | 401 | A workload token and a user token are required and must be valid; an `Agent-Job-Ticket` header on `POST /runs` or `GET /runs/{id}` is refused too. |
+| `forbidden` | 403 | The user is no member of the app, the request's `roles` lack the caller's role, the request names a tool while the app has no MCP origin, the two tokens do not belong together (`agent_runtime_service.identity` lists every cause). |
+| `not_enabled` | 403 | No route is enabled for this caller and model, the run names tools and the chosen subscription profile's provider cannot take tools yet. |
 | `unsupported_version` | 400 | `v` is not 2. |
 | `invalid_request` | 422 | The body is not a valid request for the route. |
 | `capability_too_large` | 422 | The run's capability would exceed 8,192 characters. |
@@ -55,56 +55,20 @@ A request the service refuses answers a `RunRejection` with one `RejectionCode`:
 | `unavailable` | 503 | The service cannot check tokens right now. |
 | `not_found` | 404 | No such run, or not yours. |
 
-## Job tickets
-
-`POST /job-tickets` takes `{v: 2, purpose, expires_in_s}` (`JobTicketRequest`) and answers
-`{v: 2, ticket, expires_at}` (`JobTicket`). It is for a background job that has no live user
-token when it runs: the app calls it inside the live request that starts the job, stores the
-ticket, and uses it later. The call carries the same two tokens as a live `POST /runs` (never a ticket) and is refused
-the same way (401, 403, 503), then by framing, version and shape (400 `unsupported_version`,
-422 `invalid_request`), and only then `not_enabled` when the installation has no `[signing]`
-section. A ticket cannot fetch a ticket.
-
-`expires_in_s` is required, from 1 to 86,400 seconds (24 hours), and `expires_at` is the ticket's
-`exp`. The ticket is a JWT of type `agent-job-ticket+jwt` and audience `agent-job-ticket`, signed
-with the capability's key, so an app's MCP server refuses it as a capability. It binds the app
-and its workload client, the person (`iss`, `sub`), the agent (`purpose`), the expiry, and of the
-person's groups only the configured subscription groups, the API groups, and `/apps/<app>` with
-everything below it. The service issues a ticket even to a person who could not run an agent
-right now, limits no count per person, stores nothing and cannot revoke one. The ticket is shown
-only in this response: never in a URL, a log, a header or another body.
-
-**Running with a ticket.** `POST /runs` and `GET /runs/{id}` read the ticket from the
-`Agent-Job-Ticket` header; its presence, even empty, selects this branch, and any `Authorization`
-header beside it is `401`. The workload token is checked first (401, or 503 while the key set is
-unreachable), then the ticket: a ticket that is expired, wrongly signed, unreadable, or signed by
-another key is `401`, as is every ticket on an installation without `[signing]`; a capability is
-no ticket. A ticket of another app, workload client or issuer is `403`, and so is a body whose
-`purpose` is not the ticket's agent. After that the run is decided as a live one, from the groups
-bound at mint and not from the person's live groups: a person who left a group since still runs
-until the ticket expires, and a changed configuration applies at once. A ticket run reads only
-the profiles marked `background = true`; when the person's route would be the subscription and no
-such profile serves it, it goes on as ever, over the API when the groups carry API rights, else
-`403 not_enabled`, and `max_parallel_cli_runs` still answers `busy`. One ticket carries any number
-of runs of its agent until it expires; it cannot be revoked, and a new signing key ends every
-ticket. `GET /runs/{id}` answers a run of the same app and person, whatever its agent. The
-ticket reaches no log, frame, record, response, CLI or provider. The routes `POST /job-tickets`
-and `GET /offer` never read the header.
-
 ## The offer
 
 `GET /offer` answers `{v: 2, object: "list", data: [...]}` (`Offer`), shaped like OpenAI's
 `GET /v1/models`: `data` lists the models the asking person can run in this app, sorted by
 `id`. Each entry (`OfferedModel`) is `{id, object: "model", created: 0, owned_by, route,
 background, ready, reason}`: `id` is `<provider>/<model>` as `RunRequest.model` writes it,
-`owned_by` the provider, `route` is `cli` (the subscription) or `api`, `background` is whether a
-job ticket's run gets this model on the same route, with the same profile, as a live run for this
-person (a profile with `background = false` makes it `false` on the subscription), and `reason`
+`owned_by` the provider, `route` is `cli` (the subscription) or `api`, `background` is `false`
+for every model (this service runs no job tickets; the field stays so protocol 2 keeps its shape),
+and `reason`
 is `null` when `ready` is true and `not_built` when it is not (the route has no runner installed). `OfferReason` is
 closed; a new reason is a wire change, because a new variant is a new `PROTOCOL_VERSION`.
 
-The call has no body and carries the same two tokens as a live `POST /runs` (never a ticket), refused the same way
-(401, 403, 503). The app is the one the workload token names; a query parameter naming
+The call has no body and carries the same two tokens as a live `POST /runs` (an `Agent-Job-Ticket` header is not examined), refused
+the same way (401, 403, 503). The app is the one the workload token names; a query parameter naming
 another app is ignored. Every member of the app may ask, not only admins, and the answer is for the
 asking person only: a member in no subscription or API group gets `200` with an empty `data`.
 It is computed on every request from the configuration and the installed runners, never
@@ -160,7 +124,7 @@ connection/TLS/read failures, or missing/invalid gateway credentials, end as
 
 The turn, model, granted definitions and accepted results reach the gateway.
 Only gateway Authorization carries the selected gateway credential; only app MCP
-Authorization carries the capability. User/workload tokens, ticket, identity and
+Authorization carries the capability. User/workload tokens, identity and
 correlation metadata are not added; arbitrary app/user content is not anonymized.
 Protected values in initial content, definitions or a decoded round are refused.
 The accumulated assistant text is checked before releasing each round, so a
@@ -215,7 +179,7 @@ error stream is read and discarded. The HTTP server adds one access line per
 request: the caller's address, the method, the path including its query string, the
 protocol version and the status.
 
-**Tokens.** The end user's token or job ticket and the app's workload token are checked on the
+**Tokens.** The end user's token and the app's workload token are checked on the
 request and none stored nor passed to the CLI. The service hands the CLI nothing
 derived from them either: not the subject, issuer, groups, client id, app name or
 run id, and not the capability, which it sends only to the app's MCP server. From

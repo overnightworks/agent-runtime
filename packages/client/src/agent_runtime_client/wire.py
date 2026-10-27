@@ -5,7 +5,7 @@ service (decision record 0001, H6): the request that starts a run, the run's
 event stream as a closed union discriminated on ``type`` with every event
 carrying the protocol version, the run id and its sequence number, and the
 typed body the service answers with when it refuses a request, the status
-body it answers ``GET /runs/{id}`` with, the two bodies of ``POST /job-tickets``, and the
+body it answers ``GET /runs/{id}`` with, and the
 offer ``GET /offer`` answers with.
 A new variant or a new field is a new ``PROTOCOL_VERSION``.
 
@@ -43,7 +43,6 @@ MAX_EVENT_BYTES: Final = 1_048_576
 MAX_TOOL_INPUT_DEPTH: Final = 128
 MAX_MESSAGE_LENGTH: Final = 500
 MAX_PURPOSE_LENGTH: Final = 64
-MAX_JOB_TICKET_SECONDS: Final = 86_400
 MODEL_PART_PATTERN: Final = re.compile(r"[a-z0-9.-]+")
 _MODEL_NAME_PATTERN: Final = re.compile(rf"[a-z0-9-]+/{MODEL_PART_PATTERN.pattern}")
 _PURPOSE_PATTERN: Final = re.compile(rf"[a-z][a-z0-9-]{{0,{MAX_PURPOSE_LENGTH - 1}}}")
@@ -367,20 +366,6 @@ class RunStatus(_WireModel):
         return self
 
 
-class JobTicketRequest(_WireModel):
-    """The HTTP body of ``POST /job-tickets``: the agent and how long the ticket lives."""
-
-    purpose: Purpose
-    expires_in_s: int = Field(ge=1, le=MAX_JOB_TICKET_SECONDS)
-
-
-class JobTicket(_WireModel):
-    """The HTTP body of a minted ticket; ``ticket`` is a bearer credential shown only here."""
-
-    ticket: NonEmptyUnicodeText = Field(repr=False)
-    expires_at: UtcInstant
-
-
 class OfferRoute(StrEnum):
     """The route an offered model would run on."""
 
@@ -397,8 +382,8 @@ class OfferReason(StrEnum):
 class OfferedModel(_StrictModel):
     """One entry of the offer, shaped like an entry of OpenAI's ``GET /v1/models``.
 
-    ``background`` says whether a job ticket's run gets this model on the same route as a live
-    run for this person.
+    ``background`` is ``false`` for every model: this service runs no job tickets. The field
+    stays so protocol 2 keeps its shape.
     """
 
     id: ModelName

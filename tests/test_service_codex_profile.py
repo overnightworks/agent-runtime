@@ -68,8 +68,6 @@ from test_service_cli_runner import (
     shown,
     status_of,
 )
-from test_service_ticket_runs import minted_ticket
-from ticket_run_support import running_service, ticket_headers
 
 import agent_runtime_service.cli_runner as cli_runner
 from agent_runtime.cli_run import RelayAccess
@@ -86,7 +84,6 @@ from agent_runtime_client.wire import (
 from agent_runtime_service.capability import Capability
 from agent_runtime_service.cli_runner import CliRunner, mcp_tls_context
 from agent_runtime_service.config import Provider, ServiceConfig
-from agent_runtime_service.routing import Api, Cli
 from agent_runtime_service.run_events import RUNNER_FAILED_MESSAGE
 from agent_runtime_service.run_liveness import LoopClock
 from agent_runtime_service.runners import AdmittedRun, Runners
@@ -155,7 +152,7 @@ def codex_document(
         "codex": {"binary": str(binary), "version": CODEX_PIN, "models": [CODEX_MODEL]},
     }
     document["profiles"] = {
-        CODEX_PROFILE: {"provider": "codex", "token_file": str(login_file), "background": True}
+        CODEX_PROFILE: {"provider": "codex", "token_file": str(login_file)}
     }
     return document
 
@@ -173,7 +170,6 @@ def with_claude_beside(
         CLI_PROFILE: {
             "provider": "claude",
             "token_file": str(process_token_file()),
-            "background": False,
             "default": not codex_is_default,
         },
         CODEX_PROFILE: codex,
@@ -485,33 +481,6 @@ def test_the_same_codex_request_without_tools_runs_even_for_an_app_with_a_tool_o
             "succeeded",
             "one",
         )
-
-
-SUBSCRIBER = (SUBSCRIPTION_GROUP, SONGMAKER_GROUP)
-
-
-@pytest.mark.parametrize(
-    ("codex_is_default", "groups", "route"),
-    [
-        pytest.param(True, SUBSCRIBER, Cli(CODEX_PROFILE), id="default-is-background"),
-        pytest.param(False, (*SUBSCRIBER, API_GROUP), Api("assistant-api"), id="api-fallback"),
-        pytest.param(False, SUBSCRIBER, None, id="not-enabled-without-api-rights"),
-    ],
-)
-def test_a_ticket_run_on_two_profiles_takes_only_the_background_one(
-    tmp_path: Path, codex_is_default: bool, groups: tuple[str, ...], route: Cli | Api | None
-) -> None:
-    config = a_config(a_document_with_both(tmp_path, codex_is_default=codex_is_default))
-    with running_service(config, MINT.fetch_key_set) as service:
-        ticket = minted_ticket(service.base_url, MINT, groups)
-
-        response = post_run(service.base_url, ticket_headers(MINT.workload(), ticket), run_body())
-
-        if route is None:
-            assert_rejected(response, RejectionCode.NOT_ENABLED, 403)
-        else:
-            assert response.status_code == 200
-            assert [run.route for run in (*service.admitted(), *service.api.admitted)] == [route]
 
 
 def test_a_codex_run_given_a_relay_is_refused_by_an_exception_not_an_assert(

@@ -62,11 +62,9 @@ runs on, never from the purpose. Every check precedes any child process.
 
 ```mermaid
 flowchart TB
-    request["POST /runs"] --> gate{"user in /apps/&lt;app&gt;<br/>or below?<br/>(a ticket: its groups at mint)"}
+    request["POST /runs"] --> gate{"user in /apps/&lt;app&gt;<br/>or below?"}
     gate -->|no| forbidden["403 forbidden"]
-    gate -->|yes| purpose{"a ticket's agent is<br/>the request's purpose?"}
-    purpose -->|no| forbidden
-    purpose -->|yes| role{"caller's role in<br/>request.roles?"}
+    gate -->|yes| role{"caller's role in<br/>request.roles?"}
     role -->|no| forbidden
     role -->|yes| tools{"tools named but app<br/>has no MCP origin?"}
     tools -->|yes| forbidden
@@ -75,7 +73,7 @@ flowchart TB
     subscription -->|yes| relay{"tools named, and the profile's<br/>provider has no relay yet?"}
     relay -->|yes| notenabled
     relay -->|no| slot{"CLI place free?"}
-    slot -->|yes| cli["CLI route<br/>the profile's provider under its profile<br/>(a ticket: only profiles with background = true)"]
+    slot -->|yes| cli["CLI route<br/>the profile's provider under its profile"]
     slot -->|no| busy["429 busy"]
     subscription -->|no| api{"API group member<br/>and route.api_alias set?"}
     api -->|yes| paid["API route<br/>buffered gateway rounds"]
@@ -89,8 +87,7 @@ flowchart TB
 *Question: which route serves this caller? Source:
 `agent_runtime_service.app._admitted`, `agent_runtime_service.routing.route`; `GET /offer`
 (`agent_runtime_service.offer`) is the second reader of `route`. The groups and models are
-operator configuration ([operations.md](operations.md)). A ticket run reads only the profiles
-marked `background = true`; the picture is otherwise the same.*
+operator configuration ([operations.md](operations.md)).*
 
 Keycloak decides who may use the subscription and who the paid route, through
 groups; the service holds no user list. A requested model is never replaced by
@@ -133,12 +130,6 @@ service's container ([host.md](host.md)).
   registered MCP origin. The request names the tools and their effects; the
   service signs a per-run capability that grants exactly those names, and the app
   verifies it with the public key ([wire.md](wire.md) has the details).
-- *A job ticket needs a live request.* The service mints one only for a request with both
-  tokens, signs it with the capability's key under its own type and audience, binds the app,
-  its workload client, the person, the agent, the expiry and the named groups, and stores
-  nothing. It also verifies one on `POST /runs` and `GET /runs/{id}` with the workload token,
-  and decides the run from the groups of mint time, not the live ones
-  ([wire.md](wire.md#job-tickets)).
 - *No credential in an app.* The subscription login is one file the operator
   names; an app that starts runs through the service holds none (the interim core
   path in [operations.md](operations.md) is the exception).

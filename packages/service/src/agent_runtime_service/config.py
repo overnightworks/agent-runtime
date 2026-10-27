@@ -361,7 +361,6 @@ class ProfileConfig(_Section):
 
     provider: Annotated[Provider, BeforeValidator(_text_only)]
     token_file: Annotated[Path, BeforeValidator(_sound_token_file)] | None = None
-    background: StrictBool
     default: StrictBool = False
 
 
@@ -478,17 +477,6 @@ def _refuse_an_origin_without_signing(document: object) -> None:
             )
 
 
-def _refuse_a_background_profile_without_signing(document: object) -> None:
-    if not isinstance(document, Mapping) or document.get("signing") is not None:
-        return
-    for name, table, _provider in _raw_profiles(document):
-        if _value(table, "background") is True:
-            raise ValueError(
-                f"profiles.{shown_text(name)}.background: true needs a [signing] section,"
-                " because a job ticket's run is verified with the signing key"
-            )
-
-
 def _declares_an_origin(app: object) -> bool:
     return _value(app, "mcp_origin") is not None
 
@@ -511,7 +499,6 @@ RULES_ON_THE_RAW_DOCUMENT: Final = (
     _refuse_a_served_profile_without_its_program_table,
     _refuse_two_profiles_without_exactly_one_default,
     _refuse_an_origin_without_signing,
-    _refuse_a_background_profile_without_signing,
     _refuse_an_origin_without_a_ca_bundle,
 )
 
@@ -615,10 +602,6 @@ class ServiceConfig(_Section):
     def profile_takes_tools(self, name: str) -> bool:
         """Whether the profile's provider has the tool relay attached."""
         return self.profiles[name].provider in RELAY_ATTACHED_PROVIDERS
-
-    def background_profiles(self) -> Mapping[str, ProfileConfig]:
-        """The profiles a job ticket's run may use: those marked ``background = true``."""
-        return {name: profile for name, profile in self.profiles.items() if profile.background}
 
     def mcp_trust_bundle(self) -> Path | None:
         """The CA bundle for the apps' MCP origins; ``None`` while no app declares an origin."""
