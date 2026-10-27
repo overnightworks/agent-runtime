@@ -24,6 +24,7 @@ from provider_test_support import (
     grok_tool_round_lines,
 )
 from service_support import (
+    LISTED_MODEL,
     SONGMAKER_TOOLS,
     ScriptedRunner,
     decoded_events,
@@ -78,7 +79,7 @@ def _streamed(runner: Runner | None, records: RunRecords | None = None) -> bytes
         app="songmaker",
         principal=Principal("https://keycloak.test/realms/agent-test", "user-alice"),
         request=RunRequest.model_validate(run_body(tools=SONGMAKER_TOOLS)),
-        route=Cli("claude-main"),
+        route=Cli("claude-main", LISTED_MODEL),
         capability=None,
     )
 

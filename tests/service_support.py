@@ -1035,7 +1035,7 @@ def alice_admitted_run(run_id: uuid.UUID) -> AdmittedRun:
         app="songmaker",
         principal=ALICE,
         request=RunRequest.model_validate(run_body(tools=SONGMAKER_TOOLS)),
-        route=Cli("claude-main"),
+        route=Cli("claude-main", LISTED_MODEL),
         capability=None,
     )
 
