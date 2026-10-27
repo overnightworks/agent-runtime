@@ -77,7 +77,7 @@ SUBSCRIPTION_GROUPS_LINE = (
 )
 
 VALID_CONFIG = f"""
-defaults = {{ model = "claude/sonnet" }}
+defaults = {{ model = "{Provider.CLAUDE}/sonnet" }}
 [identity]
 issuer = "https://keycloak.test/realms/agent-test"
 jwks_url = "https://keycloak.test/realms/agent-test/protocol/openid-connect/certs"

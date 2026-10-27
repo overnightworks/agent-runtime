@@ -17,9 +17,9 @@ non-dumpable at startup before it reads its configuration; it refuses to start
 otherwise. The restriction names the service only. The image must run it as a
 non-root user with `cap_drop: ALL`.
 
-`[defaults] model` is required. It names the model a run uses as `<provider>/<model>`;
-`model` may be set again in `[apps.<app>]` and in `[apps.<app>.agents.<purpose>]`, and the
-most specific level wins. Startup exits 2 and names the field (`defaults.model`,
+`[defaults] model` is required. It names a default model as `<provider>/<model>`;
+`model` may also be set in `[apps.<app>]` and in `[apps.<app>.agents.<purpose>]`. Startup exits
+2 and names the field (`defaults.model`,
 `apps.<app>.model` or `apps.<app>.agents.<purpose>.model`) for a name outside the wire's grammar
 or one that no `[cli.<provider>] models` lists. An installation without a `[cli]` table that
 lists its models therefore no longer starts; the paid route gets its own list with the paid-route

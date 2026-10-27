@@ -403,8 +403,8 @@ class AgentConfig(_Section):
 class AppConfig(_Section):
     """One app: its workload client, its MCP origin and the agents the operator names.
 
-    The app's tools and their effects arrive with each run request; its ``model``, when set,
-    replaces the default for the app's agents.
+    The app's tools and their effects arrive with each run request, and so does the model
+    it runs on; ``model``, when set, is validated at startup like the default.
     """
 
     workload_client: NonEmptyText

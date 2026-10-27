@@ -29,7 +29,7 @@ from agent_runtime_client.wire import AssistantText, Failed, FailureCode, Succee
 from agent_runtime_service import api_runner
 from agent_runtime_service.app import create_app
 from agent_runtime_service.cli import installed_runners
-from agent_runtime_service.config import ServiceConfig
+from agent_runtime_service.config import Provider, ServiceConfig
 from agent_runtime_service.run_liveness import LoopClock
 
 
@@ -331,6 +331,7 @@ def test_the_api_runner_is_installed_beside_the_cli_runner_and_the_offer_lists_t
     runners = installed_runners(config, None, LoopClock())
     assert runners.cli is not None
     assert runners.api is not None
+    assert installed_runners(service_config(), None, LoopClock()).api is None
 
     async def run():
         mint = TokenMint()
@@ -341,7 +342,7 @@ def test_the_api_runner_is_installed_beside_the_cli_runner_and_the_offer_lists_t
                 mint.workload(), mint.user(groups=[API_GROUP, SONGMAKER_GROUP])))
             assert response.status_code == 200
             assert [entry["id"] for entry in response.json()["data"]] == [
-                f"claude/{LISTED_MODEL}"
+                f"{Provider.CLAUDE}/{LISTED_MODEL}"
             ]
 
     asyncio.run(run())
@@ -548,7 +549,7 @@ def test_process_entry_installs_the_api_route_beside_the_probed_cli_program(
     import uvicorn
     from mcp_app_fake import TestAuthority
 
-    from agent_runtime_service import cli, cli_version
+    from agent_runtime_service import cli
     from agent_runtime_service import config as configuration
     from agent_runtime_service.config import McpConfig
 
@@ -558,7 +559,6 @@ def test_process_entry_installs_the_api_route_beside_the_probed_cli_program(
     fake_gateway(monkeypatch, lambda request: httpx.Response(200, json=answer()))
     monkeypatch.setattr(cli, "harden_process", lambda: None)
     monkeypatch.setattr(configuration, "load_config", lambda path: config)
-    monkeypatch.setattr(cli_version, "require_pinned_versions", lambda config: None)
     mint = TokenMint()
     original = create_app
     monkeypatch.setattr("agent_runtime_service.app.create_app", lambda config, **options: original(
