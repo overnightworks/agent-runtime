@@ -14,7 +14,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-import httpx
 import pytest
 import uvicorn
 from anchored_support import ChildCleanup
@@ -75,11 +74,8 @@ from agent_runtime.codex.run import CODEX_CLI_PROCESS_POOL
 from agent_runtime.config import reset_config
 from agent_runtime_client.wire import (
     FailureCode,
-    Offer,
-    OfferRoute,
     RejectionCode,
     Turn,
-    parse_offer,
 )
 from agent_runtime_service.capability import Capability
 from agent_runtime_service.cli_runner import CliRunner, mcp_tls_context
@@ -513,22 +509,6 @@ def test_no_run_adapter_factory_sees_the_admitted_run_or_its_capability() -> Non
     ]
 
     assert [t for t in annotations if t in (AdmittedRun, Capability)] == []
-
-
-def test_the_offer_lists_the_codex_model_on_the_subscription_route(
-    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    config, _capture = a_codex_service(tmp_path)
-
-    def scenario(base_url: str) -> bytes:
-        return httpx.get(f"{base_url}/offer", headers=headers()).content
-
-    offer = parse_offer(drive_over_http(child_cleanup, monkeypatch, config, scenario))
-
-    assert isinstance(offer, Offer)
-    assert [(m.id, m.route, m.ready, m.owned_by) for m in offer.data] == [
-        (f"codex/{CODEX_MODEL}", OfferRoute.CLI, True, "codex")
-    ]
 
 
 def test_a_run_with_no_model_goes_to_the_default_profile_and_a_named_model_to_its_own(

@@ -37,7 +37,7 @@ in this order for a person's run:
 
 1. The user must be a member of the app: one of their groups is `/apps/<app>` or
    a path below it (`/apps/notes-other` is not a member of `notes`). This holds
-   for `POST /runs`, `GET /runs/{id}` and `GET /offer`; anyone else gets 403 `forbidden`,
+   for `POST /runs` and `GET /runs/{id}`; anyone else gets 403 `forbidden`,
    before the body is read.
 2. Their role is `admin` in `/apps/<app>/admin` or below, else `user`; a
    request whose `roles` lacks it gets 403 `forbidden`.
@@ -100,7 +100,7 @@ fail `provider_unavailable`. To disable paid entitlement entirely, remove
 `api_groups`, `[route]` and `[api]` together; API-only callers then get
 `not_enabled`. A contradictory partial configuration is a startup error.
 The API route is installed beside the CLI program, whose `[cli.<provider>] models` the
-configuration must list; `/offer` lists those models. Gateway activation and paid testing require
+configuration must list. Gateway activation and paid testing require
 the operator's separate approval; this route's repository proof uses fakes.
 
 ## App tools

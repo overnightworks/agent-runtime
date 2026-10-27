@@ -1,9 +1,7 @@
 """The HTTP surface: ``POST /runs``, the one entrance through which an app starts a run,
-``GET /runs/{id}``, through which the app and user that started it read where it stands,
-and ``GET /offer``, which lists the models the asking person can run in this app
-(``agent_runtime_service.offer``).
+and ``GET /runs/{id}``, through which the app and user that started it read where it stands.
 
-All three routes check the two tokens first, with the same answers. ``POST /runs`` and
+Both routes check the two tokens first, with the same answers. ``POST /runs`` and
 ``GET /runs/{id}`` answer a request carrying an ``Agent-Job-Ticket`` header ``unauthorized``
 before any token is verified or the body is read; the header's value is never read. A
 ``POST`` is then checked in a fixed order, and the first failure answers:
@@ -59,7 +57,6 @@ from agent_runtime import lost_groups
 from agent_runtime_client.capability import MAX_CAPABILITY_CHARACTERS
 from agent_runtime_client.wire import (
     PROTOCOL_VERSION,
-    Offer,
     RejectionCode,
     RunRejection,
     RunRequest,
@@ -80,7 +77,6 @@ from agent_runtime_service.identity import (
     PersonCaller,
     build_verifier,
 )
-from agent_runtime_service.offer import offered_models
 from agent_runtime_service.quarantine import GroupConfirmation, Quarantine
 from agent_runtime_service.routing import Cli, NotEnabled, ServedRoute, route
 from agent_runtime_service.run_events import run_frames
@@ -171,7 +167,6 @@ def create_app(
         )
 
     app.get("/runs/{run_id}")(_run_status_route(callers, installed_records))
-    app.get("/offer")(_offer_route(callers, config, installed_runners))
 
     return app
 
@@ -357,27 +352,6 @@ def _run_status_route(
         )
 
     return run_status
-
-
-def _offer_route(
-    callers: CallerCheck, config: ServiceConfig, runners: Runners
-) -> Callable[[Request], Awaitable[Response]]:
-    async def offer(request: Request) -> Response:
-        caller = await _caller_of(callers, request)
-        if isinstance(caller, RejectionCode):
-            return rejection(caller)
-        body = Offer(
-            v=PROTOCOL_VERSION,
-            object="list",
-            data=list(offered_models(config, runners, caller.groups)),
-        )
-        return Response(
-            content=body.model_dump_json(),
-            media_type=_JSON_MEDIA_TYPE,
-            headers={"Cache-Control": "no-store"},
-        )
-
-    return offer
 
 
 def rejection(code: RejectionCode) -> Response:

@@ -10,6 +10,7 @@ service does not read them at admission yet.
 | Before (0.9.0) | Now |
 | --- | --- |
 | The configuration named no model | `[defaults] model = "<provider>/<model>"` is required; `model` is also accepted in `[apps.<app>]` and `[apps.<app>.agents.<purpose>]`. A missing default, a name outside the wire's grammar or a name that no `[cli.<provider>] models` lists stops startup with exit 2, and the refusal names `defaults.model`, `apps.<app>.model` or `apps.<app>.agents.<purpose>.model` ([operations.md](operations.md), "Starting the service"). |
+| `GET /offer` listed the models the asking person could run in the app; `agent_runtime_client.wire` carried `Offer`, `OfferedModel`, `OfferRoute`, `OfferReason` and `parse_offer` | Removed with no replacement: the route answers 404 and the five names are gone from `agent_runtime_client.wire`. The service configuration alone names the model, and an app neither chooses nor lists models. |
 | An installation without `[cli]`, or with `models = []`, started and sent every named model to the API route | It stops startup with exit 2, naming `defaults.model`, because the default must be listed by a `[cli.<provider>]` table. List the models in `[cli.<provider>] models`; the paid route gets its own list with the paid-route work (#463). |
 
 ## Migrating to 0.9.0

@@ -5,8 +5,7 @@ service (decision record 0001, H6): the request that starts a run, the run's
 event stream as a closed union discriminated on ``type`` with every event
 carrying the protocol version, the run id and its sequence number, and the
 typed body the service answers with when it refuses a request, the status
-body it answers ``GET /runs/{id}`` with, and the
-offer ``GET /offer`` answers with.
+body it answers ``GET /runs/{id}`` with.
 A new variant or a new field is a new ``PROTOCOL_VERSION``.
 
 Validation is strict, so the wire's JSON types are the contract: a sequence
@@ -32,7 +31,6 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
-    TypeAdapter,
     model_validator,
 )
 
@@ -364,61 +362,6 @@ class RunStatus(_WireModel):
         if (self.ended_at is None) != (self.state is RunState.RUNNING):
             raise ValueError("ended_at is set exactly when the run is over")
         return self
-
-
-class OfferRoute(StrEnum):
-    """The route an offered model would run on."""
-
-    CLI = "cli"
-    API = "api"
-
-
-class OfferReason(StrEnum):
-    """Why an offered model is not ready."""
-
-    NOT_BUILT = "not_built"
-
-
-class OfferedModel(_StrictModel):
-    """One entry of the offer, shaped like an entry of OpenAI's ``GET /v1/models``.
-
-    ``background`` is ``false`` for every model: this service runs no job tickets. The field
-    stays so protocol 2 keeps its shape.
-    """
-
-    id: ModelName
-    object: Literal["model"]
-    created: Annotated[Literal[0], BeforeValidator(_json_integer)]
-    owned_by: str
-    route: Annotated[OfferRoute, Field(strict=False)]
-    background: bool
-    ready: bool
-    reason: Annotated[OfferReason | None, Field(strict=False)]
-
-    @model_validator(mode="after")
-    def _reason_matches_readiness(self) -> Self:
-        if (self.reason is None) != self.ready:
-            raise ValueError("reason is set exactly when the model is not ready")
-        return self
-
-
-class Offer(_WireModel):
-    """The HTTP body of ``GET /offer``: the models this person can run in this app."""
-
-    object: Literal["list"]
-    data: list[OfferedModel]
-
-
-_OFFER_ANSWER: Final[TypeAdapter[Offer | RunRejection]] = TypeAdapter(Offer | RunRejection)
-
-
-def parse_offer(body: bytes | str) -> Offer | RunRejection:
-    """Read the body of ``GET /offer`` as the offer or as the service's refusal.
-
-    The two types share no field beyond ``v`` and both forbid extra fields, so the body
-    alone says which it is. A body that is neither raises ``ValidationError``.
-    """
-    return _OFFER_ANSWER.validate_json(body)
 
 
 class TurnRole(StrEnum):

@@ -12,7 +12,6 @@ from pydantic import ValidationError
 from service_support import (
     API_ALIAS,
     API_GROUP,
-    LISTED_MODEL,
     SONGMAKER_GROUP,
     TokenMint,
     decoded_events,
@@ -29,7 +28,7 @@ from agent_runtime_client.wire import AssistantText, Failed, FailureCode, Succee
 from agent_runtime_service import api_runner
 from agent_runtime_service.app import create_app
 from agent_runtime_service.cli import installed_runners
-from agent_runtime_service.config import Provider, ServiceConfig
+from agent_runtime_service.config import ServiceConfig
 from agent_runtime_service.run_liveness import LoopClock
 
 
@@ -324,28 +323,11 @@ def test_repeated_submissions_each_send_one_http_request(tmp_path, monkeypatch):
     assert decoded_events(first.content)[0].run_id != decoded_events(second.content)[0].run_id
 
 
-def test_the_api_runner_is_installed_beside_the_cli_runner_and_the_offer_lists_the_cli_models(
-    tmp_path,
-):
-    config = configured(tmp_path)
-    runners = installed_runners(config, None, LoopClock())
+def test_the_api_runner_is_installed_beside_the_cli_runner(tmp_path):
+    runners = installed_runners(configured(tmp_path), None, LoopClock())
     assert runners.cli is not None
     assert runners.api is not None
     assert installed_runners(service_config(), None, LoopClock()).api is None
-
-    async def run():
-        mint = TokenMint()
-        app = create_app(config, runners=runners, fetch_key_set=mint.fetch_key_set)
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
-                                     base_url="http://service") as client:
-            response = await client.get("/offer", headers=run_headers(
-                mint.workload(), mint.user(groups=[API_GROUP, SONGMAKER_GROUP])))
-            assert response.status_code == 200
-            assert [entry["id"] for entry in response.json()["data"]] == [
-                f"{Provider.CLAUDE}/{LISTED_MODEL}"
-            ]
-
-    asyncio.run(run())
 
 
 @pytest.mark.parametrize("ending", ["answer", "idle", "maximum", "disconnect"])
