@@ -236,8 +236,8 @@ ListedModel = Annotated[str, Field(strict=True), AfterValidator(_model_part_in_g
 class ProgramPin(_Section):
     """One provider's program, the exact version it must report and the models it serves.
 
-    ``models`` lists what this installation runs on the subscription; an empty list
-    lists nothing, so a named model then goes to the API route.
+    ``models`` lists what this installation runs on the subscription; a configured
+    model this list does not name stops startup.
     """
 
     binary: Annotated[Path, BeforeValidator(_program)]

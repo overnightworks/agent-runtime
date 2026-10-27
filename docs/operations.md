@@ -51,8 +51,7 @@ in this order for a person's run:
 4. `agent_runtime_service.routing.route` decides the route; the second picture in
    [ARCHITECTURE.md](ARCHITECTURE.md) owns the order. The keys that feed it: the
    subscription groups (`[identity]
-   subscription_groups`), the profiles (`[profiles.<name>]`), the names the
-   subscription lists (`[cli.<provider>] models`), and the API groups (`api_groups`,
+   subscription_groups`), the profiles (`[profiles.<name>]`), and the API groups (`api_groups`,
    set together with `[api]`). The app sends no model: admission takes the
    run's model from the configuration, the agent's `model` in
    `[apps.<app>.agents.<agent>]`, else the app's, else `[defaults] model`. A configured model whose
