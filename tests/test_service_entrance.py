@@ -52,8 +52,13 @@ from webauth.https_client import KeySetFetchError
 from webauth.jwt_verification import KEY_SET_REFRESH_COOLDOWN_SECONDS
 
 from agent_runtime.events import AssistantTextEvent, FinalEvent
-from agent_runtime_client.wire import PROTOCOL_VERSION as V
-from agent_runtime_client.wire import Failed, FailureCode, RejectionCode, RunRejection
+from agent_runtime_client.wire import (
+    PROTOCOL_VERSION,
+    Failed,
+    FailureCode,
+    RejectionCode,
+    RunRejection,
+)
 from agent_runtime_service.app import create_app, rejection
 from agent_runtime_service.config import load_config
 from agent_runtime_service.routing import Api, Cli
@@ -585,55 +590,46 @@ def _too_large() -> bytes:
     return json.dumps(run_body(turn={"system": "x" * MAX_REQUEST_BYTES, "messages": []})).encode()
 
 
+def _invalid_request(content: bytes, id: str):
+    return pytest.param(content, RejectionCode.INVALID_REQUEST, 422, id=id)
+
+
 BODY_REJECTIONS = [
-    pytest.param(b'{"v": 2, "purpose": NaN}', RejectionCode.INVALID_REQUEST, 422, id="nan"),
-    pytest.param(
-        json.dumps(run_body())[:-1].encode() + b', "purpose": "cowriter"}',
-        RejectionCode.INVALID_REQUEST,
-        422,
-        id="a-member-named-twice",
+    _invalid_request(
+        json.dumps(run_body())[:-1].encode() + b', "purpose": "cowriter"}', "a-member-named-twice"
     ),
-    pytest.param(b"[1]", RejectionCode.INVALID_REQUEST, 422, id="not-an-object"),
-    pytest.param(b'{"v": 2,', RejectionCode.INVALID_REQUEST, 422, id="not-json"),
-    pytest.param(_too_large(), RejectionCode.INVALID_REQUEST, 422, id="over-256-kib"),
+    _invalid_request(b"[1]", "not-an-object"),
+    _invalid_request(b'{"purpose":', "not-json"),
+    _invalid_request(_too_large(), "over-256-kib"),
     *(
-        pytest.param(
-            json.dumps(run_body()).encode(encoding),
-            RejectionCode.INVALID_REQUEST,
-            422,
-            id=encoding,
-        )
+        _invalid_request(json.dumps(run_body()).encode(encoding), encoding)
         for encoding in ("utf-16", "utf-16-le", "utf-32", "utf-32-be")
     ),
-    pytest.param(
-        json.dumps(run_body(turn={"system": "x", "messages": []})).encode(),
-        RejectionCode.INVALID_REQUEST,
-        422,
-        id="wrong-shape",
+    _invalid_request(
+        json.dumps(run_body(turn={"system": "x", "messages": []})).encode(), "wrong-shape"
     ),
     *(
         pytest.param(
-            json.dumps(run_body(v=v)).encode(), RejectionCode.UNSUPPORTED_VERSION, 400, id=i
+            json.dumps(run_body(v=version)).encode(),
+            RejectionCode.UNSUPPORTED_VERSION,
+            400,
+            id=label,
         )
-        for i, v in (
-            ("version-1", 1), ("older-version", 2), ("newer-version", V + 1),
-            ("version-as-a-numeric-string", str(V)), ("version-as-a-boolean", True),
-            ("version-as-a-float", float(V)),
+        for label, version in (
+            ("version-1", 1),
+            ("older-version", 2),
+            ("newer-version", PROTOCOL_VERSION + 1),
+            ("version-as-a-numeric-string", str(PROTOCOL_VERSION)),
+            ("version-as-a-boolean", True),
+            ("version-as-a-float", float(PROTOCOL_VERSION)),
         )
     ),
-    pytest.param(
+    _invalid_request(
         json.dumps({name: value for name, value in run_body().items() if name != "tools"}).encode(),
-        RejectionCode.INVALID_REQUEST,
-        422,
-        id="tools-omitted",
+        "tools-omitted",
     ),
     *(
-        pytest.param(
-            json.dumps(run_body(tools=tools)).encode(),
-            RejectionCode.INVALID_REQUEST,
-            422,
-            id=f"tools-{label}",
-        )
+        _invalid_request(json.dumps(run_body(tools=tools)).encode(), f"tools-{label}")
         for label, tools in (
             ("with-an-empty-name", {"": "read_only"}),
             ("with-an-unknown-effect", {"read_song": "write"}),
@@ -658,19 +654,18 @@ BODY_REJECTIONS = [
         400,
         id="no-version",
     ),
-    *(
-        pytest.param(b, RejectionCode.INVALID_REQUEST, 422, id=f"{n}-is-checked-before-the-version")
-        for n, b in (
-            ("strict-json", b'{"v": %d, "purpose": NaN}' % (V + 1)),
-            ("a-member-named-twice", b'{"v": %d, "v": %d}' % (V + 1, V + 1)),
-        )
+    _invalid_request(
+        b'{"v": %d, "v": %d}' % (PROTOCOL_VERSION + 1, PROTOCOL_VERSION + 1),
+        "a-member-named-twice-is-checked-before-the-version",
+    ),
+    _invalid_request(
+        b'{"purpose": NaN, "v": %d}' % (PROTOCOL_VERSION + 1),
+        "strict-json-is-checked-before-the-version",
     ),
     *(
-        pytest.param(
+        _invalid_request(
             json.dumps(run_body(purpose=purpose)).encode(),
-            RejectionCode.INVALID_REQUEST,
-            422,
-            id=f"purpose-outside-the-grammar-{purpose!r}",
+            f"purpose-outside-the-grammar-{purpose!r}",
         )
         for purpose in MALFORMED_PURPOSES
     ),
@@ -686,7 +681,7 @@ def test_a_body_that_is_not_an_allowed_run_request_is_refused(service, content, 
 
 def test_an_oversized_body_without_a_declared_length_is_refused_while_read(service):
     def chunks() -> Iterator[bytes]:
-        yield b'{"v": 2, "purpose": "'
+        yield b'{"purpose": "'
         for _ in range(MAX_REQUEST_BYTES // 1024 + 1):
             yield b"x" * 1024
         yield b'"}'

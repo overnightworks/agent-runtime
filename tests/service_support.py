@@ -1,9 +1,8 @@
 """Shared arrangement for the agent service's suites: config, tokens, runners, a socket.
 
-The service is built through ``create_app`` with the one injected seam the
-verifier offers, its key-set fetch, so every test drives the real token
-checks. Tokens minted here are signed by a throwaway RSA key whose key set the
-fetch serves; the Keycloak suite uses the real issuer's tokens instead.
+The service is built through ``create_app`` with the one injected seam the verifier offers, its
+key-set fetch, so every test drives the real token checks. Tokens minted here are signed by a
+throwaway RSA key whose key set the fetch serves; the Keycloak suite uses the real issuer's.
 """
 
 from __future__ import annotations
@@ -330,7 +329,8 @@ def run_body(**overrides: object) -> dict[str, Any]:
         "v": PROTOCOL_VERSION,
         "purpose": COWRITER,
         "turn": {"system": "You help write songs.", "messages": [{"role": "user", "text": "Hi"}]},
-        "roles": ["admin", "user"], "tools": {},
+        "roles": ["admin", "user"],
+        "tools": {},
         **overrides,
     }
 
