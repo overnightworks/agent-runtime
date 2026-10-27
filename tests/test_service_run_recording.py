@@ -21,8 +21,8 @@ import math
 import traceback
 import types
 import uuid
-from collections.abc import AsyncGenerator, AsyncIterator, Callable, Coroutine, Generator
-from contextlib import aclosing, asynccontextmanager
+from collections.abc import AsyncIterator, Callable, Coroutine, Generator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
@@ -30,7 +30,6 @@ from typing import Any
 import anyio
 import pytest
 from service_support import (
-    ALICE,
     CUT_BY_ITS_SCOPE,
     MOST_BUSY_TURNS_BEFORE_THE_RUN_NEVER_SETTLES,
     STRAY_CANCELLATION_CANARY,
@@ -43,7 +42,6 @@ from service_support import (
     StepClock,
     StrayCancelledRunner,
     TokenMint,
-    alice_admitted_run,
     client_leaves_mid_run,
     client_takes_nothing_until_dropped,
     closed_inside,
@@ -53,7 +51,6 @@ from service_support import (
     in_loop,
     instant,
     post_run,
-    quarantine_on,
     reaches_text,
     respond_through,
     respond_through_the_app,
@@ -86,10 +83,8 @@ from agent_runtime_client.wire import (
 from agent_runtime_service.app import create_app
 from agent_runtime_service.config import RunConfig
 from agent_runtime_service.identity import Principal
-from agent_runtime_service.run_events import run_frames
 from agent_runtime_service.run_liveness import (
     FailedPart,
-    LoopClock,
     RunFailures,
     RunStepCancelled,
     log_failure,
@@ -292,61 +287,6 @@ async def test_a_run_ended_by_the_idle_timeout_reads_running_until_its_runner_is
             events=9,
             at=130,
         )
-
-
-def _frames_of_a_run_without_a_runner(
-    records: RunRecords,
-) -> tuple[uuid.UUID, AsyncGenerator[bytes, None]]:
-    run_id = uuid.uuid4()
-    frames = run_frames(
-        alice_admitted_run(run_id),
-        None,
-        RunConfig(),
-        LoopClock(),
-        records,
-        quarantine=quarantine_on(),
-    )
-    return run_id, frames
-
-
-def test_a_run_without_a_runner_is_over_before_its_first_frame_is_handed_out():
-    records = RunRecords()
-
-    async def scenario() -> RunStatus | None:
-        run_id, frames = _frames_of_a_run_without_a_runner(records)
-        await anext(frames)
-        status = records.read(run_id, "songmaker", ALICE)
-        await frames.aclose()
-        return status
-
-    status = asyncio.run(scenario())
-
-    assert status is not None
-    assert (status.state, status.failure_code, status.events) == (
-        RunState.FAILED,
-        FailureCode.PROVIDER_UNAVAILABLE,
-        2,
-    )
-    assert status.client_lost is None
-
-
-def test_a_run_without_a_runner_closed_at_its_first_frame_keeps_its_ending_and_records_the_loss():
-    records = RunRecords()
-
-    async def scenario() -> RunStatus | None:
-        run_id, frames = _frames_of_a_run_without_a_runner(records)
-        await anext(frames)
-        await frames.aclose()
-        return records.read(run_id, "songmaker", ALICE)
-
-    status = asyncio.run(scenario())
-
-    assert status is not None
-    assert (status.state, status.failure_code, status.client_lost) == (
-        RunState.FAILED,
-        FailureCode.PROVIDER_UNAVAILABLE,
-        ClientLoss.DISCONNECTED,
-    )
 
 
 @pytest.mark.parametrize(
@@ -957,20 +897,6 @@ async def test_a_terminal_commit_that_breaks_ends_the_record_as_provider_error_w
         assert drive.types == ["run_started"]
         assert drive.runner.closes == 1
         assert not drive.slot_is_full()
-
-
-@in_loop
-async def test_a_run_without_a_runner_whose_terminal_commit_breaks_ends_its_record_failed():
-    clock = ClockBreaksOnce()
-    records = _RecordsWhoseClockBreaksAfterBegin(clock)
-    run_id, frames = _frames_of_a_run_without_a_runner(records)
-
-    with pytest.raises(RuntimeError, match=_CLOCK_BREAKS):
-        await anext(frames)
-
-    status = records.read(run_id, "songmaker", ALICE)
-    assert status is not None
-    assert (status.state, status.failure_code) == (RunState.FAILED, FailureCode.PROVIDER_ERROR)
 
 
 @in_loop
@@ -1821,12 +1747,11 @@ async def test_one_stray_cancellation_met_by_two_steps_of_a_close_propagates_onc
 
 @pytest.mark.parametrize("spec_version", ["2.3", "2.4"])
 @pytest.mark.parametrize(
-    ("records", "clock", "runners", "state", "lost"),
+    ("records", "clock", "state", "lost"),
     [
         pytest.param(
             lambda: _RecordsThatFail(frozenset({_Step.RECORD_END}), breaks=_cancelled_unasked),
             StepClock,
-            None,
             RunState.RUNNING,
             ClientLoss.DROPPED,
             id="record_end",
@@ -1834,33 +1759,22 @@ async def test_one_stray_cancellation_met_by_two_steps_of_a_close_propagates_onc
         pytest.param(
             _RecordsThatFail,
             lambda: BrokenClock(lambda: _cancelled_unasked(_Step.CLOCK)),
-            None,
             RunState.CANCELLED,
             ClientLoss.DROPPED,
             id="clock",
-        ),
-        pytest.param(
-            lambda: _RecordsThatFail(frozenset({_Step.RECORD_END}), breaks=_cancelled_unasked),
-            StepClock,
-            Runners,
-            RunState.RUNNING,
-            None,
-            id="no_runner-record_end",
         ),
     ],
 )
 @in_loop
 async def test_a_stray_cancellation_reaches_the_asgi_server_as_the_step_s_failure(
-    caplog, monkeypatch, spec_version, records, clock, runners, state, lost
+    caplog, monkeypatch, spec_version, records, clock, state, lost
 ):
     """A server below spec 2.4 swallows a ``CancelledError``; a stray one never travels as one."""
     caplog.set_level(logging.DEBUG)
     store = records()
     async with driven(clock=clock(), records=store, read=False) as drive:
         client = ClientSocket(spec_version=spec_version)
-        response = await respond_through_the_app(
-            drive, client, monkeypatch, runners=runners and runners()
-        )
+        response = await respond_through_the_app(drive, client, monkeypatch)
         await drive.clock.parked()
         drive.runner.release(FINAL)
         await asyncio.wait({response})
@@ -1995,49 +1909,36 @@ async def test_a_finished_task_of_a_run_is_shut_down_only_while_its_cancellation
 
 
 @pytest.mark.parametrize(
-    ("has_runner", "failing", "propagates", "logged"),
+    ("failing", "propagates", "logged"),
     [
-        pytest.param(True, frozenset(), "CancelledError", [], id="nothing-failed"),
+        pytest.param(frozenset(), "CancelledError", [], id="nothing-failed"),
         pytest.param(
-            True, frozenset({_Step.RECORD_END}), "_EndNotRecorded", [], id="the-record-end-failed"
+            frozenset({_Step.RECORD_END}), "_EndNotRecorded", [], id="the-record-end-failed"
         ),
         pytest.param(
-            True,
             frozenset({_Step.DISCONNECT_REPORT, _Step.RECORD_END}),
             "_DisconnectNotRecorded",
             [(_CLEANUP, "_EndNotRecorded")],
             id="both-cleanup-steps-failed",
         ),
-        pytest.param(
-            False,
-            frozenset({_Step.DISCONNECT_REPORT}),
-            "_DisconnectNotRecorded",
-            [],
-            id="no-runner-the-disconnect-report-failed",
-        ),
     ],
 )
 @in_loop
 async def test_a_cancellation_thrown_into_the_body_without_a_request_yields_to_a_failed_cleanup(
-    caplog, has_runner, failing, propagates, logged
+    caplog, failing, propagates, logged
 ):
     """Rule 14: the body's own ``CancelledError`` is its outcome; a cleanup failure outranks it."""
     caplog.set_level(logging.DEBUG)
     records = _RecordsThatFail(failing)
     async with _watched_loop() as unretrieved, driven(records=records, read=False) as drive:
-        run_id, frames = (
-            (drive.run_id, drive.frames)
-            if has_runner
-            else _frames_of_a_run_without_a_runner(records)
-        )
-        drive.took(await anext(frames))
+        drive.took(await anext(drive.frames))
         await drive.clock.parked()
-        closer = asyncio.create_task(frames.athrow(asyncio.CancelledError()))
+        closer = asyncio.create_task(drive.frames.athrow(asyncio.CancelledError()))
         await asyncio.wait({closer})
 
     assert _propagated(closer, delivered=False) == propagates
     assert [(event, kind) for event, kind, _raiser in failure_lines(caplog)] == [
-        (event.format(run_id), kind) for event, kind in logged
+        (event.format(drive.run_id), kind) for event, kind in logged
     ]
     assert unretrieved == []
     assert not [step for step in _Step if step.canary in caplog.text]
@@ -2068,111 +1969,6 @@ async def test_a_clock_failure_racing_the_close_is_logged_once_however_soon_the_
     ] * len(broken)
     assert unretrieved == []
     assert _Step.CLOCK.canary not in caplog.text
-
-
-class _NoRunnerClient(enum.Enum):
-    """What the client of a run without a runner does once it holds the first frame."""
-
-    READS = enum.auto()
-    CLOSES = enum.auto()
-    IS_CANCELLED = enum.auto()
-
-
-async def _take_a_run_without_a_runner(
-    frames: AsyncGenerator[bytes, None], does: _NoRunnerClient, taken: list[bytes]
-) -> None:
-    """Take the first frame, then act; the frames are closed on the way out, as a response does."""
-    async with aclosing(frames):
-        taken.append(await anext(frames))
-        match does:
-            case _NoRunnerClient.READS:
-                taken.extend([frame async for frame in frames])
-            case _NoRunnerClient.IS_CANCELLED:
-                await asyncio.Event().wait()
-
-
-@pytest.mark.parametrize(
-    ("failing", "does", "propagates", "frames", "logged"),
-    [
-        (frozenset(), _NoRunnerClient.READS, "returned", 2, []),
-        *(
-            (frozenset({_Step.RECORD_END, *also}), does, "_EndNotRecorded", 0, [])
-            for also in ((), (_Step.DISCONNECT_REPORT,))
-            for does in _NoRunnerClient
-        ),
-        (
-            frozenset({_Step.DISCONNECT_REPORT}),
-            _NoRunnerClient.CLOSES,
-            "_DisconnectNotRecorded",
-            1,
-            [],
-        ),
-        (
-            frozenset({_Step.DISCONNECT_REPORT}),
-            _NoRunnerClient.IS_CANCELLED,
-            "cancelled",
-            1,
-            [(_CLEANUP, "_DisconnectNotRecorded")],
-        ),
-    ],
-    ids=lambda value: (
-        "+".join(sorted(step.name.lower() for step in value)) or "nothing"
-        if isinstance(value, frozenset)
-        else None
-    ),
-)
-@in_loop
-async def test_a_run_without_a_runner_ends_its_record_before_it_hands_out_a_frame(
-    caplog, failing, does, propagates, frames, logged
-):
-    """A failed record end leaves no frame to hand out, so no cancellation can reach it."""
-    caplog.set_level(logging.DEBUG)
-    records = _RecordsThatFail(failing)
-    taken: list[bytes] = []
-    async with _watched_loop() as unretrieved:
-        run_id, run = _frames_of_a_run_without_a_runner(records)
-        client = asyncio.create_task(_take_a_run_without_a_runner(run, does, taken))
-        await asyncio.sleep(0)
-        delivered = does is _NoRunnerClient.IS_CANCELLED and client.cancel()
-        await asyncio.wait({client})
-
-    assert _propagated(client, delivered=delivered) == propagates
-    assert len(taken) == frames
-    assert [(event, kind) for event, kind, _raiser in failure_lines(caplog)] == [
-        (event.format(run_id), kind) for event, kind in logged
-    ]
-    assert unretrieved == []
-    assert not [step for step in _Step if step.canary in caplog.text]
-    status = records.read(run_id, "songmaker", ALICE)
-    assert status is not None
-    assert status.state is (RunState.RUNNING if _Step.RECORD_END in failing else RunState.FAILED)
-
-
-@pytest.mark.parametrize("spec_version", ["2.3", "2.4"])
-@in_loop
-async def test_a_response_without_a_runner_cancelled_in_its_first_send_is_cancelled(
-    caplog, monkeypatch, spec_version
-):
-    """The failed disconnect report is logged, and the response's cancellation still propagates."""
-    caplog.set_level(logging.DEBUG)
-    client = ClientSocket(spec_version=spec_version, blocks_the_first_chunk=True)
-    records = _RecordsThatFail(frozenset({_Step.DISCONNECT_REPORT}))
-    async with driven(records=records, read=False) as drive:
-        response = await respond_through_the_app(drive, client, monkeypatch, runners=Runners())
-        await drive.clock.parked()
-        response.cancel()
-        await asyncio.wait({response})
-
-    assert response.cancelled()
-    assert [(event, kind) for event, kind, _raiser in failure_lines(caplog)] == [
-        (_CLEANUP.format(records.started[0].run_id), "_DisconnectNotRecorded")
-    ]
-    status = drive.status(records.started[0].run_id)
-    assert status is not None
-    assert (status.state, status.failure_code) == (
-        RunState.FAILED,
-        FailureCode.PROVIDER_UNAVAILABLE,
-    )
 
 
 @in_loop

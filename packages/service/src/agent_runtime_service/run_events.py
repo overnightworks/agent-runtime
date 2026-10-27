@@ -84,7 +84,6 @@ from agent_runtime_service.runners import AdmittedRun, ApiUnavailable, Runner
 
 log = logging.getLogger(__name__)
 
-NO_RUNNER_MESSAGE: Final = "No provider can serve this route yet."
 RUNNER_FAILED_MESSAGE: Final = "The provider failed during the run."
 NO_ANSWER_MESSAGE: Final = "The provider ended the run without an answer."
 UNMAPPABLE_EVENT_MESSAGE: Final = "The provider sent an event the service cannot map."
@@ -123,7 +122,7 @@ _COMMIT_FAILED: Final = _DecidedFailure(FailureCode.PROVIDER_ERROR, RUNNER_FAILE
 
 async def run_frames(
     admitted: AdmittedRun,
-    runner: Runner | None,
+    runner: Runner,
     runs: RunConfig,
     clock: RunClock,
     records: RunRecords,
@@ -135,17 +134,6 @@ async def run_frames(
     failures = RunFailures(admitted.run_id)
     started = wire.started()
     started_at = clock()
-    if runner is None:
-        wire.decide_failure(FailureCode.PROVIDER_UNAVAILABLE, NO_RUNNER_MESSAGE)
-        with failures.leaving():
-            failures.attempt(FailedPart.CLEANUP, lambda: wire.commit_terminal(()))
-            failures.attempt(FailedPart.CLEANUP, lambda: wire.run_over(()))
-            if failures.met_any:
-                return
-            with _client_lost_when_closed(wire, failures):
-                yield started
-                yield wire.terminal_frame()
-        return
     events = runner.run(admitted)
     async with (
         SupervisedRun(admitted.run_id, wire, events, runs, clock, started_at, failures) as run,

@@ -395,21 +395,15 @@ async def test_buffered_http_keeps_heartbeats_and_closes_on_every_ending(
     assert asyncio.all_tasks() == {asyncio.current_task()}
 
 
-@pytest.mark.parametrize("backend", [False, True])
-def test_backend_absence_and_disabled_entitlement_are_distinct(tmp_path, monkeypatch, backend):
+def test_a_disabled_api_entitlement_is_refused_as_not_enabled(tmp_path):
     config = configured(tmp_path)
     fields = {name: getattr(config, name) for name in ServiceConfig.model_fields}
     fields["api"] = None
-    if not backend:
-        fields["identity"] = config.identity.model_copy(update={"api_groups": frozenset()})
-        fields["route"] = None
-    disabled = ServiceConfig.model_validate(fields)
-    response = asyncio.run(service_response(disabled))
-    if backend:
-        assert decoded_events(response.content)[-1].code is FailureCode.PROVIDER_UNAVAILABLE
-    else:
-        assert response.status_code == 403
-        assert response.json()["code"] == "not_enabled"
+    fields["identity"] = config.identity.model_copy(update={"api_groups": frozenset()})
+    fields["route"] = None
+    response = asyncio.run(service_response(ServiceConfig.model_validate(fields)))
+    assert response.status_code == 403
+    assert response.json()["code"] == "not_enabled"
 
 
 def test_api_requires_routing_and_valid_startup_credentials(tmp_path):

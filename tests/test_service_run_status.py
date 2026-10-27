@@ -24,6 +24,7 @@ from service_support import (
     instant,
     post_run,
     run_headers,
+    runners_that_start_no_run,
     served,
     service_config,
 )
@@ -92,7 +93,12 @@ def seeded() -> Seeded:
 
 @pytest.fixture(scope="module")
 def service(seeded: Seeded) -> Iterator[str]:
-    app = create_app(service_config(), records=seeded.records, fetch_key_set=MINT.fetch_key_set)
+    app = create_app(
+        service_config(),
+        runners=runners_that_start_no_run(),
+        records=seeded.records,
+        fetch_key_set=MINT.fetch_key_set,
+    )
     with served(app) as base_url:
         yield base_url
 
@@ -209,7 +215,12 @@ def test_an_unfetchable_key_set_answers_unavailable_for_every_id(seeded: Seeded)
     def unreachable_issuer(_url: str) -> bytes:
         raise KeySetFetchError("the issuer cannot be reached")
 
-    app = create_app(service_config(), records=seeded.records, fetch_key_set=unreachable_issuer)
+    app = create_app(
+        service_config(),
+        runners=runners_that_start_no_run(),
+        records=seeded.records,
+        fetch_key_set=unreachable_issuer,
+    )
     with served(app) as base_url:
         responses = [
             get_run(base_url, _alice(), segment)
@@ -256,7 +267,9 @@ def test_a_get_without_an_id_is_not_a_status_read(service):
 
 
 def test_a_second_app_over_the_same_configuration_remembers_nothing(seeded: Seeded):
-    restarted = create_app(service_config(), fetch_key_set=MINT.fetch_key_set)
+    restarted = create_app(
+        service_config(), runners=runners_that_start_no_run(), fetch_key_set=MINT.fetch_key_set
+    )
 
     with served(restarted) as base_url:
         response = get_run(base_url, _alice(), str(seeded.owned))

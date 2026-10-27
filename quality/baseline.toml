@@ -25,12 +25,12 @@
 "tests/test_procfs.py" = 838
 "tests/test_run_directories.py" = 852
 "tests/test_service_app_tools.py" = 1087
-"tests/test_service_capability.py" = 886
-"tests/test_service_cli_runner.py" = 1108
+"tests/test_service_capability.py" = 869
+"tests/test_service_cli_runner.py" = 1106
 "tests/test_service_cli_runner_tools.py" = 1717
 "tests/test_service_config.py" = 1632
 "tests/test_service_quarantine.py" = 870
-"tests/test_service_run_recording.py" = 2249
+"tests/test_service_run_recording.py" = 2045
 "tests/test_service_tool_relay.py" = 1309
 "tests/test_service_tool_relay_barrier.py" = 2010
 "tests/test_text_tool_protocol.py" = 888

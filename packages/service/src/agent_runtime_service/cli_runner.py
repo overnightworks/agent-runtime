@@ -105,7 +105,6 @@ RUN_ADAPTERS: Final[Mapping[Provider, AdapterFactory]] = {
 
 
 def _launches_of(config: ServiceConfig) -> Mapping[str, ProfileLaunch]:
-    assert config.cli is not None
     programs = config.cli.programs()
     launches = {}
     for name, profile in config.profiles.items():
@@ -135,7 +134,6 @@ class CliRunner:
     def __init__(
         self, config: ServiceConfig, *, tls_context: ssl.SSLContext | None, clock: RunClock
     ) -> None:
-        assert config.cli is not None
         self._working_root: PrivateWorkingRoot = config.cli.working_root
         self._launches = _launches_of(config)
         self._tls_context = tls_context

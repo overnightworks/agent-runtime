@@ -102,8 +102,7 @@ round is checked before releasing text or invoking granted MCP tools. The API ro
 uses the same tool-call and result acceptance barrier as the subscription route,
 without a CLI listener. Service supervision continues heartbeats and time limits
 while HTTP or tools wait. [The wire contract](wire.md#api-text-results) owns the
-round, privacy and acceptance rules. Without `[api]`, an admitted paid run ends
-`failed: provider_unavailable`. Credential selection and rotation are described in
+round, privacy and acceptance rules. Credential selection and rotation are described in
 [operations.md](operations.md#configure-the-api-text-route).
 
 ## Crosscutting concepts

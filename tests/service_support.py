@@ -748,6 +748,10 @@ class ScriptedRunner:
             yield event
 
 
+def runners_that_start_no_run() -> Runners:
+    return Runners(cli=ScriptedRunner([]))
+
+
 class _ReadyServer(uvicorn.Server):
     """A uvicorn server that says when its startup ended, or how the thread running it failed."""
 
@@ -1307,7 +1311,7 @@ def the_app_on(
 ) -> FastAPI:
     """The real app on the drive's runner, clock and store.
 
-    ``runners`` replace the drive's runner, as ``Runners()`` serves a run without one.
+    ``runners`` replace the drive's runner.
     ``config`` replaces the default one.
 
     The app builds its own quarantine on ``drive.clock`` with its own
@@ -1339,14 +1343,10 @@ async def respond_through(app: FastAPI, client: ClientSocket) -> asyncio.Task[No
 
 
 async def respond_through_the_app(
-    drive: Drive,
-    client: ClientSocket,
-    monkeypatch: pytest.MonkeyPatch,
-    runners: Runners | None = None,
-    config: ServiceConfig | None = None,
+    drive: Drive, client: ClientSocket, monkeypatch: pytest.MonkeyPatch
 ) -> asyncio.Task[None]:
     """Post a run to a fresh ``the_app_on`` the drive; its response task."""
-    return await respond_through(the_app_on(drive, monkeypatch, runners, config), client)
+    return await respond_through(the_app_on(drive, monkeypatch), client)
 
 
 async def status_through(app: FastAPI, run_id: uuid.UUID) -> RunStatus:
