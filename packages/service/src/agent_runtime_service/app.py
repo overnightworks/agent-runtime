@@ -219,7 +219,6 @@ def _admitted(
         config.profiles,
         caller.groups,
         model,
-        config.subscription_models(),
     )
     if isinstance(served, NotEnabled) or (
         isinstance(served, Cli)

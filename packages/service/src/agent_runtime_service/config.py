@@ -1,4 +1,4 @@
-"""The service's one configuration: identity, listener, the model, profiles, the route and apps.
+"""The service's one configuration: identity, listener, the model, profiles, the API and apps.
 
 The configuration names the model of every run at three levels: ``[defaults] model`` is
 required, and ``model`` may be set again in ``[apps.<app>]`` and in
@@ -8,8 +8,8 @@ startup refuses one that no ``[cli.<provider>]`` table lists in its ``models``.
 The service accepts at most one subscription profile per provider, for Claude and for Codex.
 Each needs its token file (a Claude setup token, or a Codex sign-in document) and a
 ``[cli.<provider>]`` table naming the absolute program, the exact version it must report and the
-models it serves, beside the ``[cli]`` section's private ``working_root``, checked at load. With
-two profiles exactly one is marked ``default = true``. An
+models it serves, beside the ``[cli]`` section's private ``working_root``, checked at load.
+``identity.api_groups`` and ``[api]`` come together. An
 app that offers tools names its one https MCP origin, and the service signs a capability for
 each run that grants the tools its request names; an origin is never shared between apps and
 needs the signing key. The ``[mcp]`` section names the one CA bundle (``ca_file``, an absolute
@@ -378,13 +378,6 @@ class ProfileConfig(_Section):
 
     provider: Annotated[Provider, BeforeValidator(_text_only)]
     token_file: Annotated[Path, BeforeValidator(_sound_token_file)] | None = None
-    default: StrictBool = False
-
-
-class RouteConfig(_Section):
-    """The paid route's alias (decision record 0001, H5)."""
-
-    api_alias: NonEmptyText
 
 
 class DefaultsConfig(_Section):
@@ -486,26 +479,6 @@ def _refuse_a_served_profile_without_its_program_table(document: object) -> None
             raise ValueError(f"cli.{provider}: required for a {provider} profile")
 
 
-def _refuse_two_profiles_without_exactly_one_default(document: object) -> None:
-    profiles = [(name, table) for name, table, _provider in _raw_profiles(document)]
-    if len(profiles) < 2:
-        return
-    defaults = [_value(table, "default") for _name, table in profiles]
-    if any(value is not None and not isinstance(value, bool) for value in defaults):
-        return
-    marked = [name for name, table in profiles if _value(table, "default") is True]
-    if not marked:
-        raise ValueError(
-            f"profiles.{shown_text(profiles[0][0])}.default:"
-            " one profile must be marked default = true"
-        )
-    if len(marked) > 1:
-        raise ValueError(
-            f"profiles.{shown_text(marked[1])}.default: only one profile may be marked"
-            f" default = true; {shown_text(marked[0])!r} is already"
-        )
-
-
 def _refuse_an_origin_without_signing(document: object) -> None:
     if not isinstance(document, Mapping) or document.get("signing") is not None:
         return
@@ -537,7 +510,6 @@ RULES_ON_THE_RAW_DOCUMENT: Final = (
     _refuse_a_profile_for_a_provider_without_a_route,
     _refuse_a_served_profile_without_its_token_file,
     _refuse_a_served_profile_without_its_program_table,
-    _refuse_two_profiles_without_exactly_one_default,
     _refuse_an_origin_without_signing,
     _refuse_an_origin_without_a_ca_bundle,
 )
@@ -553,7 +525,6 @@ class ServiceConfig(_Section):
     mcp: McpConfig | None = None
     signing: SigningConfig | None = None
     profiles: dict[NonEmptyText, ProfileConfig] = Field(default_factory=dict)
-    route: RouteConfig | None = None
     apps: dict[NonEmptyText, AppConfig]
     _admissions: dict[str, AdmissionConfig] = PrivateAttr(default_factory=dict)
 
@@ -564,13 +535,6 @@ class ServiceConfig(_Section):
         for refuse_if_broken in RULES_ON_THE_RAW_DOCUMENT:
             refuse_if_broken(document)
         return document
-
-    @model_validator(mode="after")
-    def _a_lone_profile_is_the_default(self) -> Self:
-        if len(self.profiles) == 1:
-            ((name, profile),) = self.profiles.items()
-            self.profiles[name] = profile.model_copy(update={"default": True})
-        return self
 
     @model_validator(mode="after")
     def _every_configured_model_is_listed_by_its_cli_table(self) -> Self:
@@ -598,18 +562,12 @@ class ServiceConfig(_Section):
                     yield f"{app_field}.agents.{shown_text(agent_name)}.model", agent.model
 
     @model_validator(mode="after")
-    def _api_groups_and_alias_come_together(self) -> Self:
-        if self.identity.api_groups and self.route is None:
-            raise ValueError("route.api_alias: required because identity.api_groups is set")
-        if self.route is not None and not self.identity.api_groups:
-            raise ValueError("identity.api_groups: required because route.api_alias is set")
-        return self
-
-    @model_validator(mode="after")
-    def _api_has_routing_and_credentials(self) -> Self:
+    def _api_groups_and_the_api_section_come_together(self) -> Self:
+        if self.identity.api_groups and self.api is None:
+            raise ValueError("api: required because identity.api_groups is set")
         if self.api is not None:
-            if self.route is None:
-                raise ValueError("api: requires identity.api_groups and route.api_alias")
+            if not self.identity.api_groups:
+                raise ValueError("identity.api_groups: required because [api] is set")
             read_api_credentials(self.api.credential_file, frozenset(self.apps))
         return self
 

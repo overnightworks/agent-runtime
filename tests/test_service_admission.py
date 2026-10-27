@@ -24,7 +24,6 @@ from service_support import (
     LONGEST_PURPOSE,
     SONGMAKER_GROUP,
     SUBSCRIPTION_GROUP,
-    UNLISTED_MODEL,
     ClientSocket,
     ScriptedConfirmation,
     ScriptedRunner,
@@ -32,7 +31,6 @@ from service_support import (
     TokenMint,
     alice_admitted_run,
     assert_rejected,
-    capable_service_config,
     decoded_events,
     in_loop,
     post_run,
@@ -46,6 +44,10 @@ from service_support import (
 )
 from starlette.requests import ClientDisconnect
 from test_service_capability import QUOTATION_MARKS_256, TUNED_AT_THE_LIMIT
+from test_service_codex_profile import (
+    UNPROFILED,
+    a_config_whose_codex_table_has_no_profile,
+)
 from webauth.https_client import KeySetFetchError
 
 from agent_runtime.errors import ContainmentLost, RetainedGroup
@@ -126,16 +128,16 @@ class _Service:
             _assert_streamed_to_a_terminal(self.let_go(run))
 
 
-UNLISTED_AGENT: Final = "unlisted-model-agent"
+UNPROFILED_AGENT: Final = "unprofiled-model-agent"
 
 
 def _serving(tmp_path, monkeypatch, runs: RunConfig) -> Iterator[_Service]:
     held = HeldRunner()
     api = ScriptedRunner(FINAL)
     signed = record_signed_tokens(monkeypatch)
-    config = capable_service_config(tmp_path)
+    config = a_config_whose_codex_table_has_no_profile(tmp_path)
     songmaker = config.apps["songmaker"].model_copy(
-        update={"agents": {UNLISTED_AGENT: AgentConfig(model=f"claude/{UNLISTED_MODEL}")}}
+        update={"agents": {UNPROFILED_AGENT: AgentConfig(model=UNPROFILED)}}
     )
     apps = {**config.apps, "songmaker": songmaker}
     config = config.model_copy(update={"runs": runs, "apps": apps})
@@ -247,23 +249,23 @@ def test_h9_a_listed_model_with_every_place_taken_gets_busy_and_no_api_run(servi
     service.let_all_go(held)
 
 
-def test_h10_an_unlisted_model_with_every_place_taken_goes_to_the_api_and_takes_no_place(service):
+def test_h10_a_model_without_a_profile_with_every_place_taken_goes_to_the_api(service):
     held = service.fill_the_places()
     both = MINT.user(groups=[SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP])
 
-    _assert_streamed_to_a_terminal(service.run(both, purpose=UNLISTED_AGENT))
+    _assert_streamed_to_a_terminal(service.run(both, purpose=UNPROFILED_AGENT))
 
     assert [(admitted.route, admitted.model) for admitted in service.api.admitted] == [
-        (Api(), f"claude/{UNLISTED_MODEL}")
+        (Api(), UNPROFILED)
     ]
     service.let_all_go(held)
 
 
-def test_h11_an_unlisted_model_for_a_subscription_member_is_not_enabled_even_when_full(service):
+def test_h11_a_model_without_a_profile_is_not_enabled_for_a_subscriber_even_when_full(service):
     held = service.fill_the_places()
     signed_before = len(service.signed)
 
-    refused = service.run(purpose=UNLISTED_AGENT)
+    refused = service.run(purpose=UNPROFILED_AGENT)
 
     assert_rejected(refused, RejectionCode.NOT_ENABLED, 403)
     assert len(service.signed) == signed_before

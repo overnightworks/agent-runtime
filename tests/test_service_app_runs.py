@@ -31,7 +31,6 @@ from service_support import (
     SONGMAKER_GROUP,
     SUBSCRIPTION_GROUP,
     TEST_ISSUER,
-    UNLISTED_MODEL,
     ScriptedRunner,
     TokenMint,
     WallClock,
@@ -45,6 +44,10 @@ from service_support import (
     service_config,
 )
 from test_service_admission import HeldRunner
+from test_service_codex_profile import (
+    UNPROFILED,
+    a_config_whose_codex_table_has_no_profile,
+)
 from test_service_config import VALID_CONFIG, _written, assert_startup_refuses
 from webauth.https_client import KeySetFetchError
 
@@ -61,7 +64,6 @@ CLI_SCRIPT = (AssistantTextEvent(text="via the CLI"), FinalEvent(text="CLI answe
 API_SCRIPT = (AssistantTextEvent(text="via the API"), FinalEvent(text="API answer"))
 SERVICE_ACCOUNT = f"service-account-user-of-{SONGMAKER_CLIENT}"
 LISTED = f"claude/{LISTED_MODEL}"
-UNLISTED = f"claude/{UNLISTED_MODEL}"
 ENABLED_COWRITER: Final = {COWRITER: {"runs_as_app": True}}
 UNKNOWN_RUN = "00000000-0000-4000-8000-000000000000"
 
@@ -388,18 +390,20 @@ def test_e5_the_roles_of_the_body_are_not_read_for_the_apps_own_run(service):
     ("groups", "app_model", "agent_model", "route", "model"),
     [
         pytest.param([SUBSCRIPTION_GROUP], None, None, Cli("claude-main"), LISTED, id="r1"),
-        pytest.param([API_GROUP], None, UNLISTED, Api(), UNLISTED, id="r2-the-agents-model"),
-        pytest.param([SUBSCRIPTION_GROUP, API_GROUP], UNLISTED, None, Api(), UNLISTED, id="r3-app"),
+        pytest.param([API_GROUP], None, UNPROFILED, Api(), UNPROFILED, id="r2-the-agents-model"),
         pytest.param(
-            [SUBSCRIPTION_GROUP, API_GROUP], UNLISTED, LISTED, Cli("claude-main"), LISTED,
+            [SUBSCRIPTION_GROUP, API_GROUP], UNPROFILED, None, Api(), UNPROFILED, id="r3-app"
+        ),
+        pytest.param(
+            [SUBSCRIPTION_GROUP, API_GROUP], UNPROFILED, LISTED, Cli("claude-main"), LISTED,
             id="r5-the-agent-over-the-app",
         ),
     ],
 )
 def test_r1_r2_r3_r5_the_route_and_model_come_from_the_service_account_and_the_configuration(
-    groups, app_model, agent_model, route, model
+    tmp_path, groups, app_model, agent_model, route, model
 ):
-    config = _config()
+    config = a_config_whose_codex_table_has_no_profile(tmp_path)
     songmaker = config.apps["songmaker"].model_copy(
         update={
             "model": app_model,

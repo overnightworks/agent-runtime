@@ -74,7 +74,7 @@ flowchart TB
     role -->|yes| tools{"tools named but app<br/>has no MCP origin?"}
     tools -->|yes| forbidden
     tools -->|no| model["the configured model:<br/>the agent's, else the app's,<br/>else the defaults"]
-    model --> subscription{"subscription group member,<br/>and a profile serves it?<br/>(a profile of the model's<br/>provider exists and<br/>[cli.&lt;provider&gt;] models lists it)"}
+    model --> subscription{"subscription group member,<br/>and a profile serves it?<br/>(a profile of the model's<br/>provider exists)"}
     subscription -->|yes| relay{"tools named, and the profile's<br/>provider has no relay yet?"}
     relay -->|yes| notenabled
     relay -->|no| slot{"CLI place free?"}
