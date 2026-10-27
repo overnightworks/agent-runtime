@@ -7,6 +7,10 @@ with exit status 2 and one line naming the reason; nothing is served. Otherwise 
 app with CLI and API runners installed independently from their sections. The CLI trusts the
 CA bundle ``[mcp] ca_file`` names for the apps' MCP origins, loaded only when an app declares
 one; a bundle that cannot be loaded ends the process the same way.
+
+``--check`` takes the same path as a start and returns 0 just before it would serve, so the
+check cannot drift from the start: it runs the same steps, in the same order, with the same
+refusals.
 """
 
 from __future__ import annotations
@@ -15,12 +19,15 @@ import argparse
 import logging
 import ssl
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 from agent_runtime_service.process_hardening import StartupHardeningRefused, harden_process
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from agent_runtime_service.config import ServiceConfig
     from agent_runtime_service.run_liveness import RunClock
     from agent_runtime_service.runners import Runners
@@ -58,15 +65,24 @@ def close_transport_loggers() -> None:
         logging.getLogger(name).setLevel(CLOSED_LOGGER_LEVEL)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog=PROGRAM_NAME, description=__doc__)
-    parser.add_argument("--config", type=Path, required=True, help="the service's TOML file")
-    arguments = parser.parse_args(argv)
+@dataclass(frozen=True)
+class PreparedStart:
+    """What a start has built once every refusal has been passed, just before serving."""
+
+    serve: Callable[[], None]
+
+
+def refuse(reason: str) -> int:
+    print(f"{REFUSAL_PREFIX}{reason}", file=sys.stderr)
+    return EXIT_BAD_CONFIG
+
+
+def prepared_start(config_path: Path) -> PreparedStart | int:
+    """Run every step of a start except serving; return the exit status 2 on the first refusal."""
     try:
         harden_process()
     except StartupHardeningRefused as error:
-        print(f"{REFUSAL_PREFIX}{error}", file=sys.stderr)
-        return EXIT_BAD_CONFIG
+        return refuse(str(error))
     # Imported only now: the application modules need Unix-only os constants at import, so
     # importing them first would crash a non-Linux start before the refusal line.
     import uvicorn
@@ -79,42 +95,50 @@ def main(argv: list[str] | None = None) -> int:
     from agent_runtime_service.run_liveness import LoopClock
 
     try:
-        config = load_config(arguments.config)
+        config = load_config(config_path)
     except ConfigError as error:
-        print(f"{REFUSAL_PREFIX}{error}", file=sys.stderr)
-        return EXIT_BAD_CONFIG
+        return refuse(str(error))
     try:
         if config.cli is not None:
             require_pinned_versions(config.cli)
     except ProgramVersionRefused as error:
-        print(
-            f"{REFUSAL_PREFIX}{shown_text(str(arguments.config))}: {error}",
-            file=sys.stderr,
-        )
-        return EXIT_BAD_CONFIG
+        return refuse(f"{shown_text(str(config_path))}: {error}")
     try:
         trust_bundle = config.mcp_trust_bundle()
         tls_context = None if trust_bundle is None else mcp_tls_context(trust_bundle)
     except OSError as error:
-        print(
-            f"{REFUSAL_PREFIX}mcp.ca_file: cannot be loaded: {shown_text(str(error))}",
-            file=sys.stderr,
-        )
-        return EXIT_BAD_CONFIG
+        return refuse(f"mcp.ca_file: cannot be loaded: {shown_text(str(error))}")
     try:
         runners = installed_runners(config, tls_context, LoopClock())
     except OSError as error:
-        print(
-            f"{REFUSAL_PREFIX}api.ca_file: cannot be loaded: {shown_text(str(error))}",
-            file=sys.stderr,
+        return refuse(f"api.ca_file: cannot be loaded: {shown_text(str(error))}")
+
+    def serve() -> None:
+        uvicorn.run(
+            create_app(config, runners=runners),
+            host=config.server.host,
+            port=config.server.port,
         )
-        return EXIT_BAD_CONFIG
-    close_transport_loggers()
-    uvicorn.run(
-        create_app(config, runners=runners),
-        host=config.server.host,
-        port=config.server.port,
+
+    return PreparedStart(serve=serve)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog=PROGRAM_NAME, description=__doc__)
+    parser.add_argument("--config", type=Path, required=True, help="the service's TOML file")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="run every step of a start except serving, then exit 0",
     )
+    arguments = parser.parse_args(argv)
+    start = prepared_start(arguments.config)
+    if isinstance(start, int):
+        return start
+    if arguments.check:
+        return 0
+    close_transport_loggers()
+    start.serve()
     return 0
 
 
