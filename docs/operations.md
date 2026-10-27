@@ -25,6 +25,11 @@ or one that no `[cli.<provider>] models` lists. An installation without a `[cli]
 lists its models therefore no longer starts; the paid route gets its own list with the paid-route
 work (#463).
 
+`agent-runtime-service --config PATH --check` runs every step of a start up to serving,
+including the configuration with its credential files, the pinned program versions and the
+CA bundles, and exits 0 without binding the port. Otherwise it prints the start's one
+refusal line and exits 2. Run it with the new image and file before stopping the old service.
+
 The configuration is read once; a restart applies a change. The signing key
 file, the Claude token file and any API credential file are read and checked with it.
 

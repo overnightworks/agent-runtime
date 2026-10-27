@@ -7,6 +7,10 @@ with exit status 2 and one line naming the reason; nothing is served. Otherwise 
 app with CLI and API runners installed independently from their sections. The CLI trusts the
 CA bundle ``[mcp] ca_file`` names for the apps' MCP origins, loaded only when an app declares
 one; a bundle that cannot be loaded ends the process the same way.
+
+``--check`` takes the same path as a start and returns 0 just before it would serve, so the
+check cannot drift from the start: it runs the same steps, in the same order, with the same
+refusals.
 """
 
 from __future__ import annotations
@@ -61,6 +65,11 @@ def close_transport_loggers() -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog=PROGRAM_NAME, description=__doc__)
     parser.add_argument("--config", type=Path, required=True, help="the service's TOML file")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="run every step of a start except serving, then exit 0",
+    )
     arguments = parser.parse_args(argv)
     try:
         harden_process()
@@ -109,6 +118,8 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return EXIT_BAD_CONFIG
+    if arguments.check:
+        return 0
     close_transport_loggers()
     uvicorn.run(
         create_app(config, runners=runners),
