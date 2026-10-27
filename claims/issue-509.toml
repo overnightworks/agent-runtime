@@ -1,0 +1,8 @@
+claim_id = "315632420708489f9bd0e085083d560f"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "900dde1e9a831431c83411a43efb862969d54b88"
+branch = "claude/issue-509-purpose-becomes-agent"
+scope = ["docs/ARCHITECTURE.md", "docs/MIGRATING.md", "docs/operations.md", "docs/wire.md", "packages/client/src/agent_runtime_client/agents.py", "packages/client/src/agent_runtime_client/capability.py", "packages/client/src/agent_runtime_client/wire.py", "packages/service/src/agent_runtime_service/__init__.py", "packages/service/src/agent_runtime_service/app.py", "packages/service/src/agent_runtime_service/capability.py", "packages/service/src/agent_runtime_service/config.py", "quality/baseline.toml", "tests/capability_support.py", "tests/mcp_server_support.py", "tests/service_support.py", "tests/test_agent_files.py", "tests/test_capability_claims.py", "tests/test_capability_verifier.py", "tests/test_service_admission.py", "tests/test_service_api_runner.py", "tests/test_service_app_gate.py", "tests/test_service_app_runs.py", "tests/test_service_capability.py", "tests/test_service_entrance.py", "tests/test_service_keycloak.py", "tests/test_service_routing.py", "tests/test_wire_protocol.py"]
+opened_commit = "528c67f6f950cd422430f194ef24cfe1fcfed688"
+whole_reason = "One renamed contract: the request field, the signed claim's issuer and its verifier, the types, their tests and docs say agent in one commit, or the service mints claims its own client refuses."
