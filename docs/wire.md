@@ -23,11 +23,11 @@ the operator enabled ([The app's own runs](#the-apps-own-runs)). `POST /runs` an
 `GET /runs/{id}` answer a request carrying an `Agent-Job-Ticket` header, even an empty one, with
 `401` before the body is read; the header's value is never read.
 
-`RunRequest`, wire version 2:
+`RunRequest`, wire version 3:
 
 | Field | Meaning |
 |---|---|
-| `v` | The protocol version, `2`. Any other body answers 400 `unsupported_version`. |
+| `v` | The protocol version, `3`. Any other body answers 400 `unsupported_version`. |
 | `purpose` | The agent's name, `[a-z][a-z0-9-]{0,63}`. It labels the run and its capability; it chooses no route and no model. |
 | `turn` | The system prompt and the messages (`Turn`, `TurnMessage`). |
 | `roles` | The agent's allowed roles, exactly `["admin"]` or `["admin", "user"]`; `AgentDefinition.request` fills it from the agent file. |

@@ -36,7 +36,7 @@ from pydantic import (
 
 from agent_runtime_client.tools import ToolEffect
 
-PROTOCOL_VERSION: Final = 2
+PROTOCOL_VERSION: Final = 3
 MAX_EVENT_BYTES: Final = 1_048_576
 MAX_TOOL_INPUT_DEPTH: Final = 128
 MAX_MESSAGE_LENGTH: Final = 500
@@ -95,7 +95,7 @@ def _json_integer(value: object) -> object:
     return value
 
 
-ProtocolVersion = Annotated[Literal[2], BeforeValidator(_json_integer)]
+ProtocolVersion = Annotated[Literal[3], BeforeValidator(_json_integer)]
 """The one decider of whether a ``v`` is the version this package speaks."""
 
 

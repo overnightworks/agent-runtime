@@ -63,6 +63,7 @@ from agent_runtime_client.run_stream import StreamViolation, ViolationKind
 from agent_runtime_client.sse import RunStreamDecoder
 from agent_runtime_client.wire import (
     MAX_PURPOSE_LENGTH,
+    PROTOCOL_VERSION,
     RejectionCode,
     RunEvent,
     RunRejection,
@@ -326,7 +327,7 @@ def capable_service_config(
 
 def run_body(**overrides: object) -> dict[str, Any]:
     return {
-        "v": 2,
+        "v": PROTOCOL_VERSION,
         "purpose": COWRITER,
         "turn": {"system": "You help write songs.", "messages": [{"role": "user", "text": "Hi"}]},
         "roles": ["admin", "user"],
