@@ -23,7 +23,9 @@ file, the Claude token file and any API credential file are read and checked wit
 ## Who may run what
 
 A caller presents a workload token bound to one registered app and a user token
-bound to one principal (`agent_runtime_service.identity`). The checks run in this order:
+bound to one principal (`agent_runtime_service.identity`); an app's own run, for an
+agent with `runs_as_app = true`, presents the workload token alone. The checks below run
+in this order for a person's run:
 
 1. The user must be a member of the app: one of their groups is `/apps/<app>` or
    a path below it (`/apps/notes-other` is not a member of `notes`). This holds

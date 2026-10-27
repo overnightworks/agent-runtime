@@ -70,7 +70,7 @@ to the app's own run. The checks run in this order and the first failure answers
 3. The app has an agent with `runs_as_app = true` in `[apps.<app>.agents.<purpose>]`, else 401
    before the body is read.
 4. The body is checked as for a person's run, and its `purpose` names such an agent, else 403
-   `forbidden`. The body's `roles` are not read.
+   `forbidden`. The body's `roles` must still be a valid list but is not read.
 5. The route is decided by the service from the groups of the workload token and the request's
    model, never named on the wire: no route group is 403 `not_enabled`, and a full subscription is
    429 `busy` without falling back.
@@ -95,7 +95,7 @@ and `reason`
 is `null` when `ready` is true and `not_built` when it is not (the route has no runner installed). `OfferReason` is
 closed; a new reason is a wire change, because a new variant is a new `PROTOCOL_VERSION`.
 
-The call has no body and carries the same two tokens as a live `POST /runs` (an `Agent-Job-Ticket` header is not examined), refused
+The call has no body and carries the same two tokens as a person's live `POST /runs`, the workload token and the user token (an `Agent-Job-Ticket` header is not examined), refused
 the same way (401, 403, 503). The app is the one the workload token names; a query parameter naming
 another app is ignored. Every member of the app may ask, not only admins, and the answer is for the
 asking person only: a member in no subscription or API group gets `200` with an empty `data`.

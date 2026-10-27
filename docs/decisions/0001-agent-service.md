@@ -5024,13 +5024,41 @@ own agent, with the service account as principal and no on-behalf-of caller.
   (`[identity] group_claim`), with the request's model. No route group is `not_enabled`, and a
   full subscription is `busy` without falling back to the paid route. The app sends no route and
   the configuration holds none per agent.
-- H12: what the app's credential alone can do. A stolen workload token (at most 300 s) starts runs
-  of the enabled agents until it expires; a stolen client secret mints new tokens until it is
-  rotated or the service account loses `agent-workload`. Per-run bounds are `[runs]`. On the CLI
-  route the app's runs share `max_parallel_cli_runs` with people; the API route's concurrency and
-  cost are #463 and H10b. The run is attributed to the service account, never to a person; the
-  durable audit line stays #18. Revoking a credential does not cancel an admitted run, and a
-  capability's `exp` is fixed at admission.
+- H12: what the app's credential alone can do (the operator's „ja“ ruled this text).
+
+  Today neither the client secret nor a workload access token can start a run. After this
+  amendment, for an app with an agent that runs as the app:
+  - **A stolen workload access token** (accepted only with `exp - iat <= 300`) starts any number
+    of runs of the enabled agents, with any prompt, until its `exp` plus `[identity]
+    leeway_seconds` (0 in the deployment today). It cannot mint new tokens.
+  - **A stolen client secret** mints fresh workload tokens for as long as the client is enabled
+    with that secret and its service account holds `agent-workload`. That is unbounded until
+    recovery. In the deployment today it is the same secret the app uses to sign people in.
+  - **Per run**, bounds are `[runs]`: `max_duration_s`, `max_tool_calls`, `max_bytes`. The
+    capability is valid until admission plus `max_duration_s`.
+  - **Concurrency.** On the CLI route, app runs share `max_parallel_cli_runs` with people: an
+    attacker can take every place, and the operator's own person-facing agent then gets `busy`
+    (no fallback). On the API route the service has no concurrency or count limit; cost is
+    bounded only by whatever the gateway enforces per app credential (#463, H10b; not built).
+  - **Attribution.** A run is attributed to the app's service account, never to a person. Run
+    records are in memory, at most 10,000 ended records, unavailable one hour after completion,
+    purged lazily; active records are outside that cap. There is no durable audit line (that is
+    #18) and no replay detection.
+
+  Recovery, and how far it reaches:
+  - Remove the service account from its route groups in Keycloak: new tokens get `not_enabled`;
+    issued tokens keep their groups until `exp` plus leeway.
+  - Remove `agent-workload` from the service account: same timing, and it also stops every
+    person run of that app.
+  - Rotate the client secret: stops minting; the client is shared, so the app redeploys with the
+    new secret; issued tokens survive until `exp` plus leeway.
+  - Set `runs_as_app = false` or remove the agent's table: an edge change and a restart. That is
+    an operational action, not a revocation.
+
+  Three things never to be read as one: credential revocation does not cancel an admitted run (no
+  introspection, no cancel route); a process restart is no defined cancellation guarantee (it
+  does lose every run record); a capability's `exp` is fixed at admission and independent of run
+  liveness.
 
 ## Out of scope at this size
 

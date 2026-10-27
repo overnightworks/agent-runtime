@@ -140,6 +140,11 @@ def _person(**user_claims: object) -> dict[str, str]:
     return run_headers(MINT.workload(), MINT.user(**user_claims))
 
 
+def _workload_of_lifetime(seconds: int) -> str:
+    issued_at = int(time.time())
+    return MINT.workload(groups=[SUBSCRIPTION_GROUP], iat=issued_at, exp=issued_at + seconds)
+
+
 def _expired_workload() -> str:
     now = int(time.time())
     return MINT.workload(iat=now - 400, exp=now - 100)
@@ -282,7 +287,7 @@ def test_w1_w2_a_missing_or_unverifiable_workload_token_is_unauthorized(service,
     "workload_token",
     [
         pytest.param(
-            lambda: MINT.workload(groups=[SUBSCRIPTION_GROUP], exp=int(time.time()) + 301),
+            lambda: _workload_of_lifetime(301),
             id="lifetime-over-300-seconds",
         ),
         pytest.param(

@@ -135,13 +135,21 @@ def own_agents_service(runners) -> Iterator[str]:
 
 
 def test_k1_a_real_client_credentials_token_alone_runs_an_enabled_agent_on_its_groups_route(
-    own_agents_service, runners
+    own_agents_service,
+    runners,
+    verify,  # noqa: F811 - the imported fixture
 ):
-    response = post_run(own_agents_service, run_headers(_songmaker_workload(), None))
+    workload_token = _songmaker_workload()
+    admitted_before = len(runners.api.admitted)
+
+    response = post_run(own_agents_service, run_headers(workload_token, None))
 
     assert response.status_code == 200, response.text
-    assert runners.api.admitted[-1].route == Api(API_ALIAS)
-    assert runners.api.admitted[-1].app == "songmaker"
+    (admitted,) = runners.api.admitted[admitted_before:]
+    claims = verify(workload_token)
+    assert admitted.route == Api(API_ALIAS)
+    assert admitted.app == "songmaker"
+    assert admitted.principal == Principal(str(claims["iss"]), str(claims["sub"]))
 
 
 def test_k2_a_real_token_of_a_service_account_in_no_route_group_is_not_enabled(own_agents_service):
