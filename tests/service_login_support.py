@@ -186,7 +186,7 @@ def the_signal_handlers_restored() -> Iterator[None]:
 
 
 @pytest.fixture(name="recorded_signals")
-def the_signals_received() -> Iterator[Callable[[], list[int]]]:
+def the_signals_received(restored_signal_handlers: None) -> Callable[[], list[int]]:
     """Recording handlers; the command must replace them before any signal arrives."""
     received: list[int] = []
 
@@ -195,7 +195,7 @@ def the_signals_received() -> Iterator[Callable[[], list[int]]]:
 
     for number in login.interrupt_signals():
         signal.signal(number, record)
-    yield lambda: received
+    return lambda: received
 
 
 def send(*numbers: int) -> None:
