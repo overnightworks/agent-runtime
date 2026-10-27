@@ -13,6 +13,7 @@ either; the wire stays version 2.
 | `POST /job-tickets` minted a job ticket | Removed: the route answers 404. `JobTicketRequest`, `JobTicket` and `MAX_JOB_TICKET_SECONDS` are gone from `agent_runtime_client.wire`. |
 | `POST /runs` and `GET /runs/{id}` took the `Agent-Job-Ticket` header in place of a user token | Both answer a request carrying the header, whatever its value, with `401 unauthorized` before the body is read. Send the workload token and the user token. |
 | `OfferedModel.background` said whether a ticket run got the model on the same route | The field stays and is always `false`. |
+| A run always needed a user token | `[apps.<app>.agents.<purpose>] runs_as_app` is new and optional (default `false`). A workload token alone, with no `Authorization` header, runs an agent whose table says `true`, as the app's service account and routed by that account's groups; for every other agent nothing changes. |
 
 ## Migrating to 0.8.0
 

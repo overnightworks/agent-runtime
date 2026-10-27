@@ -5002,6 +5002,36 @@ pinned a release without ticket code.
 - A run-time audit line for on-behalf-of work is no longer a gap on #445; its owner is #18.
 - H12's Context clause stands: an app must never assert a principal on its own.
 
+*Amendment (27.10.2026, #479, #489).* An app's own agent runs on the app's workload token alone.
+Authority: the operator's „ja“ (27.10.2026, #479 line 3) to "What the app's credential alone can
+do" below, and his words of 26.10.2026 in #479 that background work of an app runs as the app's
+own agent, with the service account as principal and no on-behalf-of caller.
+- The mental model's "two tokens — the end user's and its own" holds for a run that serves a
+  person. An app's own run carries the workload token alone.
+- H3's first bullet holds for a person's run. A request with neither `Authorization` nor
+  `Agent-Job-Ticket` is the app's own run: the workload token is verified and bound as before, and
+  the principal is `(iss, workload sub)`. Any `Authorization` header, even an empty or malformed
+  one, keeps the request on the person's path and never falls through; selection is by header
+  presence, not by the header's validity.
+- H3's amendment of #389: the static app registry gains `[apps.<app>.agents.<purpose>]
+  runs_as_app = true`, which names an agent that may run as its app. The run is admitted only for
+  such a pair, else 403 `forbidden`, and an app with no such agent answers 401 before the body is
+  read. The list is a tripwire: an aid that stops a cooperative app's person agent from silently
+  running as the app when it loses the user token. It cannot constrain a malicious app, because the
+  request carries the whole turn and the purpose is only a label. The boundary is the groups of the
+  app's service account in Keycloak.
+- H5: the app's own run is routed by the same `route` from the groups its workload token carries
+  (`[identity] group_claim`), with the request's model. No route group is `not_enabled`, and a
+  full subscription is `busy` without falling back to the paid route. The app sends no route and
+  the configuration holds none per agent.
+- H12: what the app's credential alone can do. A stolen workload token (at most 300 s) starts runs
+  of the enabled agents until it expires; a stolen client secret mints new tokens until it is
+  rotated or the service account loses `agent-workload`. Per-run bounds are `[runs]`. On the CLI
+  route the app's runs share `max_parallel_cli_runs` with people; the API route's concurrency and
+  cost are #463 and H10b. The run is attributed to the service account, never to a person; the
+  durable audit line stays #18. Revoking a credential does not cancel an admitted run, and a
+  capability's `exp` is fixed at admission.
+
 ## Out of scope at this size
 
 - arbitrary MCP endpoints and dynamic discovery;

@@ -16,10 +16,12 @@ operator's configuration ([operations.md](operations.md)).
 
 `POST /runs` takes a `RunRequest` and answers with the run's event stream
 (SSE), ending every run with exactly one terminal event except the cut stream
-of a dropped client. A call carries two tokens: the end user's, and the app's
-workload token in the `Agent-Workload-Token` header. `POST /runs` and `GET /runs/{id}` answer a
-request carrying an `Agent-Job-Ticket` header, even an empty one, with `401` before the body is
-read; the header's value is never read.
+of a dropped client. A call carries the app's workload token in the `Agent-Workload-Token`
+header, and the end user's token in `Authorization` when the run serves a person. A call with
+neither `Authorization` nor `Agent-Job-Ticket` is the app's own run, admitted only for an agent
+the operator enabled ([The app's own runs](#the-apps-own-runs)). `POST /runs` and
+`GET /runs/{id}` answer a request carrying an `Agent-Job-Ticket` header, even an empty one, with
+`401` before the body is read; the header's value is never read.
 
 `RunRequest`, wire version 2:
 
@@ -33,7 +35,7 @@ read; the header's value is never read.
 | `model` | Optional, `<provider>/<model>` such as `claude/sonnet`. |
 
 `GET /runs/{id}` returns the run's `RunStatus`, readable only by the app and
-user that started it ([What a run keeps](#what-a-run-keeps) says what the record holds).
+user that started it, or for the app's own run by that app with its workload token alone ([What a run keeps](#what-a-run-keeps) says what the record holds).
 
 The stream's events are `run_started`, `assistant_text`, `tool_call`,
 `tool_result`, `heartbeat` and one terminal event: `succeeded`, `failed`
@@ -45,8 +47,8 @@ A request the service refuses answers a `RunRejection` with one `RejectionCode`:
 
 | Code | Status | Meaning |
 |---|---|---|
-| `unauthorized` | 401 | A workload token and a user token are required and must be valid; an `Agent-Job-Ticket` header on `POST /runs` or `GET /runs/{id}` is refused too. |
-| `forbidden` | 403 | The user is no member of the app, the request's `roles` lack the caller's role, the request names a tool while the app has no MCP origin, the two tokens do not belong together (`agent_runtime_service.identity` lists every cause). |
+| `unauthorized` | 401 | A workload token is required, and a user token unless the app runs one of its own agents; every token sent must be valid. An `Agent-Job-Ticket` header on `POST /runs` or `GET /runs/{id}` is refused too. |
+| `forbidden` | 403 | The user is no member of the app, the request's `roles` lack the caller's role, the request names a tool while the app has no MCP origin, the two tokens do not belong together (`agent_runtime_service.identity` lists every cause), or a run without a user token names an agent the app may not run as itself. |
 | `not_enabled` | 403 | No route is enabled for this caller and model, the run names tools and the chosen subscription profile's provider cannot take tools yet. |
 | `unsupported_version` | 400 | `v` is not 2. |
 | `invalid_request` | 422 | The body is not a valid request for the route. |
@@ -54,6 +56,32 @@ A request the service refuses answers a `RunRejection` with one `RejectionCode`:
 | `busy` | 429 | The subscription route's places are taken; `Retry-After` is set and the run never falls back to the paid route. |
 | `unavailable` | 503 | The service cannot check tokens right now. |
 | `not_found` | 404 | No such run, or not yours. |
+
+## The app's own runs
+
+A request with a valid workload token and neither `Authorization` nor `Agent-Job-Ticket` is the
+app's own run. Selection is by header presence: any `Authorization` header, even an empty or
+malformed one, is the person's path and answers its own errors, and the request never falls through
+to the app's own run. The checks run in this order and the first failure answers:
+
+1. The workload token is verified (401, or 503 when the key set is unreachable) and bound to its
+   registered app as for a person's run (403).
+2. Its `sub` is valid Unicode text, and its group claim, if present, is a list of strings (401).
+3. The app has an agent with `runs_as_app = true` in `[apps.<app>.agents.<purpose>]`, else 401
+   before the body is read.
+4. The body is checked as for a person's run, and its `purpose` names such an agent, else 403
+   `forbidden`. The body's `roles` are not read.
+5. The route is decided by the service from the groups of the workload token and the request's
+   model, never named on the wire: no route group is 403 `not_enabled`, and a full subscription is
+   429 `busy` without falling back.
+
+The principal is the app's service account, `(iss, workload sub)`, and so is the run's owner with
+the app: the capability names it as the principal like a person's, and `GET /runs/{id}` with the
+workload token alone reads exactly the app's own runs. `GET /offer` still takes both tokens.
+
+The list of enabled agents is a tripwire for a cooperative app, not a boundary against a malicious
+one: the request carries the whole turn and the purpose is only a label. The boundary is the
+Keycloak groups of the app's service account ([operations.md](operations.md#who-may-run-what)).
 
 ## The offer
 
