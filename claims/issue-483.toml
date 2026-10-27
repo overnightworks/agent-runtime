@@ -3,6 +3,6 @@ agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
 role = "builder"
 base = "78710df43db978fe50d55b6fc5258f6c1316303d"
 branch = "claude/issue-483-service-login-from-stdin"
-scope = [".github/workflows/ci.yml", "docs/operations.md", "packages/service/pyproject.toml", "packages/service/src/agent_runtime_service/config.py", "packages/service/src/agent_runtime_service/login.py", "packages/service/src/agent_runtime_service/login_file.py", "scripts/replace_token_file.py", "tests/test_replace_token_file_script.py", "tests/test_service_login.py"]
+scope = [".github/workflows/ci.yml", "docs/operations.md", "packages/service/pyproject.toml", "packages/service/src/agent_runtime_service/config.py", "packages/service/src/agent_runtime_service/login.py", "packages/service/src/agent_runtime_service/login_file.py", "scripts/replace_token_file.py", "src/agent_runtime/secret_file.py", "tests/service_login_support.py", "tests/test_replace_token_file_script.py", "tests/test_service_login.py", "tests/test_service_login_file.py"]
 opened_commit = "d3c191d0ea3043f3f8d5934ff4cf8d6e71eb40ea"
 whole_reason = "One vertical installer: the config load without logins, the bounded stdin read, the one login writer with its commit point and confirmed sibling report, --check, the console script and its wheel proof, the predecessor script's removal and the operator's paragraph; split, the writer would have no caller but tests or a script the next slice deletes."
