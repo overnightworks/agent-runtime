@@ -9,7 +9,7 @@ The service accepts at most one subscription profile per provider, for Claude an
 Each needs its token file (a Claude setup token, or a Codex sign-in document) and a
 ``[cli.<provider>]`` table naming the absolute program, the exact version it must report and the
 models it serves, beside the ``[cli]`` section's private ``working_root``, checked at load. With
-two profiles exactly one is marked ``default = true``: it serves a run that names no model. An
+two profiles exactly one is marked ``default = true``. An
 app that offers tools names its one https MCP origin, and the service signs a capability for
 each run that grants the tools its request names; an origin is never shared between apps and
 needs the signing key. The ``[mcp]`` section names the one CA bundle (``ca_file``, an absolute
@@ -403,8 +403,8 @@ class AgentConfig(_Section):
 class AppConfig(_Section):
     """One app: its workload client, its MCP origin and the agents the operator names.
 
-    The app's tools and their effects arrive with each run request, and so does the model
-    it runs on; ``model``, when set, is validated at startup like the default.
+    The app's tools and their effects arrive with each run request; ``model``, when set, is the
+    model of the app's runs and is validated at startup like the default.
     """
 
     workload_client: NonEmptyText
@@ -651,6 +651,14 @@ class ServiceConfig(_Section):
                     f"{shown_text(str(error))}"
                 ) from error
         return self
+
+    def model_for(self, app_name: str, purpose: str) -> ModelName:
+        """The model of the app's run of ``purpose``: the agent's, else the app's, else defaults."""
+        app = self.apps[app_name]
+        agent = app.agents.get(purpose)
+        if agent is not None and agent.model is not None:
+            return agent.model
+        return app.model if app.model is not None else self.defaults.model
 
     def capability_scope(self, app_name: str, tools: Iterable[str]) -> CapabilityScope | None:
         """What the app's capability is bound to, granting exactly ``tools`` sorted."""

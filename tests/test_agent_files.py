@@ -26,7 +26,6 @@ def agent_text(
     name: str = "notes-assistant",
     description: str | None = "Helps with notes",
     tools: str | None = "[read_note, edit_note]",
-    model: str | None = "claude/sonnet",
     roles: str | None = "[admin, user]",
     extra: str = "",
     body: str = PROMPT,
@@ -36,8 +35,6 @@ def agent_text(
         lines.append(f"description: {description}")
     if tools is not None:
         lines.append(f"tools: {tools}")
-    if model is not None:
-        lines.append(f"model: {model}")
     if roles is not None:
         lines.append(f"appRoles: {roles}")
     if extra:
@@ -77,18 +74,16 @@ def test_full_file_loads_with_tools_in_file_order(tmp_path: Path) -> None:
 
     assert agent.name == "notes-assistant"
     assert agent.description == "Helps with notes"
-    assert agent.model == "claude/sonnet"
     assert agent.roles == ["admin", "user"]
     assert agent.tools == (EDIT_NOTE, READ_NOTE)
     assert agent.tools[1].effect is ToolEffect.READ_ONLY
     assert agent.prompt == PROMPT
 
 
-def test_minimal_file_has_no_tools_and_no_model(tmp_path: Path) -> None:
-    agent = load(tmp_path, agent_text(tools=None, model=None, roles="[admin]"))
+def test_minimal_file_has_no_tools(tmp_path: Path) -> None:
+    agent = load(tmp_path, agent_text(tools=None, roles="[admin]"))
 
     assert agent.tools == ()
-    assert agent.model is None
 
 
 @pytest.mark.parametrize(
@@ -213,18 +208,11 @@ def test_bytes_that_are_not_utf8_are_refused(tmp_path: Path) -> None:
         load_agent(path, DECLARATIONS)
 
 
-@pytest.mark.parametrize("model", ["claude/sonnet", "xai/grok-4.6", "openai/gpt-6-astra"])
-def test_model_in_the_grammar_is_accepted(tmp_path: Path, model: str) -> None:
-    assert load(tmp_path, agent_text(model=model)).model == model
-
-
-@pytest.mark.parametrize(
-    "model", ["claude/sonnet@2", "'claude/sonnet:1'", "Claude/Sonnet", "sonnet", "''", "null", ""]
-)
-def test_model_outside_the_grammar_or_without_a_value_is_refused(
+@pytest.mark.parametrize("model", ["claude/sonnet", "null", "''", ""])
+def test_a_model_key_is_refused_and_named_because_the_configuration_owns_the_model(
     tmp_path: Path, model: str
 ) -> None:
-    path = write(tmp_path, agent_text(model=model))
+    path = write(tmp_path, agent_text(extra=f"model: {model}"))
 
     with pytest.raises(AgentFileError, match="model"):
         load_agent(path, DECLARATIONS)
@@ -246,7 +234,6 @@ def test_missing_empty_or_multiline_description_is_refused(
         ("name: notes-assistant\nname: notes-assistant", "name"),
         ("appRoles: [admin]\nappRoles: [admin, user]", "appRoles"),
         ("tools: []\ntools: [edit_note]", "tools"),
-        ("model: claude/sonnet\nmodel: claude/opus", "model"),
         ("tools:\n  - read_note\ntools: [edit_note]", "tools"),
     ],
 )
@@ -337,10 +324,10 @@ def test_control_character_inside_quotes_is_refused_not_normalized(
     [
         {"extra": "description: sentinelvalue"},
         {"extra": "description: 'sentinelvalue"},
-        {"model": "sentinelvalue"},
+        {"extra": "model: sentinelvalue"},
         {"description": "[sentinelvalue]"},
     ],
-    ids=["duplicate-key", "syntax-error", "invalid-model", "non-string-description"],
+    ids=["duplicate-key", "syntax-error", "model-key", "non-string-description"],
 )
 def test_formatted_traceback_does_not_show_file_values(
     tmp_path: Path, fields: dict[str, str]
@@ -452,22 +439,7 @@ def test_request_is_the_current_protocol_body_with_purpose_prompt_and_tool_effec
         "read_note": ToolEffect.READ_ONLY,
         "edit_note": ToolEffect.SIDE_EFFECTING,
     }
-    assert set(request.model_dump()) == {"v", "purpose", "model", "turn", "roles", "tools"}
-
-
-@pytest.mark.parametrize(
-    ("model_line", "model"),
-    [
-        pytest.param("claude/sonnet", "claude/sonnet", id="A1-the-files-model"),
-        pytest.param(None, None, id="A2-no-model"),
-    ],
-)
-def test_request_carries_the_files_model_or_none(
-    tmp_path: Path, model_line: str | None, model: str | None
-) -> None:
-    agent = load(tmp_path, agent_text(model=model_line))
-
-    assert agent.request([TurnMessage(role=TurnRole.USER, text="hi")]).model == model
+    assert set(request.model_dump()) == {"v", "purpose", "turn", "roles", "tools"}
 
 
 @pytest.mark.parametrize("roles", ["[admin]", "[admin, user]"])

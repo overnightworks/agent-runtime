@@ -57,8 +57,9 @@ maps it onto the wire.
 
 ## How a run is routed
 
-The service decides the route from the caller's groups and the model the agent
-runs on, never from the purpose. Every check precedes any child process.
+The service decides the route from the caller's groups and the model the
+configuration names for the agent, never from the purpose and never from the request. Every
+check precedes any child process.
 
 ```mermaid
 flowchart TB
@@ -72,14 +73,14 @@ flowchart TB
     role -->|no| forbidden
     role -->|yes| tools{"tools named but app<br/>has no MCP origin?"}
     tools -->|yes| forbidden
-    tools -->|no| model["the request's model,<br/>or none"]
-    model --> subscription{"subscription group member,<br/>and a profile serves it?<br/>(no model asked: the default profile;<br/>model asked: a profile of that<br/>provider exists and<br/>[cli.&lt;provider&gt;] models lists it)"}
+    tools -->|no| model["the configured model:<br/>the agent's, else the app's,<br/>else the defaults"]
+    model --> subscription{"subscription group member,<br/>and a profile serves it?<br/>(a profile of the model's<br/>provider exists and<br/>[cli.&lt;provider&gt;] models lists it)"}
     subscription -->|yes| relay{"tools named, and the profile's<br/>provider has no relay yet?"}
     relay -->|yes| notenabled
     relay -->|no| slot{"CLI place free?"}
     slot -->|yes| cli["CLI route<br/>the profile's provider under its profile"]
     slot -->|no| busy["429 busy"]
-    subscription -->|no| api{"API group member<br/>and route.api_alias set?"}
+    subscription -->|no| api{"API group member?"}
     api -->|yes| paid["API route<br/>buffered gateway rounds"]
     api -->|no| notenabled["403 not_enabled"]
     cli --> size{"app has an MCP origin and<br/>capability over 8,192 characters?"}
@@ -94,9 +95,9 @@ operator configuration ([operations.md](operations.md)). An app's own run is rou
 groups its workload token carries.*
 
 Keycloak decides who may use the subscription and who the paid route, through
-groups of a person, or for an app's own run of its service account; the service holds no user list. A requested model is never replaced by
-another. The independently installed API runner sends the selected model (or
-configured alias) through the core's OpenAI-compatible conversation adapter. Each
+groups of a person, or for an app's own run of its service account; the service holds no user list. The configured model is never replaced by
+another. The independently installed API runner sends the configured full
+`<provider>/<model>` name through the core's OpenAI-compatible conversation adapter. Each
 round is checked before releasing text or invoking granted MCP tools. The API route
 uses the same tool-call and result acceptance barrier as the subscription route,
 without a CLI listener. Service supervision continues heartbeats and time limits
@@ -127,8 +128,8 @@ service's container ([host.md](host.md)).
 - *The service decides, the browser supplies nothing.* The user's browser reaches
   the service only as the access token its app forwards. The app gate and the
   caller's role come from the verified tokens. The request, sent by the app under
-  its workload token, supplies the agent's allowed roles, its tools and the
-  requested model; configuration decides the rest. It carries no MCP URL, MCP
+  its workload token, supplies the agent's allowed roles and its tools; configuration
+  decides the rest, the model included. It carries no MCP URL, MCP
   token, route or user id.
 - *An app runs as itself only for the agents the operator enabled.* The principal of
   an app's own run is its service account, and its route comes from that account's groups.

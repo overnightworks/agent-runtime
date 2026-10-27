@@ -17,7 +17,13 @@ from service_support import (
     run_headers,
 )
 from test_openai_adapter import provider_call, tool_completion
-from test_service_api_runner import answer, configured, fake_gateway
+from test_service_api_runner import (
+    CONFIGURED_MODEL,
+    answer,
+    configured,
+    fake_gateway,
+    with_default_model,
+)
 
 from agent_runtime.config import reset_config
 from agent_runtime_client.wire import Succeeded
@@ -51,7 +57,7 @@ def with_origin(config, origin):
 
 
 @pytest.mark.parametrize("count,rounds", [(2, 1), (4, 1), (1, 9)])
-@pytest.mark.parametrize("model", [None, "chosen/provider"])
+@pytest.mark.parametrize("model", [CONFIGURED_MODEL, "chosen/provider"])
 def test_real_entry_preserves_order_ids_and_model_across_complete_tool_rounds(
     tmp_path, monkeypatch, count, rounds, model,
 ):
@@ -70,8 +76,8 @@ def test_real_entry_preserves_order_ids_and_model_across_complete_tool_rounds(
     clients = fake_gateway(monkeypatch, upstream)
     reset_config()
     with serving(ScriptedApp(), authority.credentials_for("localhost")) as peer:
-        config = with_origin(configured(tmp_path), peer.origin)
-        events = asyncio.run(post_tools(config, authority, **({"model": model} if model else {})))
+        config = with_origin(with_default_model(configured(tmp_path), model), peer.origin)
+        events = asyncio.run(post_tools(config, authority))
         assert isinstance(events[-1], Succeeded)
         assert events[-1].text == "prefix " * rounds + " done "
         effects = [request for request in peer.requests if request.rpc_method == "tools/call"]
@@ -81,8 +87,7 @@ def test_real_entry_preserves_order_ids_and_model_across_complete_tool_rounds(
     assert len(requests) == rounds + 1
     assert all(set(request) == {"model", "messages", "tools"} for request in requests)
     assert len({request["model"] for request in requests}) == 1
-    if model:
-        assert requests[0]["model"] == model
+    assert requests[0]["model"] == model
     assert requests[-1]["messages"][-count:] == [
         {"role": "tool", "tool_call_id": f"call-{index}", "content": "echo"}
         for index in range(count)]

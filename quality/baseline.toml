@@ -26,10 +26,10 @@
 "tests/test_run_directories.py" = 852
 "tests/test_service_app_tools.py" = 1087
 "tests/test_service_capability.py" = 886
-"tests/test_service_cli_runner.py" = 1150
-"tests/test_service_cli_runner_tools.py" = 1730
+"tests/test_service_cli_runner.py" = 1108
+"tests/test_service_cli_runner_tools.py" = 1717
 "tests/test_service_config.py" = 1632
-"tests/test_service_entrance.py" = 833
+"tests/test_service_entrance.py" = 803
 "tests/test_service_quarantine.py" = 870
 "tests/test_service_run_recording.py" = 2249
 "tests/test_service_tool_relay.py" = 1309

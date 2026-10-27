@@ -18,8 +18,8 @@ from uuid import uuid4
 
 import pytest
 from service_support import (
-    API_ALIAS,
     COWRITER,
+    LISTED_MODEL,
     PRESENTATOR_CLIENT,
     SONGMAKER_CLIENT,
     ScriptedRunner,
@@ -64,6 +64,8 @@ pytestmark = [
     pytest.mark.skipif(KEYCLOAK_URL is None, reason="KEYCLOAK_URL names no test Keycloak"),
 ]
 
+CLI_ROUTE = Cli("claude-main", LISTED_MODEL)
+API_ROUTE = Api(f"claude/{LISTED_MODEL}")
 CLI_SCRIPT = (AssistantTextEvent(text="Hello from the CLI."), FinalEvent(text="CLI done."))
 API_SCRIPT = (AssistantTextEvent(text="Hello from the API."), FinalEvent(text="API done."))
 
@@ -148,7 +150,7 @@ def test_k1_a_real_client_credentials_token_alone_runs_an_enabled_agent_on_its_g
     assert response.status_code == 200, response.text
     (admitted,) = runners.api.admitted[admitted_before:]
     claims = verify(workload_token)
-    assert admitted.route == Api(API_ALIAS)
+    assert admitted.route == API_ROUTE
     assert admitted.app == "songmaker"
     assert admitted.principal == Principal(str(claims["iss"]), str(claims["sub"]))
 
@@ -162,9 +164,9 @@ def test_k2_a_real_token_of_a_service_account_in_no_route_group_is_not_enabled(o
 @pytest.mark.parametrize(
     ("user", "route", "expected_route"),
     [
-        ("alice", "CLI", Cli("claude-main")),
-        ("bob", "API", Api(API_ALIAS)),
-        ("dave", "CLI", Cli("claude-main")),
+        ("alice", "CLI", CLI_ROUTE),
+        ("bob", "API", API_ROUTE),
+        ("dave", "CLI", CLI_ROUTE),
     ],
 )
 def test_a_real_user_and_workload_token_stream_the_scripted_run(
@@ -179,7 +181,7 @@ def test_a_real_user_and_workload_token_stream_the_scripted_run(
         "assistant_text",
         "succeeded",
     ]
-    runner = runners.cli if expected_route == Cli("claude-main") else runners.api
+    runner = runners.cli if expected_route == CLI_ROUTE else runners.api
     assert runner.admitted[-1].route == expected_route
 
 
@@ -329,10 +331,10 @@ def _songmaker_workload() -> str:
         ),
         pytest.param(
             _songmaker_workload,
-            run_body(model="opus"),
+            run_body(model="claude/sonnet"),
             RejectionCode.INVALID_REQUEST,
             422,
-            id="malformed-model",
+            id="model-refused",
         ),
         pytest.param(
             _songmaker_workload,

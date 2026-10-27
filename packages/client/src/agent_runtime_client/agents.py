@@ -1,8 +1,9 @@
 """The agent file an app ships, and the definition read from it.
 
 An agent file is Claude Code's subagent format (YAML front matter between two
-``---`` lines, read as YAML 1.2 by ruamel.yaml, then the prompt as Markdown) with two
-extra keys, ``model`` and ``appRoles`` (decision record 0001, H9). ``offered_to`` is a display
+``---`` lines, read as YAML 1.2 by ruamel.yaml, then the prompt as Markdown) with one
+extra key, ``appRoles`` (decision record 0001, H9); the service configuration names the model,
+so a ``model`` key is refused. ``offered_to`` is a display
 filter for the app's own UI; the boundary is the
 service's role check.
 """
@@ -31,7 +32,6 @@ from agent_runtime_client.wire import (
     PROTOCOL_VERSION,
     AgentRole,
     AgentRoles,
-    ModelName,
     Purpose,
     RunRequest,
     Turn,
@@ -62,7 +62,6 @@ class _FrontMatter(BaseModel):
     name: Purpose
     description: Annotated[StrictStr, AfterValidator(_refuse_non_single_line)]
     tools: list[StrictStr] = Field(default_factory=list)
-    model: ModelName | None = None
     roles: AgentRoles = Field(alias="appRoles")
 
     @model_validator(mode="before")
@@ -82,7 +81,6 @@ class AgentDefinition(BaseModel):
 
     name: Purpose
     description: str
-    model: str | None
     roles: AgentRoles
     tools: tuple[ToolDeclaration, ...]
     prompt: str
@@ -100,7 +98,6 @@ class AgentDefinition(BaseModel):
         return RunRequest(
             v=PROTOCOL_VERSION,
             purpose=self.name,
-            model=self.model,
             turn=Turn(system=self.prompt, messages=messages),
             roles=self.roles,
             tools={declaration.name: declaration.effect for declaration in self.tools},
@@ -125,7 +122,6 @@ def load_agent(source: Traversable, declarations: list[ToolDeclaration]) -> Agen
     return AgentDefinition(
         name=front_matter.name,
         description=front_matter.description,
-        model=front_matter.model,
         roles=front_matter.roles,
         tools=_selected_tools(file_name, front_matter.tools, declarations),
         prompt=prompt,

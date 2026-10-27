@@ -28,11 +28,10 @@ the operator enabled ([The app's own runs](#the-apps-own-runs)). `POST /runs` an
 | Field | Meaning |
 |---|---|
 | `v` | The protocol version, `3`. Any other body answers 400 `unsupported_version`. |
-| `purpose` | The agent's name, `[a-z][a-z0-9-]{0,63}`. It labels the run and its capability; it chooses no route and no model. |
+| `purpose` | The agent's name, `[a-z][a-z0-9-]{0,63}`. It labels the run and its capability; it chooses no route and no model; the service configuration names the model, and a body that carries `model` answers 422 `invalid_request`. |
 | `turn` | The system prompt and the messages (`Turn`, `TurnMessage`). |
 | `roles` | The agent's allowed roles, exactly `["admin"]` or `["admin", "user"]`; `AgentDefinition.request` fills it from the agent file. |
 | `tools` | A map from each tool the run may call to its `ToolEffect`; required, possibly `{}`. |
-| `model` | Optional, `<provider>/<model>` such as `claude/sonnet`. |
 
 `GET /runs/{id}` returns the run's `RunStatus`, readable only by the app and
 user that started it, or for the app's own run by that app with its workload token alone ([What a run keeps](#what-a-run-keeps) says what the record holds).
@@ -71,8 +70,8 @@ to the app's own run. The checks run in this order and the first failure answers
    before the body is read.
 4. The body is checked as for a person's run, and its `purpose` names such an agent, else 403
    `forbidden`. The body's `roles` must still be a valid list but is not read.
-5. The route is decided by the service from the groups of the workload token and the request's
-   model, never named on the wire: no route group is 403 `not_enabled`, and a full subscription is
+5. The route is decided by the service from the groups of the workload token and the model the
+   configuration names for the agent, never named on the wire: no route group is 403 `not_enabled`, and a full subscription is
    429 `busy` without falling back.
 
 The principal is the app's service account, `(iss, workload sub)`, and so is the run's owner with
@@ -88,7 +87,7 @@ Keycloak groups of the app's service account ([operations.md](operations.md#who-
 An app declares its agents as Claude Code subagent files,
 `src/<pkg>/agents/<name>.md`, that `agent_runtime_client.agents.load_agent` reads into
 an `AgentDefinition`: YAML front matter (`name`, `description`, `tools`, plus
-`model` as `<provider>/<model>` and the extension `appRoles`, exactly `[admin]`
+the extension `appRoles`, exactly `[admin]`
 or `[admin, user]`) and the Markdown body as the prompt. `AgentFileError` names
 the file and the field. `offered_to(role)` is a display filter, not the
 security boundary: the service checks the role.
@@ -108,8 +107,8 @@ tool calls. Calls run sequentially in provider order: a call starts only after
 its event is accepted, and its result reaches the next gateway request only
 after the result event is accepted. The final `succeeded` text concatenates the
 rounds without trimming whitespace. Heartbeats continue while HTTP or tools wait,
-without resetting the idle timeout. The exact requested model, otherwise the
-configured alias, reaches the gateway unchanged across rounds, without fallback
+without resetting the idle timeout. The configured model's full
+`<provider>/<model>` name reaches the gateway unchanged across rounds, without fallback
 or retry. The service's usual time, call and byte limits apply; there is no
 additional eight-round limit.
 
@@ -183,7 +182,7 @@ protocol version and the status.
 request and none stored nor passed to the CLI. The service hands the CLI nothing
 derived from them either: not the subject, issuer, groups, client id, app name or
 run id, and not the capability, which it sends only to the app's MCP server. From
-the service the CLI receives the app's turn, the model the request
+the service the CLI receives the app's turn, the model the configuration
 names, the app's tool definitions and tool
 results through the relay, the run's fixed flags and limits, the path of its system
 prompt file and, when the run offers tools, of its relay file with the relay's
