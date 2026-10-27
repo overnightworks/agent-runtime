@@ -2,9 +2,8 @@
 
 A runner turns one admitted run into the provider core's in-process turn
 events (``agent_runtime.events``); the service maps those onto the wire.
-Each route has at most one runner. Production independently installs CLI and API
-runners when their configuration sections are set. A run on a route without a runner fails
-as ``provider_unavailable``.
+Each route has at most one runner. Production always installs the CLI runner and installs
+the API runner when ``[api]`` is set; an admitted run always has its route's runner.
 
 An admitted run of an app with an MCP origin carries its capability
 (``agent_runtime_service.capability``), minted at admission; a runner that sends it
@@ -55,12 +54,13 @@ class Runner(Protocol):
 
 @dataclass(frozen=True)
 class Runners:
-    cli: Runner | None = None
+    cli: Runner
     api: Runner | None = None
 
-    def for_route(self, served: ServedRoute) -> Runner | None:
+    def for_route(self, served: ServedRoute) -> Runner:
         match served:
             case Cli():
                 return self.cli
             case Api():
+                assert self.api is not None
                 return self.api

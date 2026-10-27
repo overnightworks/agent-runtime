@@ -42,7 +42,7 @@ def installed_runners(
     from agent_runtime_service.runners import Runners
 
     return Runners(
-        cli=CliRunner(config, tls_context=tls_context, clock=clock) if config.cli else None,
+        cli=CliRunner(config, tls_context=tls_context, clock=clock),
         api=ApiRunner(config, tls_context=tls_context, clock=clock) if config.api else None,
     )
 
@@ -99,8 +99,7 @@ def prepared_start(config_path: Path) -> PreparedStart | int:
     except ConfigError as error:
         return refuse(str(error))
     try:
-        if config.cli is not None:
-            require_pinned_versions(config.cli)
+        require_pinned_versions(config.cli)
     except ProgramVersionRefused as error:
         return refuse(f"{shown_text(str(config_path))}: {error}")
     try:

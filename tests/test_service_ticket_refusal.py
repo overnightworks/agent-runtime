@@ -22,6 +22,7 @@ from service_support import (
     get_run,
     post_run,
     run_headers,
+    runners_that_start_no_run,
     served,
     service_config,
     service_config_file,
@@ -107,7 +108,9 @@ def test_the_header_is_refused_before_any_token_is_verified(
     headers = run_headers(MINT.workload(), MINT.user() if with_authorization else None)
     if ticket is not None:
         headers["Agent-Job-Ticket"] = ticket
-    app = create_app(service_config(), fetch_key_set=_unreachable_issuer)
+    app = create_app(
+        service_config(), runners=runners_that_start_no_run(), fetch_key_set=_unreachable_issuer
+    )
 
     with served(app) as base_url:
         response = _send(base_url, route, headers)
@@ -131,7 +134,9 @@ def test_the_header_is_refused_without_reading_the_request_body(
     async def receive() -> dict[str, object]:
         pytest.fail("the request body was read")
 
-    app = create_app(service_config(), fetch_key_set=MINT.fetch_key_set)
+    app = create_app(
+        service_config(), runners=runners_that_start_no_run(), fetch_key_set=MINT.fetch_key_set
+    )
 
     status = asyncio.run(asgi_post_status(app, headers, receive, (method, path)))
 

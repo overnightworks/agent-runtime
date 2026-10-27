@@ -40,6 +40,7 @@ from service_support import (
     post_run,
     run_body,
     run_headers,
+    runners_that_start_no_run,
     served,
     service_config,
     service_config_file,
@@ -52,8 +53,6 @@ from webauth.jwt_verification import KEY_SET_REFRESH_COOLDOWN_SECONDS
 from agent_runtime.events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import (
     PROTOCOL_VERSION,
-    Failed,
-    FailureCode,
     RejectionCode,
     RunRejection,
 )
@@ -180,16 +179,6 @@ def test_a_member_of_neither_group_is_not_enabled_and_starts_no_run(service, run
     assert len(runners.cli.admitted) + len(runners.api.admitted) == runs_before
 
 
-def test_a_route_without_a_runner_answers_provider_unavailable():
-    app = create_app(service_config(), fetch_key_set=MINT.fetch_key_set)
-    with served(app) as base_url:
-        response = post_run(base_url, run_headers(MINT.workload(), MINT.user()))
-
-    terminal = decoded_events(response.content)[-1]
-    assert isinstance(terminal, Failed)
-    assert terminal.code is FailureCode.PROVIDER_UNAVAILABLE
-
-
 @pytest.mark.parametrize(
     ("workload", "user", "code", "status"),
     [
@@ -229,7 +218,9 @@ def test_an_unfetchable_key_set_answers_unavailable_after_the_workload_token_is_
     def unreachable_issuer(_url: str) -> bytes:
         raise KeySetFetchError("the issuer cannot be reached")
 
-    app = create_app(service_config(), fetch_key_set=unreachable_issuer)
+    app = create_app(
+        service_config(), runners=runners_that_start_no_run(), fetch_key_set=unreachable_issuer
+    )
     with served(app) as base_url:
         response = post_run(base_url, run_headers(workload(), user()))
 
@@ -259,6 +250,7 @@ def test_a_token_with_an_unknown_kid_answers_by_whether_the_key_set_can_be_refre
 
     app = create_app(
         service_config(),
+        runners=runners_that_start_no_run(),
         fetch_key_set=issuer_that_fails_after_the_first_fetch,
         monotonic_clock=clock,
     )
@@ -305,7 +297,11 @@ def test_a_token_without_a_kid_is_admitted_only_against_a_sole_rs256_key(
 
 def test_one_key_set_fetch_serves_every_request_of_the_process():
     mint = TokenMint()
-    app = create_app(service_config(), fetch_key_set=mint.fetch_key_set)
+    app = create_app(
+        service_config(),
+        runners=Runners(cli=ScriptedRunner(CLI_SCRIPT), api=ScriptedRunner(API_SCRIPT)),
+        fetch_key_set=mint.fetch_key_set,
+    )
     with served(app) as base_url:
         for _ in range(3):
             post_run(base_url, run_headers(mint.workload(), mint.user()))
@@ -688,7 +684,9 @@ def test_a_single_chunk_over_the_limit_is_refused_without_being_buffered():
     """Driven in-process: uvicorn hands the body over in socket-read pieces, never as one chunk."""
     chunk_size = 16 * MAX_REQUEST_BYTES
     chunk = b"x" * chunk_size
-    app = create_app(service_config(), fetch_key_set=MINT.fetch_key_set)
+    app = create_app(
+        service_config(), runners=runners_that_start_no_run(), fetch_key_set=MINT.fetch_key_set
+    )
     headers = run_headers(MINT.workload(), MINT.user())
     tracemalloc.start()
     try:

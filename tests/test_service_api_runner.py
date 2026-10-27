@@ -30,7 +30,6 @@ from agent_runtime_service.app import create_app
 from agent_runtime_service.cli import installed_runners
 from agent_runtime_service.config import AgentConfig, DefaultsConfig, Provider, ServiceConfig
 from agent_runtime_service.run_liveness import LoopClock
-from agent_runtime_service.runners import Runners
 
 
 def configured(tmp_path, **api):
@@ -63,9 +62,9 @@ def answer(text="answer"):
                          "finish_reason": "stop"}]}
 
 
-async def service_response(config, *, runners=None, **body):
+async def service_response(config, **body):
     mint = TokenMint()
-    app = create_app(config, runners=runners or installed_runners(config, None, LoopClock()),
+    app = create_app(config, runners=installed_runners(config, None, LoopClock()),
                      fetch_key_set=mint.fetch_key_set)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                  base_url="http://service") as client:
@@ -397,20 +396,10 @@ async def test_buffered_http_keeps_heartbeats_and_closes_on_every_ending(
     assert asyncio.all_tasks() == {asyncio.current_task()}
 
 
-@pytest.mark.parametrize("backend", [False, True])
-def test_backend_absence_and_disabled_entitlement_are_distinct(tmp_path, backend):
-    config = configured(tmp_path)
-    runners = None
-    if backend:
-        runners = Runners(cli=None, api=None)
-    else:
-        config = without_the_api(config)
-    response = asyncio.run(service_response(config, runners=runners))
-    if backend:
-        assert decoded_events(response.content)[-1].code is FailureCode.PROVIDER_UNAVAILABLE
-    else:
-        assert response.status_code == 403
-        assert response.json()["code"] == "not_enabled"
+def test_a_disabled_api_entitlement_is_refused_as_not_enabled(tmp_path):
+    response = asyncio.run(service_response(without_the_api(configured(tmp_path))))
+    assert response.status_code == 403
+    assert response.json()["code"] == "not_enabled"
 
 
 def test_api_requires_its_groups_and_valid_startup_credentials(tmp_path):

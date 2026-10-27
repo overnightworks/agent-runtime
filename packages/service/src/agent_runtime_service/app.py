@@ -126,7 +126,7 @@ _MESSAGE: Final[Mapping[RejectionCode, str]] = {
 def create_app(
     config: ServiceConfig,
     *,
-    runners: Runners | None = None,
+    runners: Runners,
     records: RunRecords | None = None,
     fetch_key_set: KeySetFetch = fetch_key_set_over_https,
     monotonic_clock: MonotonicClock = time.monotonic,
@@ -142,11 +142,11 @@ def create_app(
     ``confirm_group_gone`` is how the one quarantine asks whether a lost process group is gone.
     """
     callers = CallerCheck(build_verifier(config.identity, fetch_key_set, monotonic_clock), config)
-    installed_runners = runners or Runners()
     installed_records = records or RunRecords(wall_clock)
     subscription_slot = AdmissionSlot(config.runs.max_parallel_cli_runs)
     quarantine = Quarantine(LoopClock(), confirm_group_gone)
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
     @app.post("/runs")
     async def start_run(request: Request) -> Response:
         caller = await _run_caller_of(callers, request)
@@ -158,7 +158,7 @@ def create_app(
             return rejection(run_request)
         return _admitted(
             config,
-            installed_runners,
+            runners,
             installed_records,
             subscription_slot,
             quarantine,
