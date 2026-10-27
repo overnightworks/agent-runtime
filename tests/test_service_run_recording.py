@@ -855,17 +855,6 @@ async def test_a_recording_defect_surfaces_as_a_supervision_failure(caplog):
 _CLOCK_BREAKS = "the store clock broke once"
 
 
-class _RecordsWhoseClockBreaksAfterBegin(RunRecords):
-    def __init__(self, clock: ClockBreaksOnce) -> None:
-        super().__init__(clock)
-        self._clock = clock
-
-    def begin(self, started, app, principal):
-        recorder = super().begin(started, app, principal)
-        self._clock.arm()
-        return recorder
-
-
 @pytest.mark.parametrize(
     ("runs", "ending"),
     [

@@ -298,7 +298,9 @@ def test_a_token_without_a_kid_is_admitted_only_against_a_sole_rs256_key(
 def test_one_key_set_fetch_serves_every_request_of_the_process():
     mint = TokenMint()
     app = create_app(
-        service_config(), runners=runners_that_start_no_run(), fetch_key_set=mint.fetch_key_set
+        service_config(),
+        runners=Runners(cli=ScriptedRunner(CLI_SCRIPT), api=ScriptedRunner(API_SCRIPT)),
+        fetch_key_set=mint.fetch_key_set,
     )
     with served(app) as base_url:
         for _ in range(3):

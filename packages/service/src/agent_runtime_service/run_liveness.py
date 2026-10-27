@@ -401,11 +401,6 @@ class RunFailures:
         _make_inert(cancelled)
         return known[1]
 
-    @property
-    def met_any(self) -> bool:
-        """Whether a step has failed yet."""
-        return bool(self._failures)
-
     def raised(self, cancellation: asyncio.CancelledError | None) -> BaseException | None:
         """What a stop of the runner raises: the decided failure, nothing logged yet."""
         return _exit_of(
@@ -431,18 +426,6 @@ class RunFailures:
             )
         if decided.raised is not None:
             raise decided.raised
-
-    @contextmanager
-    def leaving(self) -> Iterator[None]:
-        """Leave a run that has no supervisor by the same decision."""
-        body_failure: BaseException | None = None
-        try:
-            yield
-        except BaseException as failure:
-            body_failure = failure
-            raise
-        finally:
-            self.leave(cancellation=None, body_failure=body_failure)
 
 
 def _make_inert(stray: asyncio.CancelledError) -> None:
