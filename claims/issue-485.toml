@@ -1,8 +1,0 @@
-claim_id = "78da228d6ca14113808d4cf2f6e8db53"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "78710df43db978fe50d55b6fc5258f6c1316303d"
-branch = "claude/issue-485-retire-job-tickets"
-scope = [".github/host-vocabulary-allowed.txt", "docs/ARCHITECTURE.md", "docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "docs/wire.md", "packages/client/src/agent_runtime_client/wire.py", "packages/service/src/agent_runtime_service/app.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/src/agent_runtime_service/identity.py", "packages/service/src/agent_runtime_service/job_ticket.py", "packages/service/src/agent_runtime_service/offer.py", "tests/service_support.py", "tests/test_client_offer.py", "tests/test_service_api_runner.py", "tests/test_service_codex_profile.py", "tests/test_service_codex_startup.py", "tests/test_service_config.py", "tests/test_service_entrance.py", "tests/test_service_job_tickets.py", "tests/test_service_offer.py", "tests/test_service_profile_background.py", "tests/test_service_routing.py", "tests/test_service_ticket_runs.py", "tests/test_wire_offer.py", "tests/ticket_run_support.py"]
-opened_commit = "cc2de5d4b0790e305f2181e94435a1cc26448d91"
-whole_reason = "Ticket, background flag and the offer's second route call are one feature; split, a flag would gate nothing or the offer would read profiles that no longer exist."
