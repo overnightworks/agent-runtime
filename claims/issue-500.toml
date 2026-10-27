@@ -3,6 +3,6 @@ agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
 role = "builder"
 base = "fc5135c73dbd5557bf7a5526be8ff57c67871493"
 branch = "claude/issue-500-protocol-3"
-scope = ["README.md", "docs/MIGRATING.md", "docs/wire.md", "packages/client/src/agent_runtime_client/agents.py", "packages/client/src/agent_runtime_client/wire.py", "tests/service_support.py", "tests/test_service_cli_runner_tools.py", "tests/test_service_entrance.py", "tests/test_service_keycloak.py", "tests/test_service_run_events.py", "tests/test_service_run_status.py", "tests/test_sse_codec.py", "tests/test_wire_protocol.py"]
+scope = ["README.md", "docs/MIGRATING.md", "docs/wire.md", "packages/client/src/agent_runtime_client/agents.py", "packages/client/src/agent_runtime_client/wire.py", "tests/service_support.py", "tests/test_agent_files.py", "tests/test_service_cli_runner_tools.py", "tests/test_service_entrance.py", "tests/test_service_keycloak.py", "tests/test_service_run_events.py", "tests/test_service_run_status.py", "tests/test_sse_codec.py", "tests/test_wire_protocol.py"]
 opened_commit = "19dbbae810f670e19aeba8ed242c20c37e9fc02c"
 whole_reason = "One wire number: its type, its constant, every test that writes it and the documents that state it change together, or main refuses its own tests' bodies."
