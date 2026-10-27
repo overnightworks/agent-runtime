@@ -39,7 +39,6 @@ from test_service_config import (
     CLAUDE_VERSION_LINE,
     CLI_SECTION,
     NO_PROFILE,
-    ROOT_ONLY_CLI,
     VALID_CONFIG,
     _refused_on_one_line,
     _written,
@@ -50,7 +49,6 @@ import agent_runtime.process as core_process
 from agent_runtime.config import reset_config
 from agent_runtime.procfs import GroupCensus
 from agent_runtime.spawn import KillUntilGoneResult
-from agent_runtime_service import cli_version
 from agent_runtime_service.cli import EXIT_BAD_CONFIG, main
 from agent_runtime_service.cli_version import (
     ProgramVersionRefused,
@@ -168,26 +166,6 @@ def test_a_program_table_without_a_profile_serves_after_probing_the_program(
 
     assert len(served) == 1
     assert probe_log.read_text() == "--version\n"
-
-
-@pytest.mark.parametrize(
-    "cli_text",
-    [
-        pytest.param("", id="no-cli-section"),
-        pytest.param(ROOT_ONLY_CLI, id="working-root-only"),
-    ],
-)
-def test_an_installation_with_neither_profile_nor_program_table_serves(
-    tmp_path, served, monkeypatch, cli_text
-):
-    probes = []
-    monkeypatch.setattr(cli_version, "run_catalog_cli", lambda *args, **where: probes.append(args))
-    text = NO_PROFILE.replace(CLI_SECTION, cli_text)
-
-    assert main(["--config", str(_written(tmp_path, text))]) == 0
-
-    assert len(served) == 1
-    assert probes == []
 
 
 def test_the_probe_runs_in_a_run_tree_below_the_working_root_with_no_token_and_no_login(

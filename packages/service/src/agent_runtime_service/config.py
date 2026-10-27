@@ -1,4 +1,9 @@
-"""The service's one configuration: identity, listener, profiles, the route and apps.
+"""The service's one configuration: identity, listener, the model, profiles, the route and apps.
+
+The configuration names the model of every run at three levels: ``[defaults] model`` is
+required, and ``model`` may be set again in ``[apps.<app>]`` and in
+``[apps.<app>.agents.<agent>]``. Each name is ``<provider>/<model>`` in the wire's grammar, and
+startup refuses one that no ``[cli.<provider>]`` table lists in its ``models``.
 
 The service accepts at most one subscription profile per provider, for Claude and for Codex.
 Each needs its token file (a Claude setup token, or a Codex sign-in document) and a
@@ -59,7 +64,7 @@ from agent_runtime.secret_file import (
     shown_text,
 )
 from agent_runtime_client.capability import McpOrigin
-from agent_runtime_client.wire import MAX_EVENT_BYTES, MODEL_PART_PATTERN, Purpose
+from agent_runtime_client.wire import MAX_EVENT_BYTES, MODEL_PART_PATTERN, ModelName, Purpose
 from agent_runtime_service.api_credentials import read_api_credentials
 from agent_runtime_service.capability import CapabilityScope
 from agent_runtime_service.signing import SigningKey, load_signing_key
@@ -382,20 +387,28 @@ class RouteConfig(_Section):
     api_alias: NonEmptyText
 
 
+class DefaultsConfig(_Section):
+    """What a run uses when neither its agent's nor its app's table names it."""
+
+    model: ModelName
+
+
 class AgentConfig(_Section):
     """One of an app's agents; ``runs_as_app`` lets it run on the app's workload token alone."""
 
     runs_as_app: StrictBool = False
+    model: ModelName | None = None
 
 
 class AppConfig(_Section):
     """One app: its workload client, its MCP origin and the agents the operator names.
 
-    The app's tools and their effects arrive with each run request, and so does its choice
-    of model.
+    The app's tools and their effects arrive with each run request, and so does the model
+    it runs on; ``model``, when set, is validated at startup like the default.
     """
 
     workload_client: NonEmptyText
+    model: ModelName | None = None
     mcp_origin: McpOrigin | None = None
     agents: Mapping[Purpose, AgentConfig] = {}
 
@@ -532,6 +545,7 @@ RULES_ON_THE_RAW_DOCUMENT: Final = (
 
 class ServiceConfig(_Section):
     identity: IdentityConfig
+    defaults: DefaultsConfig
     server: ServerConfig = ServerConfig()
     runs: RunConfig = RunConfig()
     cli: CliConfig | None = None
@@ -557,6 +571,31 @@ class ServiceConfig(_Section):
             ((name, profile),) = self.profiles.items()
             self.profiles[name] = profile.model_copy(update={"default": True})
         return self
+
+    @model_validator(mode="after")
+    def _every_configured_model_is_listed_by_its_cli_table(self) -> Self:
+        listed = {
+            f"{provider}/{model}"
+            for provider, models in self.subscription_models().items()
+            for model in models
+        }
+        for field, name in self._configured_models():
+            if name not in listed:
+                raise ValueError(
+                    f"{field}: {shown_text(name)} is not listed in the models of any"
+                    " [cli.<provider>] table"
+                )
+        return self
+
+    def _configured_models(self) -> Iterator[tuple[str, str]]:
+        yield "defaults.model", self.defaults.model
+        for app_name, app in self.apps.items():
+            app_field = f"apps.{shown_text(app_name)}"
+            if app.model is not None:
+                yield f"{app_field}.model", app.model
+            for agent_name, agent in app.agents.items():
+                if agent.model is not None:
+                    yield f"{app_field}.agents.{shown_text(agent_name)}.model", agent.model
 
     @model_validator(mode="after")
     def _api_groups_and_alias_come_together(self) -> Self:

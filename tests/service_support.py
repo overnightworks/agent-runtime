@@ -71,7 +71,7 @@ from agent_runtime_client.wire import (
 )
 from agent_runtime_service.admission import AdmissionSlot
 from agent_runtime_service.app import create_app
-from agent_runtime_service.config import RunConfig, ServiceConfig
+from agent_runtime_service.config import Provider, RunConfig, ServiceConfig
 from agent_runtime_service.identity import Principal
 from agent_runtime_service.quarantine import GroupConfirmation, Quarantine
 from agent_runtime_service.routing import Cli
@@ -212,16 +212,6 @@ def with_listed_models(config: ServiceConfig, models: Iterable[str]) -> ServiceC
     return config.model_copy(update={"cli": config.cli.model_copy(update={"claude": claude})})
 
 
-def without_cli(config: ServiceConfig) -> ServiceConfig:
-    """``config`` as a service without the subscription route starts: no ``[cli]``, no profiles."""
-    kept = {
-        name: getattr(config, name)
-        for name in ServiceConfig.model_fields
-        if name not in {"cli", "profiles"}
-    }
-    return ServiceConfig.model_validate(kept)
-
-
 def without_profiles(config: ServiceConfig) -> ServiceConfig:
     return config.model_copy(update={"profiles": {}})
 
@@ -243,6 +233,7 @@ def _service_config_document(
             "api_groups": [API_GROUP],
             "group_claim": GROUP_CLAIM,
         },
+        "defaults": {"model": f"{Provider.CLAUDE}/{LISTED_MODEL}"},
         "cli": {
             "working_root": str(process_working_root().path),
             "claude": {

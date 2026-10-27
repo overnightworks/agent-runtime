@@ -17,6 +17,14 @@ non-dumpable at startup before it reads its configuration; it refuses to start
 otherwise. The restriction names the service only. The image must run it as a
 non-root user with `cap_drop: ALL`.
 
+`[defaults] model` is required. It names a default model as `<provider>/<model>`;
+`model` may also be set in `[apps.<app>]` and in `[apps.<app>.agents.<purpose>]`. Startup exits
+2 and names the field (`defaults.model`,
+`apps.<app>.model` or `apps.<app>.agents.<purpose>.model`) for a name outside the wire's grammar
+or one that no `[cli.<provider>] models` lists. An installation without a `[cli]` table that
+lists its models therefore no longer starts; the paid route gets its own list with the paid-route
+work (#463).
+
 The configuration is read once; a restart applies a change. The signing key
 file, the Claude token file and any API credential file are read and checked with it.
 
@@ -43,7 +51,8 @@ in this order for a person's run:
    set together with `[route] api_alias`). A model name the subscription does not
    list sends that agent to the paid API for every caller with API rights and
    gives subscription-only callers `not_enabled`. The app chooses the model per
-   agent and sends it on each run; the service stores nothing of the choice. A run that
+   agent and sends it on each run; the configuration's `model` levels are checked at startup
+   and are not yet read at admission. A run that
    names no model goes to the profile marked `default = true`; with one profile that is
    the profile, marked or not, and with two exactly one must be marked. A run that names
    tools and whose profile's provider has no tool relay yet (Codex) gets 403 `not_enabled`
@@ -90,8 +99,8 @@ Removing `[api]` leaves group/alias routing enabled but makes admitted API runs
 fail `provider_unavailable`. To disable paid entitlement entirely, remove
 `api_groups`, `[route]` and `[api]` together; API-only callers then get
 `not_enabled`. A contradictory partial configuration is a startup error.
-Without CLI model configuration, `/offer` lists no models even with API installed;
-apps may still submit explicit models. Gateway activation and paid testing require
+The API route is installed beside the CLI program, whose `[cli.<provider>] models` the
+configuration must list; `/offer` lists those models. Gateway activation and paid testing require
 the operator's separate approval; this route's repository proof uses fakes.
 
 ## App tools

@@ -2,6 +2,16 @@
 
 Read by a host bumping its pin; each release that breaks a host has one section, newest first.
 
+## Migrating to 0.10.0
+
+The service configuration names a default model, which an app and an agent may override. The keys are checked at startup; the
+service does not read them at admission yet.
+
+| Before (0.9.0) | Now |
+| --- | --- |
+| The configuration named no model | `[defaults] model = "<provider>/<model>"` is required; `model` is also accepted in `[apps.<app>]` and `[apps.<app>.agents.<purpose>]`. A missing default, a name outside the wire's grammar or a name that no `[cli.<provider>] models` lists stops startup with exit 2, and the refusal names `defaults.model`, `apps.<app>.model` or `apps.<app>.agents.<purpose>.model` ([operations.md](operations.md), "Starting the service"). |
+| An installation without `[cli]`, or with `models = []`, started and sent every named model to the API route | It stops startup with exit 2, naming `defaults.model`, because the default must be listed by a `[cli.<provider>]` table. List the models in `[cli.<provider>] models`; the paid route gets its own list with the paid-route work (#463). |
+
 ## Migrating to 0.9.0
 
 Job tickets are retired, and the profile flag `background` goes with them. No app is known to use

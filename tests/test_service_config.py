@@ -77,6 +77,7 @@ SUBSCRIPTION_GROUPS_LINE = (
 )
 
 VALID_CONFIG = f"""
+defaults = {{ model = "{Provider.CLAUDE}/sonnet" }}
 [identity]
 issuer = "https://keycloak.test/realms/agent-test"
 jwks_url = "https://keycloak.test/realms/agent-test/protocol/openid-connect/certs"
@@ -1238,7 +1239,6 @@ def test_a_claude_program_without_a_models_array_in_the_grammar_is_refused_by_fi
     ("models_line", "listed"),
     [
         pytest.param('models = ["sonnet", "opus"]', {"sonnet", "opus"}, id="C4-two-names"),
-        pytest.param("models = []", set(), id="C5-none"),
     ],
 )
 def test_a_claude_program_lists_the_models_it_serves(tmp_path, models_line, listed):

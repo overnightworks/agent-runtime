@@ -147,6 +147,7 @@ def codex_document(
     document = _service_config_document(TEST_ISSUER, runs, songmaker)
     if songmaker is None:
         del document["apps"]["songmaker"]["mcp_origin"]
+    document["defaults"] = {"model": f"{Provider.CODEX}/{CODEX_MODEL}"}
     document["cli"] = {
         "working_root": str(a_private_root(tmp_path)),
         "codex": {"binary": str(binary), "version": CODEX_PIN, "models": [CODEX_MODEL]},
