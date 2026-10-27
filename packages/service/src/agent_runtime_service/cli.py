@@ -19,6 +19,7 @@ import argparse
 import logging
 import ssl
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
@@ -62,6 +63,54 @@ def close_transport_loggers() -> None:
         logging.getLogger(name).setLevel(CLOSED_LOGGER_LEVEL)
 
 
+@dataclass(frozen=True)
+class PreparedStart:
+    """What a start has built once every refusal has been passed, just before serving."""
+
+    config: ServiceConfig
+    runners: Runners
+
+
+def refuse(reason: str) -> int:
+    print(f"{REFUSAL_PREFIX}{reason}", file=sys.stderr)
+    return EXIT_BAD_CONFIG
+
+
+def prepared_start(config_path: Path) -> PreparedStart | int:
+    """Run every step of a start except serving; return the exit status 2 on the first refusal."""
+    try:
+        harden_process()
+    except StartupHardeningRefused as error:
+        return refuse(str(error))
+    # Imported only now: the application modules need Unix-only os constants at import, so
+    # importing them first would crash a non-Linux start before the refusal line.
+    from agent_runtime.secret_file import shown_text
+    from agent_runtime_service.cli_runner import mcp_tls_context
+    from agent_runtime_service.cli_version import ProgramVersionRefused, require_pinned_versions
+    from agent_runtime_service.config import ConfigError, load_config
+    from agent_runtime_service.run_liveness import LoopClock
+
+    try:
+        config = load_config(config_path)
+    except ConfigError as error:
+        return refuse(str(error))
+    try:
+        if config.cli is not None:
+            require_pinned_versions(config.cli)
+    except ProgramVersionRefused as error:
+        return refuse(f"{shown_text(str(config_path))}: {error}")
+    try:
+        trust_bundle = config.mcp_trust_bundle()
+        tls_context = None if trust_bundle is None else mcp_tls_context(trust_bundle)
+    except OSError as error:
+        return refuse(f"mcp.ca_file: cannot be loaded: {shown_text(str(error))}")
+    try:
+        runners = installed_runners(config, tls_context, LoopClock())
+    except OSError as error:
+        return refuse(f"api.ca_file: cannot be loaded: {shown_text(str(error))}")
+    return PreparedStart(config=config, runners=runners)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog=PROGRAM_NAME, description=__doc__)
     parser.add_argument("--config", type=Path, required=True, help="the service's TOML file")
@@ -71,60 +120,20 @@ def main(argv: list[str] | None = None) -> int:
         help="run every step of a start except serving, then exit 0",
     )
     arguments = parser.parse_args(argv)
-    try:
-        harden_process()
-    except StartupHardeningRefused as error:
-        print(f"{REFUSAL_PREFIX}{error}", file=sys.stderr)
-        return EXIT_BAD_CONFIG
-    # Imported only now: the application modules need Unix-only os constants at import, so
-    # importing them first would crash a non-Linux start before the refusal line.
-    import uvicorn
-
-    from agent_runtime.secret_file import shown_text
-    from agent_runtime_service.app import create_app
-    from agent_runtime_service.cli_runner import mcp_tls_context
-    from agent_runtime_service.cli_version import ProgramVersionRefused, require_pinned_versions
-    from agent_runtime_service.config import ConfigError, load_config
-    from agent_runtime_service.run_liveness import LoopClock
-
-    try:
-        config = load_config(arguments.config)
-    except ConfigError as error:
-        print(f"{REFUSAL_PREFIX}{error}", file=sys.stderr)
-        return EXIT_BAD_CONFIG
-    try:
-        if config.cli is not None:
-            require_pinned_versions(config.cli)
-    except ProgramVersionRefused as error:
-        print(
-            f"{REFUSAL_PREFIX}{shown_text(str(arguments.config))}: {error}",
-            file=sys.stderr,
-        )
-        return EXIT_BAD_CONFIG
-    try:
-        trust_bundle = config.mcp_trust_bundle()
-        tls_context = None if trust_bundle is None else mcp_tls_context(trust_bundle)
-    except OSError as error:
-        print(
-            f"{REFUSAL_PREFIX}mcp.ca_file: cannot be loaded: {shown_text(str(error))}",
-            file=sys.stderr,
-        )
-        return EXIT_BAD_CONFIG
-    try:
-        runners = installed_runners(config, tls_context, LoopClock())
-    except OSError as error:
-        print(
-            f"{REFUSAL_PREFIX}api.ca_file: cannot be loaded: {shown_text(str(error))}",
-            file=sys.stderr,
-        )
-        return EXIT_BAD_CONFIG
+    start = prepared_start(arguments.config)
+    if isinstance(start, int):
+        return start
     if arguments.check:
         return 0
+    import uvicorn
+
+    from agent_runtime_service.app import create_app
+
     close_transport_loggers()
     uvicorn.run(
-        create_app(config, runners=runners),
-        host=config.server.host,
-        port=config.server.port,
+        create_app(start.config, runners=start.runners),
+        host=start.config.server.host,
+        port=start.config.server.port,
     )
     return 0
 
