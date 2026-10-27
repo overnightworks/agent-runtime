@@ -1,0 +1,7 @@
+claim_id = "167f85e07032486babf74e13e1f0b708"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "fc5135c73dbd5557bf7a5526be8ff57c67871493"
+branch = "claude/issue-502-record-amendment"
+scope = ["docs/decisions/0001-agent-service.md"]
+opened_commit = "5d346d8df952f78255c294e3b441ea045c32b466"
