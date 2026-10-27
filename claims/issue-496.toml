@@ -1,0 +1,8 @@
+claim_id = "e65591b2b59146c2b19c9a526239c415"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "0908c7ae3ef357f568e30fe5b202706ca364d53b"
+branch = "claude/issue-496-c1-model-three-levels"
+scope = ["docs/MIGRATING.md", "docs/operations.md", "packages/service/src/agent_runtime_service/config.py", "tests/service_support.py", "tests/test_service_api_runner.py", "tests/test_service_codex_profile.py", "tests/test_service_config.py", "tests/test_service_entrance.py", "tests/test_service_model_config.py", "tests/test_service_offer.py"]
+opened_commit = "cb1dbc44bd27d1804220483a6ae8d14308d7569c"
+whole_reason = "One production file plus the test builders and fixtures its required field invalidates and the two docs it makes false; split, main would carry a required key its tests or docs contradict."
