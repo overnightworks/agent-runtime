@@ -1,7 +1,0 @@
-claim_id = "c1407de7c40949789a65d6c46000f7fb"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "ef6375ef89208126d36bc36eada59e0190285c5a"
-branch = "claude/issue-490-stray-record-ends-with-stray"
-scope = ["packages/service/src/agent_runtime_service/run_liveness.py", "tests/test_service_run_recording.py"]
-opened_commit = "7f768a108ed042460c6270524e4567285134335c"
