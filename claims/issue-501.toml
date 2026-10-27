@@ -1,0 +1,7 @@
+claim_id = "9417cb997f31458abb2e28dcafbd9df3"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "fc5135c73dbd5557bf7a5526be8ff57c67871493"
+branch = "claude/issue-501-service-check"
+scope = ["docs/operations.md", "packages/service/src/agent_runtime_service/cli.py", "tests/test_service_check.py"]
+opened_commit = "bf8ed3494b9ac790bcce485241a6fa728dc77304"
