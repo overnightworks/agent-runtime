@@ -1035,13 +1035,13 @@ def alice_admitted_run(run_id: uuid.UUID) -> AdmittedRun:
         app="songmaker",
         principal=ALICE,
         request=RunRequest.model_validate(run_body(tools=SONGMAKER_TOOLS)),
-        route=Cli("claude-main", LISTED_MODEL),
+        model=f"claude/{LISTED_MODEL}",
+        route=Cli("claude-main"),
         capability=None,
     )
 
 
 QUIET = AssistantTextEvent(text="")
-
 
 FAILURE_LINE = re.compile(r"(?P<event>.+?): (?P<kind>\w+) at (?P<positions>.+)")
 POSITION = re.compile(r"[\w.]+\.py:\d+:[\w<>]+")

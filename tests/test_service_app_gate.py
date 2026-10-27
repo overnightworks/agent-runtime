@@ -191,7 +191,8 @@ def test_a_member_without_an_ai_group_passes_the_gate_and_is_not_enabled(gate, a
 def test_an_api_caller_in_the_app_reaches_the_api_route_on_the_configured_model(gate, groups):
     _admitted(gate.post(groups))
 
-    assert gate.runners.api.admitted[-1].route == Api(LISTED)
+    assert gate.runners.api.admitted[-1].route == Api()
+    assert gate.runners.api.admitted[-1].model == LISTED
     assert gate.runners.cli.admitted == []
 
 

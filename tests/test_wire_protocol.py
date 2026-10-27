@@ -85,8 +85,10 @@ def test_the_effect_class_never_reaches_a_model(project) -> None:
         assert leak not in seen_by_the_model
 
 
+STARTED_FIELDS = {"model": "claude/sonnet", "route": "cli", "heartbeat_interval_s": 15}
+
 WIRE_VARIANTS = {
-    "run_started": wire("run_started", 0, heartbeat_interval_s=15),
+    "run_started": wire("run_started", 0, **STARTED_FIELDS),
     "assistant_text": wire("assistant_text", 1, text="A first line."),
     "tool_call": wire(
         "tool_call",
@@ -151,7 +153,7 @@ def test_every_variant_round_trips_through_its_json(raw: dict[str, object]) -> N
         ),
         pytest.param(wire("heartbeat", "1"), ViolationKind.SCHEMA_MISMATCH, id="seq as string"),
         pytest.param(
-            wire("run_started", 3, heartbeat_interval_s=15),
+            wire("run_started", 3, **STARTED_FIELDS),
             ViolationKind.SCHEMA_MISMATCH,
             id="run_started after seq 0",
         ),
@@ -160,15 +162,35 @@ def test_every_variant_round_trips_through_its_json(raw: dict[str, object]) -> N
                 "v": PROTOCOL_VERSION,
                 "run_id": str(RUN_ID),
                 "type": "run_started",
-                "heartbeat_interval_s": 15,
+                **STARTED_FIELDS,
             },
             ViolationKind.SCHEMA_MISMATCH,
             id="run_started without seq",
         ),
         pytest.param(
-            wire("run_started", False, heartbeat_interval_s=15),
+            wire("run_started", False, **STARTED_FIELDS),
             ViolationKind.SCHEMA_MISMATCH,
             id="run_started with seq false",
+        ),
+        pytest.param(
+            wire("run_started", 0, route="cli", heartbeat_interval_s=15),
+            ViolationKind.SCHEMA_MISMATCH,
+            id="run_started without a model",
+        ),
+        pytest.param(
+            wire("run_started", 0, model="claude/sonnet", heartbeat_interval_s=15),
+            ViolationKind.SCHEMA_MISMATCH,
+            id="run_started without a route",
+        ),
+        pytest.param(
+            wire("run_started", 0, **{**STARTED_FIELDS, "model": "sonnet"}),
+            ViolationKind.SCHEMA_MISMATCH,
+            id="run_started with a model that is not provider/name",
+        ),
+        pytest.param(
+            wire("run_started", 0, **{**STARTED_FIELDS, "route": "mcp"}),
+            ViolationKind.SCHEMA_MISMATCH,
+            id="run_started with a route outside the closed set",
         ),
         pytest.param(
             wire("failed", 5, code="crashed", message="x"),

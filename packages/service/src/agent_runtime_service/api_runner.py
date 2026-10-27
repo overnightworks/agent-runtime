@@ -70,7 +70,7 @@ class ApiRunner:
                 text = await complete_openai_compatible_text(
                     client=client, provider="api", api_url=self._config.completion_url,
                     api_key=key.get_secret_value(),
-                    model=admitted.route.model,
+                    model=admitted.model,
                     system=initial.system, messages=initial.messages,
                 )
         except ProviderUnavailableError as error:
@@ -106,7 +106,7 @@ class ApiRunner:
             schemas = await offered_schemas(tools, key, admitted.capability)
             conversation = OpenAIConversation(
                 client=client, provider="api", api_url=self._config.completion_url,
-                api_key=key, model=admitted.route.model, tool_schemas=schemas,
+                api_key=key, model=admitted.model, tool_schemas=schemas,
             )
             events = RelayedEvents(tool_conversation(
                 conversation, initial, tools, {schema["function"]["name"] for schema in schemas},

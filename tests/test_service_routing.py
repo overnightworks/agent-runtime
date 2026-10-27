@@ -23,8 +23,8 @@ IDENTITY = IdentityConfig(
 )
 PROFILES = {"claude-main": ProfileConfig(provider=Provider.CLAUDE)}
 MODEL = f"{Provider.CLAUDE}/sonnet"
-CLI = Cli("claude-main", "sonnet")
-API = Api(MODEL)
+CLI = Cli("claude-main")
+API = Api()
 OFF = NotEnabled()
 
 
@@ -74,32 +74,32 @@ BOTH = {"/new-sub", "/api-members"}
     ("groups", "model", "listed", "expected"),
     [
         pytest.param(
-            SUBSCRIBER, "claude/sonnet", SONNET_LISTED, Cli("claude-main", "sonnet"), id="R-a-S"
+            SUBSCRIBER, "claude/sonnet", SONNET_LISTED, Cli("claude-main"), id="R-a-S"
         ),
         pytest.param(
             API_ONLY,
             "claude/sonnet",
             SONNET_LISTED,
-            Api("claude/sonnet"),
+            Api(),
             id="R-a-A",
         ),
         pytest.param(
-            BOTH, "claude/sonnet", SONNET_LISTED, Cli("claude-main", "sonnet"), id="R-a-D"
+            BOTH, "claude/sonnet", SONNET_LISTED, Cli("claude-main"), id="R-a-D"
         ),
         pytest.param(SUBSCRIBER, "claude/opus", SONNET_LISTED, OFF, id="R-b-S"),
         pytest.param(
-            API_ONLY, "claude/opus", SONNET_LISTED, Api("claude/opus"), id="R-b-A"
+            API_ONLY, "claude/opus", SONNET_LISTED, Api(), id="R-b-A"
         ),
         pytest.param(
-            BOTH, "claude/opus", SONNET_LISTED, Api("claude/opus"), id="R-b-D"
+            BOTH, "claude/opus", SONNET_LISTED, Api(), id="R-b-D"
         ),
         pytest.param(SUBSCRIBER, "claude/sonnet", NOTHING_LISTED, OFF, id="R-c-S"),
         pytest.param(
-            BOTH, "claude/sonnet", NOTHING_LISTED, Api("claude/sonnet"), id="R-c-D"
+            BOTH, "claude/sonnet", NOTHING_LISTED, Api(), id="R-c-D"
         ),
         pytest.param(SUBSCRIBER, "xai/sonnet", SONNET_LISTED, OFF, id="R-d-S"),
         pytest.param(
-            BOTH, "xai/sonnet", SONNET_LISTED, Api("xai/sonnet"), id="R-d-D"
+            BOTH, "xai/sonnet", SONNET_LISTED, Api(), id="R-d-D"
         ),
         pytest.param(set(), "claude/sonnet", SONNET_LISTED, OFF, id="R-e-N"),
     ],
@@ -118,8 +118,8 @@ BOTH_LISTED = {**SONNET_LISTED, Provider.CODEX: frozenset({"gpt-5.5"})}
 @pytest.mark.parametrize(
     ("model", "expected"),
     [
-        pytest.param("claude/sonnet", Cli("claude-main", "sonnet"), id="claude-model"),
-        pytest.param("codex/gpt-5.5", Cli("codex-main", "gpt-5.5"), id="codex-model"),
+        pytest.param("claude/sonnet", Cli("claude-main"), id="claude-model"),
+        pytest.param("codex/gpt-5.5", Cli("codex-main"), id="codex-model"),
     ],
 )
 def test_a_model_goes_to_the_profile_of_its_provider(model, expected):

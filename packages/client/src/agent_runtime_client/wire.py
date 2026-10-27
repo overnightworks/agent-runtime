@@ -57,6 +57,13 @@ class FailureCode(StrEnum):
     INTERNAL_ERROR = "internal_error"
 
 
+class RouteKind(StrEnum):
+    """Which kind of runner serves a run."""
+
+    CLI = "cli"
+    API = "api"
+
+
 class RunState(StrEnum):
     """Where a run stands: still running, or how it ended."""
 
@@ -251,10 +258,12 @@ class _RunEvent(_WireModel):
 
 
 class RunStarted(_RunEvent):
-    """The first event of every run, naming the heartbeat cadence."""
+    """The first event of every run: the selected model and route, and the heartbeat cadence."""
 
     type: Literal["run_started"] = "run_started"
     seq: Annotated[Literal[0], BeforeValidator(_json_integer)]
+    model: ModelName
+    route: Annotated[RouteKind, Field(strict=False)]
     heartbeat_interval_s: int = Field(ge=1, le=300)
 
 

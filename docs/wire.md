@@ -38,7 +38,9 @@ user that started it, or for the app's own run by that app with its workload tok
 
 The stream's events are `run_started`, `assistant_text`, `tool_call`,
 `tool_result`, `heartbeat` and one terminal event: `succeeded`, `failed`
-(with a `FailureCode`) or `cancelled`. A run cut short after a side-effecting
+(with a `FailureCode`) or `cancelled`. `run_started` carries `model` (the full
+`<provider>/<model>`) and `route` (`cli` or `api`, a `RouteKind`), both required: the
+names the service selected for the run, not proof of who answered. A run cut short after a side-effecting
 tool call was emitted ends as `failed: interrupted`, not `cancelled`
 (`ToolEffect`).
 

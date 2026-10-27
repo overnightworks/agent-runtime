@@ -342,7 +342,7 @@ def admitted_tools(origin):
     from agent_runtime_service.routing import Api
 
     capability = capability_carrying(canary_token())
-    return replace(alice_admitted_run(uuid4()), route=Api("chosen"),
+    return replace(alice_admitted_run(uuid4()), model="claude/chosen", route=Api(),
         request=RunRequest.model_validate(run_body(tools={"echo": "read_only"})),
         capability=Capability(
             capability.claims.model_copy(update={"aud": origin}), capability.token))

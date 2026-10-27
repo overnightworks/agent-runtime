@@ -621,7 +621,7 @@ async def test_runner_refusal_removes_active_caller_chain(tmp_path, monkeypatch,
     config = configured(tmp_path)
     body = run_body()
     admitted = replace(alice_admitted_run(uuid4()), request=RunRequest.model_validate(body),
-                       route=Api("synthetic"))
+                       model="claude/synthetic", route=Api())
     if scenario == "credentials":
         config.api.credential_file.unlink()
 

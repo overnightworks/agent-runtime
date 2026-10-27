@@ -57,6 +57,7 @@ from agent_runtime import lost_groups
 from agent_runtime_client.capability import MAX_CAPABILITY_CHARACTERS
 from agent_runtime_client.wire import (
     PROTOCOL_VERSION,
+    ModelName,
     RejectionCode,
     RunRejection,
     RunRequest,
@@ -212,11 +213,12 @@ def _admitted(
     scope = config.capability_scope(caller.app, run_request.tools)
     if run_request.tools and scope is None:
         return rejection(RejectionCode.FORBIDDEN)
+    model = config.model_for(caller.app, run_request.agent)
     served = route(
         config.identity,
         config.profiles,
         caller.groups,
-        config.model_for(caller.app, run_request.agent),
+        model,
         config.subscription_models(),
     )
     if isinstance(served, NotEnabled) or (
@@ -240,6 +242,7 @@ def _admitted(
             wall_clock,
             caller,
             run_request,
+            model,
             served,
             scope,
         )
@@ -272,6 +275,7 @@ def _admitted_response(
     wall_clock: Callable[[], datetime],
     caller: Caller,
     run_request: RunRequest,
+    model: ModelName,
     served: ServedRoute,
     scope: CapabilityScope | None,
 ) -> _RunResponse | RejectionCode:
@@ -291,6 +295,7 @@ def _admitted_response(
         app=caller.app,
         principal=caller.principal,
         request=run_request,
+        model=model,
         route=served,
         capability=capability,
     )

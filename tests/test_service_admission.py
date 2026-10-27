@@ -253,8 +253,8 @@ def test_h10_an_unlisted_model_with_every_place_taken_goes_to_the_api_and_takes_
 
     _assert_streamed_to_a_terminal(service.run(both, agent=UNLISTED_AGENT))
 
-    assert [admitted.route for admitted in service.api.admitted] == [
-        Api(f"claude/{UNLISTED_MODEL}")
+    assert [(admitted.route, admitted.model) for admitted in service.api.admitted] == [
+        (Api(), f"claude/{UNLISTED_MODEL}")
     ]
     service.let_all_go(held)
 
