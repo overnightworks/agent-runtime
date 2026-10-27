@@ -46,13 +46,12 @@ from service_support import (
     service_config,
 )
 from test_service_admission import HeldRunner
-from test_service_config import VALID_CONFIG, _written
+from test_service_config import VALID_CONFIG, _written, assert_startup_refuses
 from webauth.https_client import KeySetFetchError
 
 from agent_runtime.events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import RejectionCode, RunStarted
 from agent_runtime_service.app import create_app
-from agent_runtime_service.cli import EXIT_BAD_CONFIG, main
 from agent_runtime_service.config import AgentConfig, ServiceConfig, load_config
 from agent_runtime_service.routing import Api, Cli
 from agent_runtime_service.runners import Runners
@@ -525,7 +524,4 @@ def test_an_apps_agent_table_names_the_agents_that_run_as_the_app(tmp_path):
     ],
 )
 def test_a_refused_agent_table_stops_startup_naming_the_field(tmp_path, capsys, text, named_field):
-    exit_status = main(["--config", str(_written(tmp_path, text))])
-
-    assert exit_status == EXIT_BAD_CONFIG
-    assert named_field in capsys.readouterr().err
+    assert_startup_refuses(tmp_path, capsys, text, named_field)
