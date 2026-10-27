@@ -284,10 +284,10 @@ def test_the_cli_run_gets_the_configured_model_as_one_argument(
 def test_the_run_adapter_passes_the_routes_model(tmp_path: Path) -> None:
     turn = RunRequest.model_validate(run_body()).turn
     launch = cli_runner.ProviderLaunch(
-        Provider.CLAUDE, tmp_path / "claude", process_token_file(), 7, 600.0
+        Provider.ANTHROPIC, tmp_path / "claude", process_token_file(), 7, 600.0
     )
 
-    build = cli_runner.RUN_ADAPTERS[Provider.CLAUDE](launch)
+    build = cli_runner.RUN_ADAPTERS[Provider.ANTHROPIC](launch)
     adapter = build(cli_runner.RunInputs(turn, LISTED_MODEL, None))
 
     arguments = adapter.start(tmp_path / "home", tmp_path / "work").child.arguments

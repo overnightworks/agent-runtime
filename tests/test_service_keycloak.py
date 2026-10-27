@@ -65,7 +65,7 @@ pytestmark = [
     pytest.mark.skipif(KEYCLOAK_URL is None, reason="KEYCLOAK_URL names no test Keycloak"),
 ]
 
-CLI_ROUTE = Cli(Provider.CLAUDE)
+CLI_ROUTE = Cli(Provider.ANTHROPIC)
 API_ROUTE = Api()
 CLI_SCRIPT = (AssistantTextEvent(text="Hello from the CLI."), FinalEvent(text="CLI done."))
 API_SCRIPT = (AssistantTextEvent(text="Hello from the API."), FinalEvent(text="API done."))
@@ -77,7 +77,7 @@ def _frozen_frames(route: str) -> bytes:
     return (
         "id: 0\nevent: run_started\n"
         f'data: {{"v":{PROTOCOL_VERSION},"run_id":"{RUN}","seq":0,"type":"run_started",'
-        f'"model":"claude/{LISTED_MODEL}","route":"{route.lower()}",'
+        f'"model":"{Provider.ANTHROPIC}/{LISTED_MODEL}","route":"{route.lower()}",'
         '"heartbeat_interval_s":15}\n\n'
         "id: 1\nevent: assistant_text\n"
         f'data: {{"v":{PROTOCOL_VERSION},"run_id":"{RUN}","seq":1,"type":"assistant_text",'
@@ -335,7 +335,7 @@ def _songmaker_workload() -> str:
         ),
         pytest.param(
             _songmaker_workload,
-            run_body(model="claude/sonnet"),
+            run_body(model=f"{Provider.ANTHROPIC}/sonnet"),
             RejectionCode.INVALID_REQUEST,
             422,
             id="model-refused",

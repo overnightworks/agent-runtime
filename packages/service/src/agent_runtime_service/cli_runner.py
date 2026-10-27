@@ -99,8 +99,8 @@ def codex_run(launch: ProviderLaunch) -> LoggedInRun:
 
 
 RUN_ADAPTERS: Final[Mapping[Provider, AdapterFactory]] = {
-    Provider.CLAUDE: claude_run,
-    Provider.CODEX: codex_run,
+    Provider.ANTHROPIC: claude_run,
+    Provider.OPENAI: codex_run,
 }
 
 

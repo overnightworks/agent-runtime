@@ -65,7 +65,7 @@ def cli_section(
 ) -> str:
     root_lines = f"{root}\n" if root else ""
     program_lines = "".join(f"{line}\n" for line in (binary, version, models, token) if line)
-    program_table = f"[cli.claude]\n{program_lines}\n" if program_lines else ""
+    program_table = f"[cli.{Provider.ANTHROPIC}]\n{program_lines}\n" if program_lines else ""
     return f"[cli]\n{root_lines}\n{program_table}"
 
 
@@ -79,7 +79,7 @@ SUBSCRIPTION_GROUPS_LINE = (
 )
 
 VALID_CONFIG = f"""
-defaults = {{ model = "{Provider.CLAUDE}/sonnet" }}
+defaults = {{ model = "{Provider.ANTHROPIC}/sonnet" }}
 [identity]
 issuer = "https://keycloak.test/realms/agent-test"
 jwks_url = "https://keycloak.test/realms/agent-test/protocol/openid-connect/certs"
@@ -137,7 +137,7 @@ def test_a_valid_file_loads_with_its_configured_identity_and_the_documented_defa
     assert config.identity.api_groups == {"/api-members"}
     assert config.api is not None
     assert config.identity.group_claim == "member-groups"
-    assert config.cli.claude.token_file == process_token_file()
+    assert config.cli.anthropic.token_file == process_token_file()
     assert (config.runs.heartbeat_interval_s, config.runs.idle_timeout_s) == (15, 120.0)
     assert config.runs.max_duration_s == 600.0
     assert config.runs.stall_timeout_s == 30.0
@@ -157,7 +157,7 @@ def test_a_leftover_tools_table_of_an_app_stops_startup_naming_the_field(tmp_pat
 
 
 def test_o11_a_leftover_models_table_of_an_app_stops_startup_naming_the_field(tmp_path, capsys):
-    text = VALID_CONFIG + '\n[apps.songmaker.models]\ncowriter = "claude/sonnet"\n'
+    text = VALID_CONFIG + f'\n[apps.songmaker.models]\ncowriter = "{Provider.ANTHROPIC}/sonnet"\n'
 
     assert _refused_on_one_line(_written(tmp_path, text), capsys).startswith(
         "apps.songmaker.models"
@@ -662,7 +662,7 @@ CANARY = "canary-token-value-7f3a91"
 API_KEY_SHAPE = "sk-ant-" + "api03-" + CANARY
 WHITESPACE_REASON = "holds whitespace; a setup token holds none"
 JSON_DOCUMENT_REASON = "holds a JSON document; it must hold one setup token"
-TOKEN_FILE_FIELD = "cli.claude.token_file"
+TOKEN_FILE_FIELD = "cli.anthropic.token_file"
 
 
 def _token_file_with(tmp_path: Path, contents: bytes, mode: int = 0o600) -> Path:
@@ -870,7 +870,7 @@ def test_a_sound_token_file_loads_with_or_without_a_trailing_newline_keeping_its
 
     config = load_config(_written(tmp_path, _token_config(str(token_file))))
 
-    assert config.cli.claude.token_file == token_file
+    assert config.cli.anthropic.token_file == token_file
 
 
 @pytest.mark.parametrize("flag", ["O_NONBLOCK", "O_CLOEXEC"])
@@ -911,7 +911,7 @@ def test_a_path_swapped_after_the_open_is_judged_by_the_opened_token_file(tmp_pa
 
     config = load_config(_written(tmp_path, _token_config(str(token_file))))
 
-    assert config.cli.claude.token_file == token_file
+    assert config.cli.anthropic.token_file == token_file
 
 
 WITHOUT_TOKEN_FILE = _with(TOKEN_FILE_LINE + "\n", "")
@@ -925,7 +925,7 @@ def served_apps(monkeypatch, logging_state_restored):
 
 
 CODEX_TABLE = (
-    f"[cli.codex]\n{CLAUDE_BINARY_LINE}\nversion = \"0.163.0\"\nmodels = [\"gpt-5.5\"]\n"
+    f'[cli.{Provider.OPENAI}]\n{CLAUDE_BINARY_LINE}\nversion = "0.163.0"\nmodels = ["gpt-5.5"]\n'
 )
 
 
@@ -954,12 +954,12 @@ def test_a_valid_document_reaches_serving(tmp_path, served_apps, monkeypatch):
 TABLE_RULE_REFUSALS = [
     pytest.param(
         WITHOUT_TOKEN_FILE,
-        "cli.claude.token_file: Field required",
+        "cli.anthropic.token_file: Field required",
         id="claude-without-a-token-file",
     ),
     pytest.param(
         _with_codex_table(token=False),
-        "cli.codex.token_file: Field required",
+        "cli.openai.token_file: Field required",
         id="codex-without-a-token-file",
     ),
     pytest.param(
@@ -976,7 +976,7 @@ TABLE_RULE_REFUSALS = [
         *TABLE_RULE_REFUSALS,
         pytest.param(
             _with(TOKEN_FILE_LINE, 'token_file = ""'),
-            "cli.claude.token_file:  must be an absolute path to the token file;"
+            "cli.anthropic.token_file:  must be an absolute path to the token file;"
             " ~ is not expanded",
             id="empty-token-file-path",
         ),
@@ -1044,7 +1044,7 @@ def test_a_name_with_a_control_character_is_refused_on_one_line_with_no_raw_cont
     [
         pytest.param(
             WITHOUT_TOKEN_FILE.replace(SONGMAKER_ORIGIN_LINE, ""),
-            ("cli.claude.token_file", "apps.songmaker.mcp_origin"),
+            ("cli.anthropic.token_file", "apps.songmaker.mcp_origin"),
             id="missing-token-and-missing-origin",
         ),
         pytest.param(
@@ -1063,11 +1063,11 @@ def test_a_document_with_several_defects_is_refused_on_one_line_naming_one_of_th
 
 
 MALFORMED_PIN_REFUSAL = (
-    "cli.claude.version: must be three dot-separated integers without leading zeros,"
+    "cli.anthropic.version: must be three dot-separated integers without leading zeros,"
     " written as a string, such as 2.1.302"
 )
 NOT_A_PROGRAM_PATH = (
-    "cli.claude.binary: {shown}must be an absolute path to the program; ~ is not expanded"
+    "cli.anthropic.binary: {shown}must be an absolute path to the program; ~ is not expanded"
 )
 
 
@@ -1090,7 +1090,7 @@ NOT_A_PROGRAM_PATH = (
             id="tilde",
         ),
         pytest.param("binary = 7", NOT_A_PROGRAM_PATH.format(shown=""), id="number"),
-        pytest.param("", "cli.claude.binary: Field required", id="missing"),
+        pytest.param("", "cli.anthropic.binary: Field required", id="missing"),
     ],
 )
 def test_a_program_binary_that_is_not_an_absolute_path_is_refused_by_field(
@@ -1107,7 +1107,7 @@ def test_a_program_binary_that_is_not_an_absolute_path_is_refused_by_field(
 @pytest.mark.parametrize(
     ("version_line", "refusal"),
     [
-        pytest.param("", "cli.claude.version: Field required", id="missing"),
+        pytest.param("", "cli.anthropic.version: Field required", id="missing"),
         pytest.param('version = "2.1"', MALFORMED_PIN_REFUSAL, id="two-integers"),
         pytest.param('version = "2.1.302.1"', MALFORMED_PIN_REFUSAL, id="four-integers"),
         pytest.param('version = "v2.1.302"', MALFORMED_PIN_REFUSAL, id="v-prefix"),
@@ -1153,7 +1153,7 @@ def test_a_claude_program_without_a_models_array_in_the_grammar_is_refused_by_fi
 ):
     refusal = _refused_on_one_line(_written(tmp_path, _with_models(models_line)), capsys)
 
-    assert refusal.startswith("cli.claude.models")
+    assert refusal.startswith("cli.anthropic.models")
 
 
 @pytest.mark.parametrize(
@@ -1165,7 +1165,7 @@ def test_a_claude_program_without_a_models_array_in_the_grammar_is_refused_by_fi
 def test_a_claude_program_lists_the_models_it_serves(tmp_path, models_line, listed):
     config = load_config(_written(tmp_path, _with_models(models_line)))
 
-    assert config.subscription_models() == {Provider.CLAUDE: listed}
+    assert config.subscription_models() == {Provider.ANTHROPIC: listed}
 
 
 def _cli_naming_the_working_root(root_line: str, program: Path) -> str:
@@ -1242,9 +1242,9 @@ def test_a_cli_table_loads_its_working_root_and_each_program_table(tmp_path):
     config = load_config(_written(tmp_path, VALID_CONFIG))
 
     assert config.cli.working_root == process_working_root()
-    assert list(config.cli.programs()) == [Provider.CLAUDE]
-    assert config.cli.claude.binary == process_claude_cli()
-    assert config.cli.claude.version == PINNED_CLAUDE_VERSION
+    assert list(config.cli.programs()) == [Provider.ANTHROPIC]
+    assert config.cli.anthropic.binary == process_claude_cli()
+    assert config.cli.anthropic.version == PINNED_CLAUDE_VERSION
 
 
 def _config_naming_a_marked_root(tmp_path: Path, make_the_root: bool) -> Path:
@@ -1376,7 +1376,7 @@ WITH_ROOT_AND_FLAT_KEYS = f"[cli]\n{WORKING_ROOT_LINE}\n{FORMER_FLAT_KEYS}\n"
             id="unchanged-v030",
         ),
         pytest.param(
-            f"[cli]\n{WORKING_ROOT_LINE}\n{FORMER_FLAT_KEYS}\n[cli.claude]\n"
+            f"[cli]\n{WORKING_ROOT_LINE}\n{FORMER_FLAT_KEYS}\n[cli.{Provider.ANTHROPIC}]\n"
             f"{CLAUDE_BINARY_LINE}\n{CLAUDE_VERSION_LINE}\n{MODELS_LINE}\n{TOKEN_FILE_LINE}\n\n",
             FORMER_FLAT_KEYS_REFUSED,
             id="beside-a-program-table",
@@ -1396,8 +1396,8 @@ def test_the_former_flat_program_keys_stop_the_start_naming_each_key(
     assert _the_probe_never_started(probe_log)
 
 
-@pytest.mark.parametrize("provider", ["grok"])
-def test_a_program_table_for_a_provider_without_a_version_reader_stops_the_start(
+@pytest.mark.parametrize("provider", ["claude", "codex", "grok"])
+def test_a_table_for_an_obsolete_or_unknown_provider_stops_the_start(
     tmp_path, capsys, provider
 ):
     probe_log = tmp_path / "probe-starts"
@@ -1412,14 +1412,12 @@ def test_a_program_table_for_a_provider_without_a_version_reader_stops_the_start
 
 
 def test_the_working_root_belongs_to_the_cli_table_not_to_a_program(tmp_path, capsys):
-    program_with_root = (
-        cli_section(binary=CLAUDE_BINARY_LINE, version=CLAUDE_VERSION_LINE, root="").rstrip("\n")
-        + f"\n{WORKING_ROOT_LINE}\n\n"
-    )
-    text = VALID_CONFIG.replace(CLI_SECTION, program_with_root)
+    program = cli_section(binary=CLAUDE_BINARY_LINE, version=CLAUDE_VERSION_LINE, root="")
+    text = VALID_CONFIG.replace(CLI_SECTION, program.rstrip("\n") + f"\n{WORKING_ROOT_LINE}\n\n")
 
     assert _refused_on_one_line(_written(tmp_path, text), capsys) == (
-        "cli.working_root: Field required; cli.claude.working_root: Extra inputs are not permitted"
+        "cli.working_root: Field required;"
+        " cli.anthropic.working_root: Extra inputs are not permitted"
     )
 
 
@@ -1440,13 +1438,13 @@ def _edited(edit: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
 
 
 def _claude_table_edit(**members: Any) -> Callable[[dict[str, Any]], None]:
-    return lambda document: document["cli"]["claude"].update(members)
+    return lambda document: document["cli"][Provider.ANTHROPIC].update(members)
 
 
 REFUSED_REPRESENTATIONS = [
     pytest.param(
         _claude_table_edit(token_file=None),
-        "cli.claude.token_file\n  Value error, must be an absolute path",
+        "cli.anthropic.token_file\n  Value error, must be an absolute path",
         id="token-file-none",
     ),
     pytest.param(

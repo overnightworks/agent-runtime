@@ -82,51 +82,51 @@ def test_a_usable_file_is_replaced_by_one_rename_and_the_reader_reads_the_new_do
 
 
 REFUSED_DOCUMENTS = [
-    pytest.param(Provider.CODEX, b"", (), "is not a Codex login document", id="codex-empty"),
+    pytest.param(Provider.OPENAI, b"", (), "is not a Codex login document", id="codex-empty"),
     pytest.param(
-        Provider.CODEX,
+        Provider.OPENAI,
         json.dumps({"OPENAI_API_KEY": CANARY_FOREIGN}).encode(),
         (CANARY_FOREIGN,),
         CODEX_FILE_REFUSAL,
         id="codex-api-key",
     ),
     pytest.param(
-        Provider.CODEX,
+        Provider.OPENAI,
         b"not json " + CANARY_FOREIGN.encode(),
         (CANARY_FOREIGN,),
         "is not a Codex login document",
         id="codex-not-json",
     ),
     pytest.param(
-        Provider.CODEX,
+        Provider.OPENAI,
         b"x" * (MAX_SECRET_FILE_BYTES + 1000),
         (),
         f"is larger than {MAX_SECRET_FILE_BYTES} bytes",
         id="codex-too-large",
     ),
     pytest.param(
-        Provider.CODEX,
+        Provider.OPENAI,
         SAMPLE_CLAUDE_SETUP_TOKEN.encode(),
         (SAMPLE_CLAUDE_SETUP_TOKEN,),
         "is not a Codex login document",
         id="codex-given-a-claude-token",
     ),
     pytest.param(
-        Provider.CLAUDE,
+        Provider.ANTHROPIC,
         b'{"claudeAiOauth": {"accessToken": "' + CANARY_FOREIGN.encode() + b'"}}',
         (CANARY_FOREIGN, "claudeAiOauth"),
         "holds a JSON document",
         id="claude-credentials-file",
     ),
     pytest.param(
-        Provider.CLAUDE,
+        Provider.ANTHROPIC,
         b"sk-ant-api03-" + CANARY_FOREIGN.encode() + b"\n",
         (CANARY_FOREIGN,),
         "holds an API key",
         id="claude-api-key",
     ),
     pytest.param(
-        Provider.CLAUDE, b" new-token\n", (), "holds whitespace", id="claude-leading-space"
+        Provider.ANTHROPIC, b" new-token\n", (), "holds whitespace", id="claude-leading-space"
     ),
 ]
 
@@ -202,11 +202,11 @@ def test_a_full_disk_while_writing_removes_the_sibling_and_names_the_cause(
 def test_a_path_the_rename_cannot_replace_removes_the_sibling_and_leaves_the_directory(
     tmp_path: Path, said: Said, refusals: list[SwapRefused | None]
 ) -> None:
-    installation = an_installation(tmp_path, Provider.CODEX, old=False)
+    installation = an_installation(tmp_path, Provider.OPENAI, old=False)
     installation.login.mkdir()
     (installation.login / "kept").write_text("kept")
 
-    status, heard = run(installation, Stream(GOOD_DOCUMENTS[Provider.CODEX]), said)
+    status, heard = run(installation, Stream(GOOD_DOCUMENTS[Provider.OPENAI]), said)
 
     assert status == 1
     assert installation.directory_holds() == [LOGIN_NAME]
@@ -303,7 +303,7 @@ def a_sibling_not_confirmed_gone(monkeypatch: pytest.MonkeyPatch, sibling: Path,
 def test_a_sibling_that_cannot_be_confirmed_gone_ends_with_exit_three_naming_it(
     tmp_path: Path, said: Said, monkeypatch: pytest.MonkeyPatch, how: str
 ) -> None:
-    installation = an_installation(tmp_path, Provider.CODEX)
+    installation = an_installation(tmp_path, Provider.OPENAI)
     a_sibling_not_confirmed_gone(monkeypatch, installation.sibling, how)
 
     status, heard = run(installation, Stream(b""), said)
@@ -357,7 +357,7 @@ def test_a_rename_that_fails_leaves_the_old_file_with_its_bytes_and_inode(
 
 
 def test_the_writer_refuses_a_path_without_a_file_name_as_a_closed_result() -> None:
-    document = GOOD_DOCUMENTS[Provider.CODEX]
+    document = GOOD_DOCUMENTS[Provider.OPENAI]
 
     refused = swap_in_login_file(Path("/"), document, lambda path: None)
 

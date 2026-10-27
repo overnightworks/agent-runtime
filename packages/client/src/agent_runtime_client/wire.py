@@ -215,7 +215,7 @@ AgentName = Annotated[str, AfterValidator(_refuse_non_agent)]
 
 def _refuse_non_model_name(text: str) -> str:
     if _MODEL_NAME_PATTERN.fullmatch(text) is None:
-        raise ValueError("must be <provider>/<model> with no version, such as claude/sonnet")
+        raise ValueError("must be <provider>/<model> with no version, such as anthropic/sonnet")
     return text
 
 

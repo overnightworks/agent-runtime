@@ -60,7 +60,7 @@ OTHER_MINT = TokenMint(key_id="another-signing-key")
 CLI_SCRIPT = (AssistantTextEvent(text="via the CLI"), FinalEvent(text="CLI answer"))
 API_SCRIPT = (AssistantTextEvent(text="via the API"), FinalEvent(text="API answer"))
 SERVICE_ACCOUNT = f"service-account-user-of-{SONGMAKER_CLIENT}"
-LISTED = f"claude/{LISTED_MODEL}"
+LISTED = f"{Provider.ANTHROPIC}/{LISTED_MODEL}"
 ENABLED_COWRITER: Final = {COWRITER: {"runs_as_app": True}}
 UNKNOWN_RUN = "00000000-0000-4000-8000-000000000000"
 
@@ -170,7 +170,7 @@ def test_p1_e1_a_workload_token_alone_runs_an_enabled_agent_as_the_service_accou
         TEST_ISSUER,
         SERVICE_ACCOUNT,
     )
-    assert (admitted.route, admitted.model) == (Cli(Provider.CLAUDE), LISTED)
+    assert (admitted.route, admitted.model) == (Cli(Provider.ANTHROPIC), LISTED)
 
 
 @pytest.mark.parametrize(
@@ -386,15 +386,15 @@ def test_e5_the_roles_of_the_body_are_not_read_for_the_apps_own_run(service):
 @pytest.mark.parametrize(
     ("groups", "app_model", "agent_model", "route", "model"),
     [
-        pytest.param([SUBSCRIPTION_GROUP], None, None, Cli(Provider.CLAUDE), LISTED, id="r1"),
+        pytest.param([SUBSCRIPTION_GROUP], None, None, Cli(Provider.ANTHROPIC), LISTED, id="r1"),
         pytest.param([API_GROUP], None, CODEX_NAME, Api(), CODEX_NAME, id="r2-the-agents-model"),
         pytest.param([API_GROUP], CODEX_NAME, None, Api(), CODEX_NAME, id="r3-app"),
         pytest.param(
-            [SUBSCRIPTION_GROUP, API_GROUP], CODEX_NAME, LISTED, Cli(Provider.CLAUDE), LISTED,
+            [SUBSCRIPTION_GROUP, API_GROUP], CODEX_NAME, LISTED, Cli(Provider.ANTHROPIC), LISTED,
             id="r5-the-agent-over-the-app",
         ),
         pytest.param(
-            [SUBSCRIPTION_GROUP, API_GROUP], None, CODEX_NAME, Cli(Provider.CODEX), CODEX_NAME,
+            [SUBSCRIPTION_GROUP, API_GROUP], None, CODEX_NAME, Cli(Provider.OPENAI), CODEX_NAME,
             id="r6-the-subscriber-of-the-models-provider",
         ),
     ],

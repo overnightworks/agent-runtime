@@ -339,10 +339,11 @@ def admitted_tools(origin):
 
     from agent_runtime_client.wire import RunRequest
     from agent_runtime_service.capability import Capability
+    from agent_runtime_service.config import Provider
     from agent_runtime_service.routing import Api
 
     capability = capability_carrying(canary_token())
-    return replace(alice_admitted_run(uuid4()), model="claude/chosen", route=Api(),
+    return replace(alice_admitted_run(uuid4()), model=f"{Provider.ANTHROPIC}/chosen", route=Api(),
         request=RunRequest.model_validate(run_body(tools={"echo": "read_only"})),
         capability=Capability(
             capability.claims.model_copy(update={"aud": origin}), capability.token))

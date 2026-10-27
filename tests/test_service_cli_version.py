@@ -132,7 +132,7 @@ def _refused_leaving_the_root_empty(
 
 def _no_version_line(program: Path, reason: str) -> str:
     return (
-        f"cli.claude.version: {program} did not print a version ({reason});"
+        f"cli.anthropic.version: {program} did not print a version ({reason});"
         f" the pinned version is {PINNED_CLAUDE_VERSION}"
     )
 
@@ -201,7 +201,7 @@ def test_a_program_reporting_another_version_refuses_the_start_naming_both(
     refusal = _refused_leaving_the_root_empty(tmp_path, capsys, program)
 
     assert refusal == (
-        f"cli.claude.version: {program} reports 2.1.303, not the pinned {PINNED_CLAUDE_VERSION}"
+        f"cli.anthropic.version: {program} reports 2.1.303, not the pinned {PINNED_CLAUDE_VERSION}"
     )
     assert served == []
 
@@ -357,7 +357,7 @@ def test_a_binary_path_holding_a_newline_is_refused_on_one_line_with_the_newline
     refusal = _refused_leaving_the_root_empty(tmp_path, capsys, program)
 
     assert refusal == (
-        f"cli.claude.version: {str(program).replace(chr(10), '\\n')} did not print a version"
+        f"cli.anthropic.version: {str(program).replace(chr(10), '\\n')} did not print a version"
         f" (probe could not start or its start deadline expired);"
         f" the pinned version is {PINNED_CLAUDE_VERSION}"
     )
@@ -459,13 +459,13 @@ def test_with_both_programs_pinned_both_are_probed_and_the_first_miss_refuses_na
     codex, codex_calls = _a_pin(
         tmp_path / "codex", "codex-cli 0.163.1\n", "0.163.0", CodexProgram, a_login_file(tmp_path)
     )
-    cli = CliConfig(working_root=str(working_root), claude=claude, codex=codex)
+    cli = CliConfig(working_root=str(working_root), anthropic=claude, openai=codex)
 
     with pytest.raises(ProgramVersionRefused) as refused:
         require_pinned_versions(cli)
 
     assert str(refused.value) == (
-        f"cli.codex.version: {codex.binary} reports 0.163.1, not the pinned 0.163.0"
+        f"cli.openai.version: {codex.binary} reports 0.163.1, not the pinned 0.163.0"
     )
     assert (claude_calls.exists(), codex_calls.exists()) == (True, True)
 
@@ -475,7 +475,8 @@ def _the_unstarted_refusal(program: Path) -> str:
 
 
 def _the_mismatch_refusal(program: Path) -> str:
-    return f"cli.claude.version: {program} reports 2.1.303, not the pinned {PINNED_CLAUDE_VERSION}"
+    pinned = PINNED_CLAUDE_VERSION
+    return f"cli.anthropic.version: {program} reports 2.1.303, not the pinned {pinned}"
 
 
 def test_a_run_tree_whose_rollback_fails_still_refuses_the_start_as_unstarted(

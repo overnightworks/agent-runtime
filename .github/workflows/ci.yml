@@ -170,7 +170,7 @@ jobs:
           test "$status" -eq 2
           grep -q 'identity.jwks_url' refused.txt
           status=0
-          "$proof/venv/bin/agent-runtime-service-login" --config bad.toml --provider claude --check 2> login_refused.txt || status=$?
+          "$proof/venv/bin/agent-runtime-service-login" --config bad.toml --provider anthropic --check 2> login_refused.txt || status=$?
           cat login_refused.txt
           test "$status" -eq 2
           grep -q 'identity.jwks_url' login_refused.txt

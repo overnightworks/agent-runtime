@@ -48,7 +48,7 @@ from agent_runtime_client.agents import load_agent
 from agent_runtime_client.wire import RejectionCode, TurnMessage, TurnRole
 from agent_runtime_service.admission import AdmissionSlot
 from agent_runtime_service.app import create_app
-from agent_runtime_service.config import ServiceConfig
+from agent_runtime_service.config import Provider, ServiceConfig
 from agent_runtime_service.identity import Principal
 from agent_runtime_service.routing import Api
 from agent_runtime_service.run_records import RunRecords
@@ -58,7 +58,7 @@ MINT = TokenMint()
 ANSWER = (AssistantTextEvent(text="answer"), FinalEvent(text="done"))
 FORBIDDEN = RejectionCode.FORBIDDEN
 NOT_ENABLED = RejectionCode.NOT_ENABLED
-LISTED = f"claude/{LISTED_MODEL}"
+LISTED = f"{Provider.ANTHROPIC}/{LISTED_MODEL}"
 SONGMAKER_ADMIN_GROUP = "/apps/songmaker/admin"
 PRESENTATOR_ADMIN_GROUP = "/apps/presentator/admin"
 ALICE = Principal(TEST_ISSUER, "user-alice")

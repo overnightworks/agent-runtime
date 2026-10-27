@@ -64,8 +64,8 @@ from agent_runtime_service.runners import Runners
 CLI_SCRIPT = (AssistantTextEvent(text="via the CLI"), FinalEvent(text="CLI answer"))
 API_SCRIPT = (AssistantTextEvent(text="via the API"), FinalEvent(text="API answer"))
 
-LISTED = f"claude/{LISTED_MODEL}"
-CLI_ROUTE = Cli(Provider.CLAUDE)
+LISTED = f"{Provider.ANTHROPIC}/{LISTED_MODEL}"
+CLI_ROUTE = Cli(Provider.ANTHROPIC)
 MINT = TokenMint()
 OTHER_MINT = TokenMint()
 
@@ -732,7 +732,7 @@ def test_s3_a_run_is_routed_on_exactly_the_configured_model(tmp_path):
 
     assert _admitted_events(response)
     admitted = runners.cli.admitted + runners.api.admitted
-    assert [(run.route, run.model) for run in admitted] == [(Cli(Provider.CODEX), CODEX_NAME)]
+    assert [(run.route, run.model) for run in admitted] == [(Cli(Provider.OPENAI), CODEX_NAME)]
 
 
 def _run_on_the_file(tmp_path, subscription_groups):

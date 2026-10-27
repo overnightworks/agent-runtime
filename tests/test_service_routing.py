@@ -21,9 +21,9 @@ IDENTITY = IdentityConfig(
     api_groups=frozenset({"/api-members"}),
     group_claim="groups",
 )
-TABLES = frozenset({Provider.CLAUDE})
-MODEL = f"{Provider.CLAUDE}/sonnet"
-CLI = Cli(Provider.CLAUDE)
+TABLES = frozenset({Provider.ANTHROPIC})
+MODEL = f"{Provider.ANTHROPIC}/sonnet"
+CLI = Cli(Provider.ANTHROPIC)
 API = Api()
 OFF = NotEnabled()
 
@@ -67,12 +67,12 @@ BOTH = {"/new-sub", "/api-members"}
 @pytest.mark.parametrize(
     ("groups", "model", "expected"),
     [
-        pytest.param(SUBSCRIBER, "claude/sonnet", CLI, id="R-a-S"),
-        pytest.param(API_ONLY, "claude/sonnet", Api(), id="R-a-A"),
-        pytest.param(BOTH, "claude/sonnet", CLI, id="R-a-D"),
+        pytest.param(SUBSCRIBER, f"{Provider.ANTHROPIC}/sonnet", CLI, id="R-a-S"),
+        pytest.param(API_ONLY, f"{Provider.ANTHROPIC}/sonnet", Api(), id="R-a-A"),
+        pytest.param(BOTH, f"{Provider.ANTHROPIC}/sonnet", CLI, id="R-a-D"),
         pytest.param(SUBSCRIBER, "xai/sonnet", OFF, id="R-d-S"),
         pytest.param(BOTH, "xai/sonnet", Api(), id="R-d-D"),
-        pytest.param(set(), "claude/sonnet", OFF, id="R-e-N"),
+        pytest.param(set(), f"{Provider.ANTHROPIC}/sonnet", OFF, id="R-e-N"),
     ],
 )
 def test_a_named_model_runs_on_the_subscription_only_when_a_table_has_its_provider(
@@ -84,11 +84,11 @@ def test_a_named_model_runs_on_the_subscription_only_when_a_table_has_its_provid
 @pytest.mark.parametrize(
     ("model", "expected"),
     [
-        pytest.param("claude/sonnet", CLI, id="claude-model"),
-        pytest.param("codex/gpt-5.5", Cli(Provider.CODEX), id="codex-model"),
+        pytest.param(f"{Provider.ANTHROPIC}/sonnet", CLI, id="anthropic-model"),
+        pytest.param(f"{Provider.OPENAI}/gpt-5.5", Cli(Provider.OPENAI), id="openai-model"),
     ],
 )
 def test_a_model_goes_to_the_table_of_its_provider(model, expected):
-    tables = frozenset({Provider.CLAUDE, Provider.CODEX})
+    tables = frozenset({Provider.ANTHROPIC, Provider.OPENAI})
 
     assert _routed(SUBSCRIBER, tables=tables, model=model) == expected
