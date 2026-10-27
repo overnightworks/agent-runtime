@@ -290,6 +290,17 @@ def test_a_provider_without_a_table_is_refused_before_anything_is_read(
     assert "cli.codex: no such table" in said.descriptor
 
 
+def test_a_provider_without_a_login_is_refused_by_the_parser_before_anything_is_read(
+    installation: Installation, said: Said
+) -> None:
+    stream = Stream(GOOD_DOCUMENTS[installation.provider])
+
+    with pytest.raises(SystemExit) as refused:
+        main(["--config", str(installation.config), "--provider", "grok"], stream)
+
+    assert (refused.value.code, stream.was_read, installation.unchanged()) == (2, False, True)
+
+
 @pytest.mark.parametrize("extra", [[], ["--check"]], ids=["install", "check"])
 def test_the_former_profile_option_is_refused_before_anything_is_read(
     installation: Installation, said: Said, extra: list[str]

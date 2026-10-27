@@ -915,7 +915,6 @@ def test_a_path_swapped_after_the_open_is_judged_by_the_opened_token_file(tmp_pa
 
 
 WITHOUT_TOKEN_FILE = _with(TOKEN_FILE_LINE + "\n", "")
-WITHOUT_ORIGIN = _with(SONGMAKER_ORIGIN_LINE, "")
 
 
 @pytest.fixture
@@ -1442,15 +1441,6 @@ def _edited(edit: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
 
 def _claude_table_edit(**members: Any) -> Callable[[dict[str, Any]], None]:
     return lambda document: document["cli"]["claude"].update(members)
-
-
-def _app_edit(*, signing: bool = True, **members: Any) -> Callable[[dict[str, Any]], None]:
-    def edit(document: dict[str, Any]) -> None:
-        document["apps"]["songmaker"].update(members)
-        if not signing:
-            del document["signing"]
-
-    return edit
 
 
 REFUSED_REPRESENTATIONS = [

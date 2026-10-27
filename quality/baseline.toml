@@ -28,7 +28,7 @@
 "tests/test_service_capability.py" = 869
 "tests/test_service_cli_runner.py" = 1082
 "tests/test_service_cli_runner_tools.py" = 1717
-"tests/test_service_config.py" = 1509
+"tests/test_service_config.py" = 1499
 "tests/test_service_quarantine.py" = 870
 "tests/test_service_run_recording.py" = 2034
 "tests/test_service_tool_relay.py" = 1309

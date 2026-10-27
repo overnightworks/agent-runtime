@@ -176,7 +176,7 @@ def main(argv: Sequence[str] | None = None, standard_input: BinaryIO | None = No
     # Imported only now, as the service's start does: its modules need Unix-only constants.
     from agent_runtime_service.config import LOGIN_READERS, ConfigError, Provider, load_config
 
-    arguments = _arguments(argv, Provider)
+    arguments = _arguments(argv, LOGIN_READERS)
     try:
         config = load_config(arguments.config, read_logins=False)
     except ConfigError as error:

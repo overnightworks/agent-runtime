@@ -31,7 +31,7 @@ CA bundles, and exits 0 without binding the port. Otherwise it prints the start'
 refusal line and exits 2. Run it with the new image and file before stopping the old service.
 
 The configuration is read once; a restart applies a change. The signing key
-file, the Claude token file and any API credential file are read and checked with it.
+file, the Claude token file, the Codex login document and any API credential file are read and checked with it.
 
 ## Who may run what
 
