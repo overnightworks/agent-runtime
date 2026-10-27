@@ -179,7 +179,7 @@ def what_the_writer_returned(monkeypatch: pytest.MonkeyPatch) -> list[SwapRefuse
 @pytest.fixture(name="restored_signal_handlers")
 def the_signal_handlers_restored() -> Iterator[None]:
     """The command keeps the three signals disregarded until its process exits; a test does not."""
-    previous = {number: signal.getsignal(number) for number in login.INTERRUPT_SIGNALS}
+    previous = {number: signal.getsignal(number) for number in login.interrupt_signals()}
     yield
     for number, handler in previous.items():
         signal.signal(number, handler)
@@ -193,7 +193,7 @@ def the_signals_received() -> Iterator[Callable[[], list[int]]]:
     def record(number: int, frame: object) -> None:
         received.append(number)
 
-    for number in login.INTERRUPT_SIGNALS:
+    for number in login.interrupt_signals():
         signal.signal(number, record)
     yield lambda: received
 

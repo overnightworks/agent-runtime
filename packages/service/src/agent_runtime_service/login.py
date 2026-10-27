@@ -38,11 +38,16 @@ from agent_runtime_service.process_hardening import StartupHardeningRefused, har
 EXIT_NOT_WRITTEN: Final = 1
 EXIT_REMAINS: Final = 3
 PROGRAM_NAME: Final = "agent-runtime-service-login"
-INTERRUPT_SIGNALS: Final = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+INTERRUPT_SIGNAL_NAMES: Final = ("SIGINT", "SIGTERM", "SIGHUP")
 
 
 def _disregard(signal_number: int, frame: FrameType | None) -> None:
     return None
+
+
+def interrupt_signals() -> tuple[int, ...]:
+    """Resolved on use: ``SIGHUP`` does not exist everywhere, and the platform gate runs first."""
+    return tuple(getattr(signal, name) for name in INTERRUPT_SIGNAL_NAMES)
 
 
 def disregard_interrupts() -> None:
@@ -51,7 +56,7 @@ def disregard_interrupts() -> None:
     A caught signal, unlike an ignored one, is reset to its default by ``exec``, so a child
     started inside the window stays interruptible.
     """
-    for signal_number in INTERRUPT_SIGNALS:
+    for signal_number in interrupt_signals():
         signal.signal(signal_number, _disregard)
 
 
@@ -75,7 +80,7 @@ def _document_read(standard_input: BinaryIO | None) -> bytes | SwapRefused:
     if standard_input is None:
         return SwapRefused("standard input cannot be read", False)
     try:
-        for signal_number in INTERRUPT_SIGNALS:
+        for signal_number in interrupt_signals():
             signal.signal(signal_number, _interrupt_once)
         try:
             return standard_input.read(MAX_SECRET_FILE_BYTES + 1)
@@ -118,7 +123,7 @@ def _sibling_left_over(sibling: Path) -> bool:
         os.lstat(sibling)
     except FileNotFoundError:
         return False
-    except OSError:
+    except (OSError, ValueError):
         return True
     return True
 
@@ -185,3 +190,4 @@ def main(argv: Sequence[str] | None = None, standard_input: BinaryIO | None = No
         read_login,
         sys.stdin.buffer if standard_input is None and sys.stdin is not None else standard_input,
     )
+

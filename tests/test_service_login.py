@@ -6,6 +6,7 @@ refusals before the read).
 from __future__ import annotations
 
 import errno
+import importlib
 import json
 import os
 import signal
@@ -56,7 +57,7 @@ from agent_runtime_service.login import main
 from agent_runtime_service.login_file import SwapRefused
 
 
-@pytest.mark.parametrize("interrupt", login.INTERRUPT_SIGNALS, ids=lambda number: number.name)
+@pytest.mark.parametrize("interrupt", login.interrupt_signals(), ids=lambda number: number.name)
 def test_an_interrupt_while_reading_ends_the_read_and_a_second_one_is_disregarded(
     installation: Installation,
     said: Said,
@@ -65,12 +66,12 @@ def test_an_interrupt_while_reading_ends_the_read_and_a_second_one_is_disregarde
     monkeypatch: pytest.MonkeyPatch,
     interrupt: signal.Signals,
 ) -> None:
-    other = next(number for number in login.INTERRUPT_SIGNALS if number != interrupt)
+    other = next(number for number in login.interrupt_signals() if number != interrupt)
     handlers_when_reported: list[object] = []
     say = login._say
 
     def reporting(line: str) -> None:
-        handlers_when_reported.extend(signal.getsignal(n) for n in login.INTERRUPT_SIGNALS)
+        handlers_when_reported.extend(signal.getsignal(n) for n in login.interrupt_signals())
         say(line)
 
     monkeypatch.setattr(login, "_say", reporting)
@@ -119,7 +120,7 @@ def a_commit_with_every_interrupt_arriving(
     where: str, monkeypatch: pytest.MonkeyPatch, installation: Installation
 ) -> None:
     def everything() -> None:
-        send(*login.INTERRUPT_SIGNALS)
+        send(*login.interrupt_signals())
 
     if where == "swap":
         reader_hook(monkeypatch, installation.provider, everything)
@@ -303,6 +304,47 @@ def test_a_configuration_the_service_refuses_is_refused_with_its_field_text(
     assert "identity.jwks_address" in heard or "identity.jwks_url" in heard
 
 
+@pytest.mark.parametrize(
+    "unshowable", ["\x00", "\x1b", "\u200b"], ids=["nul", "escape", "zero-width"]
+)
+@pytest.mark.parametrize("extra", [[], ["--check"]], ids=["install", "check"])
+def test_a_login_path_with_a_non_printing_character_is_refused_before_anything_is_read(
+    installation: Installation, said: Said, extra: list[str], unshowable: str
+) -> None:
+    quoted = json.dumps(str(installation.login))
+    text = installation.config.read_text()
+    assert quoted in text
+    bad_path = json.dumps(f"{installation.login}{unshowable}.json")
+    installation.config.write_text(text.replace(quoted, bad_path))
+    stream = Stream(GOOD_DOCUMENTS[installation.provider])
+
+    status, heard = run(installation, stream, said, *extra)
+
+    assert (status, stream.was_read, installation.unchanged()) == (2, False, True)
+    assert f"profiles.{installation.profile}.token_file" in heard
+    assert "Traceback" not in heard
+
+
+def test_a_platform_without_sighup_is_refused_by_hardening_and_not_by_the_import(
+    installation: Installation, said: Said, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refusing() -> None:
+        raise hardening.StartupHardeningRefused("this platform cannot be hardened")
+
+    monkeypatch.delattr(signal, "SIGHUP")
+    monkeypatch.delitem(sys.modules, login.__name__)
+    imported_without_sighup = importlib.import_module(login.__name__)
+    monkeypatch.setattr(imported_without_sighup, "harden_process", refusing)
+    stream = Stream(GOOD_DOCUMENTS[installation.provider])
+
+    with said.watching():
+        status = imported_without_sighup.main(installation.command(), stream)
+
+    assert (status, stream.was_read, installation.unchanged()) == (2, False, True)
+    assert "this platform cannot be hardened" in said.descriptor
+    assert "Traceback" not in said.descriptor
+
+
 def test_hardening_under_root_refuses_before_the_configuration_is_read(
     installation: Installation, said: Said, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -381,7 +423,7 @@ def test_a_login_file_without_a_file_name_is_refused_before_anything_is_read(
     assert installation.unchanged()
 
 
-@pytest.mark.parametrize("interrupt", login.INTERRUPT_SIGNALS, ids=lambda number: number.name)
+@pytest.mark.parametrize("interrupt", login.interrupt_signals(), ids=lambda number: number.name)
 def test_a_process_that_installed_a_login_exits_zero_whatever_signal_comes_after_the_commit(
     tmp_path: Path, interrupt: signal.Signals
 ) -> None:
@@ -418,12 +460,12 @@ def test_interrupts_before_the_read_are_disregarded(
 
         def inspecting(path: Any, *rest: Any) -> os.stat_result:
             if Path(path) == installation.sibling:
-                send(*login.INTERRUPT_SIGNALS)
+                send(*login.interrupt_signals())
             return real_lstat(path, *rest)
 
         monkeypatch.setattr(os, "lstat", inspecting)
     else:
-        reader_hook(monkeypatch, installation.provider, lambda: send(*login.INTERRUPT_SIGNALS))
+        reader_hook(monkeypatch, installation.provider, lambda: send(*login.interrupt_signals()))
         extra = ("--check",) if where == "check" else ()
     stream = Stream(GOOD_DOCUMENTS[installation.provider])
 

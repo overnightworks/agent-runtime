@@ -55,6 +55,7 @@ from agent_runtime.secret_file import (
     UnsoundSecretFile,
     read_secret_file,
     read_token_file,
+    shown_path,
     shown_text,
 )
 from agent_runtime_client.capability import McpOrigin
@@ -180,6 +181,7 @@ def _sound_token_file(token_file: object, info: ValidationInfo) -> Path:
     skips login reads (the login command's) still checks the path.
     """
     path = _absolute_path_to("token file", token_file)
+    shown_path(path)
     read_login = LOGIN_READERS.get(info.data.get("provider"))
     logins_skipped = isinstance(info.context, LoadContext) and not info.context.read_logins
     if read_login is not None and not logins_skipped:
