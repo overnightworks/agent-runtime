@@ -1,0 +1,8 @@
+claim_id = "7c4473f1d6cc430a8591041272cf189f"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "f5d518433d2673f3d1fa7c5efbbc4997b3be3c9e"
+branch = "claude/issue-515-profiles-fold-into-cli"
+scope = [".github/workflows/ci.yml", "docs/ARCHITECTURE.md", "docs/MIGRATING.md", "docs/operations.md", "docs/wire.md", "packages/service/src/agent_runtime_service/app.py", "packages/service/src/agent_runtime_service/cli_runner.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/src/agent_runtime_service/login.py", "packages/service/src/agent_runtime_service/login_file.py", "packages/service/src/agent_runtime_service/routing.py", "quality/baseline.toml", "tests/service_login_support.py", "tests/service_support.py", "tests/test_service_admission.py", "tests/test_service_api_runner.py", "tests/test_service_app_runs.py", "tests/test_service_check.py", "tests/test_service_cli_runner.py", "tests/test_service_cli_runner_tools.py", "tests/test_service_codex_profile.py", "tests/test_service_codex_startup.py", "tests/test_service_config.py", "tests/test_service_entrance.py", "tests/test_service_keycloak.py", "tests/test_service_login.py", "tests/test_service_login_file.py", "tests/test_service_model_config.py", "tests/test_service_routing.py", "tests/test_service_run_events.py", "tests/test_service_ticket_refusal.py"]
+opened_commit = "cff83e358f50e32944d7b55589a9a7571aa8e10c"
+whole_reason = "The token file has one owner: the provider table, its reader, routing, the CLI runner, admission, the login command, CI's wheel smoke, the shared test builders and the docs move together, or the service has no login source."
