@@ -1,8 +1,0 @@
-claim_id = "b6134753e1cc4db8abc84a2c8655e74a"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "ef6375ef89208126d36bc36eada59e0190285c5a"
-branch = "claude/issue-489-app-own-agent-runs"
-scope = [".github/host-vocabulary-allowed.txt", "docs/ARCHITECTURE.md", "docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "docs/wire.md", "packages/service/src/agent_runtime_service/app.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/src/agent_runtime_service/identity.py", "tests/keycloak/realm.json", "tests/test_keycloak_token_shapes.py", "tests/test_service_app_runs.py", "tests/test_service_config.py", "tests/test_service_entrance.py", "tests/test_service_keycloak.py"]
-opened_commit = "8867722876cab02a689e98982ed29324f1a914aa"
-whole_reason = "The caller kind, its config key and the precedence are one admission path; split, the config key would gate nothing or the precedence would admit an app run with no list to check."
