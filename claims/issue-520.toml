@@ -1,8 +1,0 @@
-claim_id = "b246551d647b4f1f93d35e19e95aedd8"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "ef3f991b1fcbab2cc5a8458d11177a03a50c463d"
-branch = "claude/issue-520-release-0-10-0"
-scope = ["docs/MIGRATING.md", "packages/client/pyproject.toml", "packages/service/pyproject.toml", "pyproject.toml", "src/agent_runtime/__init__.py", "uv.lock"]
-opened_commit = "8b490f85a420a7bf6d1e4c921decc8a77c1d7d66"
-whole_reason = "One release: the seven version literals, the lock and the migration section must agree in one commit, or the distribution contract test fails."
