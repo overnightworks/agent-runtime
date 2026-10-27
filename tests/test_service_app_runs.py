@@ -46,12 +46,14 @@ from service_support import (
     service_config,
 )
 from test_service_admission import HeldRunner
+from test_service_config import VALID_CONFIG, _written
 from webauth.https_client import KeySetFetchError
 
 from agent_runtime.events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import RejectionCode, RunStarted
 from agent_runtime_service.app import create_app
-from agent_runtime_service.config import AgentConfig, ServiceConfig
+from agent_runtime_service.cli import EXIT_BAD_CONFIG, main
+from agent_runtime_service.config import AgentConfig, ServiceConfig, load_config
 from agent_runtime_service.routing import Api, Cli
 from agent_runtime_service.runners import Runners
 
@@ -486,3 +488,44 @@ def test_c1_the_capability_of_the_apps_own_run_names_the_service_account_and_flo
     assert (claims.principal.iss, claims.principal.sub) == (TEST_ISSUER, SERVICE_ACCOUNT)
     assert (claims.app, claims.purpose) == ("songmaker", COWRITER)
     assert (claims.iat, claims.exp) == (math.floor(now), math.floor(now + 300.5))
+
+
+def test_an_apps_agent_table_names_the_agents_that_run_as_the_app(tmp_path):
+    text = (
+        VALID_CONFIG
+        + "\n[apps.songmaker.agents.cowriter]\nruns_as_app = true\n"
+        + "\n[apps.songmaker.agents.notes]\n"
+    )
+
+    songmaker = load_config(_written(tmp_path, text)).apps["songmaker"]
+
+    assert songmaker.runs_as_itself("cowriter")
+    assert not songmaker.runs_as_itself("notes")
+    assert not songmaker.runs_as_itself("unnamed")
+
+
+@pytest.mark.parametrize(
+    ("text", "named_field"),
+    [
+        pytest.param(
+            VALID_CONFIG + "\n[apps.songmaker.agents.Co_Writer]\nruns_as_app = true\n",
+            "apps.songmaker.agents.Co_Writer",
+            id="E6-an-agent-named-by-an-invalid-purpose",
+        ),
+        pytest.param(
+            VALID_CONFIG + '\n[apps.songmaker.agents.cowriter]\nruns_as_app = "yes"\n',
+            "apps.songmaker.agents.cowriter.runs_as_app",
+            id="E6-a-runs-as-app-that-is-no-boolean",
+        ),
+        pytest.param(
+            VALID_CONFIG + '\n[apps.songmaker.agents.cowriter]\nroute = "api"\n',
+            "apps.songmaker.agents.cowriter.route",
+            id="E6-an-unknown-key-in-the-agent-table",
+        ),
+    ],
+)
+def test_a_refused_agent_table_stops_startup_naming_the_field(tmp_path, capsys, text, named_field):
+    exit_status = main(["--config", str(_written(tmp_path, text))])
+
+    assert exit_status == EXIT_BAD_CONFIG
+    assert named_field in capsys.readouterr().err

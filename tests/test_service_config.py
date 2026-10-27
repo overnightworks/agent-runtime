@@ -149,20 +149,6 @@ def test_a_valid_file_loads_with_its_configured_identity_and_the_documented_defa
     assert config.app_of_workload_client("songmaker-test") == "songmaker"
 
 
-def test_an_apps_agent_table_names_the_agents_that_run_as_the_app(tmp_path):
-    text = (
-        VALID_CONFIG
-        + "\n[apps.songmaker.agents.cowriter]\nruns_as_app = true\n"
-        + "\n[apps.songmaker.agents.notes]\n"
-    )
-
-    songmaker = load_config(_written(tmp_path, text)).apps["songmaker"]
-
-    assert songmaker.runs_as_itself("cowriter")
-    assert not songmaker.runs_as_itself("notes")
-    assert not songmaker.runs_as_itself("unnamed")
-
-
 def test_an_installation_without_an_origin_needs_no_signing_section(tmp_path):
     assert load_config(_written(tmp_path, _without_origin_and_signing())).signing is None
 
@@ -348,21 +334,6 @@ def _with_key_set_url(url: str) -> str:
                 ("subscription_groups", SUBSCRIPTION_GROUPS_LINE + "\n"),
                 ("group_claim", 'group_claim = "member-groups"\n'),
             )
-        ),
-        pytest.param(
-            VALID_CONFIG + "\n[apps.songmaker.agents.Co_Writer]\nruns_as_app = true\n",
-            "apps.songmaker.agents.Co_Writer",
-            id="E6-an-agent-named-by-an-invalid-purpose",
-        ),
-        pytest.param(
-            VALID_CONFIG + '\n[apps.songmaker.agents.cowriter]\nruns_as_app = "yes"\n',
-            "apps.songmaker.agents.cowriter.runs_as_app",
-            id="E6-a-runs-as-app-that-is-no-boolean",
-        ),
-        pytest.param(
-            VALID_CONFIG + '\n[apps.songmaker.agents.cowriter]\nroute = "api"\n',
-            "apps.songmaker.agents.cowriter.route",
-            id="E6-an-unknown-key-in-the-agent-table",
         ),
         pytest.param("[identity\n", "not TOML", id="not-toml"),
         pytest.param(_with(SIGNING_KEY_LINE, ""), "signing.key_file", id="signing-without-key"),
@@ -964,12 +935,12 @@ def test_a_path_swapped_after_the_open_is_judged_by_the_opened_token_file(tmp_pa
     assert config.profiles["claude-main"].token_file == token_file
 
 
-PROFILE_TABLE = (
-    '[profiles.claude-main]\nprovider = "claude"\n' + TOKEN_FILE_LINE + "\n\n"
-)
+PROFILE_TABLE = '[profiles.claude-main]\nprovider = "claude"\n' + TOKEN_FILE_LINE + "\n\n"
 NO_PROFILE = _with(PROFILE_TABLE, "")
 WITHOUT_TOKEN_FILE = _with(TOKEN_FILE_LINE + "\n", "")
 WITHOUT_ORIGIN = _with(SONGMAKER_ORIGIN_LINE, "")
+
+
 @pytest.fixture
 def served_apps(monkeypatch, logging_state_restored):
     served = []
