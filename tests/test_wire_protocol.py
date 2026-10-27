@@ -85,7 +85,7 @@ def test_the_effect_class_never_reaches_a_model(project) -> None:
         assert leak not in seen_by_the_model
 
 
-STARTED_FIELDS = {"model": "claude/sonnet", "route": "cli", "heartbeat_interval_s": 15}
+STARTED_FIELDS = {"model": "anthropic/sonnet", "route": "cli", "heartbeat_interval_s": 15}
 
 WIRE_VARIANTS = {
     "run_started": wire("run_started", 0, **STARTED_FIELDS),
@@ -178,7 +178,7 @@ def test_every_variant_round_trips_through_its_json(raw: dict[str, object]) -> N
             id="run_started without a model",
         ),
         pytest.param(
-            wire("run_started", 0, model="claude/sonnet", heartbeat_interval_s=15),
+            wire("run_started", 0, model="anthropic/sonnet", heartbeat_interval_s=15),
             ViolationKind.SCHEMA_MISMATCH,
             id="run_started without a route",
         ),
@@ -771,7 +771,7 @@ def test_any_other_agent_roles_are_refused(roles: object) -> None:
         AGENT_ROLES.validate_python(roles)
 
 
-@pytest.mark.parametrize("model", ["claude/sonnet", None, "", 5])
+@pytest.mark.parametrize("model", ["anthropic/sonnet", None, "", 5])
 def test_a_run_request_that_carries_a_model_is_refused(model: object) -> None:
     with pytest.raises(ValidationError, match="model"):
         RunRequest.model_validate({**REQUEST, "model": model})

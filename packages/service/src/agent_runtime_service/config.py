@@ -5,10 +5,10 @@ required, and ``model`` may be set again in ``[apps.<app>]`` and in
 ``[apps.<app>.agents.<agent>]``. Each name is ``<provider>/<model>`` in the wire's grammar, and
 startup refuses one that no ``[cli.<provider>]`` table lists in its ``models``.
 
-The service runs the subscription programs of Claude and of Codex. Each ``[cli.<provider>]``
-table names the absolute program, the exact version it must report, the models it serves and its
-token file (a Claude setup token, or a Codex sign-in document), beside the ``[cli]`` section's
-private ``working_root``, checked at load.
+The service runs the subscription programs of Claude (``[cli.anthropic]``) and of Codex
+(``[cli.openai]``). Each such table names the absolute program, the exact version it must
+report, the models it serves and its token file (a Claude setup token, or a Codex sign-in
+document), beside the ``[cli]`` section's private ``working_root``, checked at load.
 ``identity.api_groups`` and ``[api]`` come together. An
 app that offers tools names its one https MCP origin, and the service signs a capability for
 each run that grants the tools its request names; an origin is never shared between apps and
@@ -93,9 +93,8 @@ class ConfigError(ValueError):
 
 
 class Provider(StrEnum):
-    CLAUDE = "claude"
-    CODEX = "codex"
-    GROK = "grok"
+    ANTHROPIC = "anthropic"
+    OPENAI = "openai"
 
 
 class _Section(BaseModel):
@@ -165,8 +164,8 @@ def read_codex_login(path: Path) -> CodexLogin:
 
 
 LOGIN_READERS: Final[Mapping[Provider, Callable[[Path], object]]] = {
-    Provider.CLAUDE: read_token_file,
-    Provider.CODEX: read_codex_login,
+    Provider.ANTHROPIC: read_token_file,
+    Provider.OPENAI: read_codex_login,
 }
 
 
@@ -251,13 +250,13 @@ class ProgramPin(_Section):
 class ClaudeProgram(ProgramPin):
     """Claude's program and the setup token its runs log in with."""
 
-    token_file: Annotated[Path, BeforeValidator(_token_file_read_by(Provider.CLAUDE))]
+    token_file: Annotated[Path, BeforeValidator(_token_file_read_by(Provider.ANTHROPIC))]
 
 
 class CodexProgram(ProgramPin):
     """Codex's program and the sign-in document its runs log in with."""
 
-    token_file: Annotated[Path, BeforeValidator(_token_file_read_by(Provider.CODEX))]
+    token_file: Annotated[Path, BeforeValidator(_token_file_read_by(Provider.OPENAI))]
 
 
 def _private_working_root(value: object) -> PrivateWorkingRoot:
@@ -279,8 +278,8 @@ class CliConfig(_Section):
     working_root: Annotated[PrivateWorkingRoot, PlainValidator(_private_working_root)] = Field(
         exclude=True, repr=False
     )
-    claude: ClaudeProgram | None = None
-    codex: CodexProgram | None = None
+    anthropic: ClaudeProgram | None = None
+    openai: CodexProgram | None = None
 
     def programs(self) -> Mapping[Provider, ProviderProgram]:
         """The pinned programs this installation sets, in ``Provider`` order."""
@@ -436,7 +435,7 @@ def _value(table: object, key: str) -> object:
     return getattr(table, key)
 
 
-RELAY_ATTACHED_PROVIDERS: Final = frozenset({Provider.CLAUDE})
+RELAY_ATTACHED_PROVIDERS: Final = frozenset({Provider.ANTHROPIC})
 
 
 def _refuse_an_origin_without_signing(document: object) -> None:

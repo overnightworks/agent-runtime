@@ -18,10 +18,11 @@ from service_support import (
 
 from agent_runtime_service.config import ConfigError, Provider, load_config
 
-LISTED = f"{Provider.CLAUDE}/{LISTED_MODEL}"
-UNLISTED = f"{Provider.CLAUDE}/{UNLISTED_MODEL}"
-NO_TABLE_FOR_PROVIDER = f"{Provider.CODEX}/{LISTED_MODEL}"
+LISTED = f"{Provider.ANTHROPIC}/{LISTED_MODEL}"
+UNLISTED = f"{Provider.ANTHROPIC}/{UNLISTED_MODEL}"
+NO_TABLE_FOR_PROVIDER = f"{Provider.OPENAI}/{LISTED_MODEL}"
 MALFORMED = "Claude/Sonnet"
+OBSOLETE_PROGRAM_PREFIXES = [f"claude/{LISTED_MODEL}", f"codex/{LISTED_MODEL}"]
 
 DEFAULTS = "defaults.model"
 APP = "apps.songmaker.model"
@@ -63,7 +64,9 @@ def _refusal(tmp_path: Path, document: dict[str, Any]) -> str:
     return str(refused.value)
 
 
-@pytest.mark.parametrize("name", [MALFORMED, UNLISTED, NO_TABLE_FOR_PROVIDER])
+@pytest.mark.parametrize(
+    "name", [MALFORMED, UNLISTED, NO_TABLE_FOR_PROVIDER, *OBSOLETE_PROGRAM_PREFIXES]
+)
 @pytest.mark.parametrize("level", LEVELS)
 def test_a_model_that_is_malformed_or_listed_by_no_cli_table_is_refused_naming_its_field(
     tmp_path, level, name
@@ -88,9 +91,9 @@ def test_a_file_that_sets_the_model_at_all_three_levels_loads(tmp_path):
 
 
 def test_the_model_of_a_run_is_the_agents_else_the_apps_else_the_defaults(tmp_path):
-    by_level = {level: f"{Provider.CLAUDE}/{level}" for level in LEVELS}
+    by_level = {level: f"{Provider.ANTHROPIC}/{level}" for level in LEVELS}
     document = _document()
-    document["cli"]["claude"]["models"] = list(LEVELS)
+    document["cli"]["anthropic"]["models"] = list(LEVELS)
     for level, (setter, _field) in LEVELS.items():
         setter(document, by_level[level])
     document["apps"]["songmaker"]["agents"]["other"] = {}
@@ -133,6 +136,6 @@ def test_a_file_without_a_cli_table_is_refused_naming_cli(tmp_path):
 
 def test_a_cli_table_that_lists_no_models_is_refused_naming_the_default_model(tmp_path):
     document = _document()
-    document["cli"]["claude"]["models"] = []
+    document["cli"]["anthropic"]["models"] = []
 
     assert DEFAULTS in _refusal(tmp_path, document)

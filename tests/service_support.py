@@ -221,10 +221,10 @@ def _service_config_document(
             "api_groups": [API_GROUP],
             "group_claim": GROUP_CLAIM,
         },
-        "defaults": {"model": f"{Provider.CLAUDE}/{LISTED_MODEL}"},
+        "defaults": {"model": f"{Provider.ANTHROPIC}/{LISTED_MODEL}"},
         "cli": {
             "working_root": str(process_working_root().path),
-            "claude": {
+            "anthropic": {
                 "binary": str(claude_binary or process_claude_cli()),
                 "version": PINNED_CLAUDE_VERSION,
                 "models": [LISTED_MODEL],
@@ -1025,8 +1025,8 @@ def alice_admitted_run(run_id: uuid.UUID) -> AdmittedRun:
         app="songmaker",
         principal=ALICE,
         request=RunRequest.model_validate(run_body(tools=SONGMAKER_TOOLS)),
-        model=f"claude/{LISTED_MODEL}",
-        route=Cli(Provider.CLAUDE),
+        model=f"{Provider.ANTHROPIC}/{LISTED_MODEL}",
+        route=Cli(Provider.ANTHROPIC),
         capability=None,
     )
 

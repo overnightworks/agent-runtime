@@ -107,9 +107,9 @@ def test_a_leftover_sibling_stops_the_command_before_it_reads_anything(
 def test_a_leftover_check_that_cannot_inspect_the_sibling_refuses_before_reading(
     tmp_path: Path, said: Said, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    installation = an_installation(tmp_path, Provider.CODEX)
+    installation = an_installation(tmp_path, Provider.OPENAI)
     an_old_file_fails(monkeypatch, "lstat", installation.sibling)
-    stream = Stream(GOOD_DOCUMENTS[Provider.CODEX])
+    stream = Stream(GOOD_DOCUMENTS[Provider.OPENAI])
 
     status, _ = run(installation, stream, said)
 
@@ -180,7 +180,7 @@ def test_a_broken_descriptor_two_changes_neither_the_status_nor_the_written_file
 def test_a_broken_descriptor_two_keeps_exit_three_and_the_sibling(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    installation = an_installation(tmp_path, Provider.CODEX)
+    installation = an_installation(tmp_path, Provider.OPENAI)
     an_old_file_fails(monkeypatch, "unlink", installation.sibling)
     a_broken_descriptor_two(monkeypatch)
 
@@ -191,13 +191,13 @@ def test_a_broken_descriptor_two_keeps_exit_three_and_the_sibling(
 
 @pytest.mark.parametrize(
     ("document", "expected"),
-    [(GOOD_DOCUMENTS[Provider.CODEX], 0), (b"", 1)],
+    [(GOOD_DOCUMENTS[Provider.OPENAI], 0), (b"", 1)],
     ids=["usable", "refused"],
 )
 def test_a_process_whose_stderr_is_a_closed_pipe_exits_with_the_installs_status(
     tmp_path: Path, document: bytes, expected: int
 ) -> None:
-    installation = an_installation(tmp_path, Provider.CODEX)
+    installation = an_installation(tmp_path, Provider.OPENAI)
     read_end, write_end = os.pipe()
     os.close(read_end)
     try:
@@ -230,7 +230,7 @@ def test_a_process_whose_stderr_is_a_closed_pipe_exits_with_the_installs_status(
 def test_check_accepts_a_file_the_reader_accepts_without_reading_input_or_writing(
     tmp_path: Path, said: Said, login_bytes: bytes
 ) -> None:
-    provider = Provider.CLAUDE if login_bytes == NEW_CLAUDE_TOKEN else Provider.CODEX
+    provider = Provider.ANTHROPIC if login_bytes == NEW_CLAUDE_TOKEN else Provider.OPENAI
     installation = an_installation(tmp_path, provider)
     write_login(installation.login, login_bytes)
     stream = Stream(b"never read")
@@ -259,7 +259,7 @@ def test_check_accepts_a_file_the_reader_accepts_without_reading_input_or_writin
 def test_check_refuses_a_missing_or_refused_file_with_the_readers_reason(
     tmp_path: Path, said: Said, contents: bytes | None, reason: str
 ) -> None:
-    installation = an_installation(tmp_path, Provider.CODEX, old=False)
+    installation = an_installation(tmp_path, Provider.OPENAI, old=False)
     if contents is not None:
         write_login(installation.login, contents)
     stream = Stream(b"never read")
@@ -280,25 +280,36 @@ def test_check_refuses_a_missing_or_refused_file_with_the_readers_reason(
 def test_a_provider_without_a_table_is_refused_before_anything_is_read(
     tmp_path: Path, said: Said
 ) -> None:
-    installation = an_installation(tmp_path, Provider.CLAUDE)
-    stream = Stream(GOOD_DOCUMENTS[Provider.CODEX])
+    installation = an_installation(tmp_path, Provider.ANTHROPIC)
+    stream = Stream(GOOD_DOCUMENTS[Provider.OPENAI])
 
     with said.watching():
-        status = main(["--config", str(installation.config), "--provider", "codex"], stream)
+        status = main(["--config", str(installation.config), "--provider", "openai"], stream)
 
     assert (status, stream.was_read, installation.unchanged()) == (2, False, True)
-    assert "cli.codex: no such table" in said.descriptor
+    assert "cli.openai: no such table" in said.descriptor
 
 
-def test_a_provider_without_a_login_is_refused_by_the_parser_before_anything_is_read(
-    installation: Installation, said: Said
+@pytest.mark.parametrize("obsolete_name", ["claude", "grok"])
+def test_an_obsolete_provider_name_is_refused_by_the_parser_before_anything_is_read(
+    installation: Installation, obsolete_name: str
 ) -> None:
     stream = Stream(GOOD_DOCUMENTS[installation.provider])
 
     with pytest.raises(SystemExit) as refused:
-        main(["--config", str(installation.config), "--provider", "grok"], stream)
+        main(["--config", str(installation.config), "--provider", obsolete_name], stream)
 
     assert (refused.value.code, stream.was_read, installation.unchanged()) == (2, False, True)
+
+
+def test_the_vendor_name_anthropic_checks_the_claude_login(tmp_path: Path) -> None:
+    installation = an_installation(tmp_path, Provider.ANTHROPIC)
+
+    status = main(
+        ["--config", str(installation.config), "--provider", "anthropic", "--check"], Stream(b"")
+    )
+
+    assert status == 0
 
 
 @pytest.mark.parametrize("extra", [[], ["--check"]], ids=["install", "check"])
@@ -317,10 +328,10 @@ def test_the_former_profile_option_is_refused_before_anything_is_read(
 def test_a_configuration_the_service_refuses_is_refused_with_its_field_text(
     tmp_path: Path, said: Said, extra: list[str]
 ) -> None:
-    installation = an_installation(tmp_path, Provider.CODEX)
+    installation = an_installation(tmp_path, Provider.OPENAI)
     text = installation.config.read_text().replace("jwks_url", "jwks_address")
     installation.config.write_text(text)
-    stream = Stream(GOOD_DOCUMENTS[Provider.CODEX])
+    stream = Stream(GOOD_DOCUMENTS[Provider.OPENAI])
 
     status, heard = run(installation, stream, said, *extra)
 
@@ -394,20 +405,20 @@ def test_hardening_under_root_refuses_before_the_configuration_is_read(
 def test_the_service_refuses_a_bad_login_at_start_and_only_the_command_repairs_it(
     tmp_path: Path, said: Said, present: bytes | None
 ) -> None:
-    installation = an_installation(tmp_path, Provider.CODEX, old=False)
+    installation = an_installation(tmp_path, Provider.OPENAI, old=False)
     if present is not None:
         write_login(installation.login, present)
 
     with said.watching():
         refused_at_start = service_main(["--config", str(installation.config)])
     stops = said.stderr
-    installed = main(installation.command(), Stream(GOOD_DOCUMENTS[Provider.CODEX]))
+    installed = main(installation.command(), Stream(GOOD_DOCUMENTS[Provider.OPENAI]))
     checked = main(installation.command("--check"), Stream(b""))
 
     assert refused_at_start == 2
     assert f"cli.{installation.provider}.token_file" in stops
     assert (installed, checked) == (0, 0)
-    assert load_config(installation.config).cli.codex.token_file is not None
+    assert load_config(installation.config).cli.openai.token_file is not None
 
 
 # The command's other refusals and the signals' reach: matrix cells 12 and 16.
@@ -452,8 +463,8 @@ def test_a_login_file_without_a_file_name_is_refused_before_anything_is_read(
 def test_a_process_that_installed_a_login_exits_zero_whatever_signal_comes_after_the_commit(
     tmp_path: Path, interrupt: signal.Signals
 ) -> None:
-    installation = an_installation(tmp_path, Provider.CODEX)
-    document = GOOD_DOCUMENTS[Provider.CODEX]
+    installation = an_installation(tmp_path, Provider.OPENAI)
+    document = GOOD_DOCUMENTS[Provider.OPENAI]
     after_the_commit = (
         "import os, signal, sys; from agent_runtime_service.login import main;"
         f" status = main(); os.kill(os.getpid(), signal.{interrupt.name}); sys.exit(status)"

@@ -44,8 +44,8 @@ def codex_version_output(stdout: str) -> str | None:
 
 
 VERSION_READERS: Final[Mapping[Provider, VersionReader]] = {
-    Provider.CLAUDE: claude_version_output,
-    Provider.CODEX: codex_version_output,
+    Provider.ANTHROPIC: claude_version_output,
+    Provider.OPENAI: codex_version_output,
 }
 
 

@@ -34,7 +34,7 @@ def started(run_id: UUID = RUN_ID) -> RunStarted:
         v=PROTOCOL_VERSION,
         run_id=run_id,
         seq=0,
-        model="claude/sonnet",
+        model="anthropic/sonnet",
         route=RouteKind.CLI,
         heartbeat_interval_s=15,
     )

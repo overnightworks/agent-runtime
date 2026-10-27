@@ -79,7 +79,7 @@ def an_installation(tmp_path: Path, provider: Provider, *, old: bool = True) -> 
     directory = tmp_path / "login"
     directory.mkdir()
     path = directory / LOGIN_NAME
-    if provider is Provider.CODEX:
+    if provider is Provider.OPENAI:
         if old:
             write_login(path, a_codex_login(tokens={"access_token": "old-access-token"}))
         document = codex_document(tmp_path, a_service_fake(tmp_path), path)
@@ -99,7 +99,7 @@ def an_installation(tmp_path: Path, provider: Provider, *, old: bool = True) -> 
 
 
 @pytest.fixture(
-    name="installation", params=[Provider.CODEX, Provider.CLAUDE], ids=["codex", "claude"]
+    name="installation", params=[Provider.OPENAI, Provider.ANTHROPIC], ids=["openai", "anthropic"]
 )
 def a_login_installation(
     request: pytest.FixtureRequest, tmp_path: Path, restored_signal_handlers: None
@@ -108,8 +108,8 @@ def a_login_installation(
 
 
 GOOD_DOCUMENTS = {
-    Provider.CODEX: a_codex_login(tokens={"refresh_token": CANARY_REFRESH}),
-    Provider.CLAUDE: NEW_CLAUDE_TOKEN,
+    Provider.OPENAI: a_codex_login(tokens={"refresh_token": CANARY_REFRESH}),
+    Provider.ANTHROPIC: NEW_CLAUDE_TOKEN,
 }
 
 

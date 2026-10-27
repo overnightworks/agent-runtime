@@ -79,8 +79,8 @@ def _streamed(runner: Runner, records: RunRecords | None = None) -> bytes:
         app="songmaker",
         principal=Principal("https://keycloak.test/realms/agent-test", "user-alice"),
         request=RunRequest.model_validate(run_body(tools=SONGMAKER_TOOLS)),
-        model=f"claude/{LISTED_MODEL}",
-        route=Cli(Provider.CLAUDE),
+        model=f"{Provider.ANTHROPIC}/{LISTED_MODEL}",
+        route=Cli(Provider.ANTHROPIC),
         capability=None,
     )
 
@@ -124,7 +124,7 @@ RUN = "00000000-0000-4000-8000-000000000000"
 SCRIPT_FRAMES = (
     "id: 0\nevent: run_started\n"
     f'data: {{"v":{PROTOCOL_VERSION},"run_id":"{RUN}","seq":0,'
-    f'"type":"run_started","model":"claude/{LISTED_MODEL}","route":"cli",'
+    f'"type":"run_started","model":"{Provider.ANTHROPIC}/{LISTED_MODEL}","route":"cli",'
     '"heartbeat_interval_s":15}\n\n'
     "id: 1\nevent: assistant_text\n"
     f'data: {{"v":{PROTOCOL_VERSION},"run_id":"{RUN}","seq":1,"type":"assistant_text",'

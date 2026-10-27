@@ -142,17 +142,17 @@ def codex_document(
     document = _service_config_document(TEST_ISSUER, runs, songmaker)
     if songmaker is None:
         del document["apps"]["songmaker"]["mcp_origin"]
-    document["defaults"] = {"model": f"{Provider.CODEX}/{CODEX_MODEL}"}
+    document["defaults"] = {"model": f"{Provider.OPENAI}/{CODEX_MODEL}"}
     document["cli"] = {
         "working_root": str(a_private_root(tmp_path)),
-        "codex": {"binary": str(binary), "version": CODEX_PIN, "models": [CODEX_MODEL]},
+        "openai": {"binary": str(binary), "version": CODEX_PIN, "models": [CODEX_MODEL]},
     }
-    document["cli"]["codex"]["token_file"] = str(login_file)
+    document["cli"]["openai"]["token_file"] = str(login_file)
     return document
 
 
 def with_claude_beside(document: dict[str, Any], claude: Path) -> dict[str, Any]:
-    document["cli"]["claude"] = {
+    document["cli"]["anthropic"] = {
         "binary": str(claude),
         "version": PINNED_CLAUDE_VERSION,
         "models": [LISTED_MODEL],
@@ -173,13 +173,13 @@ def a_config(document: dict[str, Any]) -> ServiceConfig:
     return ServiceConfig.model_validate(document)
 
 
-CODEX_NAME = f"{Provider.CODEX}/{CODEX_MODEL}"
+CODEX_NAME = f"{Provider.OPENAI}/{CODEX_MODEL}"
 
 
 def a_config_with_both_providers(tmp_path: Path) -> ServiceConfig:
-    """``service_config`` plus a listed ``[cli.codex]`` table."""
+    """``service_config`` plus a listed ``[cli.openai]`` table."""
     document = a_document_with_both(tmp_path)
-    document["defaults"] = {"model": f"{Provider.CLAUDE}/{LISTED_MODEL}"}
+    document["defaults"] = {"model": f"{Provider.ANTHROPIC}/{LISTED_MODEL}"}
     document["apps"]["songmaker"]["mcp_origin"] = SONGMAKER_ORIGIN
     return a_config(document)
 
@@ -467,7 +467,7 @@ def test_a_codex_run_given_a_relay_is_refused_by_an_exception_not_an_assert(
     tmp_path: Path,
 ) -> None:
     launch = cli_runner.ProviderLaunch(
-        Provider.CODEX,
+        Provider.OPENAI,
         a_service_fake(tmp_path),
         a_login_file(tmp_path),
         max_tool_calls=1,
@@ -498,7 +498,7 @@ def test_no_run_adapter_factory_sees_the_admitted_run_or_its_capability() -> Non
     ("app_model", "answer"),
     [
         pytest.param(None, "from-codex", id="the-default-model"),
-        pytest.param(f"claude/{LISTED_MODEL}", "done", id="the-apps-model"),
+        pytest.param(f"{Provider.ANTHROPIC}/{LISTED_MODEL}", "done", id="the-apps-model"),
     ],
 )
 def test_a_run_goes_to_the_table_of_the_configured_models_provider(

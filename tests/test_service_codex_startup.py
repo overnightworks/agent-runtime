@@ -65,21 +65,21 @@ def test_a_program_reporting_another_version_stops_the_start_naming_both(
 ) -> None:
     binary = a_service_fake(tmp_path)
     document = codex_document(tmp_path, binary, a_login_file(tmp_path))
-    document["cli"]["codex"]["version"] = "0.164.0"
+    document["cli"]["openai"]["version"] = "0.164.0"
 
     refusal = _refused_on_one_line(written(tmp_path, document), capsys)
 
-    assert refusal == f"cli.codex.version: {binary} reports {CODEX_PIN}, not the pinned 0.164.0"
+    assert refusal == f"cli.openai.version: {binary} reports {CODEX_PIN}, not the pinned 0.164.0"
 
 
 def test_a_codex_table_without_its_login_is_refused_before_any_read(tmp_path: Path) -> None:
     open_login = a_login_file(tmp_path)
     open_login.chmod(0o644)
     document = codex_document(tmp_path, a_service_fake(tmp_path), open_login)
-    del document["cli"]["codex"]["token_file"]
+    del document["cli"]["openai"]["token_file"]
 
     shown_refusal = the_refusal_of(document)
-    assert "cli.codex.token_file\n  Field required" in shown_refusal
+    assert "cli.openai.token_file\n  Field required" in shown_refusal
     assert "open to group" not in shown_refusal
 
 
@@ -144,7 +144,7 @@ def test_a_login_file_that_is_not_a_sound_codex_login_stops_the_start_naming_the
 
     refusal = _refused_on_one_line(written(tmp_path, document), capsys)
 
-    assert refusal.startswith(f"cli.codex.token_file: {login} {reason}")
+    assert refusal.startswith(f"cli.openai.token_file: {login} {reason}")
     assert [c for c in (CANARY_ACCESS_TOKEN, CANARY_ID_TOKEN) if c in refusal] == []
 
 
@@ -169,7 +169,7 @@ def test_a_link_to_a_sound_login_loads_and_a_link_to_an_open_one_is_judged_by_it
     link.symlink_to(sound)
     document = codex_document(tmp_path, a_service_fake(tmp_path), link)
 
-    assert a_config(document).cli.codex.token_file == link
+    assert a_config(document).cli.openai.token_file == link
 
     sound.chmod(0o644)
     assert "is open to group or others" in the_refusal_of(document)
@@ -185,7 +185,7 @@ def test_a_claude_table_whose_file_holds_a_codex_document_is_refused_as_json(
 
 def test_a_grok_table_is_refused_as_an_unknown_key(tmp_path: Path) -> None:
     document = codex_document(tmp_path, a_service_fake(tmp_path), a_login_file(tmp_path))
-    document["cli"]["grok"] = document["cli"]["codex"]
+    document["cli"]["grok"] = document["cli"]["openai"]
 
     assert "cli.grok" in the_refusal_of(document)
 
@@ -195,13 +195,13 @@ def test_a_claude_and_a_codex_table_load_together_and_list_their_programs_in_ord
 ) -> None:
     config = a_config(a_document_with_both(tmp_path))
 
-    assert list(config.cli.programs()) == [Provider.CLAUDE, Provider.CODEX]
+    assert list(config.cli.programs()) == [Provider.ANTHROPIC, Provider.OPENAI]
 
 
 def test_a_codex_only_installation_lists_only_its_codex_program(tmp_path: Path) -> None:
     config = a_config(codex_document(tmp_path, a_service_fake(tmp_path), a_login_file(tmp_path)))
 
-    assert list(config.cli.programs()) == [Provider.CODEX]
+    assert list(config.cli.programs()) == [Provider.OPENAI]
 
 
 @pytest.mark.parametrize(

@@ -129,12 +129,12 @@ else reaches the API route only as a member of `api_groups`; a person in neither
 group is refused `not_enabled` ([ARCHITECTURE.md](ARCHITECTURE.md)).
 The file is the operator's to keep
 fresh, named as `cli.<provider>.token_file`; the core library never creates, renews
-or rewrites it, and the service's login command installs a new one. Claude and Codex have a
-`[cli.<provider>]` table, one each, and every table needs its `token_file`; the service refuses a
-table for another provider (Grok) and a leftover `[profiles]` section.
+or rewrites it, and the service's login command installs a new one. Claude (`[cli.anthropic]`) and Codex
+(`[cli.openai]`) have a table each, and every table needs its `token_file`; the service refuses a
+table for another provider and a leftover `[profiles]` section.
 
 ```toml
-[cli.claude]
+[cli.anthropic]
 binary = "/usr/local/bin/claude"
 version = "2.1.302"
 models = ["sonnet"]
@@ -147,7 +147,7 @@ JSON (a credentials file) and API keys (`sk-ant-api...`) are refused; a link is
 followed and its target checked. Run `claude setup-token` once, sign in with the
 subscription, and install the printed token with the login command.
 
-**The Codex table.** `[cli.codex]` takes `binary`, `version`, `models` and `token_file`. The program must print exactly `codex-cli <version>` for
+**The OpenAI table.** `[cli.openai]` holds the Codex program and takes `binary`, `version`, `models` and `token_file`. The program must print exactly `codex-cli <version>` for
 `--version`. The file is the Codex sign-in document: JSON with the sign-in's tokens, at a mode
 that gives nothing to group or others, at most 16 KiB, a link followed and its target checked.
 A document holding only an API key (`OPENAI_API_KEY`), a bare key line and a Claude setup
@@ -156,7 +156,7 @@ document comes from the pinned program's device-code sign-in made in a home of i
 operator's terminal home, because the two would rotate each other's renewal token away; the
 host's setup makes it.
 
-**Install or check it (both providers).** `agent-runtime-service-login --config PATH --provider NAME`
+**Install or check it (both providers).** `agent-runtime-service-login --config PATH --provider PROVIDER` (`anthropic` or `openai`)
 reads the new document on standard input, checks it with the service's reader for that provider and
 swaps it in beside the old file; the next run reads it without a restart. It exits 0 when the
 file is written, 1 when it is not written and the old file stays, 2 when it refused before
