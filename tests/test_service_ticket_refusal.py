@@ -1,4 +1,5 @@
-"""The run routes refuse an ``Agent-Job-Ticket`` header before any token is read.
+"""The run routes refuse an ``Agent-Job-Ticket`` header before any token is verified or the
+body is read.
 
 The header is refused whatever its value, on ``POST /runs`` and ``GET /runs/{id}``, ahead of
 the token checks and the body; the retired ``POST /job-tickets`` route is gone and a profile's

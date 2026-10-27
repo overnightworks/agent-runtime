@@ -5,8 +5,8 @@ and ``GET /offer``, which lists the models the asking person can run in this app
 
 All three routes check the two tokens first, with the same answers. ``POST /runs`` and
 ``GET /runs/{id}`` answer a request carrying an ``Agent-Job-Ticket`` header ``unauthorized``
-before any token is read; the header's value is never read. A ``POST`` is then checked in a
-fixed order, and the first failure answers:
+before any token is verified or the body is read; the header's value is never read. A
+``POST`` is then checked in a fixed order, and the first failure answers:
 
 1. the workload token, then the user token, then membership of the app
    (``/apps/<app>`` or a path below it), before the body is read or anything else

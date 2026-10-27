@@ -4989,7 +4989,7 @@ the ticket sentences elsewhere in this record stand as history. Authority: the o
 pinned a release without ticket code.
 - H12's Decision and Consequence are superseded. No ticket is minted or verified: `POST /job-tickets`
   is gone (404), and `POST /runs` and `GET /runs/{id}` answer a request with an `Agent-Job-Ticket`
-  header `401` before any token or body is read, whatever the header's value and with or without
+  header `401` before any token is verified or the body is read, whatever the header's value and with or without
   `Authorization`. The #447, #456 and #457 amendments are retired with it, and the ticket
   jurisdiction of J1-J18 with them.
 - H2b's profile no longer carries "whether background purposes may use it": `background` is
