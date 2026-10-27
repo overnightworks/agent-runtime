@@ -1,9 +1,8 @@
 """Shared arrangement for the agent service's suites: config, tokens, runners, a socket.
 
-The service is built through ``create_app`` with the one injected seam the
-verifier offers, its key-set fetch, so every test drives the real token
-checks. Tokens minted here are signed by a throwaway RSA key whose key set the
-fetch serves; the Keycloak suite uses the real issuer's tokens instead.
+The service is built through ``create_app`` with the one injected seam the verifier offers, its
+key-set fetch, so every test drives the real token checks. Tokens minted here are signed by a
+throwaway RSA key whose key set the fetch serves; the Keycloak suite uses the real issuer's.
 """
 
 from __future__ import annotations
@@ -63,6 +62,7 @@ from agent_runtime_client.run_stream import StreamViolation, ViolationKind
 from agent_runtime_client.sse import RunStreamDecoder
 from agent_runtime_client.wire import (
     MAX_PURPOSE_LENGTH,
+    PROTOCOL_VERSION,
     RejectionCode,
     RunEvent,
     RunRejection,
@@ -326,7 +326,7 @@ def capable_service_config(
 
 def run_body(**overrides: object) -> dict[str, Any]:
     return {
-        "v": 2,
+        "v": PROTOCOL_VERSION,
         "purpose": COWRITER,
         "turn": {"system": "You help write songs.", "messages": [{"role": "user", "text": "Hi"}]},
         "roles": ["admin", "user"],

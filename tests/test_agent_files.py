@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from agent_runtime_client.agents import AgentDefinition, AgentFileError, load_agent
 from agent_runtime_client.tools import ToolDeclaration, ToolEffect
-from agent_runtime_client.wire import RunRequest, TurnMessage, TurnRole
+from agent_runtime_client.wire import PROTOCOL_VERSION, RunRequest, TurnMessage, TurnRole
 
 READ_NOTE = ToolDeclaration(
     name="read_note", description="Read a note", parameters={}, effect=ToolEffect.READ_ONLY
@@ -436,7 +436,9 @@ def test_offered_to_refuses_a_role_outside_the_two(tmp_path: Path, role: str) ->
         agent.offered_to(role)  # type: ignore[arg-type]
 
 
-def test_request_is_the_v2_body_with_purpose_prompt_and_tool_effects(tmp_path: Path) -> None:
+def test_request_is_the_current_protocol_body_with_purpose_prompt_and_tool_effects(
+    tmp_path: Path,
+) -> None:
     agent = load(tmp_path, agent_text())
 
     request = agent.request([TurnMessage(role=TurnRole.USER, text="hi")])
@@ -445,7 +447,7 @@ def test_request_is_the_v2_body_with_purpose_prompt_and_tool_effects(tmp_path: P
     assert request.turn.system == PROMPT
     assert [message.text for message in request.turn.messages] == ["hi"]
     assert RunRequest.model_validate(request.model_dump(mode="json")) == request
-    assert request.v == 2
+    assert request.v == PROTOCOL_VERSION
     assert request.tools == {
         "read_note": ToolEffect.READ_ONLY,
         "edit_note": ToolEffect.SIDE_EFFECTING,

@@ -122,10 +122,15 @@ def test_every_variant_round_trips_through_its_json(raw: dict[str, object]) -> N
             {**wire("heartbeat", 1), "v": 1}, ViolationKind.UNSUPPORTED_VERSION, id="older version"
         ),
         pytest.param(
-            {**wire("heartbeat", 1), "v": 3}, ViolationKind.UNSUPPORTED_VERSION, id="newer version"
+            {**wire("heartbeat", 1), "v": 2},
+            ViolationKind.UNSUPPORTED_VERSION,
+            id="previous protocol version",
         ),
         pytest.param(
-            {**wire("assistant_text", 1, text="hi", tone="warm"), "v": 3},
+            {**wire("heartbeat", 1), "v": 4}, ViolationKind.UNSUPPORTED_VERSION, id="newer version"
+        ),
+        pytest.param(
+            {**wire("assistant_text", 1, text="hi", tone="warm"), "v": 4},
             ViolationKind.UNSUPPORTED_VERSION,
             id="newer version with a field this client does not know",
         ),
@@ -135,7 +140,7 @@ def test_every_variant_round_trips_through_its_json(raw: dict[str, object]) -> N
             id="version true",
         ),
         pytest.param(
-            {**wire("heartbeat", 1), "v": 2.0},
+            {**wire("heartbeat", 1), "v": 3.0},
             ViolationKind.UNSUPPORTED_VERSION,
             id="version as a float",
         ),
@@ -278,7 +283,7 @@ def test_a_rejection_body_round_trips_through_its_json(code: RejectionCode) -> N
     "body",
     [
         pytest.param({**REJECTION, "v": True}, id="version true"),
-        pytest.param({**REJECTION, "v": 2.0}, id="version as a float"),
+        pytest.param({**REJECTION, "v": 3.0}, id="version as a float"),
         pytest.param({"code": "busy", "message": "Another run is active."}, id="no version"),
         pytest.param(
             {**REJECTION, "message": "x" * (MAX_MESSAGE_LENGTH + 1)}, id="message too long"
@@ -354,7 +359,7 @@ def test_a_status_body_names_its_state_and_codes_as_enums() -> None:
             for missing in STATUS
         ),
         pytest.param({**STATUS, "v": True}, id="version true"),
-        pytest.param({**STATUS, "v": 2.0}, id="version as a float"),
+        pytest.param({**STATUS, "v": 3.0}, id="version as a float"),
         pytest.param({**STATUS, "v": 1}, id="version 1"),
         pytest.param({**STATUS, "events": 0}, id="no events"),
         pytest.param({**STATUS, "events": True}, id="events true"),

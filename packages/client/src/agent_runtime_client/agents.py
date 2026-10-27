@@ -28,6 +28,7 @@ from ruamel.yaml import YAML, YAMLError
 
 from agent_runtime_client.tools import ToolDeclaration
 from agent_runtime_client.wire import (
+    PROTOCOL_VERSION,
     AgentRole,
     AgentRoles,
     ModelName,
@@ -97,7 +98,7 @@ class AgentDefinition(BaseModel):
     def request(self, messages: list[TurnMessage]) -> RunRequest:
         """The body that starts a run of this agent over these messages."""
         return RunRequest(
-            v=2,
+            v=PROTOCOL_VERSION,
             purpose=self.name,
             model=self.model,
             turn=Turn(system=self.prompt, messages=messages),

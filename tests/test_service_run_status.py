@@ -31,7 +31,7 @@ from test_service_entrance import MINT, TOKEN_REJECTIONS
 from webauth.https_client import KeySetFetchError
 from wire_builders import started, succeeded
 
-from agent_runtime_client.wire import RejectionCode, RunState, RunStatus
+from agent_runtime_client.wire import PROTOCOL_VERSION, RejectionCode, RunState, RunStatus
 from agent_runtime_service.app import create_app
 from agent_runtime_service.identity import Principal
 from agent_runtime_service.run_records import RunRecorder, RunRecords
@@ -39,7 +39,9 @@ from agent_runtime_service.run_records import RunRecorder, RunRecords
 ALICE = Principal(TEST_ISSUER, "user-alice")
 BOB = Principal(TEST_ISSUER, "user-bob")
 ALICE_ELSEWHERE = Principal("https://elsewhere.test/realms/x", "user-alice")
-NOT_FOUND_BODY = b'{"v":2,"code":"not_found","message":"No such run."}'
+NOT_FOUND_BODY = (
+    f'{{"v":{PROTOCOL_VERSION},"code":"not_found","message":"No such run."}}'.encode()
+)
 
 
 @dataclass(frozen=True)
