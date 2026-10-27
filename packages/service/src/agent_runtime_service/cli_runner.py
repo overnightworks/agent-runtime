@@ -5,7 +5,7 @@ reads the profile's login file with that provider's reader, so a swapped file ta
 next run without a restart, and a file gone bad fails that run as an ``UnsoundSecretFile`` before
 any tool connection or child (decision record 0001, lines 2 and 14); the secret file's size limit
 bounds that read, so it stays on the event loop. The provider's factory takes the launch and
-reads the login; the run it returns takes only the turn, the route's model and the relay's
+reads the login; the run it returns takes only the turn, the run's model and the relay's
 access, so no factory sees the admitted run or its capability. When the run's capability grants
 tools it then opens the run's tool set (``RunTools``), hands the adapter only the relay's address
 and secret, and merges the relay's tool events with the core's text and ending
@@ -54,7 +54,7 @@ class ProfileLaunch:
 
 @dataclass(frozen=True)
 class RunInputs:
-    """All of a run an adapter may see: its turn, the route's model and the relay's access."""
+    """All of a run an adapter may see: its turn, the run's model and the relay's access."""
 
     turn: Turn
     model: str | None

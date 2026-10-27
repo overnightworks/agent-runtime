@@ -69,7 +69,7 @@ API_SCRIPT = (AssistantTextEvent(text="via the API"), FinalEvent(text="API answe
 
 LISTED = f"claude/{LISTED_MODEL}"
 UNLISTED = f"claude/{UNLISTED_MODEL}"
-CLI_ON_SONNET = Cli("claude-main")
+CLI_ROUTE = Cli("claude-main")
 MINT = TokenMint()
 OTHER_MINT = TokenMint()
 
@@ -98,7 +98,7 @@ def test_a_subscription_member_with_both_tokens_runs_on_the_cli_route(service, r
     events = decoded_events(response.content)
     assert _admitted_events(response) == ["run_started", "assistant_text", "succeeded"]
     assert events[-1].text == "CLI answer"
-    assert runners.cli.admitted[-1].route == CLI_ON_SONNET
+    assert (runners.cli.admitted[-1].route, runners.cli.admitted[-1].model) == (CLI_ROUTE, LISTED)
     assert runners.cli.admitted[-1].principal.subject == "user-alice"
 
 
@@ -140,9 +140,8 @@ def test_an_api_group_member_of_the_app_runs_on_the_api_route(service, runners):
 
 
 def _loaded_service_run(tmp_path, subscription_groups, user_groups):
-    runners = Runners(cli=ScriptedRunner(CLI_SCRIPT), api=ScriptedRunner(API_SCRIPT))
     config = load_config(service_config_file(tmp_path, subscription_groups=subscription_groups))
-    app = create_app(config, runners=runners, fetch_key_set=MINT.fetch_key_set)
+    app, runners = _app_from(config)
     with served(app) as base_url:
         response = post_run(
             base_url,
@@ -158,7 +157,7 @@ def test_a_member_of_either_listed_subscription_group_alone_runs_on_the_cli_rout
     )
 
     assert _admitted_events(response) == ["run_started", "assistant_text", "succeeded"]
-    assert runners.cli.admitted[-1].route == CLI_ON_SONNET
+    assert (runners.cli.admitted[-1].route, runners.cli.admitted[-1].model) == (CLI_ROUTE, LISTED)
     assert runners.api.admitted == []
 
 
@@ -506,8 +505,7 @@ API_MEMBER = [API_GROUP, SONGMAKER_GROUP]
 def _routed_run(config, groups, *, model=LISTED):
     """Post one run of the configuration's default ``model``."""
     config = config.model_copy(update={"defaults": DefaultsConfig(model=model)})
-    runners = Runners(cli=ScriptedRunner(CLI_SCRIPT), api=ScriptedRunner(API_SCRIPT))
-    app = create_app(config, runners=runners, fetch_key_set=MINT.fetch_key_set)
+    app, runners = _app_from(config)
     with served(app) as base_url:
         headers = run_headers(MINT.workload(), MINT.user(groups=groups))
         response = post_run(base_url, headers, run_body())
@@ -518,7 +516,7 @@ def test_h1_a_listed_model_reaches_the_cli_route_by_name():
     response, runners = _routed_run(service_config(), SUBSCRIBER, model=LISTED)
 
     assert _admitted_events(response)
-    assert runners.cli.admitted[-1].route == CLI_ON_SONNET
+    assert (runners.cli.admitted[-1].route, runners.cli.admitted[-1].model) == (CLI_ROUTE, LISTED)
 
 
 def test_h2_an_unlisted_model_reaches_an_api_only_caller_by_its_full_name():
@@ -781,20 +779,21 @@ def _post_both_rights(app, runners):
             run_body(),
         )
     assert _admitted_events(response)
-    return (runners.cli.admitted + runners.api.admitted)[-1].route
+    admitted = (runners.cli.admitted + runners.api.admitted)[-1]
+    return admitted.route, admitted.model
 
 
-def _app_from(config_file):
+def _app_from(config):
     runners = Runners(cli=ScriptedRunner(CLI_SCRIPT), api=ScriptedRunner(API_SCRIPT))
-    app = create_app(load_config(config_file), runners=runners, fetch_key_set=MINT.fetch_key_set)
+    app = create_app(config, runners=runners, fetch_key_set=MINT.fetch_key_set)
     return app, runners
 
 
 def test_x_the_file_is_read_at_startup_and_a_restart_reads_it_again(tmp_path):
     config_file = _run_on_the_file(tmp_path, [SUBSCRIPTION_GROUP])
-    running, running_runners = _app_from(config_file)
-    assert _post_both_rights(running, running_runners) == CLI_ON_SONNET  # X1
+    running, running_runners = _app_from(load_config(config_file))
+    assert _post_both_rights(running, running_runners) == (CLI_ROUTE, LISTED)  # X1
 
     edited = _run_on_the_file(tmp_path, ["/not-a-subscriber-group"])
-    assert _post_both_rights(running, running_runners) == CLI_ON_SONNET  # X2
-    assert _post_both_rights(*_app_from(edited)) == Api()  # X3
+    assert _post_both_rights(running, running_runners) == (CLI_ROUTE, LISTED)  # X2
+    assert _post_both_rights(*_app_from(load_config(edited))) == (Api(), LISTED)  # X3
