@@ -89,8 +89,7 @@ flowchart TB
 ```
 
 *Question: which route serves this caller? Source:
-`agent_runtime_service.app._admitted`, `agent_runtime_service.routing.route`; `GET /offer`
-(`agent_runtime_service.offer`) is the second reader of `route`. The groups and models are
+`agent_runtime_service.app._admitted`, `agent_runtime_service.routing.route`. The groups and models are
 operator configuration ([operations.md](operations.md)). An app's own run is routed from the
 groups its workload token carries.*
 
