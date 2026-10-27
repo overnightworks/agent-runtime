@@ -392,20 +392,14 @@ class RunFailures:
         keep the frames of the step it left. The positions are taken first, when
         it is converted.
         """
-        identity = id(cancelled)
-        known = self._converted.get(identity)
-        if known is not None:
-            converted = known[1]
-        else:
-            converted = RunStepCancelled(part, cancelled)
-            converted_by_identity = self._converted
-            # The entry leaves with its stray, before the allocator can hand the
-            # identity out again; the callback closes over the dict, not over
-            # this collection, and never over the stray.
-            stray = weakref.ref(cancelled, lambda _dead: converted_by_identity.pop(identity, None))
-            self._converted[identity] = (stray, converted)
+        key = id(cancelled)
+        known = self._converted.get(key)
+        if known is None:
+            # The entry leaves with its stray, before the identity can be reused.
+            stray = weakref.ref(cancelled, lambda _, forget=self._converted.pop: forget(key, None))
+            known = self._converted[key] = (stray, RunStepCancelled(part, cancelled))
         _make_inert(cancelled)
-        return converted
+        return known[1]
 
     @property
     def met_any(self) -> bool:
