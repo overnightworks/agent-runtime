@@ -46,8 +46,8 @@ A request the service refuses answers a `RunRejection` with one `RejectionCode`:
 | Code | Status | Meaning |
 |---|---|---|
 | `unauthorized` | 401 | A workload token and a user token are required and must be valid; an `Agent-Job-Ticket` header on `POST /runs` or `GET /runs/{id}` is refused too. |
-| `forbidden` | 403 | The user is no member of the app, the request's `roles` lack the caller's role, the request names a tool while the app has no MCP origin, the two tokens do not belong together (`agent_runtime_service.identity` lists every cause) |
-| `not_enabled` | 403 | No route is enabled for this caller and model, the run names tools and the chosen subscription profile's provider cannot take tools yet |
+| `forbidden` | 403 | The user is no member of the app, the request's `roles` lack the caller's role, the request names a tool while the app has no MCP origin, the two tokens do not belong together (`agent_runtime_service.identity` lists every cause). |
+| `not_enabled` | 403 | No route is enabled for this caller and model, the run names tools and the chosen subscription profile's provider cannot take tools yet. |
 | `unsupported_version` | 400 | `v` is not 2. |
 | `invalid_request` | 422 | The body is not a valid request for the route. |
 | `capability_too_large` | 422 | The run's capability would exceed 8,192 characters. |

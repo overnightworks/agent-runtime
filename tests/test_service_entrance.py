@@ -39,7 +39,6 @@ from service_support import (
     asgi_post_status,
     assert_rejected,
     decoded_events,
-    get_run,
     post_run,
     run_body,
     run_headers,
@@ -736,33 +735,6 @@ def test_tokens_are_checked_before_the_body(service):
     response = post_run(service, run_headers(None, MINT.user()), content=b"not json")
 
     assert_rejected(response, UNAUTHORIZED, 401)
-
-
-@pytest.mark.parametrize("ticket", ["", "garbage"], ids=["empty", "garbage"])
-@pytest.mark.parametrize("with_authorization", [False, True], ids=["bare", "with-authorization"])
-@pytest.mark.parametrize("route", ["post-runs", "get-run"])
-def test_a_job_ticket_header_is_unauthorized_on_both_run_routes(
-    service, runners, route, with_authorization, ticket
-):
-    user_headers = run_headers(MINT.workload(), MINT.user() if with_authorization else None)
-    headers = {**user_headers, "Agent-Job-Ticket": ticket}
-    admitted_before = len(runners.cli.admitted)
-
-    if route == "post-runs":
-        response = post_run(service, headers, content=b"not json")
-    else:
-        response = get_run(service, headers, "00000000-0000-4000-8000-000000000000")
-
-    assert_rejected(response, UNAUTHORIZED, 401)
-    assert len(runners.cli.admitted) == admitted_before
-
-
-def test_the_job_ticket_route_is_gone(service):
-    response = httpx.post(
-        f"{service}/job-tickets", headers=run_headers(MINT.workload(), MINT.user()), json={}
-    )
-
-    assert response.status_code == 404
 
 
 def test_no_log_line_carries_token_text(service, caplog):

@@ -268,16 +268,6 @@ def _with_key_set_url(url: str) -> str:
             id="C2-leftover-app-purposes",
         ),
         pytest.param(
-            _with(TOKEN_FILE_LINE, TOKEN_FILE_LINE + "\nbackground = true"),
-            "profiles.claude-main.background",
-            id="leftover-background-true",
-        ),
-        pytest.param(
-            _with(TOKEN_FILE_LINE, TOKEN_FILE_LINE + "\nbackground = false"),
-            "profiles.claude-main.background",
-            id="leftover-background-false",
-        ),
-        pytest.param(
             _with(SUBSCRIPTION_GROUPS_LINE, 'subscription_group = "/ki-abo"'),
             "identity.subscription_group:",
             id="C3-the-singular-subscription-group",

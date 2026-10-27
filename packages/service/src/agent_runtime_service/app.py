@@ -108,7 +108,8 @@ _MESSAGE: Final[Mapping[RejectionCode, str]] = {
     RejectionCode.NOT_ENABLED: "AI is not enabled for this request.",
     RejectionCode.BUSY: "The service is busy; retry later.",
     RejectionCode.UNSUPPORTED_VERSION: f"This service speaks protocol version {PROTOCOL_VERSION}.",
-    RejectionCode.UNAUTHORIZED: "A workload token and a user token are required and must be valid.",
+    RejectionCode.UNAUTHORIZED: "A workload token and a user token are required and must be valid;"
+    " an Agent-Job-Ticket header is refused.",
     RejectionCode.FORBIDDEN: "The tokens do not permit this request.",
     RejectionCode.INVALID_REQUEST: "The body is not a valid request for the route.",
     RejectionCode.UNAVAILABLE: "The service cannot check tokens right now; retry later.",
@@ -162,7 +163,7 @@ def create_app(
             run_request,
         )
 
-    app.get("/runs/{run_id}")(_run_status_route(callers, config, installed_records, wall_clock))
+    app.get("/runs/{run_id}")(_run_status_route(callers, installed_records))
     app.get("/offer")(_offer_route(callers, config, installed_runners))
 
     return app
@@ -324,10 +325,7 @@ def _capability_of(
 
 
 def _run_status_route(
-    callers: CallerCheck,
-    config: ServiceConfig,
-    records: RunRecords,
-    wall_clock: Callable[[], datetime],
+    callers: CallerCheck, records: RunRecords
 ) -> Callable[[Request, str], Awaitable[Response]]:
     async def run_status(request: Request, run_id: str) -> Response:
         caller = await _run_caller_of(callers, request)
