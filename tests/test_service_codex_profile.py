@@ -216,24 +216,13 @@ def argv_of(capture: Path) -> list[str]:
     return (capture / "argv").read_text().splitlines()
 
 
-@pytest.mark.parametrize(
-    ("requested", "model_options"),
-    [
-        pytest.param(f"codex/{CODEX_MODEL}", [f"--model={CODEX_MODEL}"], id="listed-model"),
-        pytest.param(None, [], id="no-model"),
-    ],
-)
-def test_a_codex_run_streams_its_answer_with_the_listed_model_as_one_argument_or_none(
-    tmp_path: Path,
-    child_cleanup: ChildCleanup,
-    monkeypatch: pytest.MonkeyPatch,
-    requested: str | None,
-    model_options: list[str],
+def test_a_codex_run_streams_its_answer_with_the_configured_model_as_one_argument(
+    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config, capture = a_codex_service(tmp_path, runs={"max_parallel_cli_runs": 1})
 
     def scenario(base_url: str) -> list[Any]:
-        return [post_a_run(base_url, model=requested), post_a_run(base_url, model=requested)]
+        return [post_a_run(base_url), post_a_run(base_url)]
 
     first, second = drive_over_http(child_cleanup, monkeypatch, config, scenario)
 
@@ -241,7 +230,7 @@ def test_a_codex_run_streams_its_answer_with_the_listed_model_as_one_argument_or
         [("assistant_text", "done"), ("succeeded", "done")]
     ] * 2
     assert first[0].type == "run_started"
-    assert [a for a in argv_of(capture) if a.startswith("--model")] == model_options
+    assert [a for a in argv_of(capture) if a.startswith("--model")] == [f"--model={CODEX_MODEL}"]
     assert (list(private_root_of(config).iterdir()), held_slots(CODEX_CLI_PROCESS_POOL)) == ([], 0)
     assert all_children_gone(child_cleanup) == [True, True]
 
@@ -511,19 +500,24 @@ def test_no_run_adapter_factory_sees_the_admitted_run_or_its_capability() -> Non
     assert [t for t in annotations if t in (AdmittedRun, Capability)] == []
 
 
-def test_a_run_with_no_model_goes_to_the_default_profile_and_a_named_model_to_its_own(
-    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("app_model", "answer"),
+    [
+        pytest.param(None, "from-codex", id="the-default-model"),
+        pytest.param(f"claude/{LISTED_MODEL}", "done", id="the-apps-model"),
+    ],
+)
+def test_a_run_goes_to_the_profile_of_the_configured_models_provider(
+    tmp_path: Path,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    app_model: str | None,
+    answer: str,
 ) -> None:
-    config = a_config(a_document_with_both(tmp_path, (THREAD, a_message("from-codex"), DONE)))
+    document = a_document_with_both(tmp_path, (THREAD, a_message("from-codex"), DONE))
+    if app_model is not None:
+        document["apps"]["songmaker"]["model"] = app_model
 
-    def scenario(base_url: str) -> list[Any]:
-        return [
-            shown(post_a_run(base_url, model=model))[-1]
-            for model in (None, f"claude/{LISTED_MODEL}", f"codex/{CODEX_MODEL}")
-        ]
+    events = drive_over_http(child_cleanup, monkeypatch, a_config(document), post_a_run)
 
-    assert drive_over_http(child_cleanup, monkeypatch, config, scenario) == [
-        ("succeeded", "from-codex"),
-        ("succeeded", "done"),
-        ("succeeded", "from-codex"),
-    ]
+    assert shown(events)[-1] == ("succeeded", answer)

@@ -21,7 +21,6 @@ import pytest
 from fastapi import FastAPI
 from service_support import (
     ADMITTED_PURPOSES,
-    API_ALIAS,
     API_GROUP,
     COWRITER,
     LISTED_MODEL,
@@ -60,7 +59,7 @@ from agent_runtime_client.wire import (
     RunRejection,
 )
 from agent_runtime_service.app import create_app, rejection
-from agent_runtime_service.config import load_config
+from agent_runtime_service.config import DefaultsConfig, load_config
 from agent_runtime_service.routing import Api, Cli
 from agent_runtime_service.run_request import MAX_REQUEST_BYTES
 from agent_runtime_service.runners import Runners
@@ -68,6 +67,9 @@ from agent_runtime_service.runners import Runners
 CLI_SCRIPT = (AssistantTextEvent(text="via the CLI"), FinalEvent(text="CLI answer"))
 API_SCRIPT = (AssistantTextEvent(text="via the API"), FinalEvent(text="API answer"))
 
+LISTED = f"claude/{LISTED_MODEL}"
+UNLISTED = f"claude/{UNLISTED_MODEL}"
+CLI_ON_SONNET = Cli("claude-main", LISTED_MODEL)
 MINT = TokenMint()
 OTHER_MINT = TokenMint()
 
@@ -96,7 +98,7 @@ def test_a_subscription_member_with_both_tokens_runs_on_the_cli_route(service, r
     events = decoded_events(response.content)
     assert _admitted_events(response) == ["run_started", "assistant_text", "succeeded"]
     assert events[-1].text == "CLI answer"
-    assert runners.cli.admitted[-1].route == Cli("claude-main")
+    assert runners.cli.admitted[-1].route == CLI_ON_SONNET
     assert runners.cli.admitted[-1].principal.subject == "user-alice"
 
 
@@ -134,7 +136,7 @@ def test_an_api_group_member_of_the_app_runs_on_the_api_route(service, runners):
     )
 
     assert decoded_events(response.content)[-1].text == "API answer"
-    assert runners.api.admitted[-1].route == Api(API_ALIAS)
+    assert runners.api.admitted[-1].route == Api(LISTED)
 
 
 def _loaded_service_run(tmp_path, subscription_groups, user_groups):
@@ -156,7 +158,7 @@ def test_a_member_of_either_listed_subscription_group_alone_runs_on_the_cli_rout
     )
 
     assert _admitted_events(response) == ["run_started", "assistant_text", "succeeded"]
-    assert runners.cli.admitted[-1].route == Cli("claude-main")
+    assert runners.cli.admitted[-1].route == CLI_ON_SONNET
     assert runners.api.admitted == []
 
 
@@ -487,7 +489,7 @@ def test_a_user_token_outside_the_bearer_scheme_is_unauthorized(service):
 
 @pytest.mark.parametrize(
     "field",
-    ["provider", "route", "user_id", "mcp_url", "mcp_token"],
+    ["provider", "route", "user_id", "mcp_url", "mcp_token", "model"],
 )
 def test_a_body_naming_a_field_reserved_to_the_service_is_invalid(service, field):
     response = post_run(
@@ -497,22 +499,18 @@ def test_a_body_naming_a_field_reserved_to_the_service_is_invalid(service, field
     assert_rejected(response, RejectionCode.INVALID_REQUEST, 422)
 
 
-LISTED = f"claude/{LISTED_MODEL}"
-UNLISTED = f"claude/{UNLISTED_MODEL}"
 SUBSCRIBER = [SUBSCRIPTION_GROUP, SONGMAKER_GROUP]
 API_MEMBER = [API_GROUP, SONGMAKER_GROUP]
 
 
-def _routed_run(config, groups, *, afterwards=None, **body):
-    """Post one run; ``afterwards(base_url, headers)`` may probe the same app
-    before it is discarded."""
+def _routed_run(config, groups, *, model=LISTED):
+    """Post one run of the configuration's default ``model``."""
+    config = config.model_copy(update={"defaults": DefaultsConfig(model=model)})
     runners = Runners(cli=ScriptedRunner(CLI_SCRIPT), api=ScriptedRunner(API_SCRIPT))
     app = create_app(config, runners=runners, fetch_key_set=MINT.fetch_key_set)
     with served(app) as base_url:
         headers = run_headers(MINT.workload(), MINT.user(groups=groups))
-        response = post_run(base_url, headers, run_body(**body))
-        if afterwards is not None:
-            afterwards(base_url, headers)
+        response = post_run(base_url, headers, run_body())
     return response, runners
 
 
@@ -520,23 +518,14 @@ def test_h1_a_listed_model_reaches_the_cli_route_by_name():
     response, runners = _routed_run(service_config(), SUBSCRIBER, model=LISTED)
 
     assert _admitted_events(response)
-    assert runners.cli.admitted[-1].route == Cli("claude-main", LISTED_MODEL)
+    assert runners.cli.admitted[-1].route == CLI_ON_SONNET
 
 
 def test_h2_an_unlisted_model_reaches_an_api_only_caller_by_its_full_name():
     response, runners = _routed_run(service_config(), API_MEMBER, model=UNLISTED)
 
     assert _admitted_events(response)
-    assert runners.api.admitted[-1].route == Api(API_ALIAS, UNLISTED)
-
-
-def test_h3_a_null_model_runs_the_default_even_when_the_subscription_lists_nothing():
-    config = with_listed_models(service_config(), [])
-
-    response, runners = _routed_run(config, SUBSCRIBER, model=None)
-
-    assert _admitted_events(response)
-    assert runners.cli.admitted[-1].route == Cli("claude-main", None)
+    assert runners.api.admitted[-1].route == Api(UNLISTED)
 
 
 @pytest.mark.parametrize(
@@ -559,28 +548,28 @@ def test_a_named_model_without_subscription_facts_goes_to_the_api_or_is_refused(
 
     if api_route:
         assert _admitted_events(response)
-        assert runners.api.admitted[-1].route == Api(API_ALIAS, LISTED)
+        assert runners.api.admitted[-1].route == Api(LISTED)
     else:
         assert_rejected(response, RejectionCode.NOT_ENABLED, 403)
         assert runners.cli.admitted == runners.api.admitted == []
 
 
-def test_v6_a_malformed_model_is_invalid_before_tools_are_forbidden(service):
+def test_v6_a_model_is_invalid_before_tools_are_forbidden(service):
     response = post_run(
         service,
         run_headers(
             MINT.workload(client=PRESENTATOR_CLIENT),
             MINT.user(azp=PRESENTATOR_CLIENT, groups=[SUBSCRIPTION_GROUP, "/apps/presentator"]),
         ),
-        run_body(model="sonnet", tools=SONGMAKER_TOOLS),
+        run_body(model=LISTED, tools=SONGMAKER_TOOLS),
     )
 
     assert_rejected(response, RejectionCode.INVALID_REQUEST, 422)
 
 
-def test_v7_a_malformed_model_with_an_unsupported_version_answers_the_version(service):
+def test_v7_a_model_with_an_unsupported_version_answers_the_version(service):
     response = post_run(
-        service, run_headers(MINT.workload(), MINT.user()), run_body(v=1, model="sonnet")
+        service, run_headers(MINT.workload(), MINT.user()), run_body(v=1, model=LISTED)
     )
 
     assert_rejected(response, RejectionCode.UNSUPPORTED_VERSION, 400)
@@ -770,36 +759,14 @@ def test_a_capability_too_large_rejection_is_422_with_its_own_message_and_no_ret
 
 OPUS = "claude/opus"
 BOTH_RIGHTS = [SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP]
-CLI_ON_SONNET = Cli("claude-main", LISTED_MODEL)
 
 
-@pytest.mark.parametrize(
-    ("groups", "request_model", "route"),
-    [
-        pytest.param(SUBSCRIBER, None, Cli("claude-main", None), id="O12-no-model"),
-        pytest.param(BOTH_RIGHTS, OPUS, Api(API_ALIAS, OPUS), id="S3-both-rights-unlisted"),
-    ],
-)
-def test_s3_a_run_is_routed_on_exactly_the_model_it_requests(groups, request_model, route):
-    response, runners = _routed_run(service_config(), groups, model=request_model)
+def test_s3_a_run_without_a_listed_subscription_model_is_routed_on_exactly_the_configured_one():
+    response, runners = _routed_run(service_config(), BOTH_RIGHTS, model=OPUS)
 
     assert _admitted_events(response)
     admitted = runners.cli.admitted + runners.api.admitted
-    assert [run.route for run in admitted] == [route]
-
-
-def test_o13_two_runs_of_one_purpose_each_run_the_model_they_ask_for_without_a_restart():
-    admitted_second_run = []
-
-    def second_run(base_url, headers):
-        admitted_second_run.append(post_run(base_url, headers, run_body(model=OPUS)))
-
-    first, runners = _routed_run(service_config(), BOTH_RIGHTS, afterwards=second_run, model=LISTED)
-
-    assert _admitted_events(first)
-    assert _admitted_events(admitted_second_run[0])
-    admitted = runners.cli.admitted + runners.api.admitted
-    assert [run.route for run in admitted] == [CLI_ON_SONNET, Api(API_ALIAS, OPUS)]
+    assert [run.route for run in admitted] == [Api(OPUS)]
 
 
 def _run_on_the_file(tmp_path, subscription_groups):
@@ -811,7 +778,7 @@ def _post_both_rights(app, runners):
         response = post_run(
             base_url,
             run_headers(MINT.workload(), MINT.user(groups=BOTH_RIGHTS)),
-            run_body(model=LISTED),
+            run_body(),
         )
     assert _admitted_events(response)
     return (runners.cli.admitted + runners.api.admitted)[-1].route
@@ -830,4 +797,4 @@ def test_x_the_file_is_read_at_startup_and_a_restart_reads_it_again(tmp_path):
 
     edited = _run_on_the_file(tmp_path, ["/not-a-subscriber-group"])
     assert _post_both_rights(running, running_runners) == CLI_ON_SONNET  # X2
-    assert _post_both_rights(*_app_from(edited)) == Api(API_ALIAS, LISTED)  # X3
+    assert _post_both_rights(*_app_from(edited)) == Api(LISTED)  # X3

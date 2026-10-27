@@ -87,6 +87,22 @@ def test_a_file_that_sets_the_model_at_all_three_levels_loads(tmp_path):
     assert config.apps["songmaker"].agents["notes"].model == LISTED
 
 
+def test_the_model_of_a_run_is_the_agents_else_the_apps_else_the_defaults(tmp_path):
+    by_level = {level: f"{Provider.CLAUDE}/{level}" for level in LEVELS}
+    document = _document()
+    document["cli"]["claude"]["models"] = list(LEVELS)
+    for level, (setter, _field) in LEVELS.items():
+        setter(document, by_level[level])
+    document["apps"]["songmaker"]["agents"]["other"] = {}
+    config = _load(tmp_path, document)
+
+    assert config.model_for("songmaker", "notes") == by_level["agent"]
+    assert config.model_for("songmaker", "other") == by_level["app"]
+    del document["apps"]["songmaker"]["model"]
+    assert _load(tmp_path, document).model_for("songmaker", "other") == by_level["defaults"]
+    assert config.model_for("presentator", "anything") == by_level["defaults"]
+
+
 def test_a_file_without_defaults_is_refused_naming_defaults(tmp_path):
     document = _document()
     del document["defaults"]

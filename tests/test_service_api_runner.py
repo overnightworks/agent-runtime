@@ -10,8 +10,8 @@ import httpx
 import pytest
 from pydantic import ValidationError
 from service_support import (
-    API_ALIAS,
     API_GROUP,
+    LISTED_MODEL,
     SONGMAKER_GROUP,
     TokenMint,
     decoded_events,
@@ -28,7 +28,7 @@ from agent_runtime_client.wire import AssistantText, Failed, FailureCode, Succee
 from agent_runtime_service import api_runner
 from agent_runtime_service.app import create_app
 from agent_runtime_service.cli import installed_runners
-from agent_runtime_service.config import ServiceConfig
+from agent_runtime_service.config import AgentConfig, DefaultsConfig, Provider, ServiceConfig
 from agent_runtime_service.run_liveness import LoopClock
 
 
@@ -46,6 +46,14 @@ def configured(tmp_path, **api):
         "api": {"completion_url": "http://gateway/v1/chat/completions",
                 "credential_file": str(path), **api},
     })
+
+
+PAID_AGENT = "paid-agent"
+CONFIGURED_MODEL = f"{Provider.CLAUDE}/{LISTED_MODEL}"
+
+
+def with_default_model(config, model):
+    return config.model_copy(update={"defaults": DefaultsConfig(model=model)})
 
 
 def answer(text="answer"):
@@ -78,9 +86,9 @@ def fake_gateway(monkeypatch, handler):
     return clients
 
 
-@pytest.mark.parametrize("model", [None, "grok/synthetic"])
+@pytest.mark.parametrize("model", [CONFIGURED_MODEL, "grok/synthetic"])
 def test_api_only_service_passes_exact_model_and_no_identity(tmp_path, monkeypatch, model):
-    config = configured(tmp_path)
+    config = with_default_model(configured(tmp_path), model)
     requests = []
 
     def upstream(request):
@@ -89,12 +97,12 @@ def test_api_only_service_passes_exact_model_and_no_identity(tmp_path, monkeypat
 
     clients = fake_gateway(monkeypatch, upstream)
     reset_config()
-    response = asyncio.run(service_response(config, **({} if model is None else {"model": model})))
+    response = asyncio.run(service_response(config))
     events = decoded_events(response.content)
     assert [event.type for event in events] == ["run_started", "assistant_text", "succeeded"]
     assert events[-1].text == "answer"
     assert json.loads(requests[0].content) == {
-        "model": model or API_ALIAS,
+        "model": model,
         "messages": [{"role": "system", "content": "You help write songs."},
                      {"role": "user", "content": "Hi"}], "tools": [],
     }
@@ -473,7 +481,7 @@ def test_unreadable_ca_stops_runner_installation(tmp_path):
 
 
 def test_removed_model_is_never_substituted_retried_or_routed_to_cli(tmp_path, monkeypatch):
-    config = configured(tmp_path)
+    config = with_default_model(configured(tmp_path), "grok/removed")
     sent = []
 
     def upstream(request):
@@ -481,7 +489,7 @@ def test_removed_model_is_never_substituted_retried_or_routed_to_cli(tmp_path, m
         return httpx.Response(404, content=b"model removed")
 
     fake_gateway(monkeypatch, upstream)
-    events = decoded_events(asyncio.run(service_response(config, model="grok/removed")).content)
+    events = decoded_events(asyncio.run(service_response(config)).content)
     assert sent == ["grok/removed"]
     assert [event.type for event in events] == ["run_started", "failed"]
     assert events[-1].code is FailureCode.PROVIDER_UNAVAILABLE
@@ -493,8 +501,11 @@ def test_full_cli_capacity_does_not_block_the_real_api_runner(tmp_path, monkeypa
     from agent_runtime_service.runners import Runners
 
     config = configured(tmp_path)
-    config = config.model_copy(update={"runs": config.runs.model_copy(
-        update={"max_parallel_cli_runs": 1})})
+    paid = config.apps["songmaker"].model_copy(
+        update={"agents": {PAID_AGENT: AgentConfig(model="grok/synthetic")}})
+    config = config.model_copy(update={
+        "runs": config.runs.model_copy(update={"max_parallel_cli_runs": 1}),
+        "apps": {**config.apps, "songmaker": paid}})
     fake_gateway(monkeypatch, lambda request: httpx.Response(200, json=answer()))
 
     async def run():
@@ -512,10 +523,10 @@ def test_full_cli_capacity_does_not_block_the_real_api_runner(tmp_path, monkeypa
                 both = run_headers(mint.workload(), mint.user(groups=[
                     API_GROUP, SUBSCRIPTION_GROUP, SONGMAKER_GROUP]))
                 busy = await client.post(
-                    "/runs", json=run_body(model="claude/sonnet"), headers=both)
+                    "/runs", json=run_body(), headers=both)
                 assert busy.status_code == 429
                 paid = await client.post(
-                    "/runs", json=run_body(model="grok/synthetic"), headers=both)
+                    "/runs", json=run_body(purpose=PAID_AGENT), headers=both)
                 assert isinstance(decoded_events(paid.content)[-1], Succeeded)
         finally:
             socket.leave()

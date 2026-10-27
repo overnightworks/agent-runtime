@@ -22,7 +22,6 @@ import time
 import uuid
 from collections.abc import AsyncGenerator, Callable, Coroutine, Iterator, Mapping
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 from typing import Any, NamedTuple
 from urllib.parse import urlsplit
@@ -60,7 +59,6 @@ from service_support import (
     LISTED_MODEL,
     PINNED_CLAUDE_VERSION,
     PROCESS_TOKEN,
-    SONGMAKER_TOOLS,
     TEST_ISSUER,
     ClientSocket,
     Drive,
@@ -97,7 +95,6 @@ from agent_runtime.spawn import KillUntilGoneResult
 from agent_runtime_client.sse import RunStreamDecoder
 from agent_runtime_client.wire import (
     ClientLoss,
-    Failed,
     FailureCode,
     RunEvent,
     RunRequest,
@@ -113,7 +110,6 @@ from agent_runtime_service.config import McpConfig, Provider, ServiceConfig
 from agent_runtime_service.quarantine import Quarantine
 from agent_runtime_service.run_events import (
     INVALID_EVENT_MESSAGE,
-    NO_RUNNER_MESSAGE,
     RUNNER_FAILED_MESSAGE,
     run_frames,
 )
@@ -202,12 +198,8 @@ def headers() -> dict[str, str]:
     return run_headers(MINT.workload(), MINT.user())
 
 
-def post_a_run(
-    base_url: str, tools: Mapping[str, str] | None = None, model: str | None = None
-) -> list[RunEvent]:
+def post_a_run(base_url: str, tools: Mapping[str, str] | None = None) -> list[RunEvent]:
     body = run_body(turn=THREE_MESSAGE_TURN, tools=dict(tools or {}))
-    if model is not None:
-        body["model"] = model
     return decoded_events(post_run(base_url, headers(), body).content)
 
 
@@ -282,35 +274,22 @@ def model_options_of(argv: str) -> list[str]:
     return [a for a in argv.splitlines() if a == "--model" or a.startswith("--model=")]
 
 
-@pytest.mark.parametrize(
-    ("requested", "expected"),
-    [
-        pytest.param(f"claude/{LISTED_MODEL}", [f"--model={LISTED_MODEL}"], id="M1-listed-model"),
-        pytest.param(None, [], id="M2-no-model"),
-    ],
-)
-def test_the_cli_run_gets_the_listed_model_as_one_argument_or_none(
-    tmp_path: Path,
-    child_cleanup: ChildCleanup,
-    monkeypatch: pytest.MonkeyPatch,
-    requested: str | None,
-    expected: list[str],
+def test_the_cli_run_gets_the_configured_model_as_one_argument(
+    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     capture = tmp_path / "capture"
     config = a_config(tmp_path, a_fake_claude(tmp_path, capture=capture))
 
-    events = drive_over_http(
-        child_cleanup, monkeypatch, config, partial(post_a_run, model=requested)
-    )
+    events = drive_over_http(child_cleanup, monkeypatch, config, post_a_run)
 
     assert (shown(events)[-1], model_options_of((capture / "argv").read_text())) == (
         ("succeeded", "done"),
-        expected,
+        [f"--model={LISTED_MODEL}"],
     )
 
 
-def test_the_run_adapter_passes_the_routes_model_and_not_the_requests(tmp_path: Path) -> None:
-    turn = RunRequest.model_validate(run_body(model="claude/opus")).turn
+def test_the_run_adapter_passes_the_routes_model(tmp_path: Path) -> None:
+    turn = RunRequest.model_validate(run_body()).turn
     launch = cli_runner.ProfileLaunch(
         Provider.CLAUDE, tmp_path / "claude", process_token_file(), 7, 600.0
     )
@@ -359,27 +338,6 @@ def test_a_capability_never_reaches_the_tool_free_cli(
     carriers = captured_carriers(capture)
     assert (bool(signed), shown(events)[-1][0]) == (True, "succeeded")
     assert [name for name, text in carriers.items() if any(token in text for token in signed)] == []
-
-
-def test_without_a_cli_section_a_tool_app_is_provider_unavailable(
-    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    capture = tmp_path / "capture"
-    config = a_config(tmp_path, a_fake_claude(tmp_path, capture=capture), songmaker={})
-    without_cli = config.model_copy(update={"cli": None})
-
-    events = drive_over_http(
-        child_cleanup, monkeypatch, without_cli, partial(post_a_run, tools=SONGMAKER_TOOLS)
-    )
-
-    terminal = events[-1]
-    assert isinstance(terminal, Failed)
-    assert (terminal.code, terminal.message, child_cleanup.listed(), capture.exists()) == (
-        FailureCode.PROVIDER_UNAVAILABLE,
-        NO_RUNNER_MESSAGE,
-        (),
-        False,
-    )
 
 
 def an_assistant_line(text: str) -> bytes:

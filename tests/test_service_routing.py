@@ -2,15 +2,15 @@
 
 The subscription groups and the API groups decide the route; the purpose never does, and
 membership of the app is the caller check's gate, before any route is chosen. Test values:
-subscription groups ``/old-sub`` and ``/new-sub``, API group ``/api-members``, one Claude
-profile and the alias ``assistant-api``.
+subscription groups ``/old-sub`` and ``/new-sub``, API group ``/api-members`` and one Claude
+profile; every run names the model the configuration chose for it.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from agent_runtime_service.config import IdentityConfig, ProfileConfig, Provider, RouteConfig
+from agent_runtime_service.config import IdentityConfig, ProfileConfig, Provider
 from agent_runtime_service.routing import Api, Cli, NotEnabled, route
 
 IDENTITY = IdentityConfig(
@@ -21,12 +21,10 @@ IDENTITY = IdentityConfig(
     api_groups=frozenset({"/api-members"}),
     group_claim="groups",
 )
-PROFILES = {
-    "claude-main": ProfileConfig(provider=Provider.CLAUDE, default=True)
-}
-ROUTE = RouteConfig(api_alias="assistant-api")
-CLI = Cli("claude-main")
-API = Api("assistant-api")
+PROFILES = {"claude-main": ProfileConfig(provider=Provider.CLAUDE)}
+MODEL = f"{Provider.CLAUDE}/sonnet"
+CLI = Cli("claude-main", "sonnet")
+API = Api(MODEL)
 OFF = NotEnabled()
 
 
@@ -34,38 +32,29 @@ SONNET_LISTED = {Provider.CLAUDE: frozenset({"sonnet"})}
 NOTHING_LISTED = {Provider.CLAUDE: frozenset()}
 
 
-def _routed(
-    groups,
-    *,
-    profiles=PROFILES,
-    route_facts=ROUTE,
-    identity=IDENTITY,
-    model=None,
-    listed=SONNET_LISTED,
-):
-    return route(identity, route_facts, profiles, frozenset(groups), model, listed)
+def _routed(groups, *, profiles=PROFILES, identity=IDENTITY, model=MODEL, listed=SONNET_LISTED):
+    return route(identity, profiles, frozenset(groups), model, listed)
 
 
 @pytest.mark.parametrize(
-    ("groups", "profiles", "route_facts", "expected"),
+    ("groups", "profiles", "expected"),
     [
-        pytest.param({"/new-sub"}, PROFILES, ROUTE, CLI, id="R1-new-subscription-group"),
-        pytest.param({"/old-sub"}, PROFILES, ROUTE, CLI, id="R2-stale-token-keeps-its-route"),
-        pytest.param({"/old-sub", "/new-sub"}, PROFILES, ROUTE, CLI, id="R3-both-names"),
-        pytest.param({"/new-sub", "/api-members"}, PROFILES, ROUTE, CLI, id="R4-subscription-wins"),
-        pytest.param({"/new-sub", "/api-members"}, {}, ROUTE, API, id="R5-no-profile-uses-the-api"),
-        pytest.param({"/new-sub"}, {}, None, OFF, id="R6-nothing-configured"),
-        pytest.param({"/api-members"}, PROFILES, ROUTE, API, id="R7-api-member"),
-        pytest.param({"/api-members"}, PROFILES, None, OFF, id="R8-no-alias"),
-        pytest.param({"/new-sub/friends"}, PROFILES, ROUTE, OFF, id="R12-subscription-subgroup"),
-        pytest.param({"/new-sub-x"}, PROFILES, ROUTE, OFF, id="R12-subscription-look-alike"),
-        pytest.param({"/api-members/friends"}, PROFILES, ROUTE, OFF, id="R12a-api-subgroup"),
-        pytest.param({"/api-members-x"}, PROFILES, ROUTE, OFF, id="R12a-api-look-alike"),
-        pytest.param(set(), PROFILES, ROUTE, OFF, id="R13-no-groups"),
+        pytest.param({"/new-sub"}, PROFILES, CLI, id="R1-new-subscription-group"),
+        pytest.param({"/old-sub"}, PROFILES, CLI, id="R2-stale-token-keeps-its-route"),
+        pytest.param({"/old-sub", "/new-sub"}, PROFILES, CLI, id="R3-both-names"),
+        pytest.param({"/new-sub", "/api-members"}, PROFILES, CLI, id="R4-subscription-wins"),
+        pytest.param({"/new-sub", "/api-members"}, {}, API, id="R5-no-profile-uses-the-api"),
+        pytest.param({"/new-sub"}, {}, OFF, id="R6-nothing-configured"),
+        pytest.param({"/api-members"}, PROFILES, API, id="R7-api-member"),
+        pytest.param({"/new-sub/friends"}, PROFILES, OFF, id="R12-subscription-subgroup"),
+        pytest.param({"/new-sub-x"}, PROFILES, OFF, id="R12-subscription-look-alike"),
+        pytest.param({"/api-members/friends"}, PROFILES, OFF, id="R12a-api-subgroup"),
+        pytest.param({"/api-members-x"}, PROFILES, OFF, id="R12a-api-look-alike"),
+        pytest.param(set(), PROFILES, OFF, id="R13-no-groups"),
     ],
 )
-def test_the_route_follows_the_groups(groups, profiles, route_facts, expected):
-    assert _routed(groups, profiles=profiles, route_facts=route_facts) == expected
+def test_the_route_follows_the_groups(groups, profiles, expected):
+    assert _routed(groups, profiles=profiles) == expected
 
 
 def test_a_stale_subscription_name_is_not_enabled_once_the_configuration_drops_it():
@@ -91,7 +80,7 @@ BOTH = {"/new-sub", "/api-members"}
             API_ONLY,
             "claude/sonnet",
             SONNET_LISTED,
-            Api("assistant-api", "claude/sonnet"),
+            Api("claude/sonnet"),
             id="R-a-A",
         ),
         pytest.param(
@@ -99,18 +88,18 @@ BOTH = {"/new-sub", "/api-members"}
         ),
         pytest.param(SUBSCRIBER, "claude/opus", SONNET_LISTED, OFF, id="R-b-S"),
         pytest.param(
-            API_ONLY, "claude/opus", SONNET_LISTED, Api("assistant-api", "claude/opus"), id="R-b-A"
+            API_ONLY, "claude/opus", SONNET_LISTED, Api("claude/opus"), id="R-b-A"
         ),
         pytest.param(
-            BOTH, "claude/opus", SONNET_LISTED, Api("assistant-api", "claude/opus"), id="R-b-D"
+            BOTH, "claude/opus", SONNET_LISTED, Api("claude/opus"), id="R-b-D"
         ),
         pytest.param(SUBSCRIBER, "claude/sonnet", NOTHING_LISTED, OFF, id="R-c-S"),
         pytest.param(
-            BOTH, "claude/sonnet", NOTHING_LISTED, Api("assistant-api", "claude/sonnet"), id="R-c-D"
+            BOTH, "claude/sonnet", NOTHING_LISTED, Api("claude/sonnet"), id="R-c-D"
         ),
         pytest.param(SUBSCRIBER, "xai/sonnet", SONNET_LISTED, OFF, id="R-d-S"),
         pytest.param(
-            BOTH, "xai/sonnet", SONNET_LISTED, Api("assistant-api", "xai/sonnet"), id="R-d-D"
+            BOTH, "xai/sonnet", SONNET_LISTED, Api("xai/sonnet"), id="R-d-D"
         ),
         pytest.param(set(), "claude/sonnet", SONNET_LISTED, OFF, id="R-e-N"),
     ],
@@ -122,33 +111,18 @@ def test_a_named_model_runs_on_the_subscription_only_when_it_is_listed(
 
 
 CLAUDE = ProfileConfig(provider=Provider.CLAUDE)
-CODEX = ProfileConfig(provider=Provider.CODEX, default=True)
-TWO_PROFILES = {"claude-main": CLAUDE, "codex-main": CODEX}
+CODEX = ProfileConfig(provider=Provider.CODEX)
 BOTH_LISTED = {**SONNET_LISTED, Provider.CODEX: frozenset({"gpt-5.5"})}
 
 
 @pytest.mark.parametrize(
     ("model", "expected"),
     [
-        pytest.param(None, Cli("codex-main"), id="no-model-goes-to-the-default"),
         pytest.param("claude/sonnet", Cli("claude-main", "sonnet"), id="claude-model"),
         pytest.param("codex/gpt-5.5", Cli("codex-main", "gpt-5.5"), id="codex-model"),
     ],
 )
-def test_a_run_with_no_model_goes_to_the_default_profile_not_the_first(model, expected):
-    assert _routed(SUBSCRIBER, profiles=TWO_PROFILES, model=model, listed=BOTH_LISTED) == expected
+def test_a_model_goes_to_the_profile_of_its_provider(model, expected):
+    profiles = {"claude-main": CLAUDE, "codex-main": CODEX}
 
-
-@pytest.mark.parametrize(
-    ("groups", "expected"),
-    [
-        pytest.param(SUBSCRIBER, OFF, id="subscriber-gets-no-profile"),
-        pytest.param(BOTH, API, id="api-member-goes-to-the-api"),
-    ],
-)
-def test_a_subset_without_the_default_profile_gives_a_model_less_run_no_subscription_route(
-    groups, expected
-):
-    only_the_other = {"claude-main": CLAUDE}
-
-    assert _routed(groups, profiles=only_the_other, listed=BOTH_LISTED) == expected
+    assert _routed(SUBSCRIBER, profiles=profiles, model=model, listed=BOTH_LISTED) == expected

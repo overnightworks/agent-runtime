@@ -53,13 +53,11 @@ in this order for a person's run:
    subscription groups (`[identity]
    subscription_groups`), the profiles (`[profiles.<name>]`), the names the
    subscription lists (`[cli.<provider>] models`), and the API groups (`api_groups`,
-   set together with `[route] api_alias`). A model name the subscription does not
-   list sends that agent to the paid API for every caller with API rights and
-   gives subscription-only callers `not_enabled`. The app chooses the model per
-   agent and sends it on each run; the configuration's `model` levels are checked at startup
-   and are not yet read at admission. A run that
-   names no model goes to the profile marked `default = true`; with one profile that is
-   the profile, marked or not, and with two exactly one must be marked. A run that names
+   set together with `[route] api_alias`). The app sends no model: admission takes the
+   run's model from the configuration, the agent's `model` in
+   `[apps.<app>.agents.<purpose>]`, else the app's, else `[defaults] model`. A configured model whose
+   provider has no `[profiles.<name>]` entry sends that agent to the paid API for every caller with API
+   rights, under its full name, and gives subscription-only callers `not_enabled`. A run that names
    tools and whose profile's provider has no tool relay yet (Codex) gets 403 `not_enabled`
    before any place, capability or program, never a silent drop and never another route.
 
@@ -143,9 +141,9 @@ token_file = "/run/secrets/claude-token"
 default = true
 ```
 
-`default` serves a run that names no model. A lone profile is the default, marked or not;
-with two profiles exactly one is marked `default = true`, else the service stops at startup
-(exit 2, naming `profiles.<name>.default`).
+`default` is checked at startup and decides no route. A lone profile is the default, marked or
+not; with two profiles exactly one is marked `default = true`, else the service stops at
+startup (exit 2, naming `profiles.<name>.default`).
 
 **Provide it (Claude).** The file holds one line, the token `claude setup-token` prints,
 at a mode that gives nothing to group or others (0600 or 0400), at most 16 KiB.

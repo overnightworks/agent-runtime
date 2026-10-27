@@ -21,7 +21,6 @@ import pytest
 from bounds import TEST_WAIT_SECONDS, within_the_bound
 from service_support import (
     API_GROUP,
-    LISTED_MODEL,
     LONGEST_PURPOSE,
     SONGMAKER_GROUP,
     SUBSCRIPTION_GROUP,
@@ -54,7 +53,7 @@ from agent_runtime.events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import Failed, FailureCode, RejectionCode, RunStarted
 from agent_runtime_service.admission import AdmissionSlot
 from agent_runtime_service.app import create_app
-from agent_runtime_service.config import RunConfig
+from agent_runtime_service.config import AgentConfig, RunConfig
 from agent_runtime_service.routing import Api
 from agent_runtime_service.run_events import run_frames
 from agent_runtime_service.run_liveness import LoopClock
@@ -127,11 +126,19 @@ class _Service:
             _assert_streamed_to_a_terminal(self.let_go(run))
 
 
+UNLISTED_AGENT: Final = "unlisted-model-agent"
+
+
 def _serving(tmp_path, monkeypatch, runs: RunConfig) -> Iterator[_Service]:
     held = HeldRunner()
     api = ScriptedRunner(FINAL)
     signed = record_signed_tokens(monkeypatch)
-    config = capable_service_config(tmp_path).model_copy(update={"runs": runs})
+    config = capable_service_config(tmp_path)
+    songmaker = config.apps["songmaker"].model_copy(
+        update={"agents": {UNLISTED_AGENT: AgentConfig(model=f"claude/{UNLISTED_MODEL}")}}
+    )
+    apps = {**config.apps, "songmaker": songmaker}
+    config = config.model_copy(update={"runs": runs, "apps": apps})
     app = create_app(config, runners=Runners(cli=held, api=api), fetch_key_set=MINT.fetch_key_set)
     with served(app) as base_url, ThreadPoolExecutor() as pool:
         try:
@@ -234,7 +241,7 @@ def test_h9_a_listed_model_with_every_place_taken_gets_busy_and_no_api_run(servi
     signed_before = len(service.signed)
     both = MINT.user(groups=[SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP])
 
-    assert_rejected(service.run(both, model=f"claude/{LISTED_MODEL}"), RejectionCode.BUSY, 429)
+    assert_rejected(service.run(both), RejectionCode.BUSY, 429)
 
     assert (service.api.admitted, len(service.signed)) == ([], signed_before)
     service.let_all_go(held)
@@ -243,11 +250,12 @@ def test_h9_a_listed_model_with_every_place_taken_gets_busy_and_no_api_run(servi
 def test_h10_an_unlisted_model_with_every_place_taken_goes_to_the_api_and_takes_no_place(service):
     held = service.fill_the_places()
     both = MINT.user(groups=[SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP])
-    unlisted = f"claude/{UNLISTED_MODEL}"
 
-    _assert_streamed_to_a_terminal(service.run(both, model=unlisted))
+    _assert_streamed_to_a_terminal(service.run(both, purpose=UNLISTED_AGENT))
 
-    assert [admitted.route for admitted in service.api.admitted] == [Api("assistant-api", unlisted)]
+    assert [admitted.route for admitted in service.api.admitted] == [
+        Api(f"claude/{UNLISTED_MODEL}")
+    ]
     service.let_all_go(held)
 
 
@@ -255,7 +263,7 @@ def test_h11_an_unlisted_model_for_a_subscription_member_is_not_enabled_even_whe
     held = service.fill_the_places()
     signed_before = len(service.signed)
 
-    refused = service.run(model=f"claude/{UNLISTED_MODEL}")
+    refused = service.run(purpose=UNLISTED_AGENT)
 
     assert_rejected(refused, RejectionCode.NOT_ENABLED, 403)
     assert len(service.signed) == signed_before

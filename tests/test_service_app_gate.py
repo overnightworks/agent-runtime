@@ -20,14 +20,12 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from service_support import (
-    API_ALIAS,
     API_GROUP,
     LISTED_MODEL,
     MALFORMED_PURPOSES,
     SONGMAKER_GROUP,
     SUBSCRIPTION_GROUP,
     TEST_ISSUER,
-    UNLISTED_MODEL,
     ScriptedRunner,
     TokenMint,
     WallClock,
@@ -61,7 +59,6 @@ ANSWER = (AssistantTextEvent(text="answer"), FinalEvent(text="done"))
 FORBIDDEN = RejectionCode.FORBIDDEN
 NOT_ENABLED = RejectionCode.NOT_ENABLED
 LISTED = f"claude/{LISTED_MODEL}"
-UNLISTED = f"claude/{UNLISTED_MODEL}"
 SONGMAKER_ADMIN_GROUP = "/apps/songmaker/admin"
 PRESENTATOR_ADMIN_GROUP = "/apps/presentator/admin"
 ALICE = Principal(TEST_ISSUER, "user-alice")
@@ -179,24 +176,22 @@ def test_an_entitled_caller_outside_the_app_is_forbidden_before_routing(gate, gr
     gate.refuse(groups)
 
 
-@pytest.mark.parametrize("model", [None, LISTED])
 @pytest.mark.parametrize("app_group", [SONGMAKER_GROUP, SONGMAKER_ADMIN_GROUP])
-def test_a_member_without_an_ai_group_passes_the_gate_and_is_not_enabled(gate, app_group, model):
-    gate.refuse([app_group], NOT_ENABLED, model=model)
+def test_a_member_without_an_ai_group_passes_the_gate_and_is_not_enabled(gate, app_group):
+    gate.refuse([app_group], NOT_ENABLED)
 
 
 @pytest.mark.parametrize(
-    ("groups", "model"),
+    "groups",
     [
-        pytest.param([API_GROUP, "/apps/songmaker/team"], None, id="A7-descendant-no-model"),
-        pytest.param([API_GROUP, "/apps/songmaker/team"], UNLISTED, id="A7-descendant-unlisted"),
-        pytest.param([API_GROUP, SONGMAKER_GROUP], None, id="A7-the-exact-parent"),
+        pytest.param([API_GROUP, "/apps/songmaker/team"], id="A7-descendant"),
+        pytest.param([API_GROUP, SONGMAKER_GROUP], id="A7-the-exact-parent"),
     ],
 )
-def test_an_api_caller_in_the_app_reaches_the_api_route(gate, groups, model):
-    _admitted(gate.post(groups, model=model))
+def test_an_api_caller_in_the_app_reaches_the_api_route_on_the_configured_model(gate, groups):
+    _admitted(gate.post(groups))
 
-    assert gate.runners.api.admitted[-1].route == Api(API_ALIAS, model)
+    assert gate.runners.api.admitted[-1].route == Api(LISTED)
     assert gate.runners.cli.admitted == []
 
 
@@ -235,9 +230,8 @@ def test_a_non_member_is_refused_before_the_request_body_is_read(gate):
     assert asyncio.run(asgi_post_status(app, headers, receive)) == 403
 
 
-@pytest.mark.parametrize("model", [LISTED, UNLISTED])
-def test_a_dual_entitled_non_member_reaches_no_route_and_takes_no_place(gate, model):
-    gate.refuse([SUBSCRIPTION_GROUP, API_GROUP], model=model)
+def test_a_dual_entitled_non_member_reaches_no_route_and_takes_no_place(gate):
+    gate.refuse([SUBSCRIPTION_GROUP, API_GROUP])
 
     assert gate.slot_takes == []
 
@@ -349,13 +343,13 @@ def test_an_admins_admin_only_body_replayed_with_a_users_token_is_forbidden(gate
 
 
 def test_the_role_is_refused_before_the_route_is_known(gate):
-    gate.refuse(SUBSCRIBER_ROLE_USER, roles=ADMIN_ONLY, model=UNLISTED)
+    gate.refuse([SONGMAKER_GROUP], roles=ADMIN_ONLY)
 
-    gate.refuse(SUBSCRIBER_ROLE_USER, NOT_ENABLED, roles=EVERYONE, model=UNLISTED)
+    gate.refuse([SONGMAKER_GROUP], NOT_ENABLED, roles=EVERYONE)
 
 
 def test_a_user_on_an_admin_only_agent_is_forbidden_before_the_api_route(gate):
-    gate.refuse([API_GROUP, SONGMAKER_GROUP], roles=ADMIN_ONLY, model=UNLISTED)
+    gate.refuse([API_GROUP, SONGMAKER_GROUP], roles=ADMIN_ONLY)
 
 
 @pytest.mark.parametrize(

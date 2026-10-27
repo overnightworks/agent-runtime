@@ -388,7 +388,6 @@ def test_a_status_body_off_the_contract_is_refused(body: dict[str, object]) -> N
 REQUEST = {
     "v": PROTOCOL_VERSION,
     "purpose": "assistant",
-    "model": "claude/sonnet",
     "roles": ["admin", "user"],
     "turn": {
         "system": "You are a helpful assistant.",
@@ -750,21 +749,7 @@ def test_any_other_agent_roles_are_refused(roles: object) -> None:
         AGENT_ROLES.validate_python(roles)
 
 
-@pytest.mark.parametrize(
-    "model",
-    [
-        pytest.param("claude/sonnet@2", id="V1-a-version"),
-        pytest.param("sonnet", id="V2-no-provider"),
-        pytest.param("claude/sonnet\n", id="V3-a-trailing-newline"),
-        pytest.param("", id="V4-empty"),
-        pytest.param(5, id="V5-not-a-string"),
-    ],
-)
-def test_a_run_request_with_a_model_outside_the_grammar_is_refused(model: object) -> None:
-    with pytest.raises(ValidationError):
+@pytest.mark.parametrize("model", ["claude/sonnet", None, "", 5])
+def test_a_run_request_that_carries_a_model_is_refused(model: object) -> None:
+    with pytest.raises(ValidationError, match="model"):
         RunRequest.model_validate({**REQUEST, "model": model})
-
-
-@pytest.mark.parametrize("model", [pytest.param("claude/sonnet"), pytest.param(None)])
-def test_a_run_request_may_name_a_model_or_an_explicit_null(model: str | None) -> None:
-    assert RunRequest.model_validate({**REQUEST, "model": model}).model == model

@@ -22,7 +22,6 @@ import httpx
 import pytest
 from bounds import TEST_WAIT_SECONDS
 from service_support import (
-    API_ALIAS,
     API_GROUP,
     COWRITER,
     LISTED_MODEL,
@@ -172,7 +171,7 @@ def test_p1_e1_a_workload_token_alone_runs_an_enabled_agent_as_the_service_accou
         TEST_ISSUER,
         SERVICE_ACCOUNT,
     )
-    assert admitted.route == Cli("claude-main")
+    assert admitted.route == Cli("claude-main", LISTED_MODEL)
 
 
 @pytest.mark.parametrize(
@@ -386,18 +385,31 @@ def test_e5_the_roles_of_the_body_are_not_read_for_the_apps_own_run(service):
 
 
 @pytest.mark.parametrize(
-    ("groups", "model", "route"),
+    ("groups", "app_model", "agent_model", "route"),
     [
-        pytest.param([SUBSCRIPTION_GROUP], LISTED, Cli("claude-main", LISTED_MODEL), id="r1"),
-        pytest.param([API_GROUP], UNLISTED, Api(API_ALIAS, UNLISTED), id="r2"),
-        pytest.param([SUBSCRIPTION_GROUP, API_GROUP], UNLISTED, Api(API_ALIAS, UNLISTED), id="r3"),
-        pytest.param([SUBSCRIPTION_GROUP], None, Cli("claude-main"), id="r5"),
+        pytest.param([SUBSCRIPTION_GROUP], None, None, Cli("claude-main", LISTED_MODEL), id="r1"),
+        pytest.param([API_GROUP], None, UNLISTED, Api(UNLISTED), id="r2-the-agents-model"),
+        pytest.param([SUBSCRIPTION_GROUP, API_GROUP], UNLISTED, None, Api(UNLISTED), id="r3-app"),
+        pytest.param(
+            [SUBSCRIPTION_GROUP, API_GROUP], UNLISTED, LISTED, Cli("claude-main", LISTED_MODEL),
+            id="r5-the-agent-over-the-app",
+        ),
     ],
 )
-def test_r1_r2_r3_r5_the_route_comes_from_the_groups_of_the_service_account(
-    service, groups, model, route
+def test_r1_r2_r3_r5_the_route_and_model_come_from_the_service_account_and_the_configuration(
+    groups, app_model, agent_model, route
 ):
-    _succeeded(service.start(_own(groups), model=model))
+    config = _config()
+    songmaker = config.apps["songmaker"].model_copy(
+        update={
+            "model": app_model,
+            "agents": {COWRITER: AgentConfig(runs_as_app=True, model=agent_model)},
+        }
+    )
+    config = config.model_copy(update={"apps": {**config.apps, "songmaker": songmaker}})
+
+    with _serving(config) as service:
+        _succeeded(service.start(_own(groups)))
 
     served_by = service.cli if isinstance(route, Cli) else service.api
     assert served_by.admitted[-1].route == route

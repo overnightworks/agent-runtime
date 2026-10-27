@@ -14,10 +14,10 @@ before any token is verified or the body is read; the header's value is never re
 3. the person's role in the app (``admin`` in ``/apps/<app>/admin`` or below, else ``user``)
    must be one of the body's ``roles``, else ``forbidden``;
 4. tools named by an app without an MCP origin answer ``forbidden``, before the route;
-5. the route (``agent_runtime_service.routing``), which reads the request's model and the
-   installation's listed models; a run that names tools and whose route is a profile of a
-   provider without the tool relay (Codex) answers ``not_enabled`` here, before a place, a
-   capability or a child;
+5. the route (``agent_runtime_service.routing``), which reads the configured model
+   (``ServiceConfig.model_for``) and the installation's listed models; a run that names tools
+   and whose route is a profile of a provider without the tool relay (Codex) answers
+   ``not_enabled`` here, before a place, a capability or a child;
 6. for the CLI route, the service's admission limit (``agent_runtime_service.admission``): a
    subscription run beyond it answers ``busy`` with ``Retry-After`` before anything is
    signed;
@@ -214,10 +214,9 @@ def _admitted(
         return rejection(RejectionCode.FORBIDDEN)
     served = route(
         config.identity,
-        config.route,
         config.profiles,
         caller.groups,
-        run_request.model,
+        config.model_for(caller.app, run_request.purpose),
         config.subscription_models(),
     )
     if isinstance(served, NotEnabled) or (
