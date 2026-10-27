@@ -140,7 +140,7 @@ class CapabilityClaims(_StrictClaims):
     iat: int
     exp: int
     app: NonEmptyUnicodeText
-    purpose: NonEmptyUnicodeText
+    agent: NonEmptyUnicodeText
     principal: CapabilityPrincipal
     tools: Annotated[tuple[NonEmptyUnicodeText, ...], Field(strict=False)]
 

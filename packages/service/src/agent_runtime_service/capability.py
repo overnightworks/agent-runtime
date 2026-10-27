@@ -57,7 +57,7 @@ def capability_claims(
     app: str,
     issuer: str,
     subject: str,
-    purpose: str,
+    agent: str,
     now: float,
     max_duration_s: float,
 ) -> CapabilityClaims:
@@ -68,7 +68,7 @@ def capability_claims(
         iat=math.floor(now),
         exp=math.floor(now + max_duration_s),
         app=app,
-        purpose=purpose,
+        agent=agent,
         principal=CapabilityPrincipal(iss=issuer, sub=subject),
         tools=scope.tools,
     )

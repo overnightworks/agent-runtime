@@ -24,8 +24,8 @@ from service_support import (
     API_GROUP,
     COWRITER,
     LAST_TOOL_NAME_LENGTH_AT_THE_LIMIT,
-    LONGEST_PURPOSE,
-    MALFORMED_PURPOSES,
+    LONGEST_AGENT,
+    MALFORMED_AGENTS,
     PRESENTATOR_CLIENT,
     PRESENTER,
     SONGMAKER_GROUP,
@@ -97,7 +97,7 @@ def _claims_of(scope: CapabilityScope, **overrides: object) -> CapabilityClaims:
         "app": "songmaker",
         "issuer": TEST_ISSUER,
         "subject": "user-alice",
-        "purpose": COWRITER,
+        "agent": COWRITER,
         "now": NOW_IN_2026,
         "max_duration_s": 600.0,
         **overrides,
@@ -137,7 +137,7 @@ def test_a_capability_says_who_where_what_and_which_tools(tmp_path, requested, t
         iat=1_792_152_000,
         exp=1_792_152_600,
         app="songmaker",
-        purpose=COWRITER,
+        agent=COWRITER,
         principal={"iss": TEST_ISSUER, "sub": "user-alice"},
         tools=tools,
     )
@@ -252,7 +252,7 @@ def _widest_token_of(scope: CapabilityScope) -> str:
         scope,
         run_id=uuid.UUID(int=0),
         subject=QUOTATION_MARKS_255,
-        purpose=LONGEST_PURPOSE,
+        agent=LONGEST_AGENT,
         now=9_999_999_999,
     )
     return signed_capability(scope, claims).token
@@ -416,7 +416,7 @@ def _claims_for(admitted: AdmittedRun, subject: str, **overrides: object) -> Cap
         "iat": 1_792_152_000,
         "exp": 1_792_152_600,
         "app": "songmaker",
-        "purpose": COWRITER,
+        "agent": COWRITER,
         "principal": {"iss": TEST_ISSUER, "sub": subject},
         "tools": (),
         **overrides,
@@ -450,13 +450,13 @@ def test_the_runner_receives_a_capability_that_verifies_with_the_callers_princip
         assert admitted.principal.subject == subject
 
 
-def test_a_purpose_of_another_apps_agents_changes_only_the_label_of_the_capability(serving):
+def test_an_agent_of_another_apps_agents_changes_only_the_label_of_the_capability(serving):
     with serving() as service:
         service.run()
-        service.run(purpose=PRESENTER)
+        service.run(agent=PRESENTER)
 
         own, relabelled = (admitted.capability.claims for admitted in service.cli.admitted)
-        assert relabelled.purpose == PRESENTER
+        assert relabelled.agent == PRESENTER
         assert (relabelled.aud, relabelled.app, relabelled.principal, relabelled.tools) == (
             own.aud,
             own.app,
@@ -533,7 +533,7 @@ def test_an_app_without_an_origin_naming_tools_is_forbidden_before_the_route_and
 
 def test_an_app_without_an_origin_gets_no_capability_and_signs_nothing(serving):
     with serving() as service, serving(capable=False) as plain:
-        run = {"purpose": PRESENTER}
+        run = {"agent": PRESENTER}
         headers = {
             "workload": MINT.workload(client=PRESENTATOR_CLIENT),
             "user": MINT.user(azp=PRESENTATOR_CLIENT, groups=["/apps/presentator", API_GROUP]),
@@ -577,7 +577,7 @@ def _unreachable_issuer(_url: str) -> bytes:
         pytest.param(MINT.fetch_key_set, {"groups": []}, {}, id="outside-the-app"),
         pytest.param(MINT.fetch_key_set, {}, {"v": 1}, id="unsupported-version"),
         pytest.param(
-            MINT.fetch_key_set, {}, {"purpose": "notes.assistant"}, id="malformed-purpose"
+            MINT.fetch_key_set, {}, {"agent": "notes.assistant"}, id="malformed-agent"
         ),
         pytest.param(MINT.fetch_key_set, {}, {"turn": {"system": "x", "messages": []}}, id="shape"),
     ],
@@ -604,7 +604,7 @@ def test_a_capability_over_8192_characters_is_refused_before_any_runner_stream_o
     monkeypatch.setattr("agent_runtime_service.app.uuid.uuid4", lambda: pinned)
     user = MINT.user(sub=QUOTATION_MARKS_256)
     with serving() as service:
-        refusal = service.run(user, purpose=LONGEST_PURPOSE, tools=TUNED_AT_THE_LIMIT)
+        refusal = service.run(user, agent=LONGEST_AGENT, tools=TUNED_AT_THE_LIMIT)
 
         assert_rejected(refusal, RejectionCode.CAPABILITY_TOO_LARGE, 422)
         assert refusal.headers["content-type"] == "application/json"
@@ -629,16 +629,16 @@ def test_a_capability_over_8192_characters_is_refused_at_a_wall_clock_past_2286(
         service.clock.set_to(YEAR_2286)
 
         refusal = service.run(
-            MINT.user(sub=QUOTATION_MARKS_255), purpose=LONGEST_PURPOSE, tools=TUNED_AT_THE_LIMIT
+            MINT.user(sub=QUOTATION_MARKS_255), agent=LONGEST_AGENT, tools=TUNED_AT_THE_LIMIT
         )
 
         assert_rejected(refusal, RejectionCode.CAPABILITY_TOO_LARGE, 422)
         assert service.cli.admitted == []
 
 
-def test_the_widest_admitted_capability_has_the_longest_purpose_and_a_short_subject(serving):
+def test_the_widest_admitted_capability_has_the_longest_agent_and_a_short_subject(serving):
     with serving() as service:
-        response = service.run(purpose=LONGEST_PURPOSE, tools=TUNED_AT_THE_LIMIT)
+        response = service.run(agent=LONGEST_AGENT, tools=TUNED_AT_THE_LIMIT)
 
         assert response.status_code == 200
         assert len(service.capability_of_last_cli_run().token) == 7_524
@@ -830,7 +830,7 @@ def test_nothing_logged_over_an_admitted_run_the_refusals_and_the_guard_carries_
         service.run(tools=TUNED_AT_THE_LIMIT)
         service.run(MINT.user(sub=QUOTATION_MARKS_256), tools=TUNED_AT_THE_LIMIT)
         service.run(MINT.user(sub=None))
-        service.run(purpose=MALFORMED_PURPOSES[1])
+        service.run(agent=MALFORMED_AGENTS[1])
         service.run(MINT.user(groups=[]))
         service.run(v=1)
         service.run(turn={"system": "x", "messages": []})

@@ -25,7 +25,7 @@ EXAMPLE_CLAIMS: dict[str, Any] = {
     "iat": 1792152000,
     "exp": 1792152600,
     "app": "notes",
-    "purpose": "notes.assistant",
+    "agent": "notes.assistant",
     "principal": {"iss": "https://keycloak.test/realms/agent-test", "sub": "user-alice"},
     "tools": ["edit_note", "read_note"],
 }
@@ -172,7 +172,7 @@ REFUSED_CLAIMS = [
     pytest.param(_claims_with(exp=EXAMPLE_CLAIMS["iat"]), id="expires-when-issued"),
     pytest.param(_claims_with(exp=EXAMPLE_CLAIMS["iat"] - 1), id="expires-before-issued"),
     pytest.param(_claims_with(app=""), id="empty-app"),
-    pytest.param(_claims_with(purpose=""), id="empty-purpose"),
+    pytest.param(_claims_with(agent=""), id="empty-agent"),
     pytest.param(_claims_with(principal=_principal_with(sub=None)), id="principal-without-sub"),
     pytest.param(_claims_with(principal=_principal_with(sub="")), id="principal-empty-sub"),
     pytest.param(_claims_with(principal=_principal_with(sub="\ud800")), id="principal-lone-sub"),

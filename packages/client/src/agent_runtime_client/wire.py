@@ -40,10 +40,10 @@ PROTOCOL_VERSION: Final = 3
 MAX_EVENT_BYTES: Final = 1_048_576
 MAX_TOOL_INPUT_DEPTH: Final = 128
 MAX_MESSAGE_LENGTH: Final = 500
-MAX_PURPOSE_LENGTH: Final = 64
+MAX_AGENT_LENGTH: Final = 64
 MODEL_PART_PATTERN: Final = re.compile(r"[a-z0-9.-]+")
 _MODEL_NAME_PATTERN: Final = re.compile(rf"[a-z0-9-]+/{MODEL_PART_PATTERN.pattern}")
-_PURPOSE_PATTERN: Final = re.compile(rf"[a-z][a-z0-9-]{{0,{MAX_PURPOSE_LENGTH - 1}}}")
+_AGENT_PATTERN: Final = re.compile(rf"[a-z][a-z0-9-]{{0,{MAX_AGENT_LENGTH - 1}}}")
 
 
 class FailureCode(StrEnum):
@@ -193,17 +193,17 @@ ToolUseId = NonEmptyUnicodeText
 """The one decider of a valid call id, so a call and its result accept the same ids."""
 
 
-def _refuse_non_purpose(text: str) -> str:
-    if _PURPOSE_PATTERN.fullmatch(text) is None:
+def _refuse_non_agent(text: str) -> str:
+    if _AGENT_PATTERN.fullmatch(text) is None:
         raise ValueError(
-            f"must be 1 to {MAX_PURPOSE_LENGTH} characters from a-z, 0-9 and -, "
+            f"must be 1 to {MAX_AGENT_LENGTH} characters from a-z, 0-9 and -, "
             "starting with a letter"
         )
     return text
 
 
-Purpose = Annotated[str, AfterValidator(_refuse_non_purpose)]
-"""The one decider of an agent's name: the purpose a run is started for."""
+AgentName = Annotated[str, AfterValidator(_refuse_non_agent)]
+"""The one decider of an agent's name: the agent a run is started for."""
 
 
 def _refuse_non_model_name(text: str) -> str:
@@ -396,7 +396,7 @@ class RunRequest(_WireModel):
     service answers ``forbidden`` unless the person's own role is in it.
     """
 
-    purpose: Purpose
+    agent: AgentName
     turn: Turn
     roles: AgentRoles
     tools: dict[NonEmptyUnicodeText, Annotated[ToolEffect, Field(strict=False)]]

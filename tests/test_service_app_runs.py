@@ -1,7 +1,7 @@
 """An app's own agent runs on its workload token alone (decision record 0001, H3 and H12).
 
 A request with neither ``Authorization`` nor ``Agent-Job-Ticket`` is the app's own run. It is
-admitted only for an agent the operator enabled with ``[apps.<app>.agents.<purpose>]
+admitted only for an agent the operator enabled with ``[apps.<app>.agents.<agent>]
 runs_as_app = true`` and runs as the app's service account, routed by that account's groups.
 Any ``Authorization`` header, even an empty one, keeps the request on the person's path.
 Every test goes through the HTTP entrance with real token checks.
@@ -77,8 +77,8 @@ def _config(
     presentator = config.apps["presentator"].model_copy(
         update={
             "agents": {
-                purpose: AgentConfig(runs_as_app=enabled)
-                for purpose, enabled in presentator_agents.items()
+                agent: AgentConfig(runs_as_app=enabled)
+                for agent, enabled in presentator_agents.items()
             }
         }
     )
@@ -337,10 +337,10 @@ def test_w6_a_service_account_in_no_group_is_not_enabled_after_the_body(service,
     [
         pytest.param({}, id="no-table"),
         pytest.param({COWRITER: {"runs_as_app": False}}, id="disabled"),
-        pytest.param({"assistant": {"runs_as_app": True}}, id="another-purpose-only"),
+        pytest.param({"assistant": {"runs_as_app": True}}, id="another-agent-only"),
     ],
 )
-def test_e2_a_purpose_without_an_enabled_table_is_forbidden_after_the_body(agents):
+def test_e2_an_agent_without_an_enabled_table_is_forbidden_after_the_body(agents):
     enabled_elsewhere = {"other-agent": {"runs_as_app": True}}
     with _serving(_config({**agents, **enabled_elsewhere})) as serving:
         assert_rejected(serving.start(_own()), RejectionCode.FORBIDDEN, 403)
@@ -374,9 +374,9 @@ def test_e4_each_apps_own_tables_decide_for_its_own_workload_token():
         assert_rejected(without_tables.start(presentator), RejectionCode.UNAUTHORIZED, 401)
     with _serving(_config(presentator_agents={PRESENTER: True})) as with_tables:
         assert_rejected(
-            with_tables.start(presentator, purpose=COWRITER), RejectionCode.FORBIDDEN, 403
+            with_tables.start(presentator, agent=COWRITER), RejectionCode.FORBIDDEN, 403
         )
-        _succeeded(with_tables.start(presentator, purpose=PRESENTER))
+        _succeeded(with_tables.start(presentator, agent=PRESENTER))
         assert with_tables.cli.admitted[-1].app == "presentator"
 
 
@@ -497,7 +497,7 @@ def test_c1_the_capability_of_the_apps_own_run_names_the_service_account_and_flo
     claims = capability.claims
     now = clock().timestamp()
     assert (claims.principal.iss, claims.principal.sub) == (TEST_ISSUER, SERVICE_ACCOUNT)
-    assert (claims.app, claims.purpose) == ("songmaker", COWRITER)
+    assert (claims.app, claims.agent) == ("songmaker", COWRITER)
     assert (claims.iat, claims.exp) == (math.floor(now), math.floor(now + 300.5))
 
 
@@ -521,7 +521,7 @@ def test_an_apps_agent_table_names_the_agents_that_run_as_the_app(tmp_path):
         pytest.param(
             VALID_CONFIG + "\n[apps.songmaker.agents.Co_Writer]\nruns_as_app = true\n",
             "apps.songmaker.agents.Co_Writer",
-            id="E6-an-agent-named-by-an-invalid-purpose",
+            id="E6-an-agent-named-by-an-invalid-agent",
         ),
         pytest.param(
             VALID_CONFIG + '\n[apps.songmaker.agents.cowriter]\nruns_as_app = "yes"\n',

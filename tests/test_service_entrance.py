@@ -3,7 +3,7 @@
 Tokens are minted by a throwaway key the verifier's injected key-set fetch
 serves, so the service's real checks run; the Keycloak suite proves the same
 entrance with real Keycloak tokens. S1: both tokens are required. S2: a user
-token cannot pose as the workload. S3: the request names only purpose and
+token cannot pose as the workload. S3: the request names only agent and
 turn. S4: H5 routing decides, and a refused caller starts no run.
 """
 
@@ -20,11 +20,11 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from service_support import (
-    ADMITTED_PURPOSES,
+    ADMITTED_AGENTS,
     API_GROUP,
     COWRITER,
     LISTED_MODEL,
-    MALFORMED_PURPOSES,
+    MALFORMED_AGENTS,
     OLD_SUBSCRIPTION_GROUP,
     PRESENTATOR_CLIENT,
     SONGMAKER_CLIENT,
@@ -110,10 +110,10 @@ def test_a_runner_that_offers_tools_serves_an_app_with_tools(service):
     assert decoded_events(response.content)[-1].text == "CLI answer"
 
 
-@pytest.mark.parametrize("purpose", ADMITTED_PURPOSES)
-def test_a_purpose_in_the_grammar_is_admitted_from_any_app(service, purpose):
+@pytest.mark.parametrize("agent", ADMITTED_AGENTS)
+def test_an_agent_in_the_grammar_is_admitted_from_any_app(service, agent):
     response = post_run(
-        service, run_headers(MINT.workload(), MINT.user()), run_body(purpose=purpose)
+        service, run_headers(MINT.workload(), MINT.user()), run_body(agent=agent)
     )
 
     assert _admitted_events(response) == ["run_started", "assistant_text", "succeeded"]
@@ -585,10 +585,10 @@ def _invalid_request(content: bytes, id: str):
 
 BODY_REJECTIONS = [
     _invalid_request(
-        json.dumps(run_body())[:-1].encode() + b', "purpose": "cowriter"}', "a-member-named-twice"
+        json.dumps(run_body())[:-1].encode() + b', "agent": "cowriter"}', "a-member-named-twice"
     ),
     _invalid_request(b"[1]", "not-an-object"),
-    _invalid_request(b'{"purpose":', "not-json"),
+    _invalid_request(b'{"agent":', "not-json"),
     _invalid_request(_too_large(), "over-256-kib"),
     *(
         _invalid_request(json.dumps(run_body()).encode(encoding), encoding)
@@ -609,6 +609,7 @@ BODY_REJECTIONS = [
             ("older-version", 2),
             ("newer-version", PROTOCOL_VERSION + 1),
             ("version-as-a-numeric-string", str(PROTOCOL_VERSION)),
+            ("v-as-a-string", "1"),
             ("version-as-a-boolean", True),
             ("version-as-a-float", float(PROTOCOL_VERSION)),
         )
@@ -617,6 +618,7 @@ BODY_REJECTIONS = [
         json.dumps({name: value for name, value in run_body().items() if name != "tools"}).encode(),
         "tools-omitted",
     ),
+    _invalid_request(json.dumps({**run_body(), "purpose": "cowriter"}).encode(), "purpose-named"),
     *(
         _invalid_request(json.dumps(run_body(tools=tools)).encode(), f"tools-{label}")
         for label, tools in (
@@ -624,12 +626,6 @@ BODY_REJECTIONS = [
             ("with-an-unknown-effect", {"read_song": "write"}),
             ("as-a-list", ["read_song"]),
         )
-    ),
-    pytest.param(
-        json.dumps(run_body(v="1")).encode(),
-        RejectionCode.UNSUPPORTED_VERSION,
-        400,
-        id="v-as-a-string",
     ),
     pytest.param(
         json.dumps(run_body(v=1, provider="claude")).encode(),
@@ -648,15 +644,15 @@ BODY_REJECTIONS = [
         "a-member-named-twice-is-checked-before-the-version",
     ),
     _invalid_request(
-        b'{"purpose": NaN, "v": %d}' % (PROTOCOL_VERSION + 1),
+        b'{"agent": NaN, "v": %d}' % (PROTOCOL_VERSION + 1),
         "strict-json-is-checked-before-the-version",
     ),
     *(
         _invalid_request(
-            json.dumps(run_body(purpose=purpose)).encode(),
-            f"purpose-outside-the-grammar-{purpose!r}",
+            json.dumps(run_body(agent=agent)).encode(),
+            f"agent-outside-the-grammar-{agent!r}",
         )
-        for purpose in MALFORMED_PURPOSES
+        for agent in MALFORMED_AGENTS
     ),
 ]
 
@@ -670,7 +666,7 @@ def test_a_body_that_is_not_an_allowed_run_request_is_refused(service, content, 
 
 def test_an_oversized_body_without_a_declared_length_is_refused_while_read(service):
     def chunks() -> Iterator[bytes]:
-        yield b'{"purpose": "'
+        yield b'{"agent": "'
         for _ in range(MAX_REQUEST_BYTES // 1024 + 1):
             yield b"x" * 1024
         yield b'"}'
@@ -730,10 +726,10 @@ def test_no_log_line_carries_token_text(service, caplog):
     assert user not in logged
 
 
-def test_the_admitted_purpose_is_the_one_the_runner_receives(service, runners):
+def test_the_admitted_agent_is_the_one_the_runner_receives(service, runners):
     post_run(service, run_headers(MINT.workload(), MINT.user()))
 
-    assert runners.cli.admitted[-1].request.purpose == COWRITER
+    assert runners.cli.admitted[-1].request.agent == COWRITER
     assert runners.cli.admitted[-1].app == "songmaker"
 
 

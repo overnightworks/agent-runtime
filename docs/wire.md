@@ -28,7 +28,7 @@ the operator enabled ([The app's own runs](#the-apps-own-runs)). `POST /runs` an
 | Field | Meaning |
 |---|---|
 | `v` | The protocol version, `3`. Any other body answers 400 `unsupported_version`. |
-| `purpose` | The agent's name, `[a-z][a-z0-9-]{0,63}`. It labels the run and its capability, and names the agent whose configured model the run uses; the request itself names no model, and a body that carries `model` answers 422 `invalid_request`. |
+| `agent` | The agent's name, `[a-z][a-z0-9-]{0,63}`. It labels the run and its capability, and names the agent whose configured model the run uses; the request itself names no model, and a body that carries `model` answers 422 `invalid_request`. |
 | `turn` | The system prompt and the messages (`Turn`, `TurnMessage`). |
 | `roles` | The agent's allowed roles, exactly `["admin"]` or `["admin", "user"]`; `AgentDefinition.request` fills it from the agent file. |
 | `tools` | A map from each tool the run may call to its `ToolEffect`; required, possibly `{}`. |
@@ -66,9 +66,9 @@ to the app's own run. The checks run in this order and the first failure answers
 1. The workload token is verified (401, or 503 when the key set is unreachable) and bound to its
    registered app as for a person's run (403).
 2. Its `sub` is valid Unicode text, and its group claim, if present, is a list of strings (401).
-3. The app has an agent with `runs_as_app = true` in `[apps.<app>.agents.<purpose>]`, else 401
+3. The app has an agent with `runs_as_app = true` in `[apps.<app>.agents.<agent>]`, else 401
    before the body is read.
-4. The body is checked as for a person's run, and its `purpose` names such an agent, else 403
+4. The body is checked as for a person's run, and its `agent` names such an agent, else 403
    `forbidden`. The body's `roles` must still be a valid list but is not read.
 5. The route is decided by the service from the groups of the workload token and the model the
    configuration names for the agent, never named on the wire: no route group is 403 `not_enabled`, and a full subscription is
@@ -79,7 +79,7 @@ the app: the capability names it as the principal like a person's, and `GET /run
 workload token alone reads exactly the app's own runs.
 
 The list of enabled agents is a tripwire for a cooperative app, not a boundary against a malicious
-one: the request carries the whole turn and the purpose is only a label. The boundary is the
+one: the request carries the whole turn and the agent is only a label. The boundary is the
 Keycloak groups of the app's service account ([operations.md](operations.md#who-may-run-what)).
 
 ## Agent files

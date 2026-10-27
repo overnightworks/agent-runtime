@@ -64,7 +64,7 @@ def _minted_claims(now: float = ISSUED_AT):
         app="notes",
         issuer="https://keycloak.test/realms/agent-test",
         subject="user-alice",
-        purpose="notes.assistant",
+        agent="notes.assistant",
         now=now,
         max_duration_s=LIFETIME,
     )
@@ -207,6 +207,7 @@ def test_a_capability_of_another_token_type_is_refused(token_type):
     [
         pytest.param({"nbf": ISSUED_AT}, id="extra nbf"),
         pytest.param({"tools": None}, id="tools missing"),
+        pytest.param({"agent": None, "purpose": "notes.assistant"}, id="purpose instead of agent"),
         pytest.param({"iss": "someone-else"}, id="another issuer"),
         pytest.param({"exp": ISSUED_AT}, id="exp equal to iat"),
         pytest.param({"exp": ISSUED_AT - 1}, id="exp before iat"),
@@ -221,7 +222,7 @@ def test_a_validly_signed_payload_that_is_not_a_capability_is_refused_for_its_cl
 
 
 def test_a_validly_signed_capability_over_the_character_limit_is_refused_as_too_long():
-    token = _signed_token(payload=_claims_with(purpose="p" * MAX_CAPABILITY_CHARACTERS))
+    token = _signed_token(payload=_claims_with(agent="p" * MAX_CAPABILITY_CHARACTERS))
 
     assert len(token) > MAX_CAPABILITY_CHARACTERS
     assert _verified(token) is CapabilityRefusal.TOO_LONG
@@ -239,21 +240,21 @@ class _PlaceholderSigner:
 
 
 def _token_padded_to_the_limit() -> tuple[str, str]:
-    """Base64 cannot represent every output length, so a purpose on the limit is searched."""
-    for purpose_length in range(MAX_CAPABILITY_CHARACTERS // 2, MAX_CAPABILITY_CHARACTERS):
-        purpose = "p" * purpose_length
-        payload = _claims_with(purpose=purpose)
+    """Base64 cannot represent every output length, so an agent on the limit is searched."""
+    for agent_length in range(MAX_CAPABILITY_CHARACTERS // 2, MAX_CAPABILITY_CHARACTERS):
+        agent = "p" * agent_length
+        payload = _claims_with(agent=agent)
         unsigned = _signed_token(payload=payload, signer=_PlaceholderSigner())
         if len(unsigned) >= MAX_CAPABILITY_CHARACTERS:
-            return _signed_token(payload=payload), purpose
-    raise AssertionError("no purpose reaches the limit")
+            return _signed_token(payload=payload), agent
+    raise AssertionError("no agent reaches the limit")
 
 
 def test_a_capability_of_exactly_the_character_limit_is_still_verified():
-    token, purpose = _token_padded_to_the_limit()
+    token, agent = _token_padded_to_the_limit()
 
     assert len(token) == MAX_CAPABILITY_CHARACTERS
-    assert _verified(token) == _minted_claims().model_copy(update={"purpose": purpose})
+    assert _verified(token) == _minted_claims().model_copy(update={"agent": agent})
 
 
 NESTED_AS_DEEP_AS_THE_LIMIT_ALLOWS = b"[" * 4_500

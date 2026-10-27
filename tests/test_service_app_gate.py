@@ -22,7 +22,7 @@ import pytest
 from service_support import (
     API_GROUP,
     LISTED_MODEL,
-    MALFORMED_PURPOSES,
+    MALFORMED_AGENTS,
     SONGMAKER_GROUP,
     SUBSCRIPTION_GROUP,
     TEST_ISSUER,
@@ -239,10 +239,10 @@ def test_a_dual_entitled_non_member_reaches_no_route_and_takes_no_place(gate):
 NOT_A_REQUEST = [
     pytest.param({"v": 1}, RejectionCode.UNSUPPORTED_VERSION, 400, id="G2-unsupported-version"),
     pytest.param(
-        {"purpose": MALFORMED_PURPOSES[2]},
+        {"agent": MALFORMED_AGENTS[2]},
         RejectionCode.INVALID_REQUEST,
         422,
-        id="G2-malformed-purpose",
+        id="G2-malformed-agent",
     ),
     pytest.param({"turn": {}}, RejectionCode.INVALID_REQUEST, 422, id="G2-bad-turn"),
 ]

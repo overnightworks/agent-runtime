@@ -338,10 +338,10 @@ def _songmaker_workload() -> str:
         ),
         pytest.param(
             _songmaker_workload,
-            run_body(purpose="notes.assistant"),
+            run_body(agent="notes.assistant"),
             RejectionCode.INVALID_REQUEST,
             422,
-            id="purpose-outside-the-grammar",
+            id="agent-outside-the-grammar",
         ),
     ],
 )

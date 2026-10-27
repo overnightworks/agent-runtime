@@ -216,7 +216,7 @@ def _admitted(
         config.identity,
         config.profiles,
         caller.groups,
-        config.model_for(caller.app, run_request.purpose),
+        config.model_for(caller.app, run_request.agent),
         config.subscription_models(),
     )
     if isinstance(served, NotEnabled) or (
@@ -254,7 +254,7 @@ def _admitted(
 
 def _may_run(config: ServiceConfig, caller: Caller, run_request: RunRequest) -> bool:
     if isinstance(caller, AppCaller):
-        return config.apps[caller.app].runs_as_itself(run_request.purpose)
+        return config.apps[caller.app].runs_as_itself(run_request.agent)
     return caller.role in run_request.roles
 
 
@@ -324,7 +324,7 @@ def _capability_of(
         app=caller.app,
         issuer=caller.principal.issuer,
         subject=caller.principal.subject,
-        purpose=run_request.purpose,
+        agent=run_request.agent,
         now=wall_clock().timestamp(),
         max_duration_s=config.runs.max_duration_s,
     )

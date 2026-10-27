@@ -52,7 +52,7 @@ def minted_capability(
         app="notes",
         issuer="https://keycloak.test/realms/agent-test",
         subject="user-alice",
-        purpose="notes.assistant",
+        agent="notes.assistant",
         now=issued_at,
         max_duration_s=LIFETIME,
     )
