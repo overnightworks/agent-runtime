@@ -14,7 +14,6 @@ from service_support import (
 from test_service_cli_version import PRINTS_THE_PIN, _config_file_naming, working_root  # noqa: F401
 from test_service_config import (
     MCP_SECTION,
-    NO_PROFILE,
     VALID_CONFIG,
     _written,
 )
@@ -37,13 +36,13 @@ def _one_refusal_line(capsys) -> str:
 
 
 def test_a_valid_file_passes_the_check_without_serving(tmp_path, served):
-    assert main(["--config", str(_written(tmp_path, NO_PROFILE)), "--check"]) == 0
+    assert main(["--config", str(_written(tmp_path, VALID_CONFIG)), "--check"]) == 0
 
     assert served == []
 
 
 def test_a_start_without_check_still_serves(tmp_path, served):
-    assert main(["--config", str(_written(tmp_path, NO_PROFILE))]) == 0
+    assert main(["--config", str(_written(tmp_path, VALID_CONFIG))]) == 0
 
     assert len(served) == 1
 
@@ -66,7 +65,7 @@ def _unloadable_mcp_bundle(tmp_path: Path, monkeypatch) -> Path:
 def _root_user(tmp_path: Path, monkeypatch) -> Path:
     monkeypatch.setattr(hardening, "running_platform", lambda: "linux")
     monkeypatch.setattr(hardening, "effective_user_id", lambda: 0)
-    return _written(tmp_path, NO_PROFILE)
+    return _written(tmp_path, VALID_CONFIG)
 
 
 @pytest.mark.parametrize(

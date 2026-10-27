@@ -44,9 +44,8 @@ from service_support import (
     served,
     service_config,
     service_config_file,
-    without_profiles,
 )
-from test_service_codex_profile import UNPROFILED, a_config_whose_codex_table_has_no_profile
+from test_service_codex_profile import CODEX_NAME, a_config_with_both_providers
 from webauth.https_client import KeySetFetchError
 from webauth.jwt_verification import KEY_SET_REFRESH_COOLDOWN_SECONDS
 
@@ -57,7 +56,7 @@ from agent_runtime_client.wire import (
     RunRejection,
 )
 from agent_runtime_service.app import create_app, rejection
-from agent_runtime_service.config import DefaultsConfig, load_config
+from agent_runtime_service.config import DefaultsConfig, Provider, load_config
 from agent_runtime_service.routing import Api, Cli
 from agent_runtime_service.run_request import MAX_REQUEST_BYTES
 from agent_runtime_service.runners import Runners
@@ -66,7 +65,7 @@ CLI_SCRIPT = (AssistantTextEvent(text="via the CLI"), FinalEvent(text="CLI answe
 API_SCRIPT = (AssistantTextEvent(text="via the API"), FinalEvent(text="API answer"))
 
 LISTED = f"claude/{LISTED_MODEL}"
-CLI_ROUTE = Cli("claude-main")
+CLI_ROUTE = Cli(Provider.CLAUDE)
 MINT = TokenMint()
 OTHER_MINT = TokenMint()
 
@@ -511,32 +510,12 @@ def test_h1_a_listed_model_reaches_the_cli_route_by_name():
     assert (runners.cli.admitted[-1].route, runners.cli.admitted[-1].model) == (CLI_ROUTE, LISTED)
 
 
-def test_h2_a_model_without_a_profile_reaches_an_api_only_caller_by_its_full_name(tmp_path):
-    config = a_config_whose_codex_table_has_no_profile(tmp_path)
-    response, runners = _routed_run(config, API_MEMBER, model=UNPROFILED)
+def test_h2_a_model_reaches_an_api_only_caller_by_its_full_name(tmp_path):
+    config = a_config_with_both_providers(tmp_path)
+    response, runners = _routed_run(config, API_MEMBER, model=CODEX_NAME)
 
     assert _admitted_events(response)
-    assert (runners.api.admitted[-1].route, runners.api.admitted[-1].model) == (Api(), UNPROFILED)
-
-
-@pytest.mark.parametrize(
-    ("configure", "groups", "api_route"),
-    [
-        pytest.param(without_profiles, API_MEMBER, True, id="H6-no-profiles-api"),
-        pytest.param(without_profiles, SUBSCRIBER, False, id="H7-no-profiles-subscriber"),
-    ],
-)
-def test_a_named_model_without_subscription_facts_goes_to_the_api_or_is_refused(
-    configure, groups, api_route
-):
-    response, runners = _routed_run(configure(service_config()), groups, model=LISTED)
-
-    if api_route:
-        assert _admitted_events(response)
-        assert (runners.api.admitted[-1].route, runners.api.admitted[-1].model) == (Api(), LISTED)
-    else:
-        assert_rejected(response, RejectionCode.NOT_ENABLED, 403)
-        assert runners.cli.admitted == runners.api.admitted == []
+    assert (runners.api.admitted[-1].route, runners.api.admitted[-1].model) == (Api(), CODEX_NAME)
 
 
 def test_v6_a_model_is_invalid_before_tools_are_forbidden(service):
@@ -747,13 +726,13 @@ def test_a_capability_too_large_rejection_is_422_with_its_own_message_and_no_ret
 BOTH_RIGHTS = [SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP]
 
 
-def test_s3_a_run_without_a_profile_is_routed_on_exactly_the_configured_model(tmp_path):
-    config = a_config_whose_codex_table_has_no_profile(tmp_path)
-    response, runners = _routed_run(config, BOTH_RIGHTS, model=UNPROFILED)
+def test_s3_a_run_is_routed_on_exactly_the_configured_model(tmp_path):
+    config = a_config_with_both_providers(tmp_path)
+    response, runners = _routed_run(config, BOTH_RIGHTS, model=CODEX_NAME)
 
     assert _admitted_events(response)
     admitted = runners.cli.admitted + runners.api.admitted
-    assert [(run.route, run.model) for run in admitted] == [(Api(), UNPROFILED)]
+    assert [(run.route, run.model) for run in admitted] == [(Cli(Provider.CODEX), CODEX_NAME)]
 
 
 def _run_on_the_file(tmp_path, subscription_groups):

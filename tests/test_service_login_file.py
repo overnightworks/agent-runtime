@@ -132,7 +132,7 @@ REFUSED_DOCUMENTS = [
 
 
 @pytest.mark.parametrize(("provider", "document", "canaries", "reason"), REFUSED_DOCUMENTS)
-def test_a_document_the_profiles_reader_refuses_is_not_written_and_the_old_file_stays(
+def test_a_document_the_tables_reader_refuses_is_not_written_and_the_old_file_stays(
     tmp_path: Path,
     said: Said,
     refusals: list[SwapRefused | None],

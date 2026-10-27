@@ -2,8 +2,7 @@
 body is read.
 
 The header is refused whatever its value, on ``POST /runs`` and ``GET /runs/{id}``, ahead of
-the token checks and the body; the retired ``POST /job-tickets`` route is gone and a profile's
-leftover ``background`` key stops startup.
+the token checks and the body; the retired ``POST /job-tickets`` route is gone.
 """
 
 from __future__ import annotations
@@ -25,14 +24,12 @@ from service_support import (
     runners_that_start_no_run,
     served,
     service_config,
-    service_config_file,
 )
 from webauth.https_client import KeySetFetchError
 
 from agent_runtime.events import FinalEvent
 from agent_runtime_client.wire import RejectionCode
 from agent_runtime_service.app import create_app
-from agent_runtime_service.cli import EXIT_BAD_CONFIG, main
 from agent_runtime_service.run_records import RunRecorder, RunRecords
 from agent_runtime_service.runners import Runners
 
@@ -160,17 +157,3 @@ def test_the_job_ticket_route_is_gone(service):
     )
 
     assert response.status_code == 404
-
-
-@pytest.mark.parametrize("background", ["true", "false"])
-def test_a_leftover_background_key_stops_startup_naming_the_field(tmp_path, capsys, background):
-    path = service_config_file(tmp_path, subscription_groups=["/ki-abo"])
-    text = path.read_text(encoding="utf-8")
-    assert 'provider = "claude"' in text
-    path.write_text(
-        text.replace('provider = "claude"', f'provider = "claude"\nbackground = {background}'),
-        encoding="utf-8",
-    )
-
-    assert main(["--config", str(path)]) == EXIT_BAD_CONFIG
-    assert "profiles.claude-main.background" in capsys.readouterr().err

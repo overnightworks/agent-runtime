@@ -4,7 +4,7 @@ A person is a member of an app when one of their groups is ``/apps/<app>`` or a 
 segment-aware. Everything below is driven through the real entrance over a socket; "nothing
 signed" and "no run" are read back from the signing key and from both runners, never
 inferred from the 403. Test values: apps ``songmaker`` (with an origin) and ``presentator``,
-the subscription and API groups of ``service_support``, and one Claude profile listing
+the subscription and API groups of ``service_support``, and one Claude table listing
 ``sonnet``. A person's role is ``admin`` in ``/apps/<app>/admin`` or below, else ``user``;
 a body whose ``roles`` lacks it answers ``forbidden`` after shape and before everything else.
 """

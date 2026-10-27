@@ -1,8 +1,8 @@
-"""The service serves a Codex profile: its runs, their admission and their routing.
+"""The service serves a Codex table: its runs, their admission and their routing.
 
 Rows serve the real app on a loopback socket and run a stand-in for the pinned CLI as a real
 child, with no installed core configuration; ``test_service_codex_startup`` holds the config and
-startup rows and takes its builders from here. Test values: one Codex profile ``codex-main``, the
+startup rows and takes its builders from here. Test values: the Codex table with its login, the
 listed model ``gpt-5.5`` and the pinned version 0.163.0.
 """
 
@@ -32,7 +32,6 @@ from provider_test_support import (
 from pydantic import ValidationError
 from service_support import (
     API_GROUP,
-    CLI_PROFILE,
     LISTED_MODEL,
     PINNED_CLAUDE_VERSION,
     SONGMAKER_GROUP,
@@ -85,7 +84,6 @@ from agent_runtime_service.run_events import RUNNER_FAILED_MESSAGE
 from agent_runtime_service.run_liveness import LoopClock
 from agent_runtime_service.runners import AdmittedRun, Runners
 
-CODEX_PROFILE = "codex-main"
 CODEX_MODEL = "gpt-5.5"
 CODEX_PIN = "0.163.0"
 VERSION_LINE = f"codex-cli {CODEX_PIN}"
@@ -149,9 +147,7 @@ def codex_document(
         "working_root": str(a_private_root(tmp_path)),
         "codex": {"binary": str(binary), "version": CODEX_PIN, "models": [CODEX_MODEL]},
     }
-    document["profiles"] = {
-        CODEX_PROFILE: {"provider": "codex", "token_file": str(login_file)}
-    }
+    document["cli"]["codex"]["token_file"] = str(login_file)
     return document
 
 
@@ -160,16 +156,13 @@ def with_claude_beside(document: dict[str, Any], claude: Path) -> dict[str, Any]
         "binary": str(claude),
         "version": PINNED_CLAUDE_VERSION,
         "models": [LISTED_MODEL],
-    }
-    document["profiles"] = {
-        CLI_PROFILE: {"provider": "claude", "token_file": str(process_token_file())},
-        CODEX_PROFILE: document["profiles"][CODEX_PROFILE],
+        "token_file": str(process_token_file()),
     }
     return document
 
 
 def a_document_with_both(tmp_path: Path, stream: tuple[bytes, ...] = ANSWER) -> dict[str, Any]:
-    """Claude and Codex profiles, each with a stand-in program of its own under ``tmp_path``."""
+    """Claude and Codex tables, each with a stand-in program of its own under ``tmp_path``."""
     claude_directory = tmp_path / "claude-directory"
     claude_directory.mkdir()
     codex = codex_document(tmp_path, a_service_fake(tmp_path, stream), a_login_file(tmp_path))
@@ -180,13 +173,12 @@ def a_config(document: dict[str, Any]) -> ServiceConfig:
     return ServiceConfig.model_validate(document)
 
 
-UNPROFILED = f"{Provider.CODEX}/{CODEX_MODEL}"
+CODEX_NAME = f"{Provider.CODEX}/{CODEX_MODEL}"
 
 
-def a_config_whose_codex_table_has_no_profile(tmp_path: Path) -> ServiceConfig:
-    """``service_config`` plus a listed ``[cli.codex]`` table that no profile uses."""
+def a_config_with_both_providers(tmp_path: Path) -> ServiceConfig:
+    """``service_config`` plus a listed ``[cli.codex]`` table."""
     document = a_document_with_both(tmp_path)
-    del document["profiles"][CODEX_PROFILE]
     document["defaults"] = {"model": f"{Provider.CLAUDE}/{LISTED_MODEL}"}
     document["apps"]["songmaker"]["mcp_origin"] = SONGMAKER_ORIGIN
     return a_config(document)
@@ -401,7 +393,7 @@ def test_a_second_codex_run_beyond_the_limit_is_busy_and_never_goes_to_the_api_r
 # Tools are refused at admission until the relay serves Codex.
 
 
-def test_a_tool_request_on_a_codex_profile_is_refused_before_any_place_capability_or_child(
+def test_a_tool_request_on_the_codex_table_is_refused_before_any_place_capability_or_child(
     tmp_path: Path,
     authority: TestAuthority,
     child_cleanup: ChildCleanup,
@@ -474,7 +466,7 @@ def test_the_same_codex_request_without_tools_runs_even_for_an_app_with_a_tool_o
 def test_a_codex_run_given_a_relay_is_refused_by_an_exception_not_an_assert(
     tmp_path: Path,
 ) -> None:
-    launch = cli_runner.ProfileLaunch(
+    launch = cli_runner.ProviderLaunch(
         Provider.CODEX,
         a_service_fake(tmp_path),
         a_login_file(tmp_path),
@@ -483,7 +475,7 @@ def test_a_codex_run_given_a_relay_is_refused_by_an_exception_not_an_assert(
     )
     inputs = cli_runner.RunInputs(
         Turn.model_validate(THREE_MESSAGE_TURN),
-        None,
+        CODEX_MODEL,
         RelayAccess(url="https://relay.test", secret="secret"),
     )
 
@@ -509,7 +501,7 @@ def test_no_run_adapter_factory_sees_the_admitted_run_or_its_capability() -> Non
         pytest.param(f"claude/{LISTED_MODEL}", "done", id="the-apps-model"),
     ],
 )
-def test_a_run_goes_to_the_profile_of_the_configured_models_provider(
+def test_a_run_goes_to_the_table_of_the_configured_models_provider(
     tmp_path: Path,
     child_cleanup: ChildCleanup,
     monkeypatch: pytest.MonkeyPatch,

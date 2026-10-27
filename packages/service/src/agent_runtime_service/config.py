@@ -1,14 +1,14 @@
-"""The service's one configuration: identity, listener, the model, profiles, the API and apps.
+"""The service's one configuration: identity, listener, the model, the programs, the API and apps.
 
 The configuration names the model of every run at three levels: ``[defaults] model`` is
 required, and ``model`` may be set again in ``[apps.<app>]`` and in
 ``[apps.<app>.agents.<agent>]``. Each name is ``<provider>/<model>`` in the wire's grammar, and
 startup refuses one that no ``[cli.<provider>]`` table lists in its ``models``.
 
-The service accepts at most one subscription profile per provider, for Claude and for Codex.
-Each needs its token file (a Claude setup token, or a Codex sign-in document) and a
-``[cli.<provider>]`` table naming the absolute program, the exact version it must report and the
-models it serves, beside the ``[cli]`` section's private ``working_root``, checked at load.
+The service runs the subscription programs of Claude and of Codex. Each ``[cli.<provider>]``
+table names the absolute program, the exact version it must report, the models it serves and its
+token file (a Claude setup token, or a Codex sign-in document), beside the ``[cli]`` section's
+private ``working_root``, checked at load.
 ``identity.api_groups`` and ``[api]`` come together. An
 app that offers tools names its one https MCP origin, and the service signs a capability for
 each run that grants the tools its request names; an origin is never shared between apps and
@@ -19,7 +19,7 @@ origin, and otherwise optional and unused.
 A TOML file is read once at startup into frozen models that forbid unknown
 fields. A file the models refuse stops the service with an error naming the
 field, so a typo never becomes a silently ignored policy. The signing key file
-and each profile's token file the TOML names are read and checked with it, in the same pass;
+and each table's token file the TOML names are read and checked with it, in the same pass;
 the configuration keeps the key, but only a token file's path, since the runner reads the
 token again at the start of every run.
 """
@@ -177,21 +177,24 @@ class LoadContext:
     read_logins: bool
 
 
-def _sound_token_file(token_file: object, info: ValidationInfo) -> Path:
-    """The absolute path, once its provider's reader accepts the file; a refusal is a field error.
+def _token_file_read_by(provider: Provider) -> Callable[[object, ValidationInfo], Path]:
+    """The check of one provider's token file: its absolute path, once the provider's reader
+    accepts the file; a refusal is a field error.
 
     The login read here is dropped: a swapped file takes effect on the next run without a
     restart (decision record 0001, line 2), so only the runner's read at each run's start counts.
-    A provider that failed its own field has no reader, and its file is never read. A load that
-    skips login reads (the login command's) still checks the path.
+    A load that skips login reads (the login command's) still checks the path.
     """
-    path = _absolute_path_to("token file", token_file)
-    shown_path(path)
-    read_login = LOGIN_READERS.get(info.data.get("provider"))
-    logins_skipped = isinstance(info.context, LoadContext) and not info.context.read_logins
-    if read_login is not None and not logins_skipped:
-        read_login(path)
-    return path
+
+    def sound(token_file: object, info: ValidationInfo) -> Path:
+        path = _absolute_path_to("token file", token_file)
+        shown_path(path)
+        logins_skipped = isinstance(info.context, LoadContext) and not info.context.read_logins
+        if not logins_skipped:
+            LOGIN_READERS[provider](path)
+        return path
+
+    return sound
 
 
 class SigningConfig(_Section):
@@ -237,12 +240,24 @@ class ProgramPin(_Section):
     """One provider's program, the exact version it must report and the models it serves.
 
     ``models`` lists what this installation runs on the subscription; a configured
-    model this list does not name stops startup.
+    model of this provider that this list does not name stops startup.
     """
 
     binary: Annotated[Path, BeforeValidator(_program)]
     version: PinnedVersion
     models: frozenset[ListedModel]
+
+
+class ClaudeProgram(ProgramPin):
+    """Claude's program and the setup token its runs log in with."""
+
+    token_file: Annotated[Path, BeforeValidator(_token_file_read_by(Provider.CLAUDE))]
+
+
+class CodexProgram(ProgramPin):
+    """Codex's program and the sign-in document its runs log in with."""
+
+    token_file: Annotated[Path, BeforeValidator(_token_file_read_by(Provider.CODEX))]
 
 
 def _private_working_root(value: object) -> PrivateWorkingRoot:
@@ -255,16 +270,19 @@ def _private_working_root(value: object) -> PrivateWorkingRoot:
         raise ValueError(f"not private: {error.violation.value}") from None
 
 
+ProviderProgram = ClaudeProgram | CodexProgram
+
+
 class CliConfig(_Section):
     """The private root every program run lives in, and each provider's pinned program."""
 
     working_root: Annotated[PrivateWorkingRoot, PlainValidator(_private_working_root)] = Field(
         exclude=True, repr=False
     )
-    claude: ProgramPin | None = None
-    codex: ProgramPin | None = None
+    claude: ClaudeProgram | None = None
+    codex: CodexProgram | None = None
 
-    def programs(self) -> Mapping[Provider, ProgramPin]:
+    def programs(self) -> Mapping[Provider, ProviderProgram]:
         """The pinned programs this installation sets, in ``Provider`` order."""
         tables = {provider: getattr(self, provider.value, None) for provider in Provider}
         return {provider: pin for provider, pin in tables.items() if isinstance(pin, ProgramPin)}
@@ -366,20 +384,6 @@ class RunConfig(_Section):
         return self
 
 
-def _text_only(value: object) -> object:
-    """Refuses bytes and other lax forms of a name the relationship rules read as text."""
-    if not isinstance(value, str):
-        raise ValueError("must be text")
-    return value
-
-
-class ProfileConfig(_Section):
-    """One subscription login the CLI route may run under."""
-
-    provider: Annotated[Provider, BeforeValidator(_text_only)]
-    token_file: Annotated[Path, BeforeValidator(_sound_token_file)] | None = None
-
-
 class DefaultsConfig(_Section):
     """What a run uses when neither its agent's nor its app's table names it."""
 
@@ -432,51 +436,7 @@ def _value(table: object, key: str) -> object:
     return getattr(table, key)
 
 
-def _raw_profiles(document: object) -> Iterator[tuple[str, object, Provider | None]]:
-    for name, table in _named_tables(document, "profiles", ProfileConfig):
-        provider = _value(table, "provider")
-        yield name, table, next((known for known in Provider if known == provider), None)
-
-
-def _refuse_a_second_profile_for_one_provider(document: object) -> None:
-    owners: dict[Provider, str] = {}
-    for name, _table, provider in _raw_profiles(document):
-        if provider is None:
-            continue
-        owner = owners.setdefault(provider, name)
-        if owner != name:
-            raise ValueError(
-                f"profiles.{shown_text(name)}.provider: {provider} already has profile {owner!r}"
-            )
-
-
-SERVED_PROVIDERS: Final = tuple(LOGIN_READERS)
 RELAY_ATTACHED_PROVIDERS: Final = frozenset({Provider.CLAUDE})
-
-
-def _refuse_a_profile_for_a_provider_without_a_route(document: object) -> None:
-    for name, _table, provider in _raw_profiles(document):
-        if provider not in (None, *SERVED_PROVIDERS):
-            raise ValueError(
-                f"profiles.{shown_text(name)}.provider: {provider} has no subscription route yet;"
-                f" only {' and '.join(SERVED_PROVIDERS)} can have a profile"
-            )
-
-
-def _refuse_a_served_profile_without_its_token_file(document: object) -> None:
-    for name, table, provider in _raw_profiles(document):
-        if provider in SERVED_PROVIDERS and _value(table, "token_file") is None:
-            raise ValueError(
-                f"profiles.{shown_text(name)}.token_file: required for a {provider} profile"
-            )
-
-
-def _refuse_a_served_profile_without_its_program_table(document: object) -> None:
-    cli = _value(document, "cli")
-    tabled = isinstance(cli, Mapping | CliConfig)
-    for _name, _table, provider in _raw_profiles(document):
-        if provider in SERVED_PROVIDERS and not (tabled and _value(cli, provider) is not None):
-            raise ValueError(f"cli.{provider}: required for a {provider} profile")
 
 
 def _refuse_an_origin_without_signing(document: object) -> None:
@@ -506,10 +466,6 @@ def _refuse_an_origin_without_a_ca_bundle(document: object) -> None:
 
 
 RULES_ON_THE_RAW_DOCUMENT: Final = (
-    _refuse_a_second_profile_for_one_provider,
-    _refuse_a_profile_for_a_provider_without_a_route,
-    _refuse_a_served_profile_without_its_token_file,
-    _refuse_a_served_profile_without_its_program_table,
     _refuse_an_origin_without_signing,
     _refuse_an_origin_without_a_ca_bundle,
 )
@@ -524,7 +480,6 @@ class ServiceConfig(_Section):
     api: ApiConfig | None = None
     mcp: McpConfig | None = None
     signing: SigningConfig | None = None
-    profiles: dict[NonEmptyText, ProfileConfig] = Field(default_factory=dict)
     apps: dict[NonEmptyText, AppConfig]
     _admissions: dict[str, AdmissionConfig] = PrivateAttr(default_factory=dict)
 
@@ -628,10 +583,6 @@ class ServiceConfig(_Section):
     def subscription_models(self) -> Mapping[Provider, frozenset[str]]:
         """The model names each provider's subscription program serves."""
         return {provider: pin.models for provider, pin in self.cli.programs().items()}
-
-    def profile_takes_tools(self, name: str) -> bool:
-        """Whether the profile's provider has the tool relay attached."""
-        return self.profiles[name].provider in RELAY_ATTACHED_PROVIDERS
 
     def mcp_trust_bundle(self) -> Path | None:
         """The CA bundle for the apps' MCP origins; ``None`` while no app declares an origin."""

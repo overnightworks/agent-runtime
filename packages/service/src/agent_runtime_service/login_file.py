@@ -1,7 +1,7 @@
 """The one writer of a login file: a new document swapped in beside the old one.
 
 The document is written to a sibling of the destination (``rename(2)`` refuses across mount
-points), read back by the profile's own reader on that very file, and only then renamed over the
+points), read back by the provider's own reader on that very file, and only then renamed over the
 old file. A failure before the rename leaves the old file byte for byte.
 """
 

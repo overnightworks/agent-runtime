@@ -27,6 +27,7 @@ from provider_test_support import (
 from service_support import (
     PINNED_CLAUDE_VERSION,
     logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
+    process_token_file,
 )
 from test_run_directories import (
     REMOVAL_FAILED,
@@ -35,10 +36,10 @@ from test_run_directories import (
     rmtree_refused,
     the_only_tree,
 )
+from test_service_codex_profile import a_login_file
 from test_service_config import (
     CLAUDE_VERSION_LINE,
     CLI_SECTION,
-    NO_PROFILE,
     VALID_CONFIG,
     _refused_on_one_line,
     _written,
@@ -56,7 +57,7 @@ from agent_runtime_service.cli_version import (
     codex_version_output,
     require_pinned_versions,
 )
-from agent_runtime_service.config import CliConfig, ProgramPin
+from agent_runtime_service.config import ClaudeProgram, CliConfig, CodexProgram, ProgramPin
 
 PRINTS_THE_PIN = f"{PINNED_CLAUDE_VERSION} (Claude Code)\n"
 WORKING_ROOT_NAME = "working-root"
@@ -155,17 +156,6 @@ def test_a_program_reporting_the_pinned_version_starts_the_service_without_a_cor
 
     assert served == [{"host": "127.0.0.1", "port": 8099}]
     assert list(working_root.iterdir()) == []
-
-
-def test_a_program_table_without_a_profile_serves_after_probing_the_program(
-    tmp_path, served, probe_log
-):
-    program = _logged_program(tmp_path, probe_log)
-
-    assert main(["--config", str(_config_file_naming(tmp_path, program, NO_PROFILE))]) == 0
-
-    assert len(served) == 1
-    assert probe_log.read_text() == "--version\n"
 
 
 def test_the_probe_runs_in_a_run_tree_below_the_working_root_with_no_token_and_no_login(
@@ -444,18 +434,31 @@ def test_codex_reads_only_its_exact_version_line(stdout, version):
     assert codex_version_output(stdout) == version
 
 
-def _a_pin(directory: Path, printed: str, version: str) -> tuple[ProgramPin, Path]:
+def _a_pin(
+    directory: Path, printed: str, version: str, program_type: type[ProgramPin], login: Path
+) -> tuple[ProgramPin, Path]:
     directory.mkdir()
     calls = directory / "calls"
     program = fake_cli_executable(directory, {("--version",): printed}, calls_log=calls)
-    return ProgramPin(binary=str(program), version=version, models=frozenset()), calls
+    pin = program_type(
+        binary=str(program), version=version, models=frozenset(), token_file=str(login)
+    )
+    return pin, calls
 
 
 def test_with_both_programs_pinned_both_are_probed_and_the_first_miss_refuses_naming_it(
     tmp_path, working_root
 ):
-    claude, claude_calls = _a_pin(tmp_path / "claude", PRINTS_THE_PIN, PINNED_CLAUDE_VERSION)
-    codex, codex_calls = _a_pin(tmp_path / "codex", "codex-cli 0.163.1\n", "0.163.0")
+    claude, claude_calls = _a_pin(
+        tmp_path / "claude",
+        PRINTS_THE_PIN,
+        PINNED_CLAUDE_VERSION,
+        ClaudeProgram,
+        process_token_file(),
+    )
+    codex, codex_calls = _a_pin(
+        tmp_path / "codex", "codex-cli 0.163.1\n", "0.163.0", CodexProgram, a_login_file(tmp_path)
+    )
     cli = CliConfig(working_root=str(working_root), claude=claude, codex=codex)
 
     with pytest.raises(ProgramVersionRefused) as refused:
