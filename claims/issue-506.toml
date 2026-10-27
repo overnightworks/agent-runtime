@@ -1,0 +1,8 @@
+claim_id = "cb42f1ad6def43759467599c17019af5"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "2142f3bcfc1d02eec694aeb6e0acf5e0c11a1d0a"
+branch = "claude/issue-506-configured-model"
+scope = ["docs/ARCHITECTURE.md", "docs/MIGRATING.md", "docs/operations.md", "docs/wire.md", "packages/client/src/agent_runtime_client/agents.py", "packages/client/src/agent_runtime_client/wire.py", "packages/service/src/agent_runtime_service/api_runner.py", "packages/service/src/agent_runtime_service/app.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/src/agent_runtime_service/routing.py", "quality/baseline.toml", "tests/test_agent_files.py", "tests/test_service_admission.py", "tests/test_service_api_runner.py", "tests/test_service_api_runner_tools.py", "tests/test_service_app_gate.py", "tests/test_service_app_runs.py", "tests/test_service_cli_runner.py", "tests/test_service_cli_runner_tools.py", "tests/test_service_codex_profile.py", "tests/test_service_entrance.py", "tests/test_service_keycloak.py", "tests/test_service_model_config.py", "tests/test_service_routing.py", "tests/test_wire_protocol.py"]
+opened_commit = "c142fd2980268d0e68747d763382578208312dac"
+whole_reason = "One owner change for the model: the request field, the agent-file key, the lookup that replaces them, the routing that consumes it, the tests that sent a model and the documents that said so move together, or admission has no model or keeps the predecessor."
