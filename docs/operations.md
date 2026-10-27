@@ -55,8 +55,8 @@ in this order for a person's run:
    subscription lists (`[cli.<provider>] models`), and the API groups (`api_groups`,
    set together with `[route] api_alias`). The app sends no model: admission takes the
    run's model from the configuration, the agent's `model` in
-   `[apps.<app>.agents.<purpose>]`, else the app's, else `[defaults] model`. A model name the
-   subscription does not list sends that agent to the paid API for every caller with API
+   `[apps.<app>.agents.<purpose>]`, else the app's, else `[defaults] model`. A configured model whose
+   provider has no `[profiles.<name>]` entry sends that agent to the paid API for every caller with API
    rights, under its full name, and gives subscription-only callers `not_enabled`. A run that names
    tools and whose profile's provider has no tool relay yet (Codex) gets 403 `not_enabled`
    before any place, capability or program, never a silent drop and never another route.

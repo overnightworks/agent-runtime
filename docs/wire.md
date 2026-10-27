@@ -28,7 +28,7 @@ the operator enabled ([The app's own runs](#the-apps-own-runs)). `POST /runs` an
 | Field | Meaning |
 |---|---|
 | `v` | The protocol version, `3`. Any other body answers 400 `unsupported_version`. |
-| `purpose` | The agent's name, `[a-z][a-z0-9-]{0,63}`. It labels the run and its capability; it chooses no route and no model; the service configuration names the model, and a body that carries `model` answers 422 `invalid_request`. |
+| `purpose` | The agent's name, `[a-z][a-z0-9-]{0,63}`. It labels the run and its capability, and names the agent whose configured model the run uses; the request itself names no model, and a body that carries `model` answers 422 `invalid_request`. |
 | `turn` | The system prompt and the messages (`Turn`, `TurnMessage`). |
 | `roles` | The agent's allowed roles, exactly `["admin"]` or `["admin", "user"]`; `AgentDefinition.request` fills it from the agent file. |
 | `tools` | A map from each tool the run may call to its `ToolEffect`; required, possibly `{}`. |

@@ -515,7 +515,8 @@ def test_a_run_goes_to_the_profile_of_the_configured_models_provider(
     answer: str,
 ) -> None:
     document = a_document_with_both(tmp_path, (THREAD, a_message("from-codex"), DONE))
-    document["apps"]["songmaker"]["model"] = app_model or document["defaults"]["model"]
+    if app_model is not None:
+        document["apps"]["songmaker"]["model"] = app_model
 
     events = drive_over_http(child_cleanup, monkeypatch, a_config(document), post_a_run)
 

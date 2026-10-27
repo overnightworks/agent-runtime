@@ -58,7 +58,7 @@ maps it onto the wire.
 ## How a run is routed
 
 The service decides the route from the caller's groups and the model the
-configuration names for the agent, never from the purpose and never from the request. Every
+configuration names for the agent (the purpose picks the agent), never from the request. Every
 check precedes any child process.
 
 ```mermaid

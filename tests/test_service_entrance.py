@@ -503,17 +503,14 @@ SUBSCRIBER = [SUBSCRIPTION_GROUP, SONGMAKER_GROUP]
 API_MEMBER = [API_GROUP, SONGMAKER_GROUP]
 
 
-def _routed_run(config, groups, *, model=LISTED, afterwards=None):
-    """Post one run of the configuration's default ``model``; ``afterwards(base_url, headers)``
-    may probe the same app before it is discarded."""
+def _routed_run(config, groups, *, model=LISTED):
+    """Post one run of the configuration's default ``model``."""
     config = config.model_copy(update={"defaults": DefaultsConfig(model=model)})
     runners = Runners(cli=ScriptedRunner(CLI_SCRIPT), api=ScriptedRunner(API_SCRIPT))
     app = create_app(config, runners=runners, fetch_key_set=MINT.fetch_key_set)
     with served(app) as base_url:
         headers = run_headers(MINT.workload(), MINT.user(groups=groups))
         response = post_run(base_url, headers, run_body())
-        if afterwards is not None:
-            afterwards(base_url, headers)
     return response, runners
 
 
