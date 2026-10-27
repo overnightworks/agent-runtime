@@ -26,6 +26,8 @@ from typing import TYPE_CHECKING, Final
 from agent_runtime_service.process_hardening import StartupHardeningRefused, harden_process
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from agent_runtime_service.config import ServiceConfig
     from agent_runtime_service.run_liveness import RunClock
     from agent_runtime_service.runners import Runners
@@ -67,8 +69,7 @@ def close_transport_loggers() -> None:
 class PreparedStart:
     """What a start has built once every refusal has been passed, just before serving."""
 
-    config: ServiceConfig
-    runners: Runners
+    serve: Callable[[], None]
 
 
 def refuse(reason: str) -> int:
@@ -84,7 +85,10 @@ def prepared_start(config_path: Path) -> PreparedStart | int:
         return refuse(str(error))
     # Imported only now: the application modules need Unix-only os constants at import, so
     # importing them first would crash a non-Linux start before the refusal line.
+    import uvicorn
+
     from agent_runtime.secret_file import shown_text
+    from agent_runtime_service.app import create_app
     from agent_runtime_service.cli_runner import mcp_tls_context
     from agent_runtime_service.cli_version import ProgramVersionRefused, require_pinned_versions
     from agent_runtime_service.config import ConfigError, load_config
@@ -108,7 +112,15 @@ def prepared_start(config_path: Path) -> PreparedStart | int:
         runners = installed_runners(config, tls_context, LoopClock())
     except OSError as error:
         return refuse(f"api.ca_file: cannot be loaded: {shown_text(str(error))}")
-    return PreparedStart(config=config, runners=runners)
+
+    def serve() -> None:
+        uvicorn.run(
+            create_app(config, runners=runners),
+            host=config.server.host,
+            port=config.server.port,
+        )
+
+    return PreparedStart(serve=serve)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -125,16 +137,8 @@ def main(argv: list[str] | None = None) -> int:
         return start
     if arguments.check:
         return 0
-    import uvicorn
-
-    from agent_runtime_service.app import create_app
-
     close_transport_loggers()
-    uvicorn.run(
-        create_app(start.config, runners=start.runners),
-        host=start.config.server.host,
-        port=start.config.server.port,
-    )
+    start.serve()
     return 0
 
 
