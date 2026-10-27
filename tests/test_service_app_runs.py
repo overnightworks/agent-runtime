@@ -44,17 +44,14 @@ from service_support import (
     service_config,
 )
 from test_service_admission import HeldRunner
-from test_service_codex_profile import (
-    UNPROFILED,
-    a_config_whose_codex_table_has_no_profile,
-)
+from test_service_codex_profile import CODEX_NAME, a_config_with_both_providers
 from test_service_config import VALID_CONFIG, _written, assert_startup_refuses
 from webauth.https_client import KeySetFetchError
 
 from agent_runtime.events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import RejectionCode, RouteKind, RunStarted
 from agent_runtime_service.app import create_app
-from agent_runtime_service.config import AgentConfig, ServiceConfig, load_config
+from agent_runtime_service.config import AgentConfig, Provider, ServiceConfig, load_config
 from agent_runtime_service.routing import Api, Cli
 from agent_runtime_service.runners import Runners
 
@@ -173,7 +170,7 @@ def test_p1_e1_a_workload_token_alone_runs_an_enabled_agent_as_the_service_accou
         TEST_ISSUER,
         SERVICE_ACCOUNT,
     )
-    assert (admitted.route, admitted.model) == (Cli("claude-main"), LISTED)
+    assert (admitted.route, admitted.model) == (Cli(Provider.CLAUDE), LISTED)
 
 
 @pytest.mark.parametrize(
@@ -389,21 +386,23 @@ def test_e5_the_roles_of_the_body_are_not_read_for_the_apps_own_run(service):
 @pytest.mark.parametrize(
     ("groups", "app_model", "agent_model", "route", "model"),
     [
-        pytest.param([SUBSCRIPTION_GROUP], None, None, Cli("claude-main"), LISTED, id="r1"),
-        pytest.param([API_GROUP], None, UNPROFILED, Api(), UNPROFILED, id="r2-the-agents-model"),
+        pytest.param([SUBSCRIPTION_GROUP], None, None, Cli(Provider.CLAUDE), LISTED, id="r1"),
+        pytest.param([API_GROUP], None, CODEX_NAME, Api(), CODEX_NAME, id="r2-the-agents-model"),
+        pytest.param([API_GROUP], CODEX_NAME, None, Api(), CODEX_NAME, id="r3-app"),
         pytest.param(
-            [SUBSCRIPTION_GROUP, API_GROUP], UNPROFILED, None, Api(), UNPROFILED, id="r3-app"
+            [SUBSCRIPTION_GROUP, API_GROUP], CODEX_NAME, LISTED, Cli(Provider.CLAUDE), LISTED,
+            id="r5-the-agent-over-the-app",
         ),
         pytest.param(
-            [SUBSCRIPTION_GROUP, API_GROUP], UNPROFILED, LISTED, Cli("claude-main"), LISTED,
-            id="r5-the-agent-over-the-app",
+            [SUBSCRIPTION_GROUP, API_GROUP], None, CODEX_NAME, Cli(Provider.CODEX), CODEX_NAME,
+            id="r6-the-subscriber-of-the-models-provider",
         ),
     ],
 )
 def test_r1_r2_r3_r5_the_route_and_model_come_from_the_service_account_and_the_configuration(
     tmp_path, groups, app_model, agent_model, route, model
 ):
-    config = a_config_whose_codex_table_has_no_profile(tmp_path)
+    config = a_config_with_both_providers(tmp_path)
     songmaker = config.apps["songmaker"].model_copy(
         update={
             "model": app_model,

@@ -41,7 +41,6 @@ from provider_test_support import (
     a_child_that_outlives_sigkill,
     a_claude_cli_child,
     a_claude_stdin_line,
-    a_codex_login,
     a_fake_claude,
     a_private_root,
     an_init,
@@ -52,20 +51,16 @@ from provider_test_support import (
     own_real_children,
     the_only_tree,
 )
-from pydantic import ValidationError
 from service_support import (
     ALICE,
-    CLI_PROFILE,
     LISTED_MODEL,
     PINNED_CLAUDE_VERSION,
     PROCESS_TOKEN,
-    TEST_ISSUER,
     ClientSocket,
     Drive,
     StepClock,
     SteppedLoop,
     TokenMint,
-    _service_config_document,
     alice_admitted_run,
     decoded_events,
     driven,
@@ -290,7 +285,7 @@ def test_the_cli_run_gets_the_configured_model_as_one_argument(
 
 def test_the_run_adapter_passes_the_routes_model(tmp_path: Path) -> None:
     turn = RunRequest.model_validate(run_body()).turn
-    launch = cli_runner.ProfileLaunch(
+    launch = cli_runner.ProviderLaunch(
         Provider.CLAUDE, tmp_path / "claude", process_token_file(), 7, 600.0
     )
 
@@ -1087,22 +1082,3 @@ def test_the_service_entry_installs_the_cli_runner(
     events = through_the_service_entry(tmp_path, config, child_cleanup, monkeypatch, post_a_run)
 
     assert shown(events)[-1] == ("succeeded", "done")
-
-
-@pytest.mark.parametrize("provider", list(Provider))
-def test_a_profile_loads_only_for_a_provider_with_a_run_adapter(
-    provider: Provider, tmp_path: Path
-) -> None:
-    document = _service_config_document(TEST_ISSUER, None, None)
-    login = tmp_path / "login"
-    login.write_bytes(a_codex_login() if provider is Provider.CODEX else PROCESS_TOKEN.encode())
-    login.chmod(0o600)
-    document["cli"]["codex"] = {"binary": str(login), "version": "0.163.0", "models": []}
-    document["profiles"][CLI_PROFILE].update(provider=provider.value, token_file=str(login))
-    loads = True
-    try:
-        ServiceConfig.model_validate(document)
-    except ValidationError as refusal:
-        assert provider.value in str(refusal)
-        loads = False
-    assert loads == (provider in cli_runner.RUN_ADAPTERS)

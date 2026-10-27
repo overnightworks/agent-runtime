@@ -277,16 +277,29 @@ def test_check_refuses_a_missing_or_refused_file_with_the_readers_reason(
 # Refused before reading: matrix cell 16.
 
 
-def test_an_unknown_profile_is_refused_before_anything_is_read(
-    installation: Installation, said: Said
+def test_a_provider_without_a_table_is_refused_before_anything_is_read(
+    tmp_path: Path, said: Said
+) -> None:
+    installation = an_installation(tmp_path, Provider.CLAUDE)
+    stream = Stream(GOOD_DOCUMENTS[Provider.CODEX])
+
+    with said.watching():
+        status = main(["--config", str(installation.config), "--provider", "codex"], stream)
+
+    assert (status, stream.was_read, installation.unchanged()) == (2, False, True)
+    assert "cli.codex: no such table" in said.descriptor
+
+
+@pytest.mark.parametrize("extra", [[], ["--check"]], ids=["install", "check"])
+def test_the_former_profile_option_is_refused_before_anything_is_read(
+    installation: Installation, said: Said, extra: list[str]
 ) -> None:
     stream = Stream(GOOD_DOCUMENTS[installation.provider])
 
-    with said.watching():
-        status = main(["--config", str(installation.config), "--profile", "nobody"], stream)
+    with pytest.raises(SystemExit) as refused:
+        main(["--config", str(installation.config), "--profile", "any", *extra], stream)
 
-    assert (status, stream.was_read, installation.unchanged()) == (2, False, True)
-    assert "profiles.nobody: no such profile" in said.descriptor
+    assert (refused.value.code, stream.was_read, installation.unchanged()) == (2, False, True)
 
 
 @pytest.mark.parametrize("extra", [[], ["--check"]], ids=["install", "check"])
@@ -321,7 +334,7 @@ def test_a_login_path_with_a_non_printing_character_is_refused_before_anything_i
     status, heard = run(installation, stream, said, *extra)
 
     assert (status, stream.was_read, installation.unchanged()) == (2, False, True)
-    assert f"profiles.{installation.profile}.token_file" in heard
+    assert f"cli.{installation.provider}.token_file" in heard
     assert "Traceback" not in heard
 
 
@@ -381,9 +394,9 @@ def test_the_service_refuses_a_bad_login_at_start_and_only_the_command_repairs_i
     checked = main(installation.command("--check"), Stream(b""))
 
     assert refused_at_start == 2
-    assert f"profiles.{installation.profile}.token_file" in stops
+    assert f"cli.{installation.provider}.token_file" in stops
     assert (installed, checked) == (0, 0)
-    assert load_config(installation.config).profiles[installation.profile].token_file is not None
+    assert load_config(installation.config).cli.codex.token_file is not None
 
 
 # The command's other refusals and the signals' reach: matrix cells 12 and 16.
@@ -410,8 +423,9 @@ def test_a_login_file_without_a_file_name_is_refused_before_anything_is_read(
 
     def rooted(path: Path, **keywords: Any) -> Any:
         loaded = real_load_config(path, **keywords)
-        profile = loaded.profiles[installation.profile].model_copy(update={"token_file": Path("/")})
-        return loaded.model_copy(update={"profiles": {installation.profile: profile}})
+        name = installation.provider.value
+        table = getattr(loaded.cli, name).model_copy(update={"token_file": Path("/")})
+        return loaded.model_copy(update={"cli": loaded.cli.model_copy(update={name: table})})
 
     monkeypatch.setattr(service_config, "load_config", rooted)
     stream = Stream(GOOD_DOCUMENTS[installation.provider])

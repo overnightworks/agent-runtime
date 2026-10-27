@@ -64,7 +64,7 @@ from agent_runtime_client.wire import (
 )
 from agent_runtime_service import run_events
 from agent_runtime_service.app import create_app
-from agent_runtime_service.config import RunConfig
+from agent_runtime_service.config import Provider, RunConfig
 from agent_runtime_service.identity import Principal
 from agent_runtime_service.routing import Cli
 from agent_runtime_service.run_events import run_frames
@@ -80,7 +80,7 @@ def _streamed(runner: Runner | None, records: RunRecords | None = None) -> bytes
         principal=Principal("https://keycloak.test/realms/agent-test", "user-alice"),
         request=RunRequest.model_validate(run_body(tools=SONGMAKER_TOOLS)),
         model=f"claude/{LISTED_MODEL}",
-        route=Cli("claude-main"),
+        route=Cli(Provider.CLAUDE),
         capability=None,
     )
 

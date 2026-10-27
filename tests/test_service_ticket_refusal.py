@@ -2,7 +2,7 @@
 body is read.
 
 The header is refused whatever its value, on ``POST /runs`` and ``GET /runs/{id}``, ahead of
-the token checks and the body; the retired ``POST /job-tickets`` route is gone and a profile's
+the token checks and the body; the retired ``POST /job-tickets`` route is gone and a program table's
 leftover ``background`` key stops startup.
 """
 
@@ -161,11 +161,11 @@ def test_the_job_ticket_route_is_gone(service):
 def test_a_leftover_background_key_stops_startup_naming_the_field(tmp_path, capsys, background):
     path = service_config_file(tmp_path, subscription_groups=["/ki-abo"])
     text = path.read_text(encoding="utf-8")
-    assert 'provider = "claude"' in text
+    assert "[cli.claude]" in text
     path.write_text(
-        text.replace('provider = "claude"', f'provider = "claude"\nbackground = {background}'),
+        text.replace("[cli.claude]", f"[cli.claude]\nbackground = {background}"),
         encoding="utf-8",
     )
 
     assert main(["--config", str(path)]) == EXIT_BAD_CONFIG
-    assert "profiles.claude-main.background" in capsys.readouterr().err
+    assert "cli.claude.background" in capsys.readouterr().err

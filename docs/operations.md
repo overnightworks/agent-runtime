@@ -51,13 +51,13 @@ in this order for a person's run:
 4. `agent_runtime_service.routing.route` decides the route; the second picture in
    [ARCHITECTURE.md](ARCHITECTURE.md) owns the order. The keys that feed it: the
    subscription groups (`[identity]
-   subscription_groups`), the profiles (`[profiles.<name>]`), and the API groups (`api_groups`,
+   subscription_groups`), the programs (`[cli.<provider>]`), and the API groups (`api_groups`,
    set together with `[api]`). The app sends no model: admission takes the
    run's model from the configuration, the agent's `model` in
-   `[apps.<app>.agents.<agent>]`, else the app's, else `[defaults] model`. A configured model whose
-   provider has no `[profiles.<name>]` entry sends that agent to the paid API for every caller with API
-   rights, under its full name, and gives subscription-only callers `not_enabled`. A run that names
-   tools and whose profile's provider has no tool relay yet (Codex) gets 403 `not_enabled`
+   `[apps.<app>.agents.<agent>]`, else the app's, else `[defaults] model`. A subscription-group member's
+   run goes to the CLI route of the model's provider; every other caller with API rights goes to the paid
+   API, under the model's full name. A run that names
+   tools and whose provider has no tool relay yet (Codex) gets 403 `not_enabled`
    before any place, capability or program, never a silent drop and never another route.
 
 An app's own run skips steps 1 and 2: its agent's table `[apps.<app>.agents.<agent>]` must say
@@ -128,13 +128,16 @@ the subscription groups (`subscription_groups`) to the subscriber alone. Everyon
 else reaches the API route only as a member of `api_groups`; a person in neither
 group is refused `not_enabled` ([ARCHITECTURE.md](ARCHITECTURE.md)).
 The file is the operator's to keep
-fresh, named as `profiles.<name>.token_file`; the core library never creates, renews
-or rewrites it, and the service's login command installs a new one. Claude and Codex have a profile, one each; the service refuses a
-profile for another provider (Grok) and a second one for the same provider.
+fresh, named as `cli.<provider>.token_file`; the core library never creates, renews
+or rewrites it, and the service's login command installs a new one. Claude and Codex have a
+`[cli.<provider>]` table, one each, and every table needs its `token_file`; the service refuses a
+table for another provider (Grok) and a leftover `[profiles]` section.
 
 ```toml
-[profiles.subscription]
-provider = "claude"
+[cli.claude]
+binary = "/usr/local/bin/claude"
+version = "2.1.302"
+models = ["sonnet"]
 token_file = "/run/secrets/claude-token"
 ```
 
@@ -144,8 +147,7 @@ JSON (a credentials file) and API keys (`sk-ant-api...`) are refused; a link is
 followed and its target checked. Run `claude setup-token` once, sign in with the
 subscription, and install the printed token with the login command.
 
-**A Codex profile.** `provider = "codex"` needs `token_file` and a `[cli.codex]` table
-(`binary`, `version`, `models`). The program must print exactly `codex-cli <version>` for
+**The Codex table.** `[cli.codex]` takes `binary`, `version`, `models` and `token_file`. The program must print exactly `codex-cli <version>` for
 `--version`. The file is the Codex sign-in document: JSON with the sign-in's tokens, at a mode
 that gives nothing to group or others, at most 16 KiB, a link followed and its target checked.
 A document holding only an API key (`OPENAI_API_KEY`), a bare key line and a Claude setup
@@ -154,11 +156,11 @@ document comes from the pinned program's device-code sign-in made in a home of i
 operator's terminal home, because the two would rotate each other's renewal token away; the
 host's setup makes it.
 
-**Install or check it (both providers).** `agent-runtime-service-login --config PATH --profile NAME`
-reads the new document on standard input, checks it with the service's reader for that profile and
+**Install or check it (both providers).** `agent-runtime-service-login --config PATH --provider NAME`
+reads the new document on standard input, checks it with the service's reader for that provider and
 swaps it in beside the old file; the next run reads it without a restart. It exits 0 when the
 file is written, 1 when it is not written and the old file stays, 2 when it refused before
-reading anything (the platform, the configuration, an unknown profile, or a leftover
+reading anything (the platform, the configuration, a provider without a table, or a leftover
 `.<file>.new` beside the login file, which is removed by hand), and 3 when it is not written and
 its own `.<file>.new`, which may hold the new login, is not confirmed gone: it names the path.
 It needs what the service's own start reads except the logins, and write access to the login
@@ -173,7 +175,7 @@ log, install a new sign-in. A copy can fail before its access token's measured 2
 Claude token lasts a year and renewing it is the operator's.
 
 **When it fails.** A missing or refused file stops the service at startup, naming
-`profiles.<name>.token_file` and the kind of fault, never the content, or fails a later run as
+`cli.<provider>.token_file` and the kind of fault, never the content, or fails a later run as
 `provider_error` before any child starts. An expired token also fails the run as
 `provider_error`. A login the CLI refuses names `CliLoginRefusedError` in
 the log line; for Codex that is a `turn.failed` whose text carries `401 Unauthorized`, the only

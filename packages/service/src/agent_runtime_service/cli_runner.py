@@ -1,18 +1,18 @@
-"""The CLI route's runner: the profile a route names, run through the core with its tools.
+"""The CLI route's runner: the provider a route names, run through the core with its tools.
 
-``CliRunner.run`` builds the provider run of the route's profile, Claude's or Codex's. It first
-reads the profile's login file with that provider's reader, so a swapped file takes effect on the
-next run without a restart, and a file gone bad fails that run as an ``UnsoundSecretFile`` before
-any tool connection or child (decision record 0001, lines 2 and 14); the secret file's size limit
-bounds that read, so it stays on the event loop. The provider's factory takes the launch and
-reads the login; the run it returns takes only the turn, the run's model and the relay's
-access, so no factory sees the admitted run or its capability. When the run's capability grants
-tools it then opens the run's tool set (``RunTools``), hands the adapter only the relay's address
-and secret, and merges the relay's tool events with the core's text and ending
-(``RelayedEvents``); the CLI's own tool lines are dropped. Its one exit path closes the tool set
-once, with the core's reap, so a login refusal, a failed exit, a barrier refusal or a lost
-containment reaches the service's run supervision as it was raised. It reads no installed core
-configuration: each fact arrives as an argument.
+``CliRunner.run`` builds the provider run of the route's provider, Claude's or Codex's. It first
+reads the provider table's login file with that provider's reader, so a swapped file takes
+effect on the next run without a restart, and a file gone bad fails that run as an
+``UnsoundSecretFile`` before any tool connection or child (decision record 0001, lines 2 and
+14); the secret file's size limit bounds that read, so it stays on the event loop. The
+provider's factory takes the launch and reads the login; the run it returns takes only the turn,
+the run's model and the relay's access, so no factory sees the admitted run or its capability.
+When the run's capability grants tools it then opens the run's tool set (``RunTools``), hands
+the adapter only the relay's address and secret, and merges the relay's tool events with the
+core's text and ending (``RelayedEvents``); the CLI's own tool lines are dropped. Its one exit
+path closes the tool set once, with the core's reap, so a login refusal, a failed exit, a
+barrier refusal or a lost containment reaches the service's run supervision as it was raised. It
+reads no installed core configuration: each fact arrives as an argument.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ from agent_runtime_service.runners import AdmittedRun
 
 
 @dataclass(frozen=True)
-class ProfileLaunch:
+class ProviderLaunch:
     provider: Provider
     binary: Path
     token_file: Path
@@ -57,15 +57,15 @@ class RunInputs:
     """All of a run an adapter may see: its turn, the run's model and the relay's access."""
 
     turn: Turn
-    model: str | None
+    model: str
     relay: RelayAccess | None
 
 
 LoggedInRun = Callable[[RunInputs], CliRunAdapter]
-AdapterFactory = Callable[[ProfileLaunch], LoggedInRun]
+AdapterFactory = Callable[[ProviderLaunch], LoggedInRun]
 
 
-def _claude_run(launch: ProfileLaunch, token: SecretStr, inputs: RunInputs) -> CliRunAdapter:
+def _claude_run(launch: ProviderLaunch, token: SecretStr, inputs: RunInputs) -> CliRunAdapter:
     return ClaudeRun(
         binary=launch.binary,
         token=token,
@@ -78,11 +78,11 @@ def _claude_run(launch: ProfileLaunch, token: SecretStr, inputs: RunInputs) -> C
     )
 
 
-def claude_run(launch: ProfileLaunch) -> LoggedInRun:
+def claude_run(launch: ProviderLaunch) -> LoggedInRun:
     return partial(_claude_run, launch, SecretStr(read_token_file(launch.token_file)))
 
 
-def _codex_run(launch: ProfileLaunch, login: CodexLogin, inputs: RunInputs) -> CliRunAdapter:
+def _codex_run(launch: ProviderLaunch, login: CodexLogin, inputs: RunInputs) -> CliRunAdapter:
     if inputs.relay is not None:
         raise ValueError("a Codex run has no tool relay; admission refuses tools before this point")
     return CodexRun(
@@ -94,7 +94,7 @@ def _codex_run(launch: ProfileLaunch, login: CodexLogin, inputs: RunInputs) -> C
     )
 
 
-def codex_run(launch: ProfileLaunch) -> LoggedInRun:
+def codex_run(launch: ProviderLaunch) -> LoggedInRun:
     return partial(_codex_run, launch, read_codex_login(launch.token_file))
 
 
@@ -104,20 +104,18 @@ RUN_ADAPTERS: Final[Mapping[Provider, AdapterFactory]] = {
 }
 
 
-def _launches_of(config: ServiceConfig) -> Mapping[str, ProfileLaunch]:
+def _launches_of(config: ServiceConfig) -> Mapping[Provider, ProviderLaunch]:
     assert config.cli is not None
-    programs = config.cli.programs()
-    launches = {}
-    for name, profile in config.profiles.items():
-        assert profile.token_file is not None
-        launches[name] = ProfileLaunch(
-            provider=profile.provider,
-            binary=programs[profile.provider].binary,
-            token_file=profile.token_file,
+    return {
+        provider: ProviderLaunch(
+            provider=provider,
+            binary=program.binary,
+            token_file=program.token_file,
             max_tool_calls=config.runs.max_tool_calls,
             tool_timeout_seconds=config.runs.max_duration_s,
         )
-    return launches
+        for provider, program in config.cli.programs().items()
+    }
 
 
 def mcp_tls_context(ca_file: Path) -> ssl.SSLContext:
@@ -146,7 +144,7 @@ class CliRunner:
         tools: RunTools | None = None
         events: RelayedEvents | None = None
         try:
-            launch = self._launches[admitted.route.profile]
+            launch = self._launches[admitted.route.provider]
             logged_in = RUN_ADAPTERS[launch.provider](launch)
             tools = await self._opened_tools(admitted)
             adapter = logged_in(

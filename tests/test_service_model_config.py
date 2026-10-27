@@ -127,7 +127,6 @@ def test_an_unknown_key_in_defaults_is_refused_naming_it(tmp_path):
 def test_a_file_without_a_cli_table_is_refused_naming_the_default_model(tmp_path):
     document = _document()
     del document["cli"]
-    del document["profiles"]
 
     assert DEFAULTS in _refusal(tmp_path, document)
 

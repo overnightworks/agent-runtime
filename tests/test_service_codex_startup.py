@@ -1,8 +1,8 @@
-"""The service starts on a Codex profile: its config and its startup checks.
+"""The service starts on a Codex table: its config and its startup checks.
 
 Config rows validate documents (and ``cli.main`` for the refusal a person reads) with a stand-in
 for the pinned CLI and no installed core configuration; the shared builders and constants are
-those of ``test_service_codex_profile``, whose rows run the profile.
+those of ``test_service_codex_profile``, whose rows run the table.
 """
 
 from __future__ import annotations
@@ -29,7 +29,6 @@ from service_support import (
 )
 from test_service_codex_profile import (
     CODEX_PIN,
-    CODEX_PROFILE,
     LOGIN_NAME,
     a_config,
     a_document_with_both,
@@ -51,7 +50,7 @@ from agent_runtime_service.config import Provider
 # Startup: lines 3, 7, 14 and the matrix cells S1 to S10.
 
 
-def test_a_codex_profile_starts_the_service_after_its_program_proves_its_pin(
+def test_a_codex_table_starts_the_service_after_its_program_proves_its_pin(
     tmp_path: Path,
     served: list[dict[str, Any]],  # noqa: F811
 ) -> None:
@@ -73,30 +72,14 @@ def test_a_program_reporting_another_version_stops_the_start_naming_both(
     assert refusal == f"cli.codex.version: {binary} reports {CODEX_PIN}, not the pinned 0.164.0"
 
 
-@pytest.mark.parametrize(
-    ("without", "refusal"),
-    [
-        pytest.param(
-            "token_file",
-            f"profiles.{CODEX_PROFILE}.token_file: required for a codex profile",
-            id="token-file",
-        ),
-        pytest.param("cli.codex", "cli.codex: required for a codex profile", id="program-table"),
-    ],
-)
-def test_a_codex_profile_without_its_login_or_program_table_is_refused_before_any_read(
-    tmp_path: Path, without: str, refusal: str
-) -> None:
+def test_a_codex_table_without_its_login_is_refused_before_any_read(tmp_path: Path) -> None:
     open_login = a_login_file(tmp_path)
     open_login.chmod(0o644)
     document = codex_document(tmp_path, a_service_fake(tmp_path), open_login)
-    if without == "token_file":
-        del document["profiles"][CODEX_PROFILE]["token_file"]
-    else:
-        del document["cli"]["codex"]
+    del document["cli"]["codex"]["token_file"]
 
     shown_refusal = the_refusal_of(document)
-    assert refusal in shown_refusal
+    assert "cli.codex.token_file\n  Field required" in shown_refusal
     assert "open to group" not in shown_refusal
 
 
@@ -161,7 +144,7 @@ def test_a_login_file_that_is_not_a_sound_codex_login_stops_the_start_naming_the
 
     refusal = _refused_on_one_line(written(tmp_path, document), capsys)
 
-    assert refusal.startswith(f"profiles.{CODEX_PROFILE}.token_file: {login} {reason}")
+    assert refusal.startswith(f"cli.codex.token_file: {login} {reason}")
     assert [c for c in (CANARY_ACCESS_TOKEN, CANARY_ID_TOKEN) if c in refusal] == []
 
 
@@ -186,13 +169,13 @@ def test_a_link_to_a_sound_login_loads_and_a_link_to_an_open_one_is_judged_by_it
     link.symlink_to(sound)
     document = codex_document(tmp_path, a_service_fake(tmp_path), link)
 
-    assert a_config(document).profiles[CODEX_PROFILE].token_file == link
+    assert a_config(document).cli.codex.token_file == link
 
     sound.chmod(0o644)
     assert "is open to group or others" in the_refusal_of(document)
 
 
-def test_a_claude_profile_whose_file_holds_a_codex_document_is_refused_as_json(
+def test_a_claude_table_whose_file_holds_a_codex_document_is_refused_as_json(
     tmp_path: Path,
 ) -> None:
     document = _service_config_document(TEST_ISSUER, None, None, token_file=a_login_file(tmp_path))
@@ -200,26 +183,14 @@ def test_a_claude_profile_whose_file_holds_a_codex_document_is_refused_as_json(
     assert "holds a JSON document" in the_refusal_of(document)
 
 
-def test_a_grok_profile_is_refused_naming_its_provider(tmp_path: Path) -> None:
+def test_a_grok_table_is_refused_as_an_unknown_key(tmp_path: Path) -> None:
     document = codex_document(tmp_path, a_service_fake(tmp_path), a_login_file(tmp_path))
-    document["profiles"] = {"grok-main": {"provider": "grok"}}
+    document["cli"]["grok"] = document["cli"]["codex"]
 
-    assert (
-        "profiles.grok-main.provider: grok has no subscription route yet;"
-        " only claude and codex can have a profile"
-    ) in the_refusal_of(document)
+    assert "cli.grok" in the_refusal_of(document)
 
 
-def test_a_second_codex_profile_is_refused(tmp_path: Path) -> None:
-    document = codex_document(tmp_path, a_service_fake(tmp_path), a_login_file(tmp_path))
-    document["profiles"]["codex-spare"] = dict(document["profiles"][CODEX_PROFILE])
-
-    assert "profiles.codex-spare.provider: codex already has profile 'codex-main'" in (
-        the_refusal_of(document)
-    )
-
-
-def test_a_claude_and_a_codex_profile_load_together_and_list_their_programs_in_order(
+def test_a_claude_and_a_codex_table_load_together_and_list_their_programs_in_order(
     tmp_path: Path,
 ) -> None:
     config = a_config(a_document_with_both(tmp_path))
@@ -238,17 +209,11 @@ def test_a_codex_only_installation_lists_only_its_codex_program(tmp_path: Path) 
 @pytest.mark.parametrize(
     ("table_path", "key", "value", "refused_field"),
     [
-        pytest.param(
-            ("profiles", CODEX_PROFILE),
-            "default",
-            True,
-            f"profiles.{CODEX_PROFILE}.default",
-            id="profile-default",
-        ),
+        pytest.param((), "profiles", {"a": {"provider": "codex"}}, "profiles", id="profiles-table"),
         pytest.param((), "route", {"api_alias": "assistant-api"}, "route", id="route-table"),
     ],
 )
-def test_a_leftover_profile_default_or_route_stops_the_start_naming_its_field(
+def test_a_leftover_profiles_or_route_table_stops_the_start_naming_its_field(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     table_path: tuple[str, ...],

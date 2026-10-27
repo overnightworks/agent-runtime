@@ -53,7 +53,7 @@ from wire_builders import started
 from agent_runtime.events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import PROTOCOL_VERSION, RejectionCode, RunState, RunStatus
 from agent_runtime_service.app import create_app
-from agent_runtime_service.config import AgentConfig
+from agent_runtime_service.config import AgentConfig, Provider
 from agent_runtime_service.identity import Principal
 from agent_runtime_service.routing import Api, Cli
 from agent_runtime_service.run_records import RunRecords
@@ -64,7 +64,7 @@ pytestmark = [
     pytest.mark.skipif(KEYCLOAK_URL is None, reason="KEYCLOAK_URL names no test Keycloak"),
 ]
 
-CLI_ROUTE = Cli("claude-main")
+CLI_ROUTE = Cli(Provider.CLAUDE)
 API_ROUTE = Api()
 CLI_SCRIPT = (AssistantTextEvent(text="Hello from the CLI."), FinalEvent(text="CLI done."))
 API_SCRIPT = (AssistantTextEvent(text="Hello from the API."), FinalEvent(text="API done."))

@@ -1,4 +1,4 @@
-"""Shared arrangement of the ``agent-runtime-service-login`` tests: a profile logging in from
+"""Shared arrangement of the ``agent-runtime-service-login`` tests: a provider table logging in from
 ``<tmp>/login/<file>``, the stream standing for standard input, and the signal helpers.
 
 The canaries stand for secrets that no line or held exception may carry.
@@ -20,9 +20,8 @@ from typing import Any
 
 import pytest
 from provider_test_support import a_codex_login, write_claude_token_file
-from service_support import CLI_PROFILE, TEST_ISSUER, _service_config_document, reaches_text
+from service_support import TEST_ISSUER, _service_config_document, reaches_text
 from test_service_codex_profile import (
-    CODEX_PROFILE,
     a_service_fake,
     codex_document,
     write_login,
@@ -47,10 +46,9 @@ RUN_THE_COMMAND = "import sys; from agent_runtime_service.login import main; sys
 
 @dataclass(frozen=True)
 class Installation:
-    """A configuration whose profile logs in from ``login`` in a directory of its own."""
+    """A configuration whose provider table logs in from ``login`` in a directory of its own."""
 
     config: Path
-    profile: str
     provider: Provider
     login: Path
     old_bytes: bytes
@@ -61,7 +59,7 @@ class Installation:
         return swap_sibling(self.login)
 
     def command(self, *extra: str) -> list[str]:
-        return ["--config", str(self.config), "--profile", self.profile, *extra]
+        return ["--config", str(self.config), "--provider", self.provider.value, *extra]
 
     def unchanged(self) -> bool:
         status = self.login.stat()
@@ -85,17 +83,14 @@ def an_installation(tmp_path: Path, provider: Provider, *, old: bool = True) -> 
         if old:
             write_login(path, a_codex_login(tokens={"access_token": "old-access-token"}))
         document = codex_document(tmp_path, a_service_fake(tmp_path), path)
-        profile = CODEX_PROFILE
     else:
         if old:
             write_claude_token_file(path, OLD_CLAUDE_TOKEN.strip())
         document = _service_config_document(TEST_ISSUER, None, None, token_file=path)
-        profile = CLI_PROFILE
     config = written(tmp_path, document)
     status = path.stat() if old else None
     return Installation(
         config,
-        profile,
         provider,
         path,
         path.read_bytes() if old else b"",
@@ -244,7 +239,7 @@ def run(
 
 
 def line_of(installation: Installation, text: str) -> str:
-    return f"{LINE_PREFIX}profiles.{installation.profile}.token_file: {text}"
+    return f"{LINE_PREFIX}cli.{installation.provider}.token_file: {text}"
 
 
 def assert_not_written(

@@ -92,7 +92,6 @@ API_GROUP: Final = "/api-members"
 AUDIENCE: Final = "agent-service"
 GROUP_CLAIM: Final = "groups"
 SONGMAKER_GROUP: Final = "/apps/songmaker"
-CLI_PROFILE: Final = "claude-main"
 SONGMAKER_ORIGIN: Final = "https://songmaker.internal"
 PROCESS_TOKEN: Final = "setup-token-for-the-test-process"
 PINNED_CLAUDE_VERSION: Final = "2.1.302"
@@ -205,10 +204,6 @@ LISTED_MODEL: Final = "sonnet"
 UNLISTED_MODEL: Final = "opus"
 
 
-def without_profiles(config: ServiceConfig) -> ServiceConfig:
-    return config.model_copy(update={"profiles": {}})
-
-
 def _service_config_document(
     issuer: str,
     runs: Mapping[str, object] | None,
@@ -233,16 +228,11 @@ def _service_config_document(
                 "binary": str(claude_binary or process_claude_cli()),
                 "version": PINNED_CLAUDE_VERSION,
                 "models": [LISTED_MODEL],
+                "token_file": str(token_file or process_token_file()),
             },
         },
         "mcp": {"ca_file": "/etc/agent-service/mcp-ca.pem"},
         "signing": {"key_file": str(process_signing_key_file())},
-        "profiles": {
-            CLI_PROFILE: {
-                "provider": "claude",
-                "token_file": str(token_file or process_token_file()),
-            }
-        },
         "api": {
             "completion_url": API_COMPLETION_URL,
             "credential_file": str(process_api_credential_file()),
@@ -268,7 +258,7 @@ def service_config(
     claude_binary: Path | None = None,
     token_file: Path | None = None,
 ) -> ServiceConfig:
-    """The test configuration; its profile logs in from ``token_file``, by default the process's."""
+    """The test configuration; its Claude table logs in from ``token_file``, default the process."""
     return ServiceConfig.model_validate(
         _service_config_document(issuer, runs, songmaker, claude_binary, token_file)
     )
@@ -1032,7 +1022,7 @@ def alice_admitted_run(run_id: uuid.UUID) -> AdmittedRun:
         principal=ALICE,
         request=RunRequest.model_validate(run_body(tools=SONGMAKER_TOOLS)),
         model=f"claude/{LISTED_MODEL}",
-        route=Cli("claude-main"),
+        route=Cli(Provider.CLAUDE),
         capability=None,
     )
 

@@ -1,7 +1,8 @@
-"""``agent-runtime-service-login --config PATH --profile NAME [--check]``: install a login.
+"""``agent-runtime-service-login --config PATH --provider NAME [--check]``: install a login.
 
-Reads a profile's new login document on standard input, checks it with the service's reader for
-that provider and swaps it in over the profile's ``token_file`` through the one login writer.
+Reads a provider's new login document on standard input, checks it with the service's reader for
+that provider and swaps it in over the ``token_file`` of its ``[cli.<provider>]`` table through
+the one login writer.
 ``--check`` runs that reader on the file as it stands and reads no input; it does not prove the
 provider still accepts the login.
 
@@ -21,7 +22,7 @@ import argparse
 import os
 import signal
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from types import FrameType
 from typing import BinaryIO, Final
@@ -152,16 +153,20 @@ def _installed(
     return EXIT_REMAINS if refused.sibling_remains else EXIT_NOT_WRITTEN
 
 
-def _arguments(argv: Sequence[str] | None) -> argparse.Namespace:
+def _arguments(argv: Sequence[str] | None, providers: Iterable[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog=PROGRAM_NAME, description=__doc__)
     parser.add_argument("--config", type=Path, required=True, help="the service's TOML file")
-    parser.add_argument("--profile", required=True, help="the profile whose login this is")
+    parser.add_argument(
+        "--provider",
+        required=True,
+        choices=sorted(providers),
+        help="the provider whose login this is",
+    )
     parser.add_argument("--check", action="store_true", help="check the file; read no input")
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None, standard_input: BinaryIO | None = None) -> int:
-    arguments = _arguments(argv)
     try:
         harden_process()
     except StartupHardeningRefused as error:
@@ -169,24 +174,26 @@ def main(argv: Sequence[str] | None = None, standard_input: BinaryIO | None = No
         return EXIT_BAD_CONFIG
     disregard_interrupts()
     # Imported only now, as the service's start does: its modules need Unix-only constants.
-    from agent_runtime_service.config import LOGIN_READERS, ConfigError, load_config
+    from agent_runtime_service.config import LOGIN_READERS, ConfigError, Provider, load_config
 
+    arguments = _arguments(argv, Provider)
     try:
         config = load_config(arguments.config, read_logins=False)
     except ConfigError as error:
         _say(str(error))
         return EXIT_BAD_CONFIG
-    profile = config.profiles.get(arguments.profile)
-    if profile is None or profile.token_file is None:
-        _say(f"profiles.{shown_text(arguments.profile)}: no such profile")
+    provider = Provider(arguments.provider)
+    table = config.cli.programs().get(provider) if config.cli is not None else None
+    if table is None:
+        _say(f"cli.{arguments.provider}: no such table")
         return EXIT_BAD_CONFIG
-    subject = f"profiles.{shown_text(arguments.profile)}.token_file"
-    read_login = LOGIN_READERS[profile.provider]
+    subject = f"cli.{arguments.provider}.token_file"
+    read_login = LOGIN_READERS[provider]
     if arguments.check:
-        return _checked(subject, profile.token_file, read_login)
+        return _checked(subject, table.token_file, read_login)
     return _installed(
         subject,
-        profile.token_file,
+        table.token_file,
         read_login,
         sys.stdin.buffer if standard_input is None and sys.stdin is not None else standard_input,
     )

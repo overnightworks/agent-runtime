@@ -40,7 +40,6 @@ from agent_runtime_service.cli import EXIT_BAD_CONFIG, main
 from agent_runtime_service.config import (
     AppConfig,
     ConfigError,
-    ProfileConfig,
     Provider,
     ServiceConfig,
     load_config,
@@ -61,9 +60,11 @@ WORKING_ROOT_LINE = f"working_root = {json.dumps(str(process_working_root().path
 MODELS_LINE = 'models = ["sonnet", "opus"]'
 
 
-def cli_section(*, binary: str, version: str, root: str, models: str = MODELS_LINE) -> str:
+def cli_section(
+    *, binary: str, version: str, root: str, models: str = MODELS_LINE, token: str = TOKEN_FILE_LINE
+) -> str:
     root_lines = f"{root}\n" if root else ""
-    program_lines = "".join(f"{line}\n" for line in (binary, version, models) if line)
+    program_lines = "".join(f"{line}\n" for line in (binary, version, models, token) if line)
     program_table = f"[cli.claude]\n{program_lines}\n" if program_lines else ""
     return f"[cli]\n{root_lines}\n{program_table}"
 
@@ -91,11 +92,7 @@ group_claim = "member-groups"
 host = "127.0.0.1"
 port = 8099
 
-{CLI_SECTION}{SIGNING_SECTION}{MCP_SECTION}[profiles.claude-main]
-provider = "claude"
-{TOKEN_FILE_LINE}
-
-{API_SECTION}
+{CLI_SECTION}{SIGNING_SECTION}{MCP_SECTION}{API_SECTION}
 [apps.songmaker]
 workload_client = "songmaker-test"
 {SONGMAKER_ORIGIN_LINE}"""
@@ -140,7 +137,7 @@ def test_a_valid_file_loads_with_its_configured_identity_and_the_documented_defa
     assert config.identity.api_groups == {"/api-members"}
     assert config.api is not None
     assert config.identity.group_claim == "member-groups"
-    assert config.profiles["claude-main"].provider is Provider.CLAUDE
+    assert config.cli.claude.token_file == process_token_file()
     assert (config.runs.heartbeat_interval_s, config.runs.idle_timeout_s) == (15, 120.0)
     assert config.runs.max_duration_s == 600.0
     assert config.runs.stall_timeout_s == 30.0
@@ -167,7 +164,7 @@ def test_o11_a_leftover_models_table_of_an_app_stops_startup_naming_the_field(tm
     )
 
 
-SECOND_CLAUDE_PROFILE = f'\n[profiles.claude-spare]\nprovider = "claude"\n{TOKEN_FILE_LINE}\n'
+LEFTOVER_PROFILES = f'\n[profiles.claude-main]\nprovider = "claude"\n{TOKEN_FILE_LINE}\n'
 SECOND_APP_WITH_SAME_CLIENT = '\n[apps.presentator]\nworkload_client = "songmaker-test"\n'
 
 
@@ -249,16 +246,7 @@ def assert_startup_refuses(tmp_path, capsys, text, named_field):
         pytest.param(
             _with("port = 8099", "port = 8099\nworkers = 4"), "server.workers", id="unknown-field"
         ),
-        pytest.param(
-            _with('provider = "claude"', 'provider = "gemini"'),
-            "profiles.claude-main.provider",
-            id="unknown-provider",
-        ),
-        pytest.param(
-            VALID_CONFIG + SECOND_CLAUDE_PROFILE,
-            "profiles.claude-spare.provider",
-            id="second-profile-for-a-provider",
-        ),
+        pytest.param(VALID_CONFIG + LEFTOVER_PROFILES, "profiles", id="leftover-profiles-table"),
         pytest.param(
             _with("[api]", '[purposes.chat]\napi_alias = "assistant-api"\n\n[api]'),
             "purposes",
@@ -560,10 +548,6 @@ def test_two_apps_on_one_origin_stop_startup_naming_the_second(tmp_path, capsys)
     )
 
 
-PROFILES_WITH_NEWLINES = (
-    VALID_CONFIG.replace("[profiles.claude-main]", '[profiles."claude\\nmain"]')
-    + '\n[profiles."claude\\nspare"]\nprovider = "claude"\n'
-)
 APPS_WITH_NEWLINES = VALID_CONFIG.replace("[apps.songmaker]", '[apps."song\\nmaker"]')
 SECOND_APP_ON_THE_SAME_CLIENT = '\n[apps."pres\\nentator"]\nworkload_client = "songmaker-test"\n'
 
@@ -571,11 +555,6 @@ SECOND_APP_ON_THE_SAME_CLIENT = '\n[apps."pres\\nentator"]\nworkload_client = "s
 @pytest.mark.parametrize(
     ("text", "refusal"),
     [
-        pytest.param(
-            PROFILES_WITH_NEWLINES,
-            "profiles.claude\\nspare.provider: claude already has profile 'claude\\nmain'",
-            id="second-profile-for-a-provider",
-        ),
         pytest.param(
             APPS_WITH_NEWLINES + SECOND_APP_ON_THE_SAME_CLIENT,
             "apps.pres\\nentator.workload_client: 'songmaker-test' is already"
@@ -683,7 +662,7 @@ CANARY = "canary-token-value-7f3a91"
 API_KEY_SHAPE = "sk-ant-" + "api03-" + CANARY
 WHITESPACE_REASON = "holds whitespace; a setup token holds none"
 JSON_DOCUMENT_REASON = "holds a JSON document; it must hold one setup token"
-TOKEN_FILE_FIELD = "profiles.claude-main.token_file"
+TOKEN_FILE_FIELD = "cli.claude.token_file"
 
 
 def _token_file_with(tmp_path: Path, contents: bytes, mode: int = 0o600) -> Path:
@@ -891,7 +870,7 @@ def test_a_sound_token_file_loads_with_or_without_a_trailing_newline_keeping_its
 
     config = load_config(_written(tmp_path, _token_config(str(token_file))))
 
-    assert config.profiles["claude-main"].token_file == token_file
+    assert config.cli.claude.token_file == token_file
 
 
 @pytest.mark.parametrize("flag", ["O_NONBLOCK", "O_CLOEXEC"])
@@ -912,7 +891,7 @@ def test_the_checked_token_never_shows_in_the_repr_text_or_dump_of_the_configura
 
     config = load_config(_written(tmp_path, _token_config(str(token_file))))
 
-    assert not reaches_text([repr(config), str(config), repr(config.profiles)], [CANARY])
+    assert not reaches_text([repr(config), str(config), repr(config.cli)], [CANARY])
     assert CANARY not in config.model_dump_json()
 
 
@@ -932,11 +911,9 @@ def test_a_path_swapped_after_the_open_is_judged_by_the_opened_token_file(tmp_pa
 
     config = load_config(_written(tmp_path, _token_config(str(token_file))))
 
-    assert config.profiles["claude-main"].token_file == token_file
+    assert config.cli.claude.token_file == token_file
 
 
-PROFILE_TABLE = '[profiles.claude-main]\nprovider = "claude"\n' + TOKEN_FILE_LINE + "\n\n"
-NO_PROFILE = _with(PROFILE_TABLE, "")
 WITHOUT_TOKEN_FILE = _with(TOKEN_FILE_LINE + "\n", "")
 WITHOUT_ORIGIN = _with(SONGMAKER_ORIGIN_LINE, "")
 
@@ -948,23 +925,18 @@ def served_apps(monkeypatch, logging_state_restored):
     return served
 
 
-def _with_profile_of(provider: str, name: str = '"grok-main"', token: bool = False) -> str:
-    extra = TOKEN_FILE_LINE + "\n" if token else ""
-    return NO_PROFILE.replace(
-        "[api]", f'[profiles.{name}]\nprovider = "{provider}"\n{extra}\n[api]', 1
+CODEX_TABLE = (
+    f"[cli.codex]\n{CLAUDE_BINARY_LINE}\nversion = \"0.163.0\"\nmodels = [\"gpt-5.5\"]\n"
+)
+
+
+def _with_codex_table(token: bool) -> str:
+    return VALID_CONFIG.replace(
+        "[signing]", f"{CODEX_TABLE}{TOKEN_FILE_LINE + chr(10) if token else ''}\n[signing]", 1
     )
 
 
-@pytest.mark.parametrize(
-    "text",
-    [
-        pytest.param(_without_origin_and_signing().replace(PROFILE_TABLE, ""), id="no-profile"),
-        pytest.param(VALID_CONFIG, id="one-claude-profile-with-its-token"),
-    ],
-)
-def test_a_document_with_no_profile_or_one_sound_claude_profile_reaches_serving(
-    tmp_path, served_apps, monkeypatch, text
-):
+def test_a_valid_document_reaches_serving(tmp_path, served_apps, monkeypatch):
     app_configs = []
     create_app = app_module.create_app
     monkeypatch.setattr(
@@ -973,57 +945,28 @@ def test_a_document_with_no_profile_or_one_sound_claude_profile_reaches_serving(
         lambda config, **keywords: app_configs.append(config) or create_app(config, **keywords),
     )
 
-    assert main(["--config", str(config_file := _written(tmp_path, text))]) == 0
+    assert main(["--config", str(config_file := _written(tmp_path, VALID_CONFIG))]) == 0
 
-    assert [config.profiles for config in app_configs] == [load_config(config_file).profiles]
+    assert [config.cli for config in app_configs] == [load_config(config_file).cli]
 
     assert [where for _app, where in served_apps] == [{"host": "127.0.0.1", "port": 8099}]
 
 
-def test_an_installation_without_a_profile_has_none_and_still_scopes_its_apps(tmp_path):
-    config = load_config(_written(tmp_path, NO_PROFILE))
-
-    assert config.profiles == {}
-    assert config.capability_scope("songmaker", []) is not None
-
-
-PROFILE_RULE_REFUSALS = [
+TABLE_RULE_REFUSALS = [
     pytest.param(
         WITHOUT_TOKEN_FILE,
-        "profiles.claude-main.token_file: required for a claude profile",
+        "cli.claude.token_file: Field required",
         id="claude-without-a-token-file",
     ),
     pytest.param(
-        WITHOUT_TOKEN_FILE.replace(CLI_SECTION, ""),
-        "profiles.claude-main.token_file: required for a claude profile",
-        id="claude-without-a-token-file-nor-cli-section",
-    ),
-    pytest.param(
-        _with_profile_of("codex", '"codex-main"'),
-        "profiles.codex-main.token_file: required for a codex profile",
+        _with_codex_table(token=False),
+        "cli.codex.token_file: Field required",
         id="codex-without-a-token-file",
     ),
     pytest.param(
-        _with_profile_of("grok"),
-        "profiles.grok-main.provider: grok has no subscription route yet;"
-        " only claude and codex can have a profile",
-        id="grok",
-    ),
-    pytest.param(
-        _with_profile_of("codex", '"codex-main"', token=True),
-        "cli.codex: required for a codex profile",
-        id="codex-without-a-program-table",
-    ),
-    pytest.param(
-        VALID_CONFIG + SECOND_CLAUDE_PROFILE,
-        "profiles.claude-spare.provider: claude already has profile 'claude-main'",
-        id="two-claude-profiles",
-    ),
-    pytest.param(
-        VALID_CONFIG + '\n[profiles.grok-main]\nprovider = "grok"\n',
-        "profiles.grok-main.provider: grok has no subscription route yet;"
-        " only claude and codex can have a profile",
-        id="claude-and-grok",
+        VALID_CONFIG + '\n[cli.grok]\nbinary = "/usr/bin/grok"\n',
+        "cli.grok: Extra inputs are not permitted",
+        id="a-grok-table",
     ),
 ]
 
@@ -1031,21 +974,16 @@ PROFILE_RULE_REFUSALS = [
 @pytest.mark.parametrize(
     ("text", "refusal"),
     [
-        *PROFILE_RULE_REFUSALS,
-        pytest.param(
-            _with('provider = "claude"', 'provider = "gemini"'),
-            "profiles.claude-main.provider: Input should be",
-            id="unknown-provider",
-        ),
+        *TABLE_RULE_REFUSALS,
         pytest.param(
             _with(TOKEN_FILE_LINE, 'token_file = ""'),
-            "profiles.claude-main.token_file:  must be an absolute path to the token file;"
+            "cli.claude.token_file:  must be an absolute path to the token file;"
             " ~ is not expanded",
             id="empty-token-file-path",
         ),
     ],
 )
-def test_a_profile_the_service_cannot_serve_stops_startup_naming_the_field(
+def test_a_table_the_service_cannot_serve_stops_startup_naming_the_field(
     tmp_path, capsys, text, refusal
 ):
     assert _refused_on_one_line(_written(tmp_path, text), capsys).startswith(refusal)
@@ -1055,7 +993,7 @@ def test_a_profile_the_service_cannot_serve_stops_startup_naming_the_field(
 @pytest.mark.parametrize(
     ("text", "refusal"),
     [
-        *PROFILE_RULE_REFUSALS,
+        *TABLE_RULE_REFUSALS,
         pytest.param(
             ORIGIN_WITHOUT_SIGNING, ORIGIN_WITHOUT_SIGNING_REFUSAL, id="origin-without-signing"
         ),
@@ -1085,16 +1023,6 @@ def test_a_refused_relationship_holds_no_token_or_key_in_what_the_refusal_holds(
     ("arrange", "field"),
     [
         pytest.param(
-            lambda name: _with_profile_of("grok", name),
-            "provider: grok has no subscription route yet",
-            id="provider",
-        ),
-        pytest.param(
-            lambda name: WITHOUT_TOKEN_FILE.replace("claude-main", name),
-            "token_file: required for a claude profile",
-            id="token-file",
-        ),
-        pytest.param(
             lambda name: ORIGIN_WITHOUT_SIGNING.replace("[apps.songmaker]", f"[apps.{name}]"),
             "mcp_origin: needs a [signing] section",
             id="mcp-origin",
@@ -1117,13 +1045,8 @@ def test_a_name_with_a_control_character_is_refused_on_one_line_with_no_raw_cont
     [
         pytest.param(
             WITHOUT_TOKEN_FILE.replace(SONGMAKER_ORIGIN_LINE, ""),
-            ("profiles.claude-main.token_file", "apps.songmaker.mcp_origin"),
+            ("cli.claude.token_file", "apps.songmaker.mcp_origin"),
             id="missing-token-and-missing-origin",
-        ),
-        pytest.param(
-            _with_profile_of("grok").replace(SONGMAKER_ORIGIN_LINE, ""),
-            ("profiles.grok-main.provider", "apps.songmaker.mcp_origin"),
-            id="grok-and-missing-origin",
         ),
         pytest.param(
             _with("port = 8099", "port = 8099\nworkers = 4").replace(SONGMAKER_ORIGIN_LINE, ""),
@@ -1430,12 +1353,11 @@ def test_a_bad_working_root_and_a_bad_token_file_are_both_named_on_one_line(tmp_
     refusal = _refused_on_one_line(_written(tmp_path, text), capsys)
 
     fields = [part.split(":", 1)[0] for part in refusal.split("; ")]
-    assert sorted(fields) == ["cli.working_root", TOKEN_FILE_FIELD]
+    assert sorted(fields) == [TOKEN_FILE_FIELD, "cli.working_root"]
     assert root not in refusal.replace(str(unreadable), "")
 
 
-PROGRAM_TABLE_REQUIRED = "cli.claude: required for a claude profile"
-ROOT_ONLY_CLI = cli_section(binary="", version="", root=WORKING_ROOT_LINE, models="")
+ROOT_ONLY_CLI = cli_section(binary="", version="", root=WORKING_ROOT_LINE, models="", token="")
 FORMER_FLAT_KEYS = f"claude_{CLAUDE_BINARY_LINE}\nclaude_{CLAUDE_VERSION_LINE}\n"
 FORMER_FLAT_KEYS_REFUSED = (
     "cli.claude_binary: Extra inputs are not permitted;"
@@ -1443,27 +1365,6 @@ FORMER_FLAT_KEYS_REFUSED = (
 )
 UNCHANGED_V030_CLI = f"[cli]\n{FORMER_FLAT_KEYS}\n"
 WITH_ROOT_AND_FLAT_KEYS = f"[cli]\n{WORKING_ROOT_LINE}\n{FORMER_FLAT_KEYS}\n"
-
-
-def _unreadable_token_file(tmp_path: Path, text: str) -> str:
-    unreadable = tmp_path / "missing.token"
-    return text.replace(TOKEN_FILE_LINE, f"token_file = {json.dumps(str(unreadable))}")
-
-
-@pytest.mark.parametrize(
-    "cli_text",
-    [
-        pytest.param("", id="no-cli-table"),
-        pytest.param(ROOT_ONLY_CLI, id="working-root-only"),
-        pytest.param(UNCHANGED_V030_CLI, id="former-flat-keys"),
-    ],
-)
-def test_a_claude_profile_without_its_program_table_is_refused_before_its_token_file_is_opened(
-    tmp_path, capsys, cli_text
-):
-    text = _unreadable_token_file(tmp_path, _with(CLI_SECTION, cli_text))
-
-    assert _refused_on_one_line(_written(tmp_path, text), capsys) == PROGRAM_TABLE_REQUIRED
 
 
 @pytest.mark.parametrize(
@@ -1477,7 +1378,7 @@ def test_a_claude_profile_without_its_program_table_is_refused_before_its_token_
         ),
         pytest.param(
             f"[cli]\n{WORKING_ROOT_LINE}\n{FORMER_FLAT_KEYS}\n[cli.claude]\n"
-            f"{CLAUDE_BINARY_LINE}\n{CLAUDE_VERSION_LINE}\n{MODELS_LINE}\n\n",
+            f"{CLAUDE_BINARY_LINE}\n{CLAUDE_VERSION_LINE}\n{MODELS_LINE}\n{TOKEN_FILE_LINE}\n\n",
             FORMER_FLAT_KEYS_REFUSED,
             id="beside-a-program-table",
         ),
@@ -1489,7 +1390,8 @@ def test_the_former_flat_program_keys_stop_the_start_naming_each_key(
     probe_log = tmp_path / "probe-starts"
     program = fake_cli_executable(tmp_path, {("--version",): "any"}, calls_log=probe_log)
     logged_binary_line = f"binary = {json.dumps(str(program))}"
-    text = NO_PROFILE.replace(CLI_SECTION, cli_text.replace(CLAUDE_BINARY_LINE, logged_binary_line))
+    program_text = cli_text.replace(CLAUDE_BINARY_LINE, logged_binary_line)
+    text = VALID_CONFIG.replace(CLI_SECTION, program_text)
 
     assert _refused_on_one_line(_written(tmp_path, text), capsys) == refusal
     assert _the_probe_never_started(probe_log)
@@ -1502,7 +1404,7 @@ def test_a_program_table_for_a_provider_without_a_version_reader_stops_the_start
     probe_log = tmp_path / "probe-starts"
     program = fake_cli_executable(tmp_path, {("--version",): "any"}, calls_log=probe_log)
     table = f'[cli.{provider}]\nbinary = {json.dumps(str(program))}\nversion = "1.0.60"\n\n'
-    text = NO_PROFILE.replace(CLI_SECTION, ROOT_ONLY_CLI + table)
+    text = VALID_CONFIG.replace(CLI_SECTION, ROOT_ONLY_CLI + table)
 
     refusal = _refused_on_one_line(_written(tmp_path, text), capsys)
 
@@ -1515,7 +1417,7 @@ def test_the_working_root_belongs_to_the_cli_table_not_to_a_program(tmp_path, ca
         cli_section(binary=CLAUDE_BINARY_LINE, version=CLAUDE_VERSION_LINE, root="").rstrip("\n")
         + f"\n{WORKING_ROOT_LINE}\n\n"
     )
-    text = NO_PROFILE.replace(CLI_SECTION, program_with_root)
+    text = VALID_CONFIG.replace(CLI_SECTION, program_with_root)
 
     assert _refused_on_one_line(_written(tmp_path, text), capsys) == (
         "cli.working_root: Field required; cli.claude.working_root: Extra inputs are not permitted"
@@ -1538,8 +1440,8 @@ def _edited(edit: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
     return document
 
 
-def _profile_edit(**members: Any) -> Callable[[dict[str, Any]], None]:
-    return lambda document: document["profiles"]["claude-main"].update(members)
+def _claude_table_edit(**members: Any) -> Callable[[dict[str, Any]], None]:
+    return lambda document: document["cli"]["claude"].update(members)
 
 
 def _app_edit(*, signing: bool = True, **members: Any) -> Callable[[dict[str, Any]], None]:
@@ -1551,40 +1453,16 @@ def _app_edit(*, signing: bool = True, **members: Any) -> Callable[[dict[str, An
     return edit
 
 
-def _profiles_edit(profiles: dict[Any, Any]) -> Callable[[dict[str, Any]], None]:
-    return lambda document: document.update(profiles=profiles)
-
-
-NO_ROUTE_REFUSAL = "has no subscription route yet; only claude and codex can have a profile"
-UNIQUE_CLAUDE_PROFILE_REFUSAL = "claude already has profile"
-
-_OFF_CLAUDE = ProfileConfig(provider=Provider.CLAUDE)
 REFUSED_REPRESENTATIONS = [
     pytest.param(
-        _profile_edit(token_file=None),
-        "profiles.claude-main.token_file: required for a claude profile",
+        _claude_table_edit(token_file=None),
+        "cli.claude.token_file\n  Value error, must be an absolute path",
         id="token-file-none",
     ),
     pytest.param(
-        _profiles_edit({"claude-main": _OFF_CLAUDE}),
-        "profiles.claude-main.token_file: required for a claude profile",
-        id="tokenless-claude-instance",
-    ),
-    pytest.param(
-        _profiles_edit({"grok-main": ProfileConfig(provider=Provider.GROK)}),
-        NO_ROUTE_REFUSAL,
-        id="grok-instance",
-    ),
-    pytest.param(
-        _profiles_edit({"first": _OFF_CLAUDE, "second": _OFF_CLAUDE}),
-        UNIQUE_CLAUDE_PROFILE_REFUSAL,
-        id="two-claude-instances",
-    ),
-    pytest.param(
-        _profile_edit(provider=b"codex"), "profiles.claude-main.provider", id="bytes-provider"
-    ),
-    pytest.param(
-        _profiles_edit({b"p": {"provider": "codex"}}), "profiles", id="bytes-profile-name"
+        lambda document: document.update(profiles={}),
+        "profiles\n  Extra inputs are not permitted",
+        id="an-empty-profiles-table",
     ),
     pytest.param(
         lambda document: document.update(
