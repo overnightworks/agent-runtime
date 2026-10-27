@@ -2,6 +2,18 @@
 
 Read by a host bumping its pin; each release that breaks a host has one section, newest first.
 
+## Migrating to 0.9.0
+
+Job tickets are retired, and the profile flag `background` goes with them. No app is known to use
+either; the wire stays version 2.
+
+| Before (0.8.0) | Now |
+| --- | --- |
+| `[profiles.<name>]` required `background = true\|false` | Remove the key. A configuration that still holds it, `true` or `false`, stops startup with exit 2, and the refusal names `profiles.<name>.background`. `[signing]` stays; capabilities use it. |
+| `POST /job-tickets` minted a job ticket | Removed: the route answers 404. `JobTicketRequest`, `JobTicket` and `MAX_JOB_TICKET_SECONDS` are gone from `agent_runtime_client.wire`. |
+| `POST /runs` and `GET /runs/{id}` took the `Agent-Job-Ticket` header in place of a user token | Both answer a request carrying the header, whatever its value, with `401 unauthorized` before the body is read. Send the workload token and the user token. |
+| `OfferedModel.background` said whether a ticket run got the model on the same route | The field stays and is always `false`. |
+
 ## Migrating to 0.8.0
 
 The service no longer replaces a requested model: `[apps.<app>.models]` is removed. An app

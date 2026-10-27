@@ -486,30 +486,6 @@ def test_unreadable_ca_stops_runner_installation(tmp_path):
         installed_runners(config, None, clock)
 
 
-def test_job_ticket_runs_the_real_api_path(tmp_path, monkeypatch):
-    from agent_runtime_service.app import JOB_TICKET_HEADER, WORKLOAD_TOKEN_HEADER
-
-    config = configured(tmp_path)
-    fake_gateway(monkeypatch, lambda request: httpx.Response(200, json=answer()))
-
-    async def run():
-        mint = TokenMint()
-        app = create_app(config, runners=installed_runners(config, None, LoopClock()),
-                         fetch_key_set=mint.fetch_key_set)
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
-                                     base_url="http://service") as client:
-            headers = run_headers(mint.workload(), mint.user(groups=[API_GROUP, SONGMAKER_GROUP]))
-            response = await client.post("/job-tickets", headers=headers,
-                                         json={"v": 2, "purpose": "cowriter", "expires_in_s": 3600})
-            assert response.status_code == 200
-            ticket = response.json()["ticket"]
-            response = await client.post("/runs", json=run_body(), headers={
-                WORKLOAD_TOKEN_HEADER: mint.workload(), JOB_TICKET_HEADER: ticket})
-            assert isinstance(decoded_events(response.content)[-1], Succeeded)
-
-    asyncio.run(run())
-
-
 def test_removed_model_is_never_substituted_retried_or_routed_to_cli(tmp_path, monkeypatch):
     config = configured(tmp_path)
     sent = []

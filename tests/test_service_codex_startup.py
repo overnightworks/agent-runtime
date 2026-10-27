@@ -202,7 +202,7 @@ def test_a_claude_profile_whose_file_holds_a_codex_document_is_refused_as_json(
 
 def test_a_grok_profile_is_refused_naming_its_provider(tmp_path: Path) -> None:
     document = codex_document(tmp_path, a_service_fake(tmp_path), a_login_file(tmp_path))
-    document["profiles"] = {"grok-main": {"provider": "grok", "background": False}}
+    document["profiles"] = {"grok-main": {"provider": "grok"}}
 
     assert (
         "profiles.grok-main.provider: grok has no subscription route yet;"

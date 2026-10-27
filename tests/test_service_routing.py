@@ -22,7 +22,7 @@ IDENTITY = IdentityConfig(
     group_claim="groups",
 )
 PROFILES = {
-    "claude-main": ProfileConfig(provider=Provider.CLAUDE, background=False, default=True)
+    "claude-main": ProfileConfig(provider=Provider.CLAUDE, default=True)
 }
 ROUTE = RouteConfig(api_alias="assistant-api")
 CLI = Cli("claude-main")
@@ -121,8 +121,8 @@ def test_a_named_model_runs_on_the_subscription_only_when_it_is_listed(
     assert _routed(groups, model=model, listed=listed) == expected
 
 
-CLAUDE = ProfileConfig(provider=Provider.CLAUDE, background=False)
-CODEX = ProfileConfig(provider=Provider.CODEX, background=True, default=True)
+CLAUDE = ProfileConfig(provider=Provider.CLAUDE)
+CODEX = ProfileConfig(provider=Provider.CODEX, default=True)
 TWO_PROFILES = {"claude-main": CLAUDE, "codex-main": CODEX}
 BOTH_LISTED = {**SONNET_LISTED, Provider.CODEX: frozenset({"gpt-5.5"})}
 

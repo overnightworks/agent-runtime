@@ -17,7 +17,7 @@ def _offered(**overrides: object) -> dict[str, object]:
         "created": 0,
         "owned_by": "claude",
         "route": "cli",
-        "background": True,
+        "background": False,
         "ready": True,
         "reason": None,
         **overrides,

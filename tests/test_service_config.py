@@ -92,7 +92,6 @@ port = 8099
 {CLI_SECTION}{SIGNING_SECTION}{MCP_SECTION}[profiles.claude-main]
 provider = "claude"
 {TOKEN_FILE_LINE}
-background = false
 
 [route]
 api_alias = "assistant-api"
@@ -267,6 +266,16 @@ def _with_key_set_url(url: str) -> str:
             ),
             "apps.songmaker.purposes",
             id="C2-leftover-app-purposes",
+        ),
+        pytest.param(
+            _with(TOKEN_FILE_LINE, TOKEN_FILE_LINE + "\nbackground = true"),
+            "profiles.claude-main.background",
+            id="leftover-background-true",
+        ),
+        pytest.param(
+            _with(TOKEN_FILE_LINE, TOKEN_FILE_LINE + "\nbackground = false"),
+            "profiles.claude-main.background",
+            id="leftover-background-false",
         ),
         pytest.param(
             _with(SUBSCRIPTION_GROUPS_LINE, 'subscription_group = "/ki-abo"'),
@@ -937,7 +946,7 @@ def test_a_path_swapped_after_the_open_is_judged_by_the_opened_token_file(tmp_pa
 
 
 PROFILE_TABLE = (
-    '[profiles.claude-main]\nprovider = "claude"\n' + TOKEN_FILE_LINE + "\nbackground = false\n\n"
+    '[profiles.claude-main]\nprovider = "claude"\n' + TOKEN_FILE_LINE + "\n\n"
 )
 NO_PROFILE = _with(PROFILE_TABLE, "")
 WITHOUT_TOKEN_FILE = _with(TOKEN_FILE_LINE + "\n", "")
@@ -1560,7 +1569,7 @@ def _profiles_edit(profiles: dict[Any, Any]) -> Callable[[dict[str, Any]], None]
 NO_ROUTE_REFUSAL = "has no subscription route yet; only claude and codex can have a profile"
 UNIQUE_CLAUDE_PROFILE_REFUSAL = "claude already has profile"
 
-_OFF_CLAUDE = ProfileConfig(provider=Provider.CLAUDE, background=False)
+_OFF_CLAUDE = ProfileConfig(provider=Provider.CLAUDE)
 REFUSED_REPRESENTATIONS = [
     pytest.param(
         _profile_edit(token_file=None),
@@ -1573,7 +1582,7 @@ REFUSED_REPRESENTATIONS = [
         id="tokenless-claude-instance",
     ),
     pytest.param(
-        _profiles_edit({"grok-main": ProfileConfig(provider=Provider.GROK, background=False)}),
+        _profiles_edit({"grok-main": ProfileConfig(provider=Provider.GROK)}),
         NO_ROUTE_REFUSAL,
         id="grok-instance",
     ),

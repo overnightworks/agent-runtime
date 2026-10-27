@@ -23,14 +23,12 @@ file, the Claude token file and any API credential file are read and checked wit
 ## Who may run what
 
 A caller presents a workload token bound to one registered app and either a user token
-bound to one principal or, for a background job, a job ticket the app got earlier for that
-principal (`agent_runtime_service.identity`). The checks run in this order:
+bound to one principal (`agent_runtime_service.identity`). The checks run in this order:
 
 1. The user must be a member of the app: one of their groups is `/apps/<app>` or
    a path below it (`/apps/notes-other` is not a member of `notes`). This holds
    for `POST /runs`, `GET /runs/{id}` and `GET /offer`; anyone else gets 403 `forbidden`,
-   before the body is read. For a ticket the groups are the ones bound at mint, not the
-   person's live groups.
+   before the body is read.
 2. Their role is `admin` in `/apps/<app>/admin` or below, else `user`; a
    request whose `roles` lacks it gets 403 `forbidden`.
 3. An app without an MCP origin whose request names a tool gets 403
@@ -48,9 +46,6 @@ principal (`agent_runtime_service.identity`). The checks run in this order:
    the profile, marked or not, and with two exactly one must be marked. A run that names
    tools and whose profile's provider has no tool relay yet (Codex) gets 403 `not_enabled`
    before any place, capability or program, never a silent drop and never another route.
-   A ticket run reads only the profiles with `background = true`; without one that serves
-   it (a model-less run needs the default profile among them), it goes on over the API when
-   the ticket's groups carry API rights, else `not_enabled`.
 
 At most `[runs] max_parallel_cli_runs` (default 5) CLI runs are admitted; one
 beyond gets 429 `busy` with `Retry-After` and never falls back to the API
@@ -118,18 +113,12 @@ profile for another provider (Grok) and a second one for the same provider.
 [profiles.subscription]
 provider = "claude"
 token_file = "/run/secrets/claude-token"
-background = false
 default = true
 ```
 
 `default` serves a run that names no model. A lone profile is the default, marked or not;
 with two profiles exactly one is marked `default = true`, else the service stops at startup
 (exit 2, naming `profiles.<name>.default`).
-
-`background` is required, `true` or `false`; a profile without it, or with another
-value, stops the service at startup (exit 2, naming `profiles.<name>.background`). `true`
-lets the profile serve runs started by a job ticket; `false` keeps it to live runs. `true`
-also needs the `[signing]` section, because a ticket is signed with its key.
 
 **Provide it (Claude).** The file holds one line, the token `claude setup-token` prints,
 at a mode that gives nothing to group or others (0600 or 0400), at most 16 KiB.

@@ -4983,6 +4983,25 @@ subscription's limit still answers `busy` (J17). `GET /runs/{id}` answers the sa
 ticket and no previous public key is kept (J10, answering A1a4 O2). A run-time audit line is a named
 gap on #445.
 
+*Amendment (27.10.2026, #479, #485).* Job tickets are retired; the earlier H12 amendments and
+the ticket sentences elsewhere in this record stand as history. Authority: the operator's „JA weg“
+(27.10.2026, #479 line 1), after songmaker's head named no on-behalf-of caller and presentator
+pinned a release without ticket code.
+- H12's Decision and Consequence are superseded. No ticket is minted or verified: `POST /job-tickets`
+  is gone (404), and `POST /runs` and `GET /runs/{id}` answer a request with an `Agent-Job-Ticket`
+  header `401` before any token or body is read, whatever the header's value and with or without
+  `Authorization`. The #447, #456 and #457 amendments are retired with it, and the ticket
+  jurisdiction of J1-J18 with them.
+- H2b's profile no longer carries "whether background purposes may use it": `background` is
+  removed from `[profiles.<name>]`, and a leftover key stops the start (exit 2, naming
+  `profiles.<name>.background`).
+- H3's exception to "the request carries no route, provider, model or user id", the job ticket, is
+  retired: every run carries the two tokens.
+- H5's `GET /offer` keeps the `background` field, so protocol 2 keeps its shape, and it is
+  `false` for every model, since no ticket run exists. `route`, `ready` and `reason` are as before.
+- A run-time audit line for on-behalf-of work is no longer a gap on #445; its owner is #18.
+- H12's Context clause stands: an app must never assert a principal on its own.
+
 ## Out of scope at this size
 
 - arbitrary MCP endpoints and dynamic discovery;

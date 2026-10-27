@@ -257,7 +257,6 @@ def _service_config_document(
             CLI_PROFILE: {
                 "provider": "claude",
                 "token_file": str(token_file or process_token_file()),
-                "background": True,
             }
         },
         "route": {"api_alias": API_ALIAS},

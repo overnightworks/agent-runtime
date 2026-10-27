@@ -22,12 +22,10 @@ from pydantic import ValidationError
 from service_support import (
     API_ALIAS,
     API_GROUP,
-    COWRITER,
     LISTED_MODEL,
     PINNED_CLAUDE_VERSION,
     PRESENTATOR_CLIENT,
     PROCESS_TOKEN,
-    SONGMAKER_CLIENT,
     SONGMAKER_GROUP,
     SUBSCRIPTION_GROUP,
     UNLISTED_MODEL,
@@ -46,7 +44,6 @@ from service_support import (
     without_cli,
     without_profiles,
 )
-from ticket_run_support import minted_ticket, ticket_headers, with_background
 from webauth.https_client import KeySetFetchError
 
 from agent_runtime.events import FinalEvent
@@ -238,89 +235,48 @@ def test_an_entry_is_ready_exactly_when_a_runner_serves_its_route(groups, cli, a
     assert (entry.route, entry.ready, entry.reason) == (route, reason is None, reason)
 
 
-@pytest.mark.parametrize("profile_background", [True, False])
 @pytest.mark.parametrize(
-    ("groups", "route", "same_route_for_a_ticket"),
+    ("groups", "route"),
     [
-        pytest.param(SUBSCRIBER, OfferRoute.CLI, None, id="A4-subscription-only"),
-        pytest.param(API_CALLER, OfferRoute.API, True, id="A4-api-only"),
-        pytest.param(
-            [SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP],
-            OfferRoute.CLI,
-            None,
-            id="A4-both-groups",
-        ),
+        pytest.param(SUBSCRIBER, OfferRoute.CLI, id="subscription-only"),
+        pytest.param(API_CALLER, OfferRoute.API, id="api-only"),
+        pytest.param([SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP], OfferRoute.CLI, id="both"),
     ],
 )
-def test_the_offer_background_names_whether_a_ticket_run_gets_the_same_route(
-    profile_background, groups, route, same_route_for_a_ticket
-):
-    """J18: the profile decides only where the live run is on the subscription"""
-    config = with_background(
-        with_listed_models(service_config(), [LISTED_MODEL]), profile_background
-    )
+def test_the_offer_says_background_false_for_every_model(groups, route):
+    config = with_listed_models(service_config(), [LISTED_MODEL])
     with _served(config, _runners(cli=True, api=True)) as app:
         (entry,) = _the_offer(_get_offer(app, groups)).data
 
-    expected = profile_background if same_route_for_a_ticket is None else same_route_for_a_ticket
-    assert (entry.route, entry.background) == (route, expected)
+    assert (entry.route, entry.background) == (route, False)
 
 
-def _route_taken(response: httpx.Response, runners: Runners) -> ServedRoute | None:
-    """The route a run was admitted on, or ``None`` for a refusal; forgets the run."""
-    taken = [*runners.cli.admitted, *runners.api.admitted]
-    runners.cli.admitted.clear()
-    runners.api.admitted.clear()
-    if response.status_code != 200:
-        assert_rejected(response, RejectionCode.NOT_ENABLED, 403)
-        return None
-    (admitted,) = taken
-    return admitted.route
+def test_the_offer_does_not_examine_a_job_ticket_header():
+    config = with_listed_models(service_config(), [LISTED_MODEL])
+    with _served(config, _runners(cli=True, api=False)) as app:
+        response = httpx.get(
+            f"{app}/offer",
+            headers={**_headers(SUBSCRIBER), "Agent-Job-Ticket": "garbage"},
+            timeout=10,
+        )
+
+    assert [entry.id for entry in _the_offer(response).data] == [f"claude/{LISTED_MODEL}"]
 
 
-@pytest.mark.parametrize("profile_background", [True, False])
-@pytest.mark.parametrize(
-    "groups",
-    [SUBSCRIBER, API_CALLER, [SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP]],
-    ids=["subscription-only", "api-only", "both-groups"],
-)
-def test_a_ticket_run_lands_where_the_offer_says(groups, profile_background):
-    """J18: `background` is true exactly when a real ticket run takes the route the live run took"""
-    config = with_background(
-        with_listed_models(service_config(), [LISTED_MODEL]), profile_background
-    )
-    runners = Runners(cli=ScriptedRunner(ANSWER), api=ScriptedRunner(ANSWER))
-    with _served(config, runners) as app:
-        (entry,) = _the_offer(_get_offer(app, groups)).data
-        live_route = _route_taken(post_run(app, _headers(groups), run_body()), runners)
-        ticket = minted_ticket(app, MINT, tuple(groups), purpose=COWRITER, client=SONGMAKER_CLIENT)
-        ticket_response = post_run(app, ticket_headers(MINT.workload(), ticket), run_body())
-        ticket_route = _route_taken(ticket_response, runners)
-
-    assert entry.background == (ticket_route == live_route)
-
-
-@pytest.mark.parametrize("profile_background", [True, False])
-def test_a_member_without_an_ai_group_is_offered_nothing_whatever_the_profile_background(
-    profile_background,
-):
-    """A4: no AI group is an empty offer for either profile background"""
-    config = with_background(
-        with_listed_models(service_config(), [LISTED_MODEL]), profile_background
-    )
+def test_a_member_without_an_ai_group_is_offered_nothing():
+    config = with_listed_models(service_config(), [LISTED_MODEL])
     with _served(config, _runners(cli=True, api=True)) as app:
         offer = _the_offer(_get_offer(app, [SONGMAKER_GROUP]))
 
     assert offer.data == []
 
 
-def test_an_entry_that_is_not_ready_still_says_whether_a_ticket_run_gets_the_same_route():
-    """A5"""
+def test_an_entry_that_is_not_ready_says_why():
     config = without_profiles(with_listed_models(service_config(), [LISTED_MODEL]))
     with _served(config, _runners(cli=False, api=False)) as app:
         (entry,) = _the_offer(_get_offer(app, API_CALLER)).data
 
-    assert (entry.ready, entry.reason, entry.background) == (False, OfferReason.NOT_BUILT, True)
+    assert (entry.ready, entry.reason, entry.background) == (False, OfferReason.NOT_BUILT, False)
 
 
 def test_a_member_without_an_ai_group_gets_an_empty_list_not_not_enabled():
@@ -346,7 +302,7 @@ def test_the_offer_has_the_shape_of_a_models_list():
                 "created": 0,
                 "owned_by": "claude",
                 "route": "cli",
-                "background": True,
+                "background": False,
                 "ready": True,
                 "reason": None,
             }
