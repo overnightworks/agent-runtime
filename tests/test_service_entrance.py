@@ -112,9 +112,7 @@ def test_a_runner_that_offers_tools_serves_an_app_with_tools(service):
 
 @pytest.mark.parametrize("agent", ADMITTED_AGENTS)
 def test_an_agent_in_the_grammar_is_admitted_from_any_app(service, agent):
-    response = post_run(
-        service, run_headers(MINT.workload(), MINT.user()), run_body(agent=agent)
-    )
+    response = post_run(service, run_headers(MINT.workload(), MINT.user()), run_body(agent=agent))
 
     assert _admitted_events(response) == ["run_started", "assistant_text", "succeeded"]
 
@@ -618,7 +616,11 @@ BODY_REJECTIONS = [
         json.dumps({name: value for name, value in run_body().items() if name != "tools"}).encode(),
         "tools-omitted",
     ),
-    _invalid_request(json.dumps({**run_body(), "purpose": "cowriter"}).encode(), "purpose-named"),
+    _invalid_request(json.dumps(run_body(purpose="cowriter")).encode(), "purpose-beside-agent"),
+    _invalid_request(
+        json.dumps({n: v for n, v in run_body(purpose="x").items() if n != "agent"}).encode(),
+        "purpose-instead-of-agent",
+    ),
     *(
         _invalid_request(json.dumps(run_body(tools=tools)).encode(), f"tools-{label}")
         for label, tools in (

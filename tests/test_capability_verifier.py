@@ -195,7 +195,7 @@ def test_a_header_other_than_alg_kid_typ_with_rs256_is_refused(token):
     assert _verified(token) is CapabilityRefusal.UNEXPECTED_HEADER
 
 
-@pytest.mark.parametrize("token_type", ["JWT", "at+jwt", "", None, 1])
+@pytest.mark.parametrize("token_type", ["JWT", "at+jwt", "agent-capability+jwt", "", None, 1])
 def test_a_capability_of_another_token_type_is_refused(token_type):
     assert (
         _verified(_signed_token({**GOOD_HEADER, "typ": token_type})) is CapabilityRefusal.WRONG_TYPE

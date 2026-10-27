@@ -237,6 +237,6 @@ def test_claims_are_immutable():
 def test_the_format_constants_are_the_ones_apps_verify_against():
     assert (CAPABILITY_ISSUER, CAPABILITY_TOKEN_TYPE, MAX_CAPABILITY_CHARACTERS) == (
         "agent-service",
-        "agent-capability+jwt",
+        "agent-capability-2+jwt",
         8192,
     )

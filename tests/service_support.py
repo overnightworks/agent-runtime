@@ -462,7 +462,7 @@ class WallClock:
 
 
 SHORT_TOOL_NAME_LENGTH = 35
-LAST_TOOL_NAME_LENGTH_AT_THE_LIMIT = 11
+LAST_TOOL_NAME_LENGTH_AT_THE_LIMIT = 9
 
 
 def tool_names_with_the_last_of_length(last_tool_name_length: int) -> list[str]:
