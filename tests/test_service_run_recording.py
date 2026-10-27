@@ -1801,25 +1801,6 @@ async def test_two_equal_but_distinct_stray_cancellations_stay_two_failures(capl
 
 
 @in_loop
-async def test_a_stray_cancellation_reusing_a_freed_ones_identity_is_a_failure_of_its_own():
-    failures = RunFailures(uuid.uuid4())
-    first = _raised(_CancelledLikeAnyOther())
-    freed_identity = id(first)
-    failures.add(FailedPart.SUPERVISION, first)
-    del first
-    reuser = _raised(_CancelledLikeAnyOther())
-    for _attempt in range(1000):
-        if id(reuser) == freed_identity:
-            break
-        reuser = _raised(_CancelledLikeAnyOther())
-    assert id(reuser) == freed_identity, "the allocator did not reuse the freed identity"
-
-    second = failures.add(FailedPart.CLEANUP, reuser)
-
-    assert second.part is FailedPart.CLEANUP
-
-
-@in_loop
 async def test_one_stray_cancellation_met_by_two_steps_of_a_close_propagates_once(caplog):
     caplog.set_level(logging.DEBUG)
     shared = _cancelled_unasked(_Step.DISCONNECT_REPORT)

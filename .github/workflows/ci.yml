@@ -150,7 +150,7 @@ jobs:
           printf 'from agent_runtime.tools import ToolCatalog, ToolDeclaration\n' > consumer.py
           uvx pyright@1.1.414 --pythonpath "$proof/venv/bin/python" consumer.py
 
-      - name: The three wheels install together and the service refuses a bad config
+      - name: The three wheels install together and both commands refuse a bad config
         run: |
           proof="$(mktemp -d "$RUNNER_TEMP/three-wheels.XXXXXX")"
           uv venv "$proof/venv"
@@ -169,6 +169,11 @@ jobs:
           cat refused.txt
           test "$status" -eq 2
           grep -q 'identity.jwks_url' refused.txt
+          status=0
+          "$proof/venv/bin/agent-runtime-service-login" --config bad.toml --profile subscription --check 2> login_refused.txt || status=$?
+          cat login_refused.txt
+          test "$status" -eq 2
+          grep -q 'identity.jwks_url' login_refused.txt
 
   checks:
     name: checks

@@ -23,6 +23,7 @@ dependencies = [
 
 [project.scripts]
 agent-runtime-service = "agent_runtime_service.cli:main"
+agent-runtime-service-login = "agent_runtime_service.login:main"
 
 [project.urls]
 Repository = "https://github.com/overnightworks/agent-runtime"

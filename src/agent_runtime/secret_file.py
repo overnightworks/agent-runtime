@@ -39,11 +39,17 @@ def _shown_character(character: str) -> str:
     return character if character.isprintable() else character.encode("unicode_escape").decode()
 
 
-def read_secret_file(path: Path, subject: str) -> bytes:
-    """The file's bytes; a refusal names the path in an ``UnsoundSecretFile``, never the content."""
+def shown_path(path: Path) -> str:
+    """The path as printable text; a non-printing character is an ``UnsoundSecretFile``."""
     shown = shown_text(str(path))
     if shown != str(path):
         raise UnsoundSecretFile(f"{shown} {UNSHOWABLE_PATH}")
+    return shown
+
+
+def read_secret_file(path: Path, subject: str) -> bytes:
+    """The file's bytes; a refusal names the path in an ``UnsoundSecretFile``, never the content."""
+    shown = shown_path(path)
     try:
         read = _read_through_one_descriptor(path, subject)
     except OSError as error:
