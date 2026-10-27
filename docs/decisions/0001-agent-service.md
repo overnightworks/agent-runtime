@@ -5060,6 +5060,25 @@ own agent, with the service account as principal and no on-behalf-of caller.
   does lose every run record); a capability's `exp` is fixed at admission and independent of run
   liveness.
 
+**Amendment (27.10.2026, #494).** The service configuration is the model's one owner: `[defaults]
+model`, overridden by `[apps.<app>] model` and `[apps.<app>.agents.<agent>] model`, the most
+specific level winning. Neither the request nor the agent file names a model, and no app reads a
+service setting, so `GET /offer` is removed; an app learns which model answered from
+`run_started`, which names the model and the route it was given, as names and not proof of who
+answered. Built-in tools (#488) take the same three levels; `runs_as_app` stays a grant in the
+agent's own table and limits stay global in `[runs]`. Protocol 3 replaces protocol 2 on one
+switch day, with no coexistence and no backwards compatibility; 0.10.0 implements it. This
+supersedes #444's split (the request names the model, the service checks it), H5's `GET /offer`
+and "the wire stays version 2". Authority: the operator's rulings on #494 (27.10.2026) and its
+cards D1 to D6, each ruled A:
+- D1: no `choices` and no pick in the request, the agent file or the configuration.
+- D2: model prefixes and `[cli.<provider>]` tables name the vendor, `anthropic` and `openai`.
+- D3: one name means one model on both routes; the paid route's name mapping is a named gap, owned
+  by #463 and edge#299, and the paid route stays off until it is proven.
+- D4: profiles fold into `[cli.<provider>]`.
+- D5: the wire word `purpose` becomes `agent`.
+- D6: an installation without a `[cli]` model list does not start.
+
 ## Out of scope at this size
 
 - arbitrary MCP endpoints and dynamic discovery;
