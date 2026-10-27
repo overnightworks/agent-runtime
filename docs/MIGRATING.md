@@ -6,6 +6,8 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 
 The service configuration names a default model, which an app and an agent may override. The service reads them at admission, and the run request and the agent file name no model.
 
+On the switch day an operator pins the three 0.10.0 wheels together, rewrites `service.toml` to the shapes below, and switches every app on the same day: the service refuses protocol 2, and nothing accepts both the old and the new names.
+
 | Before (0.9.0) | Now |
 | --- | --- |
 | The configuration named no model | `[defaults] model = "<provider>/<model>"` is required; `model` is also accepted in `[apps.<app>]` and `[apps.<app>.agents.<agent>]`. A missing `[defaults]` table stops startup with exit 2 naming `defaults`; a `[defaults]` without `model`, a name outside the wire's grammar or a name that no `[cli.<provider>] models` lists stops it naming `defaults.model`, `apps.<app>.model` or `apps.<app>.agents.<agent>.model` ([operations.md](operations.md), "Starting the service"). |
