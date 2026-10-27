@@ -190,4 +190,3 @@ def main(argv: Sequence[str] | None = None, standard_input: BinaryIO | None = No
         read_login,
         sys.stdin.buffer if standard_input is None and sys.stdin is not None else standard_input,
     )
-
