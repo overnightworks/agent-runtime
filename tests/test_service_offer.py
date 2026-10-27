@@ -41,7 +41,6 @@ from service_support import (
     served,
     service_config,
     with_listed_models,
-    without_cli,
     without_profiles,
 )
 from webauth.https_client import KeySetFetchError
@@ -171,7 +170,6 @@ CALLERS = {
 CONFIGS = {
     "full": _full_config,
     "listed-name-without-a-profile": lambda: without_profiles(_full_config()),
-    "no-cli": lambda: without_cli(_full_config()),
 }
 RUNNER_SETS = {
     "no-runner": (False, False),

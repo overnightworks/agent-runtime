@@ -46,7 +46,6 @@ from service_support import (
     service_config,
     service_config_file,
     with_listed_models,
-    without_cli,
     without_profiles,
 )
 from webauth.https_client import KeySetFetchError
@@ -537,8 +536,6 @@ def test_h3_a_null_model_runs_the_default_even_when_the_subscription_lists_nothi
 @pytest.mark.parametrize(
     ("configure", "groups", "api_route"),
     [
-        pytest.param(without_cli, API_MEMBER, True, id="H4-no-cli-api"),
-        pytest.param(without_cli, SUBSCRIBER, False, id="H5-no-cli-subscriber"),
         pytest.param(without_profiles, API_MEMBER, True, id="H6-no-profiles-api"),
         pytest.param(without_profiles, SUBSCRIBER, False, id="H7-no-profiles-subscriber"),
         pytest.param(

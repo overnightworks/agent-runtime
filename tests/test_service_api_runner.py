@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from service_support import (
     API_ALIAS,
     API_GROUP,
+    LISTED_MODEL,
     SONGMAKER_GROUP,
     TokenMint,
     decoded_events,
@@ -19,7 +20,6 @@ from service_support import (
     run_body,
     run_headers,
     service_config,
-    without_cli,
 )
 from service_support import logging_state_snapshot as logging_state_snapshot
 from test_openai_adapter import assert_closed_refusal, caller_error, malformed_completions
@@ -39,9 +39,9 @@ def credentials(path: Path, document):
     return path
 
 
-def configured(tmp_path, *, cli=False, **api):
+def configured(tmp_path, **api):
     path = credentials(tmp_path / "gateway.json", {"shared_key": "synthetic-gateway-key"})
-    base = service_config() if cli else without_cli(service_config())
+    base = service_config()
     return ServiceConfig.model_validate({
         **{name: getattr(base, name) for name in ServiceConfig.model_fields},
         "api": {"completion_url": "http://gateway/v1/chat/completions",
@@ -324,12 +324,13 @@ def test_repeated_submissions_each_send_one_http_request(tmp_path, monkeypatch):
     assert decoded_events(first.content)[0].run_id != decoded_events(second.content)[0].run_id
 
 
-def test_optional_api_installation_is_independent_and_offer_catalog_stays_empty(tmp_path):
+def test_the_api_runner_is_installed_beside_the_cli_runner_and_the_offer_lists_the_cli_models(
+    tmp_path,
+):
     config = configured(tmp_path)
     runners = installed_runners(config, None, LoopClock())
-    assert runners.cli is None
+    assert runners.cli is not None
     assert runners.api is not None
-    assert installed_runners(without_cli(service_config()), None, LoopClock()).api is None
 
     async def run():
         mint = TokenMint()
@@ -339,7 +340,9 @@ def test_optional_api_installation_is_independent_and_offer_catalog_stays_empty(
             response = await client.get("/offer", headers=run_headers(
                 mint.workload(), mint.user(groups=[API_GROUP, SONGMAKER_GROUP])))
             assert response.status_code == 200
-            assert response.json()["data"] == []
+            assert [entry["id"] for entry in response.json()["data"]] == [
+                f"claude/{LISTED_MODEL}"
+            ]
 
     asyncio.run(run())
 
@@ -506,7 +509,7 @@ def test_full_cli_capacity_does_not_block_the_real_api_runner(tmp_path, monkeypa
 
     from agent_runtime_service.runners import Runners
 
-    config = configured(tmp_path, cli=True)
+    config = configured(tmp_path)
     config = config.model_copy(update={"runs": config.runs.model_copy(
         update={"max_parallel_cli_runs": 1})})
     fake_gateway(monkeypatch, lambda request: httpx.Response(200, json=answer()))
@@ -539,7 +542,7 @@ def test_full_cli_capacity_does_not_block_the_real_api_runner(tmp_path, monkeypa
     asyncio.run(run())
 
 
-def test_process_entry_installs_api_without_a_cli_version_probe(
+def test_process_entry_installs_the_api_route_beside_the_probed_cli_program(
     tmp_path, monkeypatch, logging_state_restored,
 ):
     import uvicorn
@@ -555,8 +558,7 @@ def test_process_entry_installs_api_without_a_cli_version_probe(
     fake_gateway(monkeypatch, lambda request: httpx.Response(200, json=answer()))
     monkeypatch.setattr(cli, "harden_process", lambda: None)
     monkeypatch.setattr(configuration, "load_config", lambda path: config)
-    monkeypatch.setattr(cli_version, "require_pinned_versions", lambda config: pytest.fail(
-        "API-only installation probed a CLI"))
+    monkeypatch.setattr(cli_version, "require_pinned_versions", lambda config: None)
     mint = TokenMint()
     original = create_app
     monkeypatch.setattr("agent_runtime_service.app.create_app", lambda config, **options: original(
