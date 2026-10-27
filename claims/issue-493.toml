@@ -1,0 +1,8 @@
+claim_id = "44533feb8857473084079ea326e5b068"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "0ad0e95548d38622e9c8b76c3ed046333b4ee4d5"
+branch = "claude/issue-493-t-release-0-9-0"
+scope = ["docs/MIGRATING.md", "legal/datenschutz.html", "packages/client/pyproject.toml", "packages/service/pyproject.toml", "pyproject.toml", "src/agent_runtime/__init__.py", "uv.lock"]
+opened_commit = "076e9400bada314c8f7d582b955edde778d5e620"
+whole_reason = "A release moves the seven version literals, the migration section and the shipped privacy section together; split, a tag could carry disagreeing versions or an unapproved section."
