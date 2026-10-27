@@ -62,7 +62,11 @@ runs on, never from the purpose. Every check precedes any child process.
 
 ```mermaid
 flowchart TB
-    request["POST /runs"] --> gate{"user in /apps/&lt;app&gt;<br/>or below?"}
+    request["POST /runs"] --> credential{"Authorization sent?"}
+    credential -->|no| own{"no Authorization: agent<br/>runs as the app?"}
+    own -->|no| refused["401 unauthorized<br/>or 403 forbidden"]
+    own -->|yes| tools
+    credential -->|yes| gate{"user in /apps/&lt;app&gt;<br/>or below?"}
     gate -->|no| forbidden["403 forbidden"]
     gate -->|yes| role{"caller's role in<br/>request.roles?"}
     role -->|no| forbidden
@@ -87,10 +91,11 @@ flowchart TB
 *Question: which route serves this caller? Source:
 `agent_runtime_service.app._admitted`, `agent_runtime_service.routing.route`; `GET /offer`
 (`agent_runtime_service.offer`) is the second reader of `route`. The groups and models are
-operator configuration ([operations.md](operations.md)).*
+operator configuration ([operations.md](operations.md)). An app's own run is routed from the
+groups its workload token carries.*
 
 Keycloak decides who may use the subscription and who the paid route, through
-groups; the service holds no user list. A requested model is never replaced by
+groups of a person, or for an app's own run of its service account; the service holds no user list. A requested model is never replaced by
 another. The independently installed API runner sends the selected model (or
 configured alias) through the core's OpenAI-compatible conversation adapter. Each
 round is checked before releasing text or invoking granted MCP tools. The API route
@@ -126,6 +131,9 @@ service's container ([host.md](host.md)).
   its workload token, supplies the agent's allowed roles, its tools and the
   requested model; configuration decides the rest. It carries no MCP URL, MCP
   token, route or user id.
+- *An app runs as itself only for the agents the operator enabled.* The principal of
+  an app's own run is its service account, and its route comes from that account's groups.
+  The list (`runs_as_app`) is an aid for a cooperative app; the boundary is the groups.
 - *The app owns its tools and their effects.* Tools run in the app, behind its one
   registered MCP origin. The request names the tools and their effects; the
   service signs a per-run capability that grants exactly those names, and the app

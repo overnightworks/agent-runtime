@@ -5002,6 +5002,64 @@ pinned a release without ticket code.
 - A run-time audit line for on-behalf-of work is no longer a gap on #445; its owner is #18.
 - H12's Context clause stands: an app must never assert a principal on its own.
 
+*Amendment (27.10.2026, #479, #489).* An app's own agent runs on the app's workload token alone.
+Authority: the operator's „ja“ (27.10.2026, #479 line 3) to "What the app's credential alone can
+do" below, and his words of 26.10.2026 in #479 that background work of an app runs as the app's
+own agent, with the service account as principal and no on-behalf-of caller.
+- The mental model's "two tokens — the end user's and its own" holds for a run that serves a
+  person. An app's own run carries the workload token alone.
+- H3's first bullet holds for a person's run. A request with neither `Authorization` nor
+  `Agent-Job-Ticket` is the app's own run: the workload token is verified and bound as before, and
+  the principal is `(iss, workload sub)`. Any `Authorization` header, even an empty or malformed
+  one, keeps the request on the person's path and never falls through; selection is by header
+  presence, not by the header's validity.
+- H3's amendment of #389: the static app registry gains `[apps.<app>.agents.<purpose>]
+  runs_as_app = true`, which names an agent that may run as its app. The run is admitted only for
+  such a pair, else 403 `forbidden`, and an app with no such agent answers 401 before the body is
+  read. The list is a tripwire: an aid that stops a cooperative app's person agent from silently
+  running as the app when it loses the user token. It cannot constrain a malicious app, because the
+  request carries the whole turn and the purpose is only a label. The boundary is the groups of the
+  app's service account in Keycloak.
+- H5: the app's own run is routed by the same `route` from the groups its workload token carries
+  (`[identity] group_claim`), with the request's model. No route group is `not_enabled`, and a
+  full subscription is `busy` without falling back to the paid route. The app sends no route and
+  the configuration holds none per agent.
+- H12: what the app's credential alone can do (the operator's „ja“ ruled this text).
+
+  Today neither the client secret nor a workload access token can start a run. After this
+  amendment, for an app with an agent that runs as the app:
+  - **A stolen workload access token** (accepted only with `exp - iat <= 300`) starts any number
+    of runs of the enabled agents, with any prompt, until its `exp` plus `[identity]
+    leeway_seconds` (0 in the deployment today). It cannot mint new tokens.
+  - **A stolen client secret** mints fresh workload tokens for as long as the client is enabled
+    with that secret and its service account holds `agent-workload`. That is unbounded until
+    recovery. In the deployment today it is the same secret the app uses to sign people in.
+  - **Per run**, bounds are `[runs]`: `max_duration_s`, `max_tool_calls`, `max_bytes`. The
+    capability is valid until admission plus `max_duration_s`.
+  - **Concurrency.** On the CLI route, app runs share `max_parallel_cli_runs` with people: an
+    attacker can take every place, and the operator's own person-facing agent then gets `busy`
+    (no fallback). On the API route the service has no concurrency or count limit; cost is
+    bounded only by whatever the gateway enforces per app credential (#463, H10b; not built).
+  - **Attribution.** A run is attributed to the app's service account, never to a person. Run
+    records are in memory, at most 10,000 ended records, unavailable one hour after completion,
+    purged lazily; active records are outside that cap. There is no durable audit line (that is
+    #18) and no replay detection.
+
+  Recovery, and how far it reaches:
+  - Remove the service account from its route groups in Keycloak: new tokens get `not_enabled`;
+    issued tokens keep their groups until `exp` plus leeway.
+  - Remove `agent-workload` from the service account: same timing, and it also stops every
+    person run of that app.
+  - Rotate the client secret: stops minting; the client is shared, so the app redeploys with the
+    new secret; issued tokens survive until `exp` plus leeway.
+  - Set `runs_as_app = false` or remove the agent's table: an edge change and a restart. That is
+    an operational action, not a revocation.
+
+  Three things never to be read as one: credential revocation does not cancel an admitted run (no
+  introspection, no cancel route); a process restart is no defined cancellation guarantee (it
+  does lose every run record); a capability's `exp` is fixed at admission and independent of run
+  liveness.
+
 ## Out of scope at this size
 
 - arbitrary MCP endpoints and dynamic discovery;

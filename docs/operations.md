@@ -23,7 +23,9 @@ file, the Claude token file and any API credential file are read and checked wit
 ## Who may run what
 
 A caller presents a workload token bound to one registered app and a user token
-bound to one principal (`agent_runtime_service.identity`). The checks run in this order:
+bound to one principal (`agent_runtime_service.identity`); an app's own run, for an
+agent with `runs_as_app = true`, presents the workload token alone. The checks below run
+in this order for a person's run:
 
 1. The user must be a member of the app: one of their groups is `/apps/<app>` or
    a path below it (`/apps/notes-other` is not a member of `notes`). This holds
@@ -46,6 +48,11 @@ bound to one principal (`agent_runtime_service.identity`). The checks run in thi
    the profile, marked or not, and with two exactly one must be marked. A run that names
    tools and whose profile's provider has no tool relay yet (Codex) gets 403 `not_enabled`
    before any place, capability or program, never a silent drop and never another route.
+
+An app's own run skips steps 1 and 2: its agent's table `[apps.<app>.agents.<purpose>]` must say
+`runs_as_app = true`, else 403 `forbidden`; its route comes from the groups of the app's Keycloak
+service account, and which groups that account holds is a rights decision (decision record H2).
+The list is an aid for a cooperative app and no boundary; the groups are the boundary.
 
 At most `[runs] max_parallel_cli_runs` (default 5) CLI runs are admitted; one
 beyond gets 429 `busy` with `Retry-After` and never falls back to the API
@@ -95,6 +102,12 @@ mints each admitted run a capability ([wire.md](wire.md)), signed with the
 service's one RSA-3072 key, `[signing] key_file`. The service trusts the CA
 bundle `[mcp] ca_file` names for these origins alone. The service never makes
 its key; generation and rotation are the A1a4 ruling in the decision record.
+
+An app may also run its own agent on its workload token alone. Name each such agent in
+`[apps.<app>.agents.<purpose>]` with `runs_as_app = true`; an absent table or `false` means the
+agent never runs as the app, and a table name that is no valid purpose, a non-boolean value or an
+unknown key stops startup (exit 2, naming the field). Changing the list is a configuration change
+and a restart; it revokes nothing already admitted.
 
 ## The subscription login
 

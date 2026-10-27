@@ -238,6 +238,11 @@ def _with_key_set_url(url: str) -> str:
     )
 
 
+def assert_startup_refuses(tmp_path, capsys, text, named_field):
+    assert main(["--config", str(_written(tmp_path, text))]) == EXIT_BAD_CONFIG
+    assert named_field in capsys.readouterr().err
+
+
 @pytest.mark.parametrize(
     ("text", "named_field"),
     [
@@ -358,10 +363,7 @@ def _with_key_set_url(url: str) -> str:
     ],
 )
 def test_a_refused_file_stops_startup_naming_the_field(tmp_path, capsys, text, named_field):
-    exit_status = main(["--config", str(_written(tmp_path, text))])
-
-    assert exit_status == EXIT_BAD_CONFIG
-    assert named_field in capsys.readouterr().err
+    assert_startup_refuses(tmp_path, capsys, text, named_field)
 
 
 @pytest.mark.parametrize(
@@ -674,9 +676,7 @@ def test_a_relative_mcp_ca_file_is_refused_by_the_configuration(tmp_path, capsys
 def test_a_missing_mcp_ca_file_stops_startup_naming_the_key(tmp_path, capsys):
     absent = tmp_path / "absent-ca.pem"
     text = VALID_CONFIG.replace(MCP_SECTION, f"[mcp]\nca_file = {json.dumps(str(absent))}\n\n")
-
-    assert main(["--config", str(_written(tmp_path, text))]) == EXIT_BAD_CONFIG
-    assert "mcp.ca_file: cannot be loaded" in capsys.readouterr().err
+    assert_startup_refuses(tmp_path, capsys, text, "mcp.ca_file: cannot be loaded")
 
 
 CANARY = "canary-token-value-7f3a91"
@@ -935,12 +935,12 @@ def test_a_path_swapped_after_the_open_is_judged_by_the_opened_token_file(tmp_pa
     assert config.profiles["claude-main"].token_file == token_file
 
 
-PROFILE_TABLE = (
-    '[profiles.claude-main]\nprovider = "claude"\n' + TOKEN_FILE_LINE + "\n\n"
-)
+PROFILE_TABLE = '[profiles.claude-main]\nprovider = "claude"\n' + TOKEN_FILE_LINE + "\n\n"
 NO_PROFILE = _with(PROFILE_TABLE, "")
 WITHOUT_TOKEN_FILE = _with(TOKEN_FILE_LINE + "\n", "")
 WITHOUT_ORIGIN = _with(SONGMAKER_ORIGIN_LINE, "")
+
+
 @pytest.fixture
 def served_apps(monkeypatch, logging_state_restored):
     served = []
