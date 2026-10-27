@@ -36,13 +36,13 @@ from agent_runtime.tools import (
 from agent_runtime_client.run_stream import RunStream, StreamViolation, ViolationKind, parse_event
 from agent_runtime_client.tools import ToolDeclaration, ToolEffect
 from agent_runtime_client.wire import (
+    MAX_AGENT_LENGTH,
     MAX_MESSAGE_LENGTH,
-    MAX_PURPOSE_LENGTH,
     PROTOCOL_VERSION,
+    AgentName,
     AgentRoles,
     ClientLoss,
     FailureCode,
-    Purpose,
     RejectionCode,
     RunEvent,
     RunRejection,
@@ -409,7 +409,7 @@ def test_a_status_body_off_the_contract_is_refused(body: dict[str, object]) -> N
 
 REQUEST = {
     "v": PROTOCOL_VERSION,
-    "purpose": "assistant",
+    "agent": "assistant",
     "roles": ["admin", "user"],
     "turn": {
         "system": "You are a helpful assistant.",
@@ -530,9 +530,9 @@ def test_an_event_with_a_lone_surrogate_in_its_text_is_refused(
     assert violation.kind is ViolationKind.SCHEMA_MISMATCH
 
 
-def test_a_run_request_with_a_lone_surrogate_in_its_purpose_is_refused() -> None:
+def test_a_run_request_with_a_lone_surrogate_in_its_agent_is_refused() -> None:
     with pytest.raises(ValidationError):
-        RunRequest.model_validate({**REQUEST, "purpose": "\ud800"})
+        RunRequest.model_validate({**REQUEST, "agent": "\ud800"})
 
 
 def test_a_rejection_with_a_lone_surrogate_in_its_message_is_refused() -> None:
@@ -714,9 +714,9 @@ def test_only_a_running_run_can_be_cut_short(events: list[RunEvent]) -> None:
         stream.cancellation_terminal()
 
 
-def test_a_run_request_with_an_empty_purpose_is_refused() -> None:
+def test_a_run_request_with_an_empty_agent_is_refused() -> None:
     with pytest.raises(ValidationError):
-        RunRequest.model_validate({**REQUEST, "purpose": ""})
+        RunRequest.model_validate({**REQUEST, "agent": ""})
 
 
 def test_a_violation_detail_shows_the_first_problems_and_counts_the_rest() -> None:
@@ -729,21 +729,21 @@ def test_a_violation_detail_shows_the_first_problems_and_counts_the_rest() -> No
     assert len(violation.detail) < 1_000
 
 
-PURPOSE = TypeAdapter(Purpose)
+AGENT = TypeAdapter(AgentName)
 AGENT_ROLES = TypeAdapter(AgentRoles)
 
 
-@pytest.mark.parametrize("text", ["a", "notes-2", "a" + "b" * (MAX_PURPOSE_LENGTH - 1)])
-def test_a_purpose_in_the_grammar_is_accepted(text: str) -> None:
-    assert PURPOSE.validate_python(text) == text
+@pytest.mark.parametrize("text", ["a", "notes-2", "a" + "b" * (MAX_AGENT_LENGTH - 1)])
+def test_an_agent_in_the_grammar_is_accepted(text: str) -> None:
+    assert AGENT.validate_python(text) == text
 
 
 @pytest.mark.parametrize(
-    "text", ["a" + "b" * MAX_PURPOSE_LENGTH, "A", "1a", "-a", "a_b", "a.b", "a\n", ""]
+    "text", ["a" + "b" * MAX_AGENT_LENGTH, "A", "1a", "-a", "a_b", "a.b", "a\n", ""]
 )
-def test_a_purpose_outside_the_grammar_is_refused(text: str) -> None:
+def test_an_agent_outside_the_grammar_is_refused(text: str) -> None:
     with pytest.raises(ValidationError):
-        PURPOSE.validate_python(text)
+        AGENT.validate_python(text)
 
 
 @pytest.mark.parametrize("roles", [["admin"], ["admin", "user"]])

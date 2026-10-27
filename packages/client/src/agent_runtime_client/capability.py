@@ -2,7 +2,7 @@
 
 The service mints one capability per run (decision record 0001, H3 and the A1a4
 ruling) and hands it to the runner as a bearer token of type
-``agent-capability+jwt``. ``agent_runtime_client.mcp_server`` verifies against this module:
+``agent-capability-2+jwt``. ``agent_runtime_client.mcp_server`` verifies against this module:
 it pins RS256 itself, trusts the one configured public key, checks the token type, the
 issuer, the audience (its own ``McpOrigin``), the length bound and these claims,
 refuses a token issued in the future, and checks each call's tool against
@@ -22,7 +22,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validat
 from agent_runtime_client.wire import NonEmptyUnicodeText
 
 CAPABILITY_ISSUER: Final = "agent-service"
-CAPABILITY_TOKEN_TYPE: Final = "agent-capability+jwt"
+CAPABILITY_TOKEN_TYPE: Final = "agent-capability-2+jwt"
 MAX_CAPABILITY_CHARACTERS: Final = 8192
 SIGNING_KEY_BITS: Final = 3072
 SIGNING_KEY_EXPONENT: Final = 65537
@@ -140,7 +140,7 @@ class CapabilityClaims(_StrictClaims):
     iat: int
     exp: int
     app: NonEmptyUnicodeText
-    purpose: NonEmptyUnicodeText
+    agent: NonEmptyUnicodeText
     principal: CapabilityPrincipal
     tools: Annotated[tuple[NonEmptyUnicodeText, ...], Field(strict=False)]
 

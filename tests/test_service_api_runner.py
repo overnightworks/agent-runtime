@@ -526,7 +526,7 @@ def test_full_cli_capacity_does_not_block_the_real_api_runner(tmp_path, monkeypa
                     "/runs", json=run_body(), headers=both)
                 assert busy.status_code == 429
                 paid = await client.post(
-                    "/runs", json=run_body(purpose=PAID_AGENT), headers=both)
+                    "/runs", json=run_body(agent=PAID_AGENT), headers=both)
                 assert isinstance(decoded_events(paid.content)[-1], Succeeded)
         finally:
             socket.leave()

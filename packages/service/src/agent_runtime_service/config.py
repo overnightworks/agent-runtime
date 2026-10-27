@@ -64,7 +64,7 @@ from agent_runtime.secret_file import (
     shown_text,
 )
 from agent_runtime_client.capability import McpOrigin
-from agent_runtime_client.wire import MAX_EVENT_BYTES, MODEL_PART_PATTERN, ModelName, Purpose
+from agent_runtime_client.wire import MAX_EVENT_BYTES, MODEL_PART_PATTERN, AgentName, ModelName
 from agent_runtime_service.api_credentials import read_api_credentials
 from agent_runtime_service.capability import CapabilityScope
 from agent_runtime_service.signing import SigningKey, load_signing_key
@@ -403,11 +403,11 @@ class AppConfig(_Section):
     workload_client: NonEmptyText
     model: ModelName | None = None
     mcp_origin: McpOrigin | None = None
-    agents: Mapping[Purpose, AgentConfig] = {}
+    agents: Mapping[AgentName, AgentConfig] = {}
 
-    def runs_as_itself(self, purpose: str) -> bool:
-        agent = self.agents.get(purpose)
-        return agent is not None and agent.runs_as_app
+    def runs_as_itself(self, agent: str) -> bool:
+        agent_config = self.agents.get(agent)
+        return agent_config is not None and agent_config.runs_as_app
 
     @property
     def has_an_agent_that_runs_as_itself(self) -> bool:
@@ -610,12 +610,12 @@ class ServiceConfig(_Section):
                 ) from error
         return self
 
-    def model_for(self, app_name: str, purpose: str) -> ModelName:
-        """The model of the app's run of ``purpose``: the agent's, else the app's, else defaults."""
+    def model_for(self, app_name: str, agent: str) -> ModelName:
+        """The model of the app's run of ``agent``: the agent's, else the app's, else defaults."""
         app = self.apps[app_name]
-        agent = app.agents.get(purpose)
-        if agent is not None and agent.model is not None:
-            return agent.model
+        agent_config = app.agents.get(agent)
+        if agent_config is not None and agent_config.model is not None:
+            return agent_config.model
         return app.model if app.model is not None else self.defaults.model
 
     def capability_scope(self, app_name: str, tools: Iterable[str]) -> CapabilityScope | None:

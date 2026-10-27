@@ -21,7 +21,7 @@ import pytest
 from bounds import TEST_WAIT_SECONDS, within_the_bound
 from service_support import (
     API_GROUP,
-    LONGEST_PURPOSE,
+    LONGEST_AGENT,
     SONGMAKER_GROUP,
     SUBSCRIPTION_GROUP,
     ClientSocket,
@@ -253,7 +253,7 @@ def test_h10_a_model_without_a_profile_with_every_place_taken_goes_to_the_api(se
     held = service.fill_the_places()
     both = MINT.user(groups=[SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP])
 
-    _assert_streamed_to_a_terminal(service.run(both, purpose=UNPROFILED_AGENT))
+    _assert_streamed_to_a_terminal(service.run(both, agent=UNPROFILED_AGENT))
 
     assert [(admitted.route, admitted.model) for admitted in service.api.admitted] == [
         (Api(), UNPROFILED)
@@ -265,7 +265,7 @@ def test_h11_a_model_without_a_profile_is_not_enabled_for_a_subscriber_even_when
     held = service.fill_the_places()
     signed_before = len(service.signed)
 
-    refused = service.run(purpose=UNPROFILED_AGENT)
+    refused = service.run(agent=UNPROFILED_AGENT)
 
     assert_rejected(refused, RejectionCode.NOT_ENABLED, 403)
     assert len(service.signed) == signed_before
@@ -288,7 +288,7 @@ def test_a_capability_too_large_after_the_take_releases_its_place(service):
         assert_rejected(
             service.run(
                 MINT.user(sub=QUOTATION_MARKS_256),
-                purpose=LONGEST_PURPOSE,
+                agent=LONGEST_AGENT,
                 tools=TUNED_AT_THE_LIMIT,
             ),
             RejectionCode.CAPABILITY_TOO_LARGE,
