@@ -25,6 +25,7 @@ import ipaddress
 import re
 import tomllib
 from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import dataclass
 from enum import StrEnum
 from functools import cached_property
 from pathlib import Path
@@ -54,6 +55,7 @@ from agent_runtime.secret_file import (
     UnsoundSecretFile,
     read_secret_file,
     read_token_file,
+    shown_path,
     shown_text,
 )
 from agent_runtime_client.capability import McpOrigin
@@ -163,16 +165,26 @@ LOGIN_READERS: Final[Mapping[Provider, Callable[[Path], object]]] = {
 }
 
 
+@dataclass(frozen=True)
+class LoadContext:
+    """What ``load_config`` tells the models about this load; without one, every file is read."""
+
+    read_logins: bool
+
+
 def _sound_token_file(token_file: object, info: ValidationInfo) -> Path:
     """The absolute path, once its provider's reader accepts the file; a refusal is a field error.
 
     The login read here is dropped: a swapped file takes effect on the next run without a
     restart (decision record 0001, line 2), so only the runner's read at each run's start counts.
-    A provider that failed its own field has no reader, and its file is never read.
+    A provider that failed its own field has no reader, and its file is never read. A load that
+    skips login reads (the login command's) still checks the path.
     """
     path = _absolute_path_to("token file", token_file)
+    shown_path(path)
     read_login = LOGIN_READERS.get(info.data.get("provider"))
-    if read_login is not None:
+    logins_skipped = isinstance(info.context, LoadContext) and not info.context.read_logins
+    if read_login is not None and not logins_skipped:
         read_login(path)
     return path
 
@@ -631,7 +643,8 @@ class ServiceConfig(_Section):
         return {app.workload_client: app_name for app_name, app in self.apps.items()}
 
 
-def load_config(path: Path) -> ServiceConfig:
+def load_config(path: Path, *, read_logins: bool = True) -> ServiceConfig:
+    """The configuration the file holds; only the login command loads without reading logins."""
     try:
         text = path.read_text(encoding="utf-8")  # NOSONAR(S8707) the operator names this file
     except OSError as error:
@@ -643,7 +656,7 @@ def load_config(path: Path) -> ServiceConfig:
     except tomllib.TOMLDecodeError as error:
         raise ConfigError(f"{shown_text(str(path))}: not TOML: {shown_text(str(error))}") from error
     try:
-        return ServiceConfig.model_validate(document)
+        return ServiceConfig.model_validate(document, context=LoadContext(read_logins))
     except ValidationError as error:
         refusal = f"{shown_text(str(path))}: {_named_fields(error)}"
     raise ConfigError(refusal)

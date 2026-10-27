@@ -104,9 +104,9 @@ of others. The service keeps no user list; Keycloak decides, so the operator kee
 the subscription groups (`subscription_groups`) to the subscriber alone. Everyone
 else reaches the API route only as a member of `api_groups`; a person in neither
 group is refused `not_enabled` ([ARCHITECTURE.md](ARCHITECTURE.md)).
-The file is the operator's to make and to keep
-fresh, named as `profiles.<name>.token_file`; the library never creates, renews
-or rewrites it. Claude and Codex have a profile, one each; the service refuses a
+The file is the operator's to keep
+fresh, named as `profiles.<name>.token_file`; the core library never creates, renews
+or rewrites it, and the service's login command installs a new one. Claude and Codex have a profile, one each; the service refuses a
 profile for another provider (Grok) and a second one for the same provider.
 
 ```toml
@@ -124,22 +124,35 @@ with two profiles exactly one is marked `default = true`, else the service stops
 at a mode that gives nothing to group or others (0600 or 0400), at most 16 KiB.
 JSON (a credentials file) and API keys (`sk-ant-api...`) are refused; a link is
 followed and its target checked. Run `claude setup-token` once, sign in with the
-subscription, and write the printed token into the file.
+subscription, and install the printed token with the login command.
 
 **A Codex profile.** `provider = "codex"` needs `token_file` and a `[cli.codex]` table
 (`binary`, `version`, `models`). The program must print exactly `codex-cli <version>` for
 `--version`. The file is the Codex sign-in document: JSON with the sign-in's tokens, at a mode
 that gives nothing to group or others, at most 16 KiB, a link followed and its target checked.
-An API key (`OPENAI_API_KEY`), a bare key line and a Claude setup token are refused. The
-service hands the program only a copy without the renewal token. Only the file's content is
-named here; how the dedicated login is made is not.
+A document holding only an API key (`OPENAI_API_KEY`), a bare key line and a Claude setup
+token are refused. The service hands the program only a copy without the renewal token. The
+document comes from the pinned program's device-code sign-in made in a home of its own, never the
+operator's terminal home, because the two would rotate each other's renewal token away; the
+host's setup makes it.
 
-**Renew it (Claude).** The token lasts a year and renewing it is the operator's. Run
-`uv run python scripts/replace_token_file.py PATH` from a checkout: it reads
-the new token on standard input, checks it by the service's rules and swaps it
-in atomically; a refused token leaves the old file untouched. The next run
-reads the file again, so no restart is needed. Renewing a Codex login is not shipped yet:
-that script reads a Claude token and refuses the Codex sign-in document.
+**Install or check it (both providers).** `agent-runtime-service-login --config PATH --profile NAME`
+reads the new document on standard input, checks it with the service's reader for that profile and
+swaps it in beside the old file; the next run reads it without a restart. It exits 0 when the
+file is written, 1 when it is not written and the old file stays, 2 when it refused before
+reading anything (the platform, the configuration, an unknown profile, or a leftover
+`.<file>.new` beside the login file, which is removed by hand), and 3 when it is not written and
+its own `.<file>.new`, which may hold the new login, is not confirmed gone: it names the path.
+It needs what the service's own start reads except the logins, and write access to the login
+file's directory, so run it as the service's own user: the new file is created 0600 and owned by
+whoever runs the command. A failure before the swap leaves the old file untouched. `--check` runs the
+service's reader on the file as it stands and reads no input; exit 0 means the reader accepts
+the file, not that the provider does.
+
+The service does not renew a Codex login yet. When runs fail with `CliLoginRefusedError` in the
+log, install a new sign-in. A copy can fail before its access token's measured 240 hours are up
+(decision record 0001, `#### A1b-C0b`, unavailable facts), so no lifetime is promised. The
+Claude token lasts a year and renewing it is the operator's.
 
 **When it fails.** A missing or refused file stops the service at startup, naming
 `profiles.<name>.token_file` and the kind of fault, never the content, or fails a later run as
