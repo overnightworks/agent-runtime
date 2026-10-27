@@ -64,8 +64,8 @@ pytestmark = [
     pytest.mark.skipif(KEYCLOAK_URL is None, reason="KEYCLOAK_URL names no test Keycloak"),
 ]
 
-CLI_ROUTE = Cli("claude-main", LISTED_MODEL)
-API_ROUTE = Api(f"claude/{LISTED_MODEL}")
+CLI_ROUTE = Cli("claude-main")
+API_ROUTE = Api()
 CLI_SCRIPT = (AssistantTextEvent(text="Hello from the CLI."), FinalEvent(text="CLI done."))
 API_SCRIPT = (AssistantTextEvent(text="Hello from the API."), FinalEvent(text="API done."))
 
@@ -76,6 +76,7 @@ def _frozen_frames(route: str) -> bytes:
     return (
         "id: 0\nevent: run_started\n"
         f'data: {{"v":{PROTOCOL_VERSION},"run_id":"{RUN}","seq":0,"type":"run_started",'
+        f'"model":"claude/{LISTED_MODEL}","route":"{route.lower()}",'
         '"heartbeat_interval_s":15}\n\n'
         "id: 1\nevent: assistant_text\n"
         f'data: {{"v":{PROTOCOL_VERSION},"run_id":"{RUN}","seq":1,"type":"assistant_text",'

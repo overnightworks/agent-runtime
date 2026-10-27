@@ -25,7 +25,7 @@ from typing import Protocol
 from uuid import UUID
 
 from agent_runtime.events import StreamEvent
-from agent_runtime_client.wire import RunRequest
+from agent_runtime_client.wire import ModelName, RunRequest
 from agent_runtime_service.capability import Capability
 from agent_runtime_service.identity import Principal
 from agent_runtime_service.routing import Api, Cli, ServedRoute
@@ -37,6 +37,7 @@ class AdmittedRun:
     app: str
     principal: Principal
     request: RunRequest
+    model: ModelName
     route: ServedRoute
     capability: Capability | None
 

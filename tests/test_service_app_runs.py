@@ -49,7 +49,7 @@ from test_service_config import VALID_CONFIG, _written, assert_startup_refuses
 from webauth.https_client import KeySetFetchError
 
 from agent_runtime.events import AssistantTextEvent, FinalEvent
-from agent_runtime_client.wire import RejectionCode, RunStarted
+from agent_runtime_client.wire import RejectionCode, RouteKind, RunStarted
 from agent_runtime_service.app import create_app
 from agent_runtime_service.config import AgentConfig, ServiceConfig, load_config
 from agent_runtime_service.routing import Api, Cli
@@ -171,7 +171,7 @@ def test_p1_e1_a_workload_token_alone_runs_an_enabled_agent_as_the_service_accou
         TEST_ISSUER,
         SERVICE_ACCOUNT,
     )
-    assert admitted.route == Cli("claude-main", LISTED_MODEL)
+    assert (admitted.route, admitted.model) == (Cli("claude-main"), LISTED)
 
 
 @pytest.mark.parametrize(
@@ -385,19 +385,19 @@ def test_e5_the_roles_of_the_body_are_not_read_for_the_apps_own_run(service):
 
 
 @pytest.mark.parametrize(
-    ("groups", "app_model", "agent_model", "route"),
+    ("groups", "app_model", "agent_model", "route", "model"),
     [
-        pytest.param([SUBSCRIPTION_GROUP], None, None, Cli("claude-main", LISTED_MODEL), id="r1"),
-        pytest.param([API_GROUP], None, UNLISTED, Api(UNLISTED), id="r2-the-agents-model"),
-        pytest.param([SUBSCRIPTION_GROUP, API_GROUP], UNLISTED, None, Api(UNLISTED), id="r3-app"),
+        pytest.param([SUBSCRIPTION_GROUP], None, None, Cli("claude-main"), LISTED, id="r1"),
+        pytest.param([API_GROUP], None, UNLISTED, Api(), UNLISTED, id="r2-the-agents-model"),
+        pytest.param([SUBSCRIPTION_GROUP, API_GROUP], UNLISTED, None, Api(), UNLISTED, id="r3-app"),
         pytest.param(
-            [SUBSCRIPTION_GROUP, API_GROUP], UNLISTED, LISTED, Cli("claude-main", LISTED_MODEL),
+            [SUBSCRIPTION_GROUP, API_GROUP], UNLISTED, LISTED, Cli("claude-main"), LISTED,
             id="r5-the-agent-over-the-app",
         ),
     ],
 )
 def test_r1_r2_r3_r5_the_route_and_model_come_from_the_service_account_and_the_configuration(
-    groups, app_model, agent_model, route
+    groups, app_model, agent_model, route, model
 ):
     config = _config()
     songmaker = config.apps["songmaker"].model_copy(
@@ -409,10 +409,28 @@ def test_r1_r2_r3_r5_the_route_and_model_come_from_the_service_account_and_the_c
     config = config.model_copy(update={"apps": {**config.apps, "songmaker": songmaker}})
 
     with _serving(config) as service:
-        _succeeded(service.start(_own(groups)))
+        response = service.start(_own(groups))
+        _succeeded(response)
 
     served_by = service.cli if isinstance(route, Cli) else service.api
-    assert served_by.admitted[-1].route == route
+    assert (served_by.admitted[-1].route, served_by.admitted[-1].model) == (route, model)
+    started = decoded_events(response.content)[0]
+    assert (started.model, started.route) == (model, route.kind)
+
+
+@pytest.mark.parametrize(
+    ("groups", "route"),
+    [
+        pytest.param([SONGMAKER_GROUP, SUBSCRIPTION_GROUP], RouteKind.CLI, id="cli"),
+        pytest.param([SONGMAKER_GROUP, API_GROUP], RouteKind.API, id="api"),
+    ],
+)
+def test_a_persons_run_starts_naming_the_configured_model_and_its_route(service, groups, route):
+    response = service.start(_person(groups=groups))
+
+    _succeeded(response)
+    started = decoded_events(response.content)[0]
+    assert (started.model, started.route) == (LISTED, route)
 
 
 def test_r4_a_service_account_in_no_route_group_is_not_enabled(service):
