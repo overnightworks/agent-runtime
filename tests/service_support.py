@@ -1043,7 +1043,6 @@ def alice_admitted_run(run_id: uuid.UUID) -> AdmittedRun:
 
 QUIET = AssistantTextEvent(text="")
 
-
 FAILURE_LINE = re.compile(r"(?P<event>.+?): (?P<kind>\w+) at (?P<positions>.+)")
 POSITION = re.compile(r"[\w.]+\.py:\d+:[\w<>]+")
 QUARANTINE_LOGGER: Final = "agent_runtime_service.quarantine"
