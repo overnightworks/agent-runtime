@@ -1,8 +1,0 @@
-claim_id = "7f7b30a02296437da84075aa4cd27341"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "3afb5dba253e4ed6767375b8ada79acfd7444e70"
-branch = "claude/issue-498-remove-offer"
-scope = ["docs/ARCHITECTURE.md", "docs/MIGRATING.md", "docs/operations.md", "docs/wire.md", "packages/client/src/agent_runtime_client/wire.py", "packages/service/src/agent_runtime_service/app.py", "packages/service/src/agent_runtime_service/offer.py", "tests/test_client_offer.py", "tests/test_service_api_runner.py", "tests/test_service_codex_profile.py", "tests/test_service_offer.py", "tests/test_wire_offer.py"]
-opened_commit = "d75fccf07a160a586c90071d59bfe7d583fc0698"
-whole_reason = "One removal of one public route and its client types: the route, its module, its wire types, their tests and the documents presenting them go together, or main carries a route its own docs or client contradict."
