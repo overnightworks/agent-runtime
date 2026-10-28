@@ -1,6 +1,8 @@
 ^tests/test_service_
 ^tests/support/service_support\.py:
 ^tests/support/service_config_support\.py:
+^tests/support/service_cli_runner_support\.py:
+^tests/support/service_codex_support\.py:
 ^tests/test_keycloak_token_shapes\.py:
 ^tests/support/keycloak_realm\.py:
 ^tests/keycloak/realm\.json:

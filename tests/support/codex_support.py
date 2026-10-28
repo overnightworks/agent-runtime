@@ -2,11 +2,29 @@
 
 from __future__ import annotations
 
+import json
 import shlex
 import stat
 from pathlib import Path
+from typing import Any
 
 PRECONDITIONS_MARKER = "preconditions-passed"
+
+
+def codex_line(**fields: Any) -> bytes:
+    return (json.dumps(fields) + "\n").encode()
+
+
+def an_item(event_type: str, item_type: str, **item: Any) -> bytes:
+    return codex_line(type=event_type, item={"id": "item_0", "type": item_type, **item})
+
+
+def a_message(text: str) -> bytes:
+    return an_item("item.completed", "agent_message", text=text)
+
+
+THREAD = codex_line(type="thread.started", thread_id="thread")
+DONE = codex_line(type="turn.completed", usage={})
 
 
 def a_fake_codex(
