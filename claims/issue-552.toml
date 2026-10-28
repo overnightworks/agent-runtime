@@ -1,8 +1,0 @@
-claim_id = "e50afdd2b330438292c22eef7112547e"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "678cf4277b0a5b6adb69af13779a09d19b360c3c"
-branch = "claude/issue-552-service-sends-run-files"
-scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "docs/wire.md", "packages/service/src/agent_runtime_service/cli_runner.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/src/agent_runtime_service/run_events.py", "packages/service/tests/test_cli_runner.py", "packages/service/tests/test_cli_runner_codex_profile.py", "packages/service/tests/test_cli_runner_files.py", "packages/service/tests/test_config_run_files.py", "packages/service/tests/test_run_events.py", "packages/service/tests/test_run_events_limits.py"]
-opened_commit = "730b1cd2e4091b11d703f751207ac329890b91d2"
-whole_reason = "One service contract change: the TOML limit, its hand-over to the collector, the mapping and the charging of the succeeded frame and the two failure codes only make sense together, and the docs and the tests that pin the old text-only behaviour move with them, or main is red between commits."
