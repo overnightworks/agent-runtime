@@ -43,7 +43,6 @@ from agent_runtime.codex.run import (
     CodexRun,
     CodexRunFailure,
     CodexStreamDecoder,
-    CodexToolItem,
     CodexTurnFailed,
     CodexUnknownStreamPart,
     CodexUnreadableLine,
@@ -296,13 +295,59 @@ def test_the_final_text_is_the_last_message_stripped() -> None:
 
 @pytest.mark.parametrize("event_type", ITEM_EVENT_TYPES)
 @pytest.mark.parametrize("item_type", TOOL_ITEM_TYPES)
-def test_a_tool_item_ends_the_run_at_its_first_event(event_type: str, item_type: str) -> None:
-    stream = (an_item(event_type, item_type, command=CLI_TEXT),)
+def test_a_tool_item_is_dropped_without_an_event(event_type: str, item_type: str) -> None:
+    stream = (
+        an_item(
+            event_type, item_type, command=CLI_TEXT, text=CLI_TEXT, aggregated_output=CLI_TEXT
+        ),
+    )
 
-    with pytest.raises(CodexToolItem) as ended:
-        decoded(stream)
+    assert decoded(stream) == []
 
-    assert CLI_TEXT not in str(ended.value)
+
+def test_tool_items_around_the_answer_leave_only_the_answer_and_its_final_text() -> None:
+    failed_command = an_item(
+        "item.completed", "command_execution", command=CLI_TEXT, status="failed", exit_code=1
+    )
+    search = an_item("item.completed", "web_search", query=CLI_TEXT)
+    change = an_item("item.completed", "file_change", changes=[{"path": CLI_TEXT}])
+
+    assert decoded_and_ended(
+        (TURN, failed_command, search, change, a_message("answer"), DONE)
+    ) == [AssistantTextEvent(text="answer"), FinalEvent(text="answer")]
+
+
+def test_a_tool_item_after_the_answer_changes_nothing() -> None:
+    late = an_item("item.completed", "command_execution", command=CLI_TEXT)
+
+    assert decoded_and_ended((a_message("answer"), late, DONE)) == [
+        AssistantTextEvent(text="answer"),
+        FinalEvent(text="answer"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("failure", "stream", "returncode"),
+    [
+        pytest.param(
+            CliLoginRefusedError,
+            (an_item("item.started", "command_execution", command=CLI_TEXT), REFUSED_TURN),
+            0,
+            id="tool-item-then-refused-login",
+        ),
+        pytest.param(
+            CodexAnswerMissing,
+            (an_item("item.completed", "command_execution", command=CLI_TEXT),),
+            0,
+            id="tool-item-without-turn-completed",
+        ),
+    ],
+)
+def test_a_tool_item_masks_neither_a_failed_turn_nor_a_missing_completion(
+    failure: type[Exception], stream: tuple[bytes, ...], returncode: int
+) -> None:
+    with pytest.raises(failure):
+        decoded_and_ended(stream, returncode)
 
 
 @pytest.mark.parametrize(
@@ -323,6 +368,11 @@ def test_a_tool_item_ends_the_run_at_its_first_event(event_type: str, item_type:
         pytest.param(CodexUnreadableLine, (codex_line(text=CLI_TEXT),), id="no-event-type"),
         pytest.param(
             CodexUnreadableLine, (codex_line(type="item.completed"),), id="item-event-no-item"
+        ),
+        pytest.param(
+            CodexUnreadableLine,
+            (codex_line(type="item.started", item={"id": "item_0", "command": CLI_TEXT}),),
+            id="item-without-type",
         ),
         pytest.param(
             CodexTurnFailed,
@@ -413,7 +463,6 @@ def test_a_refused_login_has_its_own_fixed_message_without_cli_text() -> None:
 
 def test_every_failure_class_has_its_own_fixed_message() -> None:
     failures = (
-        CodexToolItem(),
         CodexUnknownStreamPart(),
         CodexUnreadableLine(),
         CodexTurnFailed(),
@@ -493,12 +542,6 @@ def test_the_group_is_gone_and_the_tree_removed_before_the_final_event(
     ("stream", "then", "failure"),
     [
         pytest.param(
-            (an_item("item.started", "command_execution", command=CLI_TEXT),),
-            "exit 0",
-            CodexToolItem,
-            id="tool-item",
-        ),
-        pytest.param(
             (codex_line(type="turn.failed", error={"message": f"401 {CLI_TEXT}"}),),
             "exit 1",
             CodexTurnFailed,
@@ -533,6 +576,24 @@ def test_a_failed_run_raises_its_closed_class_and_still_reaps_and_removes_the_tr
 
     assert (tmp_path / PRECONDITIONS_MARKER).exists()
     assert CLI_TEXT not in f"{ended.value} {caplog.text}"
+    assert list(private_root.iterdir()) == []
+
+
+def test_tool_items_before_the_answer_end_the_run_with_it_and_leave_nothing_behind(
+    drive, tmp_path: Path, private_root: Path
+) -> None:
+    stream = (
+        an_item("item.started", "command_execution", command=CLI_TEXT),
+        an_item("item.completed", "command_execution", command=CLI_TEXT),
+        a_message("answer"),
+        DONE,
+    )
+    run = a_run(binary=a_fake_codex(tmp_path, stream))
+
+    assert drive(collected(PrivateWorkingRoot(private_root), run)) == [
+        AssistantTextEvent(text="answer"),
+        FinalEvent(text="answer"),
+    ]
     assert list(private_root.iterdir()) == []
 
 

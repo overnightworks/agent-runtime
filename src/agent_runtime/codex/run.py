@@ -79,6 +79,7 @@ _TOOL_ITEM_TYPES: Final = frozenset(
     }
 )
 _SILENT_ITEM_TYPES: Final = frozenset({"reasoning", "todo_list", "error"})
+_DROPPED_ITEM_TYPES: Final = _TOOL_ITEM_TYPES | _SILENT_ITEM_TYPES
 _SILENT_EVENT_TYPES: Final = frozenset({"thread.started", "turn.started", "error"})
 _ITEM_EVENT_TYPES: Final = frozenset({"item.started", "item.updated", "item.completed"})
 _AGENT_MESSAGE: Final = "agent_message"
@@ -95,10 +96,6 @@ class CodexRunFailure(Exception):
 
     def __init__(self) -> None:
         super().__init__(self.message)
-
-
-class CodexToolItem(CodexRunFailure):
-    message = "The Codex run used a tool, which a tool-free run refuses."
 
 
 class CodexUnknownStreamPart(CodexRunFailure):
@@ -194,11 +191,9 @@ class CodexStreamDecoder:
 
     def _item_events(self, event: _ItemEvent) -> list[StepEvent]:
         item = event.item
-        if item.type in _TOOL_ITEM_TYPES:
-            _fail(CodexToolItem())
         if item.type == _AGENT_MESSAGE:
             return self._message_events(event.type, item)
-        if item.type not in _SILENT_ITEM_TYPES:
+        if item.type not in _DROPPED_ITEM_TYPES:
             _fail(CodexUnknownStreamPart())
         return []
 

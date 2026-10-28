@@ -162,6 +162,17 @@ document comes from the pinned program's device-code sign-in made in a home of i
 operator's terminal home, because the two would rotate each other's renewal token away; the
 host's setup makes it.
 
+**What a CLI run does with tools.** A Codex tool item in the stream does not fail the run; the
+service drops it and no frame shows it. An item or event type the adapter does not know still ends
+the run `failed: provider_error`. The service switches off the features its Codex adapter names,
+and every other feature follows the pinned CLI. At every pin bump the operator compares that list
+with `codex features list`, run with `HOME` and `CODEX_HOME` set to one empty directory. A name
+that vanished or was renamed already stops runs (`--strict-config`); a new stable feature that is
+on by default does not. A CLI output line over 4 MiB ends the run `failed: provider_error`, and a
+tool's output travels in one line. Claude's `--max-turns` is `[runs] max_tool_calls` plus one and
+counts every tool-using response, built-in tools included. Codex has no turn limit by name, so
+only `[runs] max_duration_s` bounds it.
+
 **Install or check it (both providers).** `agent-runtime-service-login --config PATH --provider PROVIDER` (`anthropic` or `openai`)
 reads the new document on standard input, checks it with the service's reader for that provider and
 swaps it in beside the old file; the next run reads it without a restart. It exits 0 when the

@@ -225,10 +225,22 @@ def test_a_login_file_gone_bad_fails_its_run_before_the_program_and_a_repair_ser
             id="login-refused",
         ),
         pytest.param(
-            (an_item("item.started", "command_execution", command=CANARY),),
+            (an_item("item.started", "new_kind", text=CANARY),),
             "exit 0",
-            "CodexToolItem",
-            id="tool-item",
+            "CodexUnknownStreamPart",
+            id="unknown-item",
+        ),
+        pytest.param(
+            (
+                an_item("item.started", "command_execution", command=CANARY),
+                codex_line(
+                    type="turn.failed",
+                    error={"message": f"unexpected status 401 Unauthorized: {CANARY}"},
+                ),
+            ),
+            "exit 1",
+            "CliLoginRefusedError",
+            id="tool-item-then-login-refused",
         ),
     ],
 )
@@ -311,6 +323,54 @@ def test_a_codex_run_without_words_succeeds_beside_a_file(
     config, _capture = a_codex_service(
         tmp_path,
         fake={"stream": (codex_line(type="turn.started"), DONE), "then": "printf abc > output/a"},
+    )
+
+    events = drive_over_http(child_cleanup, monkeypatch, config, post_a_run)
+
+    terminal = events[-1]
+    assert isinstance(terminal, Succeeded)
+    assert (terminal.text, terminal.files) == ("", (RunFile(name="a", content=b"abc"),))
+
+
+def test_codex_tool_items_reach_no_frame_status_or_log_and_the_answer_succeeds(
+    tmp_path: Path,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level("DEBUG")
+    stream = (
+        an_item("item.started", "command_execution", command=CANARY),
+        an_item(
+            "item.completed", "command_execution", command=CANARY, aggregated_output=CANARY
+        ),
+        an_item("item.completed", "web_search", query=CANARY),
+        a_message("done"),
+        DONE,
+    )
+    config, _capture = a_codex_service(tmp_path, fake={"stream": stream})
+
+    def scenario(base_url: str) -> Any:
+        events = post_a_run(base_url)
+        return events, status_of(base_url, events)
+
+    events, status = drive_over_http(child_cleanup, monkeypatch, config, scenario)
+
+    assert shown(events) == [("assistant_text", "done"), ("succeeded", "done")]
+    seen = f"{[e.model_dump_json() for e in events]} {status.model_dump_json()} {caplog.text}"
+    assert CANARY not in seen
+
+
+def test_a_codex_run_with_tool_items_and_a_file_but_no_words_succeeds_with_the_file(
+    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stream = (
+        codex_line(type="turn.started"),
+        an_item("item.completed", "command_execution", command=CANARY),
+        DONE,
+    )
+    config, _capture = a_codex_service(
+        tmp_path, fake={"stream": stream, "then": "printf abc > output/a"}
     )
 
     events = drive_over_http(child_cleanup, monkeypatch, config, post_a_run)
