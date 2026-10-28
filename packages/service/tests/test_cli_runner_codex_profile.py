@@ -82,12 +82,18 @@ from agent_runtime.codex.run import CODEX_CLI_PROCESS_POOL
 from agent_runtime_client.wire import (
     FailureCode,
     RejectionCode,
+    RunFile,
+    Succeeded,
     Turn,
 )
 from agent_runtime_service.capability import Capability
 from agent_runtime_service.cli_runner import CliRunner, mcp_tls_context
 from agent_runtime_service.config import Provider, ServiceConfig
-from agent_runtime_service.run_events import INVALID_EVENT_MESSAGE, RUNNER_FAILED_MESSAGE
+from agent_runtime_service.run_events import (
+    INVALID_EVENT_MESSAGE,
+    RUNNER_FAILED_MESSAGE,
+    TOO_MUCH_DATA_MESSAGE,
+)
 from agent_runtime_service.run_liveness import LoopClock
 from agent_runtime_service.runners import AdmittedRun, Runners
 
@@ -271,6 +277,47 @@ def test_a_codex_run_without_words_or_a_file_ends_as_an_invalid_event_not_a_runn
         FailureCode.PROVIDER_ERROR,
         [],
     )
+
+
+@pytest.mark.parametrize(
+    ("size", "ending"),
+    [
+        pytest.param(1024, ("succeeded", "done"), id="exactly-the-limit"),
+        pytest.param(1025, ("failed", TOO_MUCH_DATA_MESSAGE), id="one-byte-over"),
+    ],
+)
+def test_a_codex_run_is_held_to_the_configured_files_limit(
+    tmp_path: Path,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    size: int,
+    ending: tuple[str, str],
+) -> None:
+    config, _capture = a_codex_service(
+        tmp_path,
+        runs={"max_files_bytes": 1024},
+        fake={"then": f"truncate -s {size} output/note"},
+    )
+
+    events = drive_over_http(child_cleanup, monkeypatch, config, post_a_run)
+
+    assert shown(events)[-1] == ending
+    assert list(private_root_of(config).iterdir()) == []
+
+
+def test_a_codex_run_without_words_succeeds_beside_a_file(
+    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _capture = a_codex_service(
+        tmp_path,
+        fake={"stream": (codex_line(type="turn.started"), DONE), "then": "printf abc > output/a"},
+    )
+
+    events = drive_over_http(child_cleanup, monkeypatch, config, post_a_run)
+
+    terminal = events[-1]
+    assert isinstance(terminal, Succeeded)
+    assert (terminal.text, terminal.files) == ("", (RunFile(name="a", content=b"abc"),))
 
 
 def test_neither_the_program_arguments_nor_the_service_log_hold_a_login_value(

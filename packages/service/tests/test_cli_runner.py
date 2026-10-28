@@ -93,7 +93,6 @@ from agent_runtime.procfs import GroupCensus
 from agent_runtime.spawn import KillUntilGoneResult
 from agent_runtime_client.sse import RunStreamDecoder
 from agent_runtime_client.wire import (
-    MAX_RUN_FILES_BYTES,
     ClientLoss,
     FailureCode,
     RunEvent,
@@ -228,34 +227,6 @@ def test_a_capability_never_reaches_the_tool_free_cli(
     carriers = captured_carriers(capture)
     assert (bool(signed), shown(events)[-1][0]) == (True, "succeeded")
     assert [name for name, text in carriers.items() if any(token in text for token in signed)] == []
-
-
-@pytest.mark.parametrize(
-    ("size", "ending"),
-    [
-        pytest.param(1, ("succeeded", "done"), id="small-file"),
-        pytest.param(MAX_RUN_FILES_BYTES, ("succeeded", "done"), id="exactly-the-ceiling"),
-        pytest.param(MAX_RUN_FILES_BYTES + 1, ("failed", RUNNER_FAILED_MESSAGE), id="over"),
-    ],
-)
-def test_a_file_a_run_writes_is_read_within_the_wire_ceiling_and_not_sent_yet(
-    tmp_path: Path,
-    child_cleanup: ChildCleanup,
-    monkeypatch: pytest.MonkeyPatch,
-    size: int,
-    ending: tuple[str, str],
-) -> None:
-    config = a_config(tmp_path, a_fake_claude(tmp_path, then=f"truncate -s {size} output/note"))
-
-    def scenario(base_url: str) -> tuple[bytes, list[RunEvent]]:
-        response = post_run(base_url, headers(), run_body(turn=THREE_MESSAGE_TURN))
-        return response.content, decoded_events(response.content)
-
-    raw, events = drive_over_http(child_cleanup, monkeypatch, config, scenario)
-
-    assert shown(events)[-1] == ending
-    assert (b'"files":[]' in raw) is (ending[0] == "succeeded")
-    assert list(private_root_of(config).iterdir()) == []
 
 
 def an_assistant_line(text: str) -> bytes:

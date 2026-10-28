@@ -64,7 +64,13 @@ from agent_runtime.secret_file import (
     shown_text,
 )
 from agent_runtime_client.capability import McpOrigin
-from agent_runtime_client.wire import MAX_EVENT_BYTES, MODEL_PART_PATTERN, AgentName, ModelName
+from agent_runtime_client.wire import (
+    MAX_EVENT_BYTES,
+    MAX_RUN_FILES_BYTES,
+    MODEL_PART_PATTERN,
+    AgentName,
+    ModelName,
+)
 from agent_runtime_service.api_credentials import read_api_credentials
 from agent_runtime_service.capability import CapabilityScope
 from agent_runtime_service.signing import SigningKey, load_signing_key
@@ -353,7 +359,8 @@ class RunConfig(_Section):
 
     Strict numbers: TOML ``true`` is not a heartbeat of 1 second and ``15.5``
     is not a heartbeat of 15. The heartbeat is announced on the wire, whose
-    bound is 1..300.
+    bound is 1..300. ``max_files_bytes`` limits all files of one run together;
+    the wire's ceiling bounds it.
     """
 
     heartbeat_interval_s: StrictInt = Field(default=15, ge=1, le=300)
@@ -364,6 +371,7 @@ class RunConfig(_Section):
     )
     max_tool_calls: StrictInt = Field(default=30, ge=1)
     max_bytes: StrictInt = Field(default=4 * MAX_EVENT_BYTES, ge=1)
+    max_files_bytes: StrictInt = Field(default=8 * 1024 * 1024, ge=1, le=MAX_RUN_FILES_BYTES)
     max_parallel_cli_runs: StrictInt = Field(default=5, ge=1)
 
     @model_validator(mode="after")

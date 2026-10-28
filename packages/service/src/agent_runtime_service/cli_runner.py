@@ -34,7 +34,7 @@ from agent_runtime.codex_login import CodexLogin
 from agent_runtime.config import PrivateWorkingRoot
 from agent_runtime.events import StreamEvent
 from agent_runtime.secret_file import read_token_file
-from agent_runtime_client.wire import MAX_RUN_FILES_BYTES, Turn
+from agent_runtime_client.wire import Turn
 from agent_runtime_service.config import Provider, ServiceConfig, read_codex_login
 from agent_runtime_service.relayed_events import RelayedEvents
 from agent_runtime_service.routing import Cli, split_model
@@ -136,6 +136,7 @@ class CliRunner:
         self._launches = _launches_of(config)
         self._tls_context = tls_context
         self._clock = clock
+        self._max_files_bytes = config.runs.max_files_bytes
 
     async def run(self, admitted: AdmittedRun) -> AsyncGenerator[StreamEvent, None]:
         assert isinstance(admitted.route, Cli)
@@ -153,7 +154,9 @@ class CliRunner:
                 )
             )
             events = RelayedEvents(
-                astream_cli_run(self._working_root, adapter, max_files_bytes=MAX_RUN_FILES_BYTES),
+                astream_cli_run(
+                    self._working_root, adapter, max_files_bytes=self._max_files_bytes
+                ),
                 None if tools is None else tools.calls,
             )
             async for event in events:
