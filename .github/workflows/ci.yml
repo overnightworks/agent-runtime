@@ -201,7 +201,7 @@ jobs:
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
-          cache-dependency-glob: tests/keycloak/requirements.txt
+          cache-dependency-glob: packages/service/tests/fixtures/keycloak/requirements.txt
 
       - name: Start Keycloak with the test realm
         run: |
@@ -213,7 +213,7 @@ jobs:
         run: |
           uv venv --python 3.12 "$RUNNER_TEMP/venv"
           uv pip install --python "$RUNNER_TEMP/venv/bin/python" \
-            --require-hashes --no-build -r tests/keycloak/requirements.txt
+            --require-hashes --no-build -r packages/service/tests/fixtures/keycloak/requirements.txt
 
       - name: Wait until the test realm is served
         run: |
@@ -229,7 +229,7 @@ jobs:
       - name: Token shapes
         run: >-
           "$RUNNER_TEMP/venv/bin/python" -m pytest --noconftest -p no:cacheprovider
-          tests/test_keycloak_token_shapes.py -m keycloak -q -rP
+          packages/service/tests/test_identity_keycloak_token_shapes.py -m keycloak -q -rP
 
       # The workspace's own packages are put on the path rather than built, so
       # this job runs no setup script: every installed package is a locked wheel.
@@ -241,7 +241,7 @@ jobs:
           PYTHONPATH: src:packages/client/src:packages/service/src
         run: >-
           uv run --locked --no-sync --no-build pytest -p no:cacheprovider
-          tests/test_service_keycloak.py -m keycloak -q -rP
+          packages/service/tests/test_app_keycloak.py -m keycloak -q -rP
 
       - name: Keycloak log on failure
         if: failure()

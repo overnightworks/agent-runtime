@@ -6,8 +6,10 @@ import json
 from pathlib import Path
 
 import pytest
-import uvicorn
 from tests.support.provider_test_support import fake_cli_executable
+from tests.support.service_codex_support import (
+    the_served_runs,  # noqa: F401 - the fixture is named in its decorator
+)
 from tests.support.service_config_support import (
     MCP_SECTION,
     VALID_CONFIG,
@@ -23,29 +25,22 @@ import agent_runtime_service.process_hardening as hardening
 from agent_runtime_service.cli import EXIT_BAD_CONFIG, REFUSAL_PREFIX, main
 
 
-@pytest.fixture
-def served(monkeypatch, logging_state_restored):
-    runs = []
-    monkeypatch.setattr(uvicorn, "run", lambda app, **where: runs.append(where))
-    return runs
-
-
 def _one_refusal_line(capsys) -> str:
     refusal = capsys.readouterr().err
     assert refusal.count("\n") == 1
     return refusal
 
 
-def test_a_valid_file_passes_the_check_without_serving(tmp_path, served):
+def test_a_valid_file_passes_the_check_without_serving(tmp_path, served_runs):
     assert main(["--config", str(written(tmp_path, VALID_CONFIG)), "--check"]) == 0
 
-    assert served == []
+    assert served_runs == []
 
 
-def test_a_start_without_check_still_serves(tmp_path, served):
+def test_a_start_without_check_still_serves(tmp_path, served_runs):
     assert main(["--config", str(written(tmp_path, VALID_CONFIG))]) == 0
 
-    assert len(served) == 1
+    assert len(served_runs) == 1
 
 
 def _bad_field(tmp_path: Path, monkeypatch) -> Path:
@@ -79,11 +74,11 @@ def _root_user(tmp_path: Path, monkeypatch) -> Path:
     ],
 )
 def test_a_check_refuses_with_the_starts_one_line_and_serves_nothing(
-    tmp_path, capsys, served, monkeypatch, working_root, configuration
+    tmp_path, capsys, served_runs, monkeypatch, working_root, configuration
 ):
     path = configuration(tmp_path, monkeypatch)
 
     assert main(["--config", str(path), "--check"]) == EXIT_BAD_CONFIG
 
     assert _one_refusal_line(capsys).startswith(REFUSAL_PREFIX)
-    assert served == []
+    assert served_runs == []

@@ -88,8 +88,8 @@ can name its own user.
 
 ### Token shapes (proven by A1a1k)
 
-`tests/test_keycloak_token_shapes.py` fetches real tokens from Keycloak 26.8.1
-serving the test realm `tests/keycloak/realm.json`, verifies them with the
+`packages/service/tests/test_identity_keycloak_token_shapes.py` fetches real tokens from Keycloak 26.8.1
+serving the test realm `packages/service/tests/fixtures/keycloak/realm.json`, verifies them with the
 webauth verifier, and holds these facts in CI (job `keycloak-token-shapes`):
 
 - A service-account token has `azp == client_id ==` its client, carries realm
@@ -299,7 +299,7 @@ table changes with it: the version row reads "not 2"; after the 422 shape row co
 row; and the capability row is the one size check of the actual token. Authority (#382, 21.10.2026): „ok das klingt langsam für mich stimmig“, said after the head explained that an app's own tools are the app's, and „wir bauen das entsprechend“.
 
 **Consequence.** Tests prove each row with minted tokens over a real socket,
-and `tests/test_service_keycloak.py` proves the entrance end to end with real
+and `packages/service/tests/test_app_keycloak.py` proves the entrance end to end with real
 Keycloak 26.8.1 tokens in the `keycloak-token-shapes` job.
 
 ## H2 Whose subscription

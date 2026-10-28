@@ -37,7 +37,7 @@ checks and the release rules.
 
 `AGENTS.md` lists the commands (sync, suite, ruff, `lint-imports`, the three-wheel
 build) and what CI adds. The suite runs without a live provider; the service's
-end-to-end proof, `tests/test_service_keycloak.py`, runs only where `KEYCLOAK_URL`
+end-to-end proof, `packages/service/tests/test_app_keycloak.py`, runs only where `KEYCLOAK_URL`
 names the test Keycloak of the `keycloak-token-shapes` CI job.
 
 ## Licence

@@ -14,14 +14,18 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-import uvicorn
+from tests.support.service_codex_support import (
+    the_served_runs,  # noqa: F401 - the fixture is named in its decorator
+)
 from tests.support.service_config_support import (
     VALID_CONFIG,
     config_file_naming,
     logged_program,
     written,
 )
-from tests.support.service_support import logging_state_snapshot  # noqa: F401 - a fixture, requested by name
+from tests.support.service_support import (
+    logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
+)
 
 import agent_runtime_service.config as service_config
 import agent_runtime_service.process_hardening as hardening
@@ -53,13 +57,6 @@ NON_LINUX_START = textwrap.dedent(
     sys.exit(main(["--config", sys.argv[1]]))
     """
 )
-
-
-@pytest.fixture
-def served(monkeypatch, logging_state_restored):
-    runs = []
-    monkeypatch.setattr(uvicorn, "run", lambda app, **where: runs.append(where))
-    return runs
 
 
 @pytest.fixture
@@ -115,7 +112,7 @@ def _one_line_refusal(capsys) -> str:
     ],
 )
 def test_a_root_or_non_linux_start_ends_in_one_line_before_the_config_is_read(
-    served, capsys, boundary_calls, valid_config, running_platform, effective_user, refusal
+    served_runs, capsys, boundary_calls, valid_config, running_platform, effective_user, refusal
 ):
     calls, recording = boundary_calls
     recording("running_platform", lambda: running_platform)
@@ -125,13 +122,13 @@ def test_a_root_or_non_linux_start_ends_in_one_line_before_the_config_is_read(
     assert main(["--config", str(valid_config)]) == 2
 
     assert _one_line_refusal(capsys) == refusal
-    assert served == []
+    assert served_runs == []
     assert "load_libc" not in calls
     assert "set_not_dumpable" not in calls
     assert "load_config" not in calls
 
 
-def test_a_non_linux_start_does_not_ask_for_the_user(served, boundary_calls):
+def test_a_non_linux_start_does_not_ask_for_the_user(served_runs, boundary_calls):
     calls, recording = boundary_calls
     recording("running_platform", lambda: "darwin")
     recording("effective_user_id", lambda: 1000)
@@ -160,7 +157,7 @@ def test_a_non_linux_interpreter_prints_the_refusal_before_any_unix_only_import(
 
 
 def test_an_unprivileged_start_hardens_before_it_reads_the_config(
-    served, boundary_calls, valid_config
+    served_runs, boundary_calls, valid_config
 ):
     calls, recording = boundary_calls
     recording("set_not_dumpable", lambda: None)
@@ -170,14 +167,14 @@ def test_an_unprivileged_start_hardens_before_it_reads_the_config(
     assert calls == ["set_not_dumpable", "load_config"]
 
 
-def test_an_unprivileged_start_serves_and_still_probes_the_program(tmp_path, served):
+def test_an_unprivileged_start_serves_and_still_probes_the_program(tmp_path, served_runs):
     probe_log = tmp_path / "probe-starts"
     program = logged_program(tmp_path, probe_log)
     config_file = config_file_naming(tmp_path, program)
 
     assert main(["--config", str(config_file)]) == 0
 
-    assert len(served) == 1
+    assert len(served_runs) == 1
     assert probe_log.read_text() == "--version\n"
 
 
@@ -189,7 +186,7 @@ def test_an_unprivileged_start_serves_and_still_probes_the_program(tmp_path, ser
     ],
 )
 def test_a_failing_prctl_ends_in_one_line_with_the_error_text_before_the_config_is_read(
-    monkeypatch, served, capsys, boundary_calls, valid_config, error_number, error_text
+    monkeypatch, served_runs, capsys, boundary_calls, valid_config, error_number, error_text
 ):
     calls, _ = boundary_calls
     monkeypatch.setattr(hardening, "set_not_dumpable", REAL_SET_NOT_DUMPABLE)
@@ -205,7 +202,7 @@ def test_a_failing_prctl_ends_in_one_line_with_the_error_text_before_the_config_
     assert _one_line_refusal(capsys) == (
         f"{REFUSAL_PREFIX}cannot make the process non-dumpable: {error_text}\n"
     )
-    assert served == []
+    assert served_runs == []
     assert "load_config" not in calls
 
 
