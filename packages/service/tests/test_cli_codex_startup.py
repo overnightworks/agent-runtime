@@ -2,7 +2,7 @@
 
 Config rows validate documents (and ``cli.main`` for the refusal a person reads) with a stand-in
 for the pinned CLI and no installed core configuration; the shared builders and constants are
-those of ``test_service_codex_profile``, whose rows run the table.
+those of ``test_cli_runner_codex_profile``, whose rows run the table.
 """
 
 from __future__ import annotations

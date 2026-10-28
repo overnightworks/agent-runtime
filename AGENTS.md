@@ -51,7 +51,7 @@ The suite needs no live provider, and `[image]` is required at collection
 `src packages tests docs` for host words; `.github/host-vocabulary-allowed.txt`
 owns the allowed hits. The required check is `quality / verdict`
 (`quality/config.toml`, `.github/workflows/ci.yml`).
-`tests/test_service_keycloak.py` skips without `KEYCLOAK_URL`, which CI's `keycloak-token-shapes` job sets.
+`packages/service/tests/test_app_keycloak.py` skips without `KEYCLOAK_URL`, which CI's `keycloak-token-shapes` job sets.
 
 ## Releasing
 

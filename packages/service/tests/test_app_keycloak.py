@@ -1,12 +1,12 @@
 """The service end to end with tokens a real Keycloak 26.8.1 issued.
 
 The ``keycloak-token-shapes`` CI job serves the test realm of
-``tests/keycloak/realm.json``; this suite asks it for real client-credentials
-workload tokens and real user tokens, serves the service with uvicorn on a
+``packages/service/tests/fixtures/keycloak/realm.json``; this suite asks it for real
+client-credentials workload tokens and real user tokens, serves the service with uvicorn on a
 loopback socket, streams ``POST /runs`` with httpx, and checks every stream
 against frozen raw SSE frames and through ``RunStreamDecoder``. The negative
 cases Keycloak cannot issue are proven with minted tokens in
-``test_service_entrance.py``.
+``test_app_entrance.py``.
 
 Runs only where ``KEYCLOAK_URL`` names that Keycloak.
 """

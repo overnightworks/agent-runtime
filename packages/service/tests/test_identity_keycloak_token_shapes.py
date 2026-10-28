@@ -1,14 +1,14 @@
 """The token shapes a real Keycloak 26.8.1 issues for the agent service's callers.
 
 The AI entrance builds on these claims, so they are proven against a real
-issuer rather than assumed: `tests/keycloak/realm.json` mirrors the platform
-realm, the `keycloak-token-shapes` CI job serves it from Keycloak, and every
+issuer rather than assumed: `packages/service/tests/fixtures/keycloak/realm.json` mirrors the
+platform realm, the `keycloak-token-shapes` CI job serves it from Keycloak, and every
 token here comes from the realm's token endpoint and is verified against its
 published key set with webauth's RS256 verifier.
 
 Runs only where `KEYCLOAK_URL` names that Keycloak. Needs nothing from the
 workspace: the job runs it with `--noconftest` in the hash-locked environment
-of `tests/keycloak/requirements.txt`.
+of `packages/service/tests/fixtures/keycloak/requirements.txt`.
 """
 
 from __future__ import annotations
