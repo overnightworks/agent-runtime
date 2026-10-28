@@ -1,8 +1,0 @@
-claim_id = "c0e03c00a61b48b0a914b9bb73f194a2"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "81da70679b34cb7040fc74f704d48c4a9622421a"
-branch = "claude/issue-536-s8a-service-tests-config"
-scope = [".github/host-vocabulary-allowed.txt", ".github/workflows/ci.yml", "AGENTS.md", "README.md", "docs/decisions/0001-agent-service.md", "packages/service/tests", "pyproject.toml", "tests/keycloak/realm.json", "tests/keycloak/requirements.in", "tests/keycloak/requirements.txt", "tests/support/keycloak_realm.py", "tests/test_keycloak_token_shapes.py", "tests/test_service_check.py", "tests/test_service_cli_version.py", "tests/test_service_codex_profile.py", "tests/test_service_codex_startup.py", "tests/test_service_entrance.py", "tests/test_service_keycloak.py", "tests/test_service_login.py", "tests/test_service_login_file.py", "tests/test_service_model_config.py", "tests/test_service_process_hardening.py", "tests/test_service_routing.py", "tests/test_service_token_reading.py", "tests/test_service_transport_logging.py"]
-opened_commit = "841356006dd4c2b06a6a0df2f8396d72b70a9593"
-whole_reason = "One rename batch plus the shared configuration it needs: the tests, the Keycloak data they read, the CI job paths, testpaths and the pointers must move together or CI or a pointer breaks."
