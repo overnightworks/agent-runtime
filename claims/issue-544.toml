@@ -1,7 +1,0 @@
-claim_id = "1a4855208ae24fc2a56f80a8d6605c50"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "ce29fc71e3ea8da5c0a69ac49461a0820accd9e2"
-branch = "claude/issue-544-token-minted-at-collection"
-scope = ["tests/test_service_admission.py", "tests/test_service_app_runs.py"]
-opened_commit = "7d9b17cd9e39a227c533a81fe160d6fe37f70876"
