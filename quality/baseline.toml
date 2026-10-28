@@ -14,7 +14,6 @@
 "src/agent_runtime/spawn.py" = 1137
 "tests/support/provider_test_support.py" = 2189
 "tests/support/service_support.py" = 1543
-"tests/test_anchored_group_signal.py" = 812
 "tests/test_catalog.py" = 1045
 "tests/test_claude_provider.py" = 5486
 "tests/test_claude_provider_streaming.py" = 1168
@@ -22,8 +21,8 @@
 "tests/test_codex_cli_adapter.py" = 3089
 "tests/test_grok_cli_adapter.py" = 1212
 "tests/test_process.py" = 6199
+"tests/test_process_run_directories.py" = 841
 "tests/test_procfs.py" = 838
-"tests/test_run_directories.py" = 841
 "tests/test_service_app_tools.py" = 1087
 "tests/test_service_capability.py" = 869
 "tests/test_service_cli_runner.py" = 764
@@ -33,6 +32,7 @@
 "tests/test_service_run_recording.py" = 2034
 "tests/test_service_tool_relay.py" = 1309
 "tests/test_service_tool_relay_barrier.py" = 2010
+"tests/test_spawn_anchored_group_signal.py" = 812
 "tests/test_text_tool_protocol.py" = 888
 
 [function_lines."src/agent_runtime/claude/provider.py"]
@@ -57,9 +57,6 @@
 "ScriptedClaudeChild.__init__" = 64
 "a_fake_claude" = 66
 
-[function_lines."tests/test_anchored_group_signal.py"]
-"test_a_kill_and_census_runs_in_one_hold_that_keeps_a_release_waiting" = 63
-
 [function_lines."tests/test_claude_provider.py"]
 "test_no_builtin_gate_sync_single_flight_waits_for_the_real_result_not_a_placeholder" = 68
 "test_probe_with_a_stalled_pipe_reaps_and_releases_its_admission" = 93
@@ -83,6 +80,9 @@
 [function_lines."tests/test_service_run_recording.py"]
 "_end_a_run" = 94
 
+[function_lines."tests/test_spawn_anchored_group_signal.py"]
+"test_a_kill_and_census_runs_in_one_hold_that_keeps_a_release_waiting" = 63
+
 [clones."src/agent_runtime/codex/protocol.py"]
 event_item = [["src/agent_runtime/codex/transport.py", "_completed_agent_message"]]
 top_level_error_message = [["src/agent_runtime/codex/transport.py", "_completed_agent_message"]]
@@ -90,11 +90,6 @@ top_level_error_message = [["src/agent_runtime/codex/transport.py", "_completed_
 [clones."src/agent_runtime/codex/transport.py"]
 _log_codex_tool_round = [["src/agent_runtime/grok/transport.py", "_log_tool_round"]]
 _tool_transport_prompt = [["src/agent_runtime/grok/transport.py", "_tool_transport_prompt"]]
-
-[clones."tests/test_anchored_kill_until_gone.py"]
-test_a_late_wait_never_starts_an_attempt_at_or_after_the_deadline = [["tests/test_blocking_anchored_child.py", "test_a_late_wait_never_starts_an_attempt_at_or_after_the_deadline"]]
-test_an_unavailable_count_ends_the_call_unchanged_and_never_confirms = [["tests/test_blocking_anchored_child.py", "test_an_unavailable_count_ends_the_call_unchanged_and_never_confirms"]]
-test_the_first_empty_count_in_time_confirms_and_ends_the_call = [["tests/test_blocking_anchored_child.py", "test_the_first_empty_count_in_time_confirms_and_ends_the_call"]]
 
 [clones."tests/test_codex_cli_adapter.py"]
 _codex_tool_events = [["tests/test_grok_cli_adapter.py", "_tool_transport_events"]]
@@ -124,3 +119,8 @@ _token_file_with = [["tests/test_service_signing.py", "_file_with"]]
 
 [clones."tests/test_service_containment_ending.py"]
 test_a_client_leaving_behind_a_decided_answer_still_ends_provider_error_on_a_loss = [["tests/test_service_run_recording.py", "test_a_run_whose_terminal_was_decided_is_recorded_when_the_held_close_is_released"]]
+
+[clones."tests/test_spawn_anchored_kill_until_gone.py"]
+test_a_late_wait_never_starts_an_attempt_at_or_after_the_deadline = [["tests/test_spawn_blocking_anchored_child.py", "test_a_late_wait_never_starts_an_attempt_at_or_after_the_deadline"]]
+test_an_unavailable_count_ends_the_call_unchanged_and_never_confirms = [["tests/test_spawn_blocking_anchored_child.py", "test_an_unavailable_count_ends_the_call_unchanged_and_never_confirms"]]
+test_the_first_empty_count_in_time_confirms_and_ends_the_call = [["tests/test_spawn_blocking_anchored_child.py", "test_the_first_empty_count_in_time_confirms_and_ends_the_call"]]

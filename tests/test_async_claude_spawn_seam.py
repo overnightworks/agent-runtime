@@ -9,7 +9,7 @@ or of ``open_anchored_pipes`` there.
 Two modules are deliberate exceptions and are not listed: ``test_spawn_owner.py``
 (the spawn-policy tests, which name ``create_subprocess_exec`` as a string and
 run the real door) and the anchored-door coexistence test in
-``test_anchored_door.py``, which awaits a stock ``create_subprocess_exec``
+``test_spawn_anchored_door.py``, which awaits a stock ``create_subprocess_exec``
 child beside an anchored zombie.
 """
 
@@ -52,7 +52,7 @@ GUARDED_MODULES = (
     "test_claude_provider_streaming.py",
     "test_claude_anchored_turns.py",
     "test_anchored_turn.py",
-    "test_run_directories.py",
+    "test_process_run_directories.py",
 )
 PATCHING_CALLS = frozenset({"setattr", "patch", "object"})
 GUARDED_DOOR_NAMES = frozenset({"create_subprocess_exec", "open_anchored_pipes"})

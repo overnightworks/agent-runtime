@@ -39,6 +39,9 @@ from agent_runtime.spawn import ChildProcess
 P_PIDFD = 3
 SIGKILLED = -9
 DISARMED = object()
+EXIT_WITH_LINE = (
+    "import sys\nline = sys.stdin.readline()\nsys.exit(int(line) if line.strip() else 0)\n"
+)
 IMPORT_ROOT_PRELUDE = "import os, sys\nsys.path[:0] = sys.argv[1].split(os.pathsep)\n"
 
 _PIDFD_SYSCALL_NUMBERS = {

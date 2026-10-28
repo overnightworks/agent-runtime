@@ -20,6 +20,7 @@ import pytest
 from tests.support import anchored_support
 from tests.support.anchored_kernel import watcher_thread
 from tests.support.anchored_support import (
+    EXIT_WITH_LINE,
     GONE,
     RUNNING,
     SIGKILLED,
@@ -36,7 +37,6 @@ from tests.support.anchored_support import (
     state,
 )
 from tests.support.bounds import TEST_WAIT_SECONDS
-from tests.test_zombie_anchor import EXIT_WITH_LINE
 
 from agent_runtime.spawn import ChildProcess, closed_environment
 
