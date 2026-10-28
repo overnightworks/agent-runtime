@@ -25,7 +25,7 @@ from agent_runtime_client.wire import (
 SECRET_MARKER = "SECRETMARKER"
 
 
-def _file(name: str = "song.txt", content: bytes = b"la la") -> RunFile:
+def _file(name: str = "report.txt", content: bytes = b"la la") -> RunFile:
     return RunFile(name=name, content=content)
 
 
@@ -56,7 +56,7 @@ def test_a_succeeded_event_survives_a_json_round_trip(files: tuple[RunFile, ...]
 def test_a_file_travels_as_a_name_and_standard_base64() -> None:
     dumped = json.loads(succeeded(5, "Done.", (_file(content=b"\xfb\xff"),)).model_dump_json())
 
-    assert dumped["files"] == [{"name": "song.txt", "content": "+/8="}]
+    assert dumped["files"] == [{"name": "report.txt", "content": "+/8="}]
 
 
 def test_files_are_required() -> None:
