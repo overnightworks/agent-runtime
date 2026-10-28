@@ -21,6 +21,7 @@ from typing import Final
 import httpx
 import pytest
 from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.held_runner_support import HeldRunner
 from tests.support.service_codex_support import CODEX_NAME, a_config_with_both_providers
 from tests.support.service_config_support import (
     VALID_CONFIG,
@@ -49,7 +50,6 @@ from tests.support.service_support import (
     served,
     service_config,
 )
-from tests.test_service_admission import HeldRunner
 from webauth.https_client import KeySetFetchError
 
 from agent_runtime.events import AssistantTextEvent, FinalEvent

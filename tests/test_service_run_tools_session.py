@@ -23,8 +23,7 @@ from tests.support.relay_support import (
     post_message,
     yield_until,
 )
-from tests.support.service_support import fake_app_authority  # noqa: F401 - a fixture, requested by name
-from tests.test_service_run_tools import (
+from tests.support.run_tools_support import (
     CALLS_EVENT,
     CAPABILITY,
     CLIENT_EVENT,
@@ -47,6 +46,7 @@ from tests.test_service_run_tools import (
     task_names,
     through_parks,
 )
+from tests.support.service_support import fake_app_authority  # noqa: F401 - a fixture, requested by name
 
 from agent_runtime_client.mcp_wire import CallToolParams, JsonRpcError, JsonRpcErrorCode
 from agent_runtime_service.app_tools import AppToolsSession, UpstreamRefused

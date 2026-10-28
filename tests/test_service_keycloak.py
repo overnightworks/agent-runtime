@@ -42,9 +42,9 @@ from tests.support.service_support import (
     post_run,
     run_body,
     run_headers,
-    runners_that_start_no_run,
     served,
     service_config,
+    unused_runners,
     with_placeholder_run_id,
 )
 from tests.support.wire_builders import started
@@ -251,7 +251,7 @@ def test_only_the_user_who_started_a_run_reads_it_with_real_tokens(verify):
     )
     app = create_app(
         service_config(issuer=realm_url()),
-        runners=runners_that_start_no_run(),
+        runners=unused_runners(),
         records=records,
         fetch_key_set=fetch_key_set_from_test_keycloak,
     )

@@ -21,9 +21,9 @@ from tests.support.service_support import (
     get_run,
     post_run,
     run_headers,
-    runners_that_start_no_run,
     served,
     service_config,
+    unused_runners,
 )
 from webauth.https_client import KeySetFetchError
 
@@ -106,7 +106,7 @@ def test_the_header_is_refused_before_any_token_is_verified(
     if ticket is not None:
         headers["Agent-Job-Ticket"] = ticket
     app = create_app(
-        service_config(), runners=runners_that_start_no_run(), fetch_key_set=_unreachable_issuer
+        service_config(), runners=unused_runners(), fetch_key_set=_unreachable_issuer
     )
 
     with served(app) as base_url:
@@ -132,7 +132,7 @@ def test_the_header_is_refused_without_reading_the_request_body(
         pytest.fail("the request body was read")
 
     app = create_app(
-        service_config(), runners=runners_that_start_no_run(), fetch_key_set=MINT.fetch_key_set
+        service_config(), runners=unused_runners(), fetch_key_set=MINT.fetch_key_set
     )
 
     status = asyncio.run(asgi_post_status(app, headers, receive, (method, path)))

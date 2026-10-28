@@ -64,6 +64,7 @@ from tests.support.relay_support import (
     post_message,
     yield_until,
 )
+from tests.support.run_tools_support import Stall
 from tests.support.service_cli_runner_support import (
     FIRST_LOGIN,
     LOGIN_FILES_GONE_BAD,
@@ -99,7 +100,6 @@ from tests.support.service_support import (
     post_run,
     run_body,
 )
-from tests.test_service_run_tools import Stall
 
 import agent_runtime_service.cli_runner as cli_runner_module
 from agent_runtime import spawn
