@@ -39,7 +39,6 @@ from tests.support.service_support import (
     StepClock,
     SteppedLoop,
     failure_lines,
-    fake_app_authority,  # noqa: F401 - a fixture, requested by name
 )
 
 from agent_runtime.errors import ContainmentLost, RetainedGroup
