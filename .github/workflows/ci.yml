@@ -206,7 +206,7 @@ jobs:
       - name: Start Keycloak with the test realm
         run: |
           docker run --detach --name keycloak --publish 8080:8080 \
-            --volume "$GITHUB_WORKSPACE/tests/keycloak:/opt/keycloak/data/import:ro" \
+            --volume "$GITHUB_WORKSPACE/packages/service/tests/fixtures/keycloak:/opt/keycloak/data/import:ro" \
             "$KEYCLOAK_IMAGE" start-dev --import-realm
 
       - name: Install the job's hash-locked environment

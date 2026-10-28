@@ -23,9 +23,7 @@ from tests.support.service_config_support import (
     logged_program,
     written,
 )
-from tests.support.service_support import (
-    logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
-)
+from tests.support.service_support import logging_state_snapshot  # noqa: F401 - a fixture, requested by name
 
 import agent_runtime_service.config as service_config
 import agent_runtime_service.process_hardening as hardening

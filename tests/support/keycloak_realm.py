@@ -1,4 +1,4 @@
-"""The throwaway Keycloak realm of the service tests' `fixtures/keycloak/realm.json`.
+"""The throwaway Keycloak realm of `packages/service/tests/fixtures/keycloak/realm.json`.
 
 Imports only httpx, webauth (inside `token_verifier`) and the standard library:
 the `keycloak-token-shapes` CI job runs `test_identity_keycloak_token_shapes.py` with
@@ -19,7 +19,8 @@ REALM = "agent-test"
 AGENT_SERVICE_AUDIENCE = "agent-service"
 USER_LOGIN_CLIENT = "songmaker-test"
 
-# Fixed test-only secrets of the throwaway realm in fixtures/keycloak/realm.json.
+# Fixed test-only secrets of the throwaway realm in
+# packages/service/tests/fixtures/keycloak/realm.json.
 CLIENT_SECRETS = {
     "songmaker-test": "songmaker-test-secret",
     "presentator-test": "presentator-test-secret",
