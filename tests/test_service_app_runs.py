@@ -21,6 +21,11 @@ from typing import Final
 import httpx
 import pytest
 from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.service_config_support import (
+    VALID_CONFIG,
+    assert_startup_refuses,
+    written,
+)
 from tests.support.service_support import (
     API_GROUP,
     COWRITER,
@@ -45,7 +50,6 @@ from tests.support.service_support import (
 )
 from tests.test_service_admission import HeldRunner
 from tests.test_service_codex_profile import CODEX_NAME, a_config_with_both_providers
-from tests.test_service_config import VALID_CONFIG, _written, assert_startup_refuses
 from webauth.https_client import KeySetFetchError
 
 from agent_runtime.events import AssistantTextEvent, FinalEvent
@@ -529,7 +533,7 @@ def test_an_apps_agent_table_names_the_agents_that_run_as_the_app(tmp_path):
         + "\n[apps.songmaker.agents.notes]\n"
     )
 
-    songmaker = load_config(_written(tmp_path, text)).apps["songmaker"]
+    songmaker = load_config(written(tmp_path, text)).apps["songmaker"]
 
     assert songmaker.runs_as_itself("cowriter")
     assert not songmaker.runs_as_itself("notes")

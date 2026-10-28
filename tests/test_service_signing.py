@@ -17,6 +17,11 @@ import uvicorn
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import dsa, ec, ed25519, rsa
 from jwt.algorithms import RSAAlgorithm
+from tests.support.service_config_support import (
+    SIGNING_KEY_LINE,
+    VALID_CONFIG,
+    written,
+)
 from tests.support.service_support import (
     CALLED_PLAINLY_OR_FROM_AN_ACTIVE_HANDLER,
     called_from,
@@ -26,7 +31,6 @@ from tests.support.service_support import (
     reaches_private_key,
     written_key_file,
 )
-from tests.test_service_config import SIGNING_KEY_LINE, VALID_CONFIG, _written
 from webauth.jwt_verification import JwtVerifier, Rejected, RejectionReason, VerifiedClaims
 
 from agent_runtime_service.cli import EXIT_BAD_CONFIG, main
@@ -64,7 +68,7 @@ def _config_text(key_file: str) -> str:
 
 
 def _loaded(tmp_path: Path, key_file: Path) -> ServiceConfig:
-    return load_config(_written(tmp_path, _config_text(str(key_file))))
+    return load_config(written(tmp_path, _config_text(str(key_file))))
 
 
 def _file_with(tmp_path: Path, contents: bytes, mode: int = 0o600) -> Path:
@@ -249,7 +253,7 @@ def test_an_unsound_key_file_stops_startup_with_one_line_naming_its_path_and_no_
     tmp_path, capsys, arrange, reason
 ):
     key_file = arrange(tmp_path)
-    config_file = _written(tmp_path, _config_text(key_file))
+    config_file = written(tmp_path, _config_text(key_file))
     shown_key_file = CONTROL_PATHS_AS_SHOWN.get(key_file, key_file)
 
     exit_status = _main_within_bound(["--config", str(config_file)])
@@ -295,7 +299,7 @@ def test_a_refused_real_key_leaves_no_key_object_or_text_in_what_the_refusal_hol
     key_file.write_bytes(key())
     key_file.chmod(0o600)
     key_body = key_file.read_text().splitlines()[1]
-    config_file = _written(tmp_path, _config_text(str(key_file)))
+    config_file = written(tmp_path, _config_text(str(key_file)))
 
     with pytest.raises(UnsoundSigningKey) as from_loading:
         called_from(lambda: load_signing_key(key_file), inside_active_handler)
@@ -328,7 +332,7 @@ def test_loading_a_path_with_a_control_character_is_refused_naming_it_escaped(pa
 def test_a_missing_key_file_is_not_created_by_the_service(tmp_path):
     missing = tmp_path / "absent.pem"
 
-    main(["--config", str(_written(tmp_path, _config_text(str(missing))))])
+    main(["--config", str(written(tmp_path, _config_text(str(missing))))])
 
     assert not missing.exists()
 

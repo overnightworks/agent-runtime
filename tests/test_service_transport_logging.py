@@ -30,6 +30,11 @@ from tests.support.mcp_app_fake import (
     TestAuthority,
     serving,
 )
+from tests.support.service_config_support import (
+    PRINTS_THE_PIN,
+    config_file_naming,
+    printing,
+)
 from tests.support.service_support import (
     UNTOUCHED_LOGGER,
     LoggerState,
@@ -38,7 +43,6 @@ from tests.support.service_support import (
     plain_service_config,
     runners_that_start_no_run,
 )
-from tests.test_service_cli_version import PRINTS_THE_PIN, _config_file_naming, _printing
 
 import agent_runtime_service.app as app_module
 from agent_runtime_service.app import create_app
@@ -245,9 +249,9 @@ def reached(monkeypatch: pytest.MonkeyPatch, logging_state_restored: None) -> Re
 @pytest.mark.parametrize("point", ["create_app", "uvicorn.run"])
 def test_the_process_entry_closes_the_transport_loggers_before_it_serves(tmp_path, reached, point):
     logging.getLogger("httpcore.http11")
-    program = _printing(tmp_path, PRINTS_THE_PIN)
+    program = printing(tmp_path, PRINTS_THE_PIN)
 
-    assert main(["--config", str(_config_file_naming(tmp_path, program))]) == 0
+    assert main(["--config", str(config_file_naming(tmp_path, program))]) == 0
 
     assert reached.levels[point] == dict.fromkeys(CLOSED_NAMES, CLOSED_LOGGER_LEVEL)
 
@@ -257,8 +261,8 @@ def refused_configuration(tmp_path: Path) -> list[str]:
 
 
 def refused_version(tmp_path: Path) -> list[str]:
-    program = _printing(tmp_path, "0.0.1 (Claude Code)\n")
-    return ["--config", str(_config_file_naming(tmp_path, program))]
+    program = printing(tmp_path, "0.0.1 (Claude Code)\n")
+    return ["--config", str(config_file_naming(tmp_path, program))]
 
 
 @pytest.mark.parametrize("refusal", [refused_configuration, refused_version])

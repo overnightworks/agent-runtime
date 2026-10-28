@@ -4,17 +4,16 @@ from __future__ import annotations
 
 import errno
 import fnmatch
-import json
 import os
 import stat
 import tempfile
 import threading
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 import uvicorn
 from tests.support import bounds, provider_test_support
+from tests.support.private_removal_support import REMOVAL_FAILED, rmtree_refused
 from tests.support.provider_test_support import (
     Hold,
     RunnerFailureWatch,
@@ -22,28 +21,26 @@ from tests.support.provider_test_support import (
     fake_cli_executable,
     fake_cli_process,
     install_cli_door,
+    removal_errors,
+    the_only_tree,
+)
+from tests.support.service_config_support import (
+    PRINTS_THE_PIN,
+    VALID_CONFIG,
+    config_file_naming,
+    document_naming,
+    printing,
+    refused_on_one_line,
+    the_working_root,  # noqa: F401 - an autouse fixture
+    working_root_of,
+    written,
 )
 from tests.support.service_support import (
     PINNED_CLAUDE_VERSION,
     logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
     process_token_file,
 )
-from tests.test_run_directories import (
-    REMOVAL_FAILED,
-    removal_errors,
-    remove_the_leftover,
-    rmtree_refused,
-    the_only_tree,
-)
 from tests.test_service_codex_profile import a_login_file
-from tests.test_service_config import (
-    CLAUDE_VERSION_LINE,
-    CLI_SECTION,
-    VALID_CONFIG,
-    _refused_on_one_line,
-    _written,
-    cli_section,
-)
 
 import agent_runtime.process as core_process
 from agent_runtime.config import reset_config
@@ -58,8 +55,6 @@ from agent_runtime_service.cli_version import (
 )
 from agent_runtime_service.config import ClaudeProgram, CliConfig, CodexProgram, ProgramPin
 
-PRINTS_THE_PIN = f"{PINNED_CLAUDE_VERSION} (Claude Code)\n"
-WORKING_ROOT_NAME = "working-root"
 RUN_TREE_PATTERN = "agent-run-*"
 A_LIVE_GROUP = KillUntilGoneResult(GroupCensus.LIVE, ended_in_time=True)
 AN_EMPTY_GROUP = KillUntilGoneResult(GroupCensus.EMPTY, ended_in_time=True)
@@ -73,21 +68,6 @@ PROVIDER_TOKEN_VARIABLES = (
 
 
 failure_watch = provider_test_support.failure_watch
-
-
-def _working_root_of(tmp_path: Path) -> Path:
-    root = tmp_path / WORKING_ROOT_NAME
-    root.mkdir(exist_ok=True)
-    root.chmod(0o700)
-    return root
-
-
-@pytest.fixture(autouse=True)
-def working_root(tmp_path: Path) -> Iterator[Path]:
-    root = _working_root_of(tmp_path)
-    yield root
-    for leftover in root.iterdir():
-        remove_the_leftover(leftover)
 
 
 @pytest.fixture
@@ -104,28 +84,11 @@ def _script(directory: Path, body: str) -> Path:
     return program
 
 
-def _printing(directory: Path, stdout: str) -> Path:
-    return fake_cli_executable(directory, {("--version",): stdout})
-
-
-def _document_naming(program: Path, root: Path, base: str = VALID_CONFIG) -> str:
-    binary_line = f"binary = {json.dumps(str(program))}"
-    root_line = f"working_root = {json.dumps(str(root))}"
-    return base.replace(
-        CLI_SECTION,
-        cli_section(binary=binary_line, version=CLAUDE_VERSION_LINE, root=root_line),
-    )
-
-
-def _config_file_naming(tmp_path: Path, program: Path, base: str = VALID_CONFIG) -> Path:
-    return _written(tmp_path, _document_naming(program, _working_root_of(tmp_path), base))
-
-
 def _refused_leaving_the_root_empty(
     tmp_path: Path, capsys, program: Path, base: str = VALID_CONFIG
 ) -> str:
-    refusal = _refused_on_one_line(_config_file_naming(tmp_path, program, base), capsys)
-    assert list(_working_root_of(tmp_path).iterdir()) == []
+    refusal = refused_on_one_line(config_file_naming(tmp_path, program, base), capsys)
+    assert list(working_root_of(tmp_path).iterdir()) == []
     return refusal
 
 
@@ -141,17 +104,13 @@ def probe_log(tmp_path) -> Path:
     return tmp_path / "probe-starts"
 
 
-def _logged_program(tmp_path: Path, probe_log: Path) -> Path:
-    return fake_cli_executable(tmp_path, {("--version",): PRINTS_THE_PIN}, calls_log=probe_log)
-
-
 def test_a_program_reporting_the_pinned_version_starts_the_service_without_a_core_runtime(
     tmp_path, working_root, served
 ):
     reset_config()
     program = _script(tmp_path, f'printf "{PRINTS_THE_PIN}"')
 
-    assert main(["--config", str(_config_file_naming(tmp_path, program))]) == 0
+    assert main(["--config", str(config_file_naming(tmp_path, program))]) == 0
 
     assert served == [{"host": "127.0.0.1", "port": 8099}]
     assert list(working_root.iterdir()) == []
@@ -177,7 +136,7 @@ def test_the_probe_runs_in_a_run_tree_below_the_working_root_with_no_token_and_n
         f' printf "{PRINTS_THE_PIN}"',
     )
 
-    assert main(["--config", str(_config_file_naming(tmp_path, program))]) == 0
+    assert main(["--config", str(config_file_naming(tmp_path, program))]) == 0
 
     home = Path((inspecting / "home").read_text().strip())
     working_directory = Path((inspecting / "cwd").read_text().strip())
@@ -195,7 +154,7 @@ def test_the_probe_runs_in_a_run_tree_below_the_working_root_with_no_token_and_n
 def test_a_program_reporting_another_version_refuses_the_start_naming_both(
     tmp_path, capsys, served
 ):
-    program = _printing(tmp_path, "2.1.303 (Claude Code)\n")
+    program = printing(tmp_path, "2.1.303 (Claude Code)\n")
 
     refusal = _refused_leaving_the_root_empty(tmp_path, capsys, program)
 
@@ -224,7 +183,7 @@ def test_a_program_reporting_another_version_refuses_the_start_naming_both(
 def test_output_that_is_not_the_version_line_refuses_the_start_naming_only_how_much_was_printed(
     tmp_path, capsys, served, stdout, reason
 ):
-    program = _printing(tmp_path, stdout)
+    program = printing(tmp_path, stdout)
 
     refusal = _refused_leaving_the_root_empty(tmp_path, capsys, program)
 
@@ -280,8 +239,8 @@ def test_a_program_printing_where_it_runs_refuses_the_start_without_the_working_
     printed_copy = tmp_path / "printed-copy"
     program = _script(tmp_path, f'{program_body} | tee "{printed_copy}"')
 
-    refusal = _refused_on_one_line(
-        _written(tmp_path, _document_naming(program, configured)), capsys
+    refusal = refused_on_one_line(
+        written(tmp_path, document_naming(program, configured)), capsys
     )
     printed_characters = len(printed_copy.read_bytes().decode(errors="replace"))
 
@@ -373,7 +332,7 @@ def test_a_binary_path_holding_a_newline_is_refused_on_one_line_with_the_newline
 def test_a_run_tree_that_cannot_be_made_refuses_the_start_as_unstarted(
     tmp_path, capsys, served, monkeypatch, failure
 ):
-    program = _printing(tmp_path, PRINTS_THE_PIN)
+    program = printing(tmp_path, PRINTS_THE_PIN)
 
     def cannot_make_a_directory(*_arguments, **_keywords):
         raise failure
@@ -481,12 +440,12 @@ def _the_mismatch_refusal(program: Path) -> str:
 def test_a_run_tree_whose_rollback_fails_still_refuses_the_start_as_unstarted(
     tmp_path, working_root, capsys, served, monkeypatch, caplog
 ):
-    program = _printing(tmp_path, PRINTS_THE_PIN)
-    config_file = _config_file_naming(tmp_path, program)
+    program = printing(tmp_path, PRINTS_THE_PIN)
+    config_file = config_file_naming(tmp_path, program)
     fail_the_directory_named(monkeypatch, "home", OSError(errno.EIO, "synthetic mkdir failure"))
 
     with rmtree_refused(monkeypatch):
-        refusal = _refused_on_one_line(config_file, capsys)
+        refusal = refused_on_one_line(config_file, capsys)
 
     the_only_tree(working_root)
     assert refusal == _the_unstarted_refusal(program)
@@ -498,8 +457,8 @@ def test_a_run_tree_whose_rollback_fails_still_refuses_the_start_as_unstarted(
 def test_a_probe_tree_that_cannot_be_removed_is_logged_once_and_the_start_still_serves(
     tmp_path, working_root, served, caplog, monkeypatch
 ):
-    program = _printing(tmp_path, PRINTS_THE_PIN)
-    config_file = _config_file_naming(tmp_path, program)
+    program = printing(tmp_path, PRINTS_THE_PIN)
+    config_file = config_file_naming(tmp_path, program)
 
     with rmtree_refused(monkeypatch):
         exit_status = main(["--config", str(config_file)])
@@ -521,11 +480,11 @@ def test_a_probe_tree_that_cannot_be_removed_is_logged_once_and_the_start_still_
 def test_a_probe_tree_that_cannot_be_removed_never_replaces_the_probe_refusal(
     tmp_path, working_root, capsys, served, monkeypatch, program_name, stdout, expected_refusal
 ):
-    program = tmp_path / program_name if stdout is None else _printing(tmp_path, stdout)
-    config_file = _config_file_naming(tmp_path, program)
+    program = tmp_path / program_name if stdout is None else printing(tmp_path, stdout)
+    config_file = config_file_naming(tmp_path, program)
 
     with rmtree_refused(monkeypatch):
-        printed = _refused_on_one_line(config_file, capsys)
+        printed = refused_on_one_line(config_file, capsys)
 
     the_only_tree(working_root)
     assert printed == expected_refusal(program)
@@ -540,7 +499,7 @@ def test_a_probe_tree_stays_below_the_working_root_until_its_group_is_confirmed_
     child = fake_cli_process(PRINTS_THE_PIN.encode(), gone=group_answers, hold=hold)
     install_cli_door(monkeypatch, lambda _child, *, stderr: child)
     program = tmp_path / "claude"
-    config_file = _config_file_naming(tmp_path, program)
+    config_file = config_file_naming(tmp_path, program)
 
     exit_status = main(["--config", str(config_file)])
     trees_at_the_return = list(working_root.glob(RUN_TREE_PATTERN))
@@ -556,8 +515,8 @@ def test_a_probe_tree_stays_below_the_working_root_until_its_group_is_confirmed_
 def test_a_probe_refused_before_its_spawn_keeps_its_tree_until_the_late_spawn_is_confirmed(
     tmp_path, working_root, capfd, served, monkeypatch, failure_watch: RunnerFailureWatch
 ):
-    program = _printing(tmp_path, PRINTS_THE_PIN)
-    config_file = _config_file_naming(tmp_path, program)
+    program = printing(tmp_path, PRINTS_THE_PIN)
+    config_file = config_file_naming(tmp_path, program)
     release_spawn = threading.Event()
 
     def held_door(child, *, stderr):

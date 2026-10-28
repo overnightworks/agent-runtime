@@ -23,12 +23,12 @@
 "tests/test_grok_cli_adapter.py" = 1212
 "tests/test_process.py" = 6199
 "tests/test_procfs.py" = 838
-"tests/test_run_directories.py" = 852
+"tests/test_run_directories.py" = 841
 "tests/test_service_app_tools.py" = 1087
 "tests/test_service_capability.py" = 869
 "tests/test_service_cli_runner.py" = 1082
 "tests/test_service_cli_runner_tools.py" = 1717
-"tests/test_service_config.py" = 1497
+"tests/test_service_config.py" = 1446
 "tests/test_service_quarantine.py" = 870
 "tests/test_service_run_recording.py" = 2034
 "tests/test_service_tool_relay.py" = 1309
