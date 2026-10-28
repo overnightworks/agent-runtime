@@ -16,6 +16,7 @@ number have no defaults.
 
 from __future__ import annotations
 
+import base64
 import math
 import re
 from collections.abc import Iterator
@@ -31,13 +32,19 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
+    PlainSerializer,
     model_validator,
 )
 
 from agent_runtime_client.tools import ToolEffect
 
-PROTOCOL_VERSION: Final = 3
+PROTOCOL_VERSION: Final = 4
 MAX_EVENT_BYTES: Final = 1_048_576
+MAX_RUN_FILES_BYTES: Final = 33_554_432
+MAX_RUN_FILE_NAME_BYTES: Final = 255
+# Base64 pads each file separately, so the allowance for the files' contents is
+# the ceiling's own base64 length; the frame rules live in ``sse``.
+MAX_SUCCEEDED_FRAME_BYTES: Final = MAX_EVENT_BYTES + 4 * math.ceil(MAX_RUN_FILES_BYTES / 3)
 MAX_TOOL_INPUT_DEPTH: Final = 128
 MAX_MESSAGE_LENGTH: Final = 500
 MAX_AGENT_LENGTH: Final = 64
@@ -102,7 +109,7 @@ def _json_integer(value: object) -> object:
     return value
 
 
-ProtocolVersion = Annotated[Literal[3], BeforeValidator(_json_integer)]
+ProtocolVersion = Annotated[Literal[4], BeforeValidator(_json_integer)]
 """The one decider of whether a ``v`` is the version this package speaks."""
 
 
@@ -192,8 +199,8 @@ UnicodeText = Annotated[str, AfterValidator(_refuse_non_unicode_text)]
 NonEmptyUnicodeText = Annotated[UnicodeText, Field(min_length=1)]
 """The one owner of non-empty wire text.
 
-It covers a call id, a tool's name, an assistant or final text and a capability's
-identifying claims.
+It covers a call id, a tool's name, an assistant text and a capability's identifying
+claims.
 """
 
 ToolUseId = NonEmptyUnicodeText
@@ -295,9 +302,64 @@ class Heartbeat(_RunEvent):
     type: Literal["heartbeat"] = "heartbeat"
 
 
+def _refuse_non_file_name(name: str) -> str:
+    _refuse_lone_surrogates(name)
+    if not 1 <= len(name.encode("utf-8")) <= MAX_RUN_FILE_NAME_BYTES:
+        raise ValueError(f"must be 1 to {MAX_RUN_FILE_NAME_BYTES} bytes in UTF-8")
+    if "/" in name or "\0" in name or name in (".", ".."):
+        raise ValueError("must be one path component: no /, no NUL, not . or ..")
+    return name
+
+
+def _read_canonical_base64(value: object) -> object:
+    # Pydantic's lenient Base64Bytes accepts whitespace, the URL-safe alphabet
+    # and missing padding; the wire accepts one spelling of each content.
+    if not isinstance(value, str):
+        return value
+    try:
+        content = base64.b64decode(value.encode("ascii"), validate=True)
+    except ValueError:
+        content = None
+    if content is None or base64.b64encode(content).decode("ascii") != value:
+        raise ValueError("must be canonical standard base64 with padding")
+    return content
+
+
+def _write_base64(content: bytes) -> str:
+    return base64.b64encode(content).decode("ascii")
+
+
+def _list_as_tuple(value: object) -> object:
+    return tuple(value) if isinstance(value, list) else value
+
+
+class RunFile(_StrictModel):
+    """One file a run returns: its name and its bytes, with no media type."""
+
+    name: Annotated[str, AfterValidator(_refuse_non_file_name)]
+    content: Annotated[
+        bytes,
+        BeforeValidator(_read_canonical_base64),
+        PlainSerializer(_write_base64, return_type=str, when_used="json"),
+    ]
+
+
 class Succeeded(_RunEvent):
+    """A run that ended with its words, its files, or both."""
+
     type: Literal["succeeded"] = "succeeded"
-    text: NonEmptyUnicodeText
+    text: UnicodeText
+    files: Annotated[tuple[RunFile, ...], BeforeValidator(_list_as_tuple)]
+
+    @model_validator(mode="after")
+    def _refuse_unusable_result(self) -> Self:
+        if not self.text and not self.files:
+            raise ValueError("a run without files must have text")
+        if len({file.name for file in self.files}) != len(self.files):
+            raise ValueError("file names must be unique")
+        if sum(len(file.content) for file in self.files) > MAX_RUN_FILES_BYTES:
+            raise ValueError(f"files together exceed {MAX_RUN_FILES_BYTES} bytes")
+        return self
 
 
 class Failed(_RunEvent):

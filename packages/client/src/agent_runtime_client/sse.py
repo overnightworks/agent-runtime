@@ -8,13 +8,17 @@ transport that writes and reads the bytes lives elsewhere.
 A frame is an ``id`` line holding the event's ``seq``, an ``event`` line
 holding its ``type``, and one ``data`` line of compact JSON holding the whole
 event, ended by a blank line. A frame's size is the bytes of its lines plus
-one per line end, so an encoded frame's size is its length. No frame exceeds
-``MAX_EVENT_BYTES`` in either direction.
+one per line end, so an encoded frame's size is its length. In either direction
+a ``succeeded`` frame is at most ``MAX_SUCCEEDED_FRAME_BYTES`` and, without the
+base64 of its files' contents, at most ``MAX_EVENT_BYTES``; every other frame is
+at most ``MAX_EVENT_BYTES``. The decoder gives the larger allowance only to a
+frame whose ``event`` line, which the encoder writes first, says ``succeeded``.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import re
 from enum import Enum, auto
 from typing import Any, Final
@@ -22,7 +26,9 @@ from typing import Any, Final
 from agent_runtime_client.run_stream import RunStream, StreamViolation, ViolationKind, parse_event
 from agent_runtime_client.wire import (
     MAX_EVENT_BYTES,
+    MAX_SUCCEEDED_FRAME_BYTES,
     RunEvent,
+    Succeeded,
     is_run_event,
     refuse_non_json_constant,
 )
@@ -34,6 +40,7 @@ _LINE_FEED: Final = ord("\n")
 _FRAME_FIELDS: Final = frozenset({"id", "event", "data"})
 _IGNORED_FIELD: Final = "retry"
 _COMMENT_MARK: Final = ":"
+_SUCCEEDED: Final = "succeeded"
 
 Decoded = RunEvent | StreamViolation
 
@@ -45,7 +52,7 @@ class _DecoderState(Enum):
 
 
 class EventTooLarge(ValueError):
-    """An event whose frame would exceed ``MAX_EVENT_BYTES``."""
+    """An event whose frame would exceed the ceiling that applies to it."""
 
 
 class DecoderClosed(RuntimeError):
@@ -57,11 +64,27 @@ def encode_event(event: RunEvent) -> bytes:
     if not is_run_event(event):
         raise TypeError(f"encode_event takes a run event, not a {type(event).__name__}")
     frame = f"id: {event.seq}\nevent: {event.type}\ndata: {event.model_dump_json()}\n\n".encode()
-    if len(frame) > MAX_EVENT_BYTES:
+    if len(frame) > _ceiling_of(event.type):
         raise EventTooLarge(
-            f"a {event.type} frame of {len(frame)} bytes exceeds {MAX_EVENT_BYTES} bytes"
+            f"a {event.type} frame of {len(frame)} bytes exceeds {_ceiling_of(event.type)} bytes"
+        )
+    if _exceeds_without_files(event, len(frame)):
+        raise EventTooLarge(
+            f"a succeeded frame of {len(frame)} bytes exceeds {MAX_EVENT_BYTES} bytes "
+            "without its files' base64"
         )
     return frame
+
+
+def _ceiling_of(event_type: str) -> int:
+    return MAX_SUCCEEDED_FRAME_BYTES if event_type == _SUCCEEDED else MAX_EVENT_BYTES
+
+
+def _exceeds_without_files(event: RunEvent, frame_bytes: int) -> bool:
+    if not isinstance(event, Succeeded):
+        return False
+    files_base64 = sum(4 * math.ceil(len(file.content) / 3) for file in event.files)
+    return frame_bytes - files_base64 > MAX_EVENT_BYTES
 
 
 class RunStreamDecoder:
@@ -100,7 +123,7 @@ class RunStreamDecoder:
                 break
             terminator = line_end.start()
             if self._exceeds_limit(terminator - position + 1):
-                self._emit(_oversized(), decoded)
+                self._emit(self._oversized(), decoded)
                 break
             line = bytes(self._unfinished_line) + chunk[position:terminator]
             self._unfinished_line.clear()
@@ -138,12 +161,18 @@ class RunStreamDecoder:
 
     def _hold(self, rest: bytes, decoded: list[Decoded]) -> None:
         if self._exceeds_limit(len(rest)):
-            self._emit(_oversized(), decoded)
+            self._emit(self._oversized(), decoded)
             return
         self._unfinished_line.extend(rest)
 
     def _exceeds_limit(self, more_bytes: int) -> bool:
-        return self._frame_bytes + len(self._unfinished_line) + more_bytes > MAX_EVENT_BYTES
+        return self._frame_bytes + len(self._unfinished_line) + more_bytes > self._ceiling()
+
+    def _ceiling(self) -> int:
+        return _ceiling_of(self._fields.get("event", ""))
+
+    def _oversized(self) -> StreamViolation:
+        return _oversized(self._ceiling())
 
     def _emit(self, outcome: Decoded | None, decoded: list[Decoded]) -> None:
         if outcome is None:
@@ -179,15 +208,15 @@ class RunStreamDecoder:
 
     def _dispatch(self) -> Decoded | None:
         fields, self._fields = self._fields, {}
-        self._frame_bytes = 0
+        frame_bytes, self._frame_bytes = self._frame_bytes, 0
         if not fields:
             return None
         missing = sorted(_FRAME_FIELDS - fields.keys())
         if missing:
             return _malformed(f"a frame without {', '.join(missing)}")
-        return self._event_from(fields["id"], fields["event"], fields["data"])
+        return self._event_from(fields["id"], fields["event"], fields["data"], frame_bytes)
 
-    def _event_from(self, frame_id: str, event_type: str, data: str) -> Decoded:
+    def _event_from(self, frame_id: str, event_type: str, data: str, frame_bytes: int) -> Decoded:
         raw = _json_object(data)
         if isinstance(raw, StreamViolation):
             return raw
@@ -199,6 +228,8 @@ class RunStreamDecoder:
         event = parse_event(raw)
         if isinstance(event, StreamViolation):
             return event
+        if _exceeds_without_files(event, frame_bytes):
+            return _oversized(MAX_EVENT_BYTES)
         if frame_id != str(event.seq):
             return StreamViolation(
                 kind=ViolationKind.ID_MISMATCH,
@@ -223,8 +254,8 @@ def _malformed(detail: str) -> StreamViolation:
     return StreamViolation(kind=ViolationKind.MALFORMED_FRAME, detail=detail)
 
 
-def _oversized() -> StreamViolation:
+def _oversized(ceiling: int) -> StreamViolation:
     return StreamViolation(
         kind=ViolationKind.OVERSIZED_FRAME,
-        detail=f"a frame larger than {MAX_EVENT_BYTES} bytes",
+        detail=f"a frame larger than {ceiling} bytes",
     )

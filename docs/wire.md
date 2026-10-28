@@ -23,11 +23,11 @@ the operator enabled ([The app's own runs](#the-apps-own-runs)). `POST /runs` an
 `GET /runs/{id}` answer a request carrying an `Agent-Job-Ticket` header, even an empty one, with
 `401` before the body is read; the header's value is never read.
 
-`RunRequest`, wire version 3:
+`RunRequest`, wire version 4:
 
 | Field | Meaning |
 |---|---|
-| `v` | The protocol version, `3`. Any other body answers 400 `unsupported_version`. |
+| `v` | The protocol version, `4`. Any other body answers 400 `unsupported_version`. |
 | `agent` | The agent's name, `[a-z][a-z0-9-]{0,63}`. It labels the run and its capability, and names the agent whose configured model the run uses; the request itself names no model, and a body that carries `model` answers 422 `invalid_request`. |
 | `turn` | The system prompt and the messages (`Turn`, `TurnMessage`). |
 | `roles` | The agent's allowed roles, exactly `["admin"]` or `["admin", "user"]`; `AgentDefinition.request` fills it from the agent file. |
@@ -44,6 +44,21 @@ names the service selected for the run, not proof of who answered. A run cut sho
 tool call was emitted ends as `failed: interrupted`, not `cancelled`
 (`ToolEffect`).
 
+`succeeded` carries `text` and `files`, and `files` is always present, possibly `[]`. A file is
+`{"name": "<name>", "content": "<base64>"}`: its bytes and nothing else, with no media type.
+A name is one path component of 1 to 255 bytes in UTF-8, holds no `/` and no NUL, and is not `.` or `..`;
+names are unique within a run. `content` is standard base64 with padding (RFC 4648 section 4) in its one
+canonical spelling: whitespace, the URL-safe alphabet, missing padding and non-zero pad bits are refused,
+and `""` is a file of zero bytes. All contents together hold at most `MAX_RUN_FILES_BYTES`, 32 MiB.
+`text` may be empty only when `files` holds a file; a run without files must have words.
+
+A frame holds at most `MAX_EVENT_BYTES` (1 MiB), except a `succeeded` frame, which holds at most
+`MAX_SUCCEEDED_FRAME_BYTES` (`MAX_EVENT_BYTES` plus the base64 length of 32 MiB, 45,787,820 bytes), and
+whose bytes without its files' base64 still hold at most `MAX_EVENT_BYTES`. Base64 pads each file
+separately, so files that sum to 32 MiB can still exceed the frame ceiling. The decoder gives the larger
+allowance only to a frame whose `event` line says `succeeded` before its `data` line. An oversized frame
+is `oversized_frame` in the decoder and `EventTooLarge` in the encoder.
+
 A request the service refuses answers a `RunRejection` with one `RejectionCode`:
 
 | Code | Status | Meaning |
@@ -51,7 +66,7 @@ A request the service refuses answers a `RunRejection` with one `RejectionCode`:
 | `unauthorized` | 401 | A workload token is required, and a user token unless the app runs one of its own agents; every token sent must be valid. An `Agent-Job-Ticket` header on `POST /runs` or `GET /runs/{id}` is refused too. |
 | `forbidden` | 403 | The user is no member of the app, the request's `roles` lack the caller's role, the request names a tool while the app has no MCP origin, the two tokens do not belong together (`agent_runtime_service.identity` lists every cause), or a run without a user token names an agent the app may not run as itself. |
 | `not_enabled` | 403 | No route is enabled for this caller and model, the run names tools and the chosen subscription provider cannot take tools yet. |
-| `unsupported_version` | 400 | `v` is not the JSON integer 3. |
+| `unsupported_version` | 400 | `v` is not the JSON integer 4. |
 | `invalid_request` | 422 | The body is not a valid request for the route. |
 | `capability_too_large` | 422 | The run's capability would exceed 8,192 characters. |
 | `busy` | 429 | The subscription route's places are taken; `Retry-After` is set and the run never falls back to the paid route. |
