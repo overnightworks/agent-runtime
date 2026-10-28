@@ -39,6 +39,7 @@ from agent_runtime.config import (
     reset_config,
 )
 
+# Assertion rewriting must be registered before the helpers below are imported, hence E402.
 pytest.register_assert_rewrite("tests.support")
 
 from tests.support.anchored_kernel import CensusRecorder  # noqa: E402
