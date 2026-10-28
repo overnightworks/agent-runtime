@@ -1,0 +1,8 @@
+claim_id = "79bdfb11d1cc423cb7c539704005a3ee"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "09b0db36d5ba87f94ee8b18229484102e7938d66"
+branch = "claude/issue-534-s7-last-test-imports"
+scope = [".github/host-vocabulary-allowed.txt", "quality/baseline.toml", "tests/support/held_runner_support.py", "tests/support/request_limits_support.py", "tests/support/run_tools_support.py", "tests/support/service_support.py", "tests/support/token_rejection_support.py", "tests/test_service_admission.py", "tests/test_service_app_runs.py", "tests/test_service_capability.py", "tests/test_service_cli_runner_tools.py", "tests/test_service_cli_version.py", "tests/test_service_entrance.py", "tests/test_service_keycloak.py", "tests/test_service_run_events.py", "tests/test_service_run_status.py", "tests/test_service_run_tools.py", "tests/test_service_run_tools_session.py", "tests/test_service_ticket_refusal.py", "tests/test_service_transport_logging.py"]
+opened_commit = "c09756d543b662c7a4a4284fd82fc01e165eb156"
+whole_reason = "One extraction: the shared code of four test modules moves into four support modules and the six importing modules switch together, with a rename and a fixture twin that touch the same import lines."
