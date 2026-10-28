@@ -3122,6 +3122,7 @@ deferred to C0b.
   - M4: with `approval_policy = "on-request"` the `turn_context` still says `never`; with
     `approvals_reviewer = "auto_review"` added it says `on-request` and `auto_review`. The
     sandbox stays `read-only` in both.
+
   Also measured on the pin, with `features list` in a fresh home (no login, no `exec`):
   - The home's `config.toml` is read (`shell_tool false`, `image_generation true`). `-c`
     ranks above the file (file `shell_tool = true`, `-c features.shell_tool=false` shows
