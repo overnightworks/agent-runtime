@@ -86,8 +86,9 @@ def test_words_are_required_only_without_files(
 
 
 def test_two_files_with_one_name_are_refused() -> None:
+    files = (_file("a"), _file("a", b"other"))
     with pytest.raises(ValidationError, match="unique"):
-        succeeded(5, "Done.", (_file("a"), _file("a", b"other")))
+        succeeded(5, "Done.", files)
     one = {"name": "a", "content": ""}
 
     assert _violation(_raw([one, one])).kind is ViolationKind.SCHEMA_MISMATCH
