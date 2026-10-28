@@ -154,19 +154,19 @@ def test_a_cli_request_with_every_place_taken_answers_busy_before_a_run_id_or_a_
 
 
 @pytest.mark.parametrize(
-    ("user", "body", "code"),
+    ("make_user", "body", "code"),
     [
         pytest.param(
-            MINT.user(groups=[SONGMAKER_GROUP]),
+            lambda: MINT.user(groups=[SONGMAKER_GROUP]),
             {},
             RejectionCode.NOT_ENABLED,
             id="route-not-enabled",
         ),
     ],
 )
-def test_a_refusal_before_the_limit_takes_nothing(service, user, body, code):
+def test_a_refusal_before_the_limit_takes_nothing(service, make_user, body, code):
     for _ in range(PLACES):
-        assert_rejected(service.run(user, **body), code, 403)
+        assert_rejected(service.run(make_user(), **body), code, 403)
 
     service.let_all_go(service.fill_the_places())
 
