@@ -1,8 +1,0 @@
-claim_id = "8402d69f74a34ee3b95d78a1978c5042"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "63b541f75b74a81c4b010a7ab67135d2b8c81c8b"
-branch = "claude/issue-525-s2-client-tests"
-scope = [".github/workflows/ci.yml", "AGENTS.md", "conftest.py", "packages/client/tests", "pyproject.toml", "quality/config.toml", "sonar-project.properties", "tests/conftest.py", "tests/support/suite_fixtures.py", "tests/test_agent_files.py", "tests/test_capability_claims.py", "tests/test_capability_verifier.py", "tests/test_mcp_server.py", "tests/test_mcp_server_interop.py", "tests/test_mcp_wire.py", "tests/test_sse_codec.py", "tests/test_wire_protocol.py"]
-opened_commit = "2baca2fefd94bd8976c7a18b5ccb044e5604bcf3"
-whole_reason = "One layout step: the client tests move under their member, and the suite fixtures must reach them through one root plugin in the same commit, with testpaths and CI following."
