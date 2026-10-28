@@ -11,7 +11,6 @@ import threading
 from pathlib import Path
 
 import pytest
-import uvicorn
 from tests.support import bounds, provider_test_support
 from tests.support.private_removal_support import REMOVAL_FAILED, rmtree_refused
 from tests.support.provider_test_support import (
@@ -24,7 +23,10 @@ from tests.support.provider_test_support import (
     removal_errors,
     the_only_tree,
 )
-from tests.support.service_codex_support import a_codex_login_file
+from tests.support.service_codex_support import (
+    a_codex_login_file,
+    the_served_runs,  # noqa: F401 - the fixture is named in its decorator
+)
 from tests.support.service_config_support import (
     PRINTS_THE_PIN,
     VALID_CONFIG,
@@ -70,13 +72,6 @@ PROVIDER_TOKEN_VARIABLES = (
 failure_watch = provider_test_support.failure_watch
 
 
-@pytest.fixture
-def served(monkeypatch, logging_state_restored):
-    runs = []
-    monkeypatch.setattr(uvicorn, "run", lambda app, **where: runs.append(where))
-    return runs
-
-
 def _script(directory: Path, body: str) -> Path:
     program = directory / "claude-script"
     program.write_text(f"#!/bin/sh\n{body}\n")
@@ -105,19 +100,19 @@ def probe_log(tmp_path) -> Path:
 
 
 def test_a_program_reporting_the_pinned_version_starts_the_service_without_a_core_runtime(
-    tmp_path, working_root, served
+    tmp_path, working_root, served_runs
 ):
     reset_config()
     program = _script(tmp_path, f'printf "{PRINTS_THE_PIN}"')
 
     assert main(["--config", str(config_file_naming(tmp_path, program))]) == 0
 
-    assert served == [{"host": "127.0.0.1", "port": 8099}]
+    assert served_runs == [{"host": "127.0.0.1", "port": 8099}]
     assert list(working_root.iterdir()) == []
 
 
 def test_the_probe_runs_in_a_run_tree_below_the_working_root_with_no_token_and_no_login(
-    tmp_path, working_root, served, monkeypatch
+    tmp_path, working_root, served_runs, monkeypatch
 ):
     reset_config()
     parent_home = tmp_path / "parent-home"
@@ -152,7 +147,7 @@ def test_the_probe_runs_in_a_run_tree_below_the_working_root_with_no_token_and_n
 
 
 def test_a_program_reporting_another_version_refuses_the_start_naming_both(
-    tmp_path, capsys, served
+    tmp_path, capsys, served_runs
 ):
     program = printing(tmp_path, "2.1.303 (Claude Code)\n")
 
@@ -161,7 +156,7 @@ def test_a_program_reporting_another_version_refuses_the_start_naming_both(
     assert refusal == (
         f"cli.anthropic.version: {program} reports 2.1.303, not the pinned {PINNED_CLAUDE_VERSION}"
     )
-    assert served == []
+    assert served_runs == []
 
 
 @pytest.mark.parametrize(
@@ -181,14 +176,14 @@ def test_a_program_reporting_another_version_refuses_the_start_naming_both(
     ],
 )
 def test_output_that_is_not_the_version_line_refuses_the_start_naming_only_how_much_was_printed(
-    tmp_path, capsys, served, stdout, reason
+    tmp_path, capsys, served_runs, stdout, reason
 ):
     program = printing(tmp_path, stdout)
 
     refusal = _refused_leaving_the_root_empty(tmp_path, capsys, program)
 
     assert refusal == _no_version_line(program, reason)
-    assert served == []
+    assert served_runs == []
 
 
 PRIVATE_MARKER = "private-marker"
@@ -231,7 +226,7 @@ def _root_named_with_a_newline(tmp_path: Path) -> tuple[Path, Path]:
     ],
 )
 def test_a_program_printing_where_it_runs_refuses_the_start_without_the_working_root(
-    tmp_path, capsys, served, root_layout, program_body
+    tmp_path, capsys, served_runs, root_layout, program_body
 ):
     configured, physical = root_layout(tmp_path)
     physical.mkdir()
@@ -248,21 +243,23 @@ def test_a_program_printing_where_it_runs_refuses_the_start_without_the_working_
     assert "phys" not in refusal
     assert refusal == _no_version_line(program, f"printed {printed_characters} characters")
     assert list(physical.iterdir()) == []
-    assert served == []
+    assert served_runs == []
 
 
 def test_a_nonzero_exit_refuses_the_start_even_when_the_output_looks_valid(
-    tmp_path, capsys, served
+    tmp_path, capsys, served_runs
 ):
     program = _script(tmp_path, f'printf "{PRINTS_THE_PIN}"; exit 3')
 
     refusal = _refused_leaving_the_root_empty(tmp_path, capsys, program)
 
     assert refusal == _no_version_line(program, "exit status 3")
-    assert served == []
+    assert served_runs == []
 
 
-def test_a_program_that_does_not_exist_refuses_the_start_as_unstarted(tmp_path, capsys, served):
+def test_a_program_that_does_not_exist_refuses_the_start_as_unstarted(
+    tmp_path, capsys, served_runs,
+):
     program = tmp_path / "absent-claude"
 
     refusal = _refused_leaving_the_root_empty(tmp_path, capsys, program)
@@ -273,7 +270,7 @@ def test_a_program_that_does_not_exist_refuses_the_start_as_unstarted(tmp_path, 
 
 
 def test_a_program_that_never_finishes_is_stopped_and_refuses_the_start(
-    tmp_path, capsys, served, monkeypatch
+    tmp_path, capsys, served_runs, monkeypatch
 ):
     monkeypatch.setattr(core_process, "PROBE_TIMEOUT_SECONDS", 1)
     program = _script(tmp_path, f'echo $$ > "{tmp_path}/pid"; exec sleep 60')
@@ -286,7 +283,9 @@ def test_a_program_that_never_finishes_is_stopped_and_refuses_the_start(
         os.kill(pid, 0)
 
 
-def test_output_beyond_the_runner_limit_refuses_the_start_as_incomplete(tmp_path, capsys, served):
+def test_output_beyond_the_runner_limit_refuses_the_start_as_incomplete(
+    tmp_path, capsys, served_runs,
+):
     program = _script(tmp_path, "head -c 70000 /dev/zero | tr '\\0' x")
 
     refusal = _refused_leaving_the_root_empty(tmp_path, capsys, program)
@@ -295,7 +294,7 @@ def test_output_beyond_the_runner_limit_refuses_the_start_as_incomplete(tmp_path
 
 
 def test_valid_output_with_stderr_beyond_the_runner_limit_still_refuses_as_incomplete(
-    tmp_path, capsys, served
+    tmp_path, capsys, served_runs
 ):
     program = _script(
         tmp_path, f"printf '{PRINTS_THE_PIN}'; head -c 70000 /dev/zero | tr '\\0' x >&2"
@@ -304,11 +303,11 @@ def test_valid_output_with_stderr_beyond_the_runner_limit_still_refuses_as_incom
     refusal = _refused_leaving_the_root_empty(tmp_path, capsys, program)
 
     assert refusal == _no_version_line(program, "probe did not complete")
-    assert served == []
+    assert served_runs == []
 
 
 def test_a_binary_path_holding_a_newline_is_refused_on_one_line_with_the_newline_escaped(
-    tmp_path, capsys, served
+    tmp_path, capsys, served_runs
 ):
     program = tmp_path / "line\nbreak" / "claude"
 
@@ -330,7 +329,7 @@ def test_a_binary_path_holding_a_newline_is_refused_on_one_line_with_the_newline
     ],
 )
 def test_a_run_tree_that_cannot_be_made_refuses_the_start_as_unstarted(
-    tmp_path, capsys, served, monkeypatch, failure
+    tmp_path, capsys, served_runs, monkeypatch, failure
 ):
     program = printing(tmp_path, PRINTS_THE_PIN)
 
@@ -344,7 +343,7 @@ def test_a_run_tree_that_cannot_be_made_refuses_the_start_as_unstarted(
     assert refusal == _no_version_line(
         program, "probe could not start or its start deadline expired"
     )
-    assert served == []
+    assert served_runs == []
 
 
 @pytest.mark.parametrize(
@@ -442,7 +441,7 @@ def _the_mismatch_refusal(program: Path) -> str:
 
 
 def test_a_run_tree_whose_rollback_fails_still_refuses_the_start_as_unstarted(
-    tmp_path, working_root, capsys, served, monkeypatch, caplog
+    tmp_path, working_root, capsys, served_runs, monkeypatch, caplog
 ):
     program = printing(tmp_path, PRINTS_THE_PIN)
     config_file = config_file_naming(tmp_path, program)
@@ -455,11 +454,11 @@ def test_a_run_tree_whose_rollback_fails_still_refuses_the_start_as_unstarted(
     assert refusal == _the_unstarted_refusal(program)
     assert removal_errors(caplog) == [REMOVAL_FAILED]
     assert str(working_root) not in caplog.text
-    assert served == []
+    assert served_runs == []
 
 
 def test_a_probe_tree_that_cannot_be_removed_is_logged_once_and_the_start_still_serves(
-    tmp_path, working_root, served, caplog, monkeypatch
+    tmp_path, working_root, served_runs, caplog, monkeypatch
 ):
     program = printing(tmp_path, PRINTS_THE_PIN)
     config_file = config_file_naming(tmp_path, program)
@@ -471,7 +470,7 @@ def test_a_probe_tree_that_cannot_be_removed_is_logged_once_and_the_start_still_
     assert exit_status == 0
     assert removal_errors(caplog) == [REMOVAL_FAILED]
     assert str(working_root) not in caplog.text
-    assert len(served) == 1
+    assert len(served_runs) == 1
 
 
 @pytest.mark.parametrize(
@@ -482,7 +481,7 @@ def test_a_probe_tree_that_cannot_be_removed_is_logged_once_and_the_start_still_
     ],
 )
 def test_a_probe_tree_that_cannot_be_removed_never_replaces_the_probe_refusal(
-    tmp_path, working_root, capsys, served, monkeypatch, program_name, stdout, expected_refusal
+    tmp_path, working_root, capsys, served_runs, monkeypatch, program_name, stdout, expected_refusal
 ):
     program = tmp_path / program_name if stdout is None else printing(tmp_path, stdout)
     config_file = config_file_naming(tmp_path, program)
@@ -492,11 +491,11 @@ def test_a_probe_tree_that_cannot_be_removed_never_replaces_the_probe_refusal(
 
     the_only_tree(working_root)
     assert printed == expected_refusal(program)
-    assert served == []
+    assert served_runs == []
 
 
 def test_a_probe_tree_stays_below_the_working_root_until_its_group_is_confirmed_gone(
-    tmp_path, working_root, served, monkeypatch, failure_watch: RunnerFailureWatch
+    tmp_path, working_root, served_runs, monkeypatch, failure_watch: RunnerFailureWatch
 ):
     hold = Hold()
     group_answers = (A_LIVE_GROUP, AN_EMPTY_GROUP)
@@ -513,11 +512,11 @@ def test_a_probe_tree_stays_below_the_working_root_until_its_group_is_confirmed_
     assert exit_status == 0
     assert len(trees_at_the_return) == 1
     assert list(working_root.iterdir()) == []
-    assert len(served) == 1
+    assert len(served_runs) == 1
 
 
 def test_a_probe_refused_before_its_spawn_keeps_its_tree_until_the_late_spawn_is_confirmed(
-    tmp_path, working_root, capfd, served, monkeypatch, failure_watch: RunnerFailureWatch
+    tmp_path, working_root, capfd, served_runs, monkeypatch, failure_watch: RunnerFailureWatch
 ):
     program = printing(tmp_path, PRINTS_THE_PIN)
     config_file = config_file_naming(tmp_path, program)
@@ -541,4 +540,4 @@ def test_a_probe_refused_before_its_spawn_keeps_its_tree_until_the_late_spawn_is
     assert capfd.readouterr().err.endswith(f"{_the_unstarted_refusal(program)}\n")
     assert len(trees_after_main) == 1
     assert list(working_root.iterdir()) == []
-    assert served == []
+    assert served_runs == []

@@ -20,6 +20,11 @@ import pytest
 from jwt.algorithms import RSAAlgorithm
 from tests.support.capability_support import capability_carrying, constructed_token
 from tests.support.provider_test_support import formatted_log_text
+from tests.support.request_limits_support import (
+    QUOTATION_MARKS_255,
+    QUOTATION_MARKS_256,
+    TUNED_AT_THE_LIMIT,
+)
 from tests.support.service_support import (
     API_GROUP,
     COWRITER,
@@ -301,11 +306,6 @@ def test_no_representation_of_a_capability_or_its_scope_shows_the_token_or_the_k
 
 MINT = TokenMint()
 SCRIPT = (AssistantTextEvent(text="hello"), FinalEvent(text="done"))
-TUNED_AT_THE_LIMIT = dict.fromkeys(
-    tool_names_with_the_last_of_length(LAST_TOOL_NAME_LENGTH_AT_THE_LIMIT), "read_only"
-)
-QUOTATION_MARKS_255 = '"' * 255
-QUOTATION_MARKS_256 = '"' * 256
 YEAR_2286 = datetime.fromtimestamp(10_000_000_000, UTC)
 
 

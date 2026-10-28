@@ -32,12 +32,12 @@ from tests.support.service_support import (
     reaches_text,
     run_body,
     run_headers,
-    runners_that_start_no_run,
     served,
     service_config,
+    shared_mint,
+    unused_runners,
     with_placeholder_run_id,
 )
-from tests.test_service_entrance import MINT
 
 from agent_runtime.errors import TextToolCallRejectedError
 from agent_runtime.events import (
@@ -113,6 +113,7 @@ def _failed_with(raw: bytes, code: FailureCode) -> None:
     assert terminal.code is code
 
 
+MINT = shared_mint()
 SCRIPT = (
     AssistantTextEvent(text="Let me read the song."),
     ToolCallEvent(tool_use_id="call-1", name="read_song", input={"song_id": 7}),
@@ -308,7 +309,7 @@ def test_the_run_record_of_a_refused_tool_call_holds_the_failed_ending_but_not_t
 
     app = create_app(
         service_config(),
-        runners=runners_that_start_no_run(),
+        runners=unused_runners(),
         records=records,
         fetch_key_set=MINT.fetch_key_set,
     )

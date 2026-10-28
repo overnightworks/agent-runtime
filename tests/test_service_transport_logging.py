@@ -41,7 +41,7 @@ from tests.support.service_support import (
     fake_app_authority,  # noqa: F401 - a fixture, requested by name
     logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
     plain_service_config,
-    runners_that_start_no_run,
+    unused_runners,
 )
 
 import agent_runtime_service.app as app_module
@@ -317,8 +317,8 @@ def test_importing_the_service_modules_opens_no_transport_logger_level():
 
 
 def test_building_the_app_twice_leaves_the_transport_loggers_untouched(logging_state_restored):
-    create_app(plain_service_config(), runners=runners_that_start_no_run())
-    create_app(plain_service_config(), runners=runners_that_start_no_run())
+    create_app(plain_service_config(), runners=unused_runners())
+    create_app(plain_service_config(), runners=unused_runners())
 
     assert [logging.getLogger(name).level for name in TRANSPORT_ROOTS] == [logging.NOTSET] * len(
         TRANSPORT_ROOTS

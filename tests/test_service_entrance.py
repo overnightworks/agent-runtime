@@ -13,7 +13,7 @@ import json
 import logging
 import time
 import tracemalloc
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 
 import anyio
 import httpx
@@ -28,7 +28,6 @@ from tests.support.service_support import (
     MALFORMED_AGENTS,
     OLD_SUBSCRIPTION_GROUP,
     PRESENTATOR_CLIENT,
-    SONGMAKER_CLIENT,
     SONGMAKER_GROUP,
     SONGMAKER_TOOLS,
     SUBSCRIPTION_GROUP,
@@ -41,10 +40,18 @@ from tests.support.service_support import (
     post_run,
     run_body,
     run_headers,
-    runners_that_start_no_run,
     served,
     service_config,
     service_config_file,
+    shared_mint,
+    unused_runners,
+)
+from tests.support.token_rejection_support import (
+    FORBIDDEN,
+    TOKEN_REJECTIONS,
+    UNAUTHORIZED,
+    TokenFor,
+    expired_workload,
 )
 from webauth.https_client import KeySetFetchError
 from webauth.jwt_verification import KEY_SET_REFRESH_COOLDOWN_SECONDS
@@ -66,8 +73,7 @@ API_SCRIPT = (AssistantTextEvent(text="via the API"), FinalEvent(text="API answe
 
 LISTED = f"{Provider.ANTHROPIC}/{LISTED_MODEL}"
 CLI_ROUTE = Cli(Provider.ANTHROPIC)
-MINT = TokenMint()
-OTHER_MINT = TokenMint()
+MINT = shared_mint()
 
 
 @pytest.fixture(scope="module")
@@ -218,7 +224,7 @@ def test_an_unfetchable_key_set_answers_unavailable_after_the_workload_token_is_
         raise KeySetFetchError("the issuer cannot be reached")
 
     app = create_app(
-        service_config(), runners=runners_that_start_no_run(), fetch_key_set=unreachable_issuer
+        service_config(), runners=unused_runners(), fetch_key_set=unreachable_issuer
     )
     with served(app) as base_url:
         response = post_run(base_url, run_headers(workload(), user()))
@@ -249,7 +255,7 @@ def test_a_token_with_an_unknown_kid_answers_by_whether_the_key_set_can_be_refre
 
     app = create_app(
         service_config(),
-        runners=runners_that_start_no_run(),
+        runners=unused_runners(),
         fetch_key_set=issuer_that_fails_after_the_first_fetch,
         monotonic_clock=clock,
     )
@@ -308,138 +314,6 @@ def test_one_key_set_fetch_serves_every_request_of_the_process():
     assert mint.key_set_fetches == 1
 
 
-TokenFor = Callable[[], str | None]
-
-
-def _no_token() -> None:
-    return None
-
-
-def _expired_workload() -> str:
-    now = int(time.time())
-    return MINT.workload(iat=now - 400, exp=now - 100)
-
-
-def _long_lived_workload() -> str:
-    now = int(time.time())
-    return MINT.workload(iat=now, exp=now + 301)
-
-
-def _user_with_the_workload_subject() -> str:
-    return MINT.user(sub=f"service-account-user-of-{SONGMAKER_CLIENT}")
-
-
-UNAUTHORIZED = RejectionCode.UNAUTHORIZED
-FORBIDDEN = RejectionCode.FORBIDDEN
-
-TOKEN_REJECTIONS = [
-    pytest.param(_no_token, _no_token, UNAUTHORIZED, id="no-tokens"),
-    pytest.param(_no_token, MINT.user, UNAUTHORIZED, id="no-workload-token"),
-    pytest.param(MINT.workload, _no_token, UNAUTHORIZED, id="no-user-token"),
-    pytest.param(lambda: "not.a.jwt", MINT.user, UNAUTHORIZED, id="garbage-workload-token"),
-    pytest.param(OTHER_MINT.workload, MINT.user, UNAUTHORIZED, id="workload-of-an-unknown-key"),
-    pytest.param(_expired_workload, MINT.user, UNAUTHORIZED, id="expired-workload-token"),
-    pytest.param(
-        MINT.workload, lambda: MINT.user(aud="account"), UNAUTHORIZED, id="user-wrong-audience"
-    ),
-    pytest.param(
-        MINT.workload,
-        lambda: MINT.user(iss="https://elsewhere.test/realms/x"),
-        UNAUTHORIZED,
-        id="user-token-wrong-issuer",
-    ),
-    pytest.param(
-        MINT.workload,
-        lambda: MINT.user(groups="/subscription-members"),
-        UNAUTHORIZED,
-        id="groups-not-a-list",
-    ),
-    pytest.param(
-        MINT.workload,
-        lambda: MINT.user(groups=["/subscription-members", 7]),
-        UNAUTHORIZED,
-        id="groups-with-a-non-string",
-    ),
-    pytest.param(
-        MINT.workload, lambda: MINT.user(sub=None), UNAUTHORIZED, id="user-token-without-subject"
-    ),
-    pytest.param(
-        MINT.workload,
-        lambda: MINT.user(sub="user-\ud800"),
-        UNAUTHORIZED,
-        id="user-subject-with-a-lone-surrogate",
-    ),
-    pytest.param(
-        MINT.workload,
-        lambda: MINT.user(azp=PRESENTATOR_CLIENT, sub="user-\ud800"),
-        UNAUTHORIZED,
-        id="lone-surrogate-answers-before-the-azp-mismatch",
-    ),
-    pytest.param(
-        lambda: MINT.workload(client="unknown-app"),
-        lambda: MINT.user(azp="unknown-app", sub="user-\ud800"),
-        UNAUTHORIZED,
-        id="lone-surrogate-answers-before-an-unregistered-client",
-    ),
-    pytest.param(
-        lambda: MINT.workload(realm_access={"roles": ["default-roles-agent-test"]}),
-        MINT.user,
-        FORBIDDEN,
-        id="workload-without-the-workload-role",
-    ),
-    pytest.param(
-        lambda: MINT.workload(client_id=PRESENTATOR_CLIENT),
-        MINT.user,
-        FORBIDDEN,
-        id="workload-client-id-differs-from-azp",
-    ),
-    pytest.param(
-        lambda: MINT.workload(client_id=None), MINT.user, FORBIDDEN, id="workload-without-client-id"
-    ),
-    pytest.param(
-        lambda: MINT.workload(client_id=""),
-        MINT.user,
-        FORBIDDEN,
-        id="workload-with-empty-client-id",
-    ),
-    pytest.param(lambda: MINT.workload(azp=None), MINT.user, FORBIDDEN, id="workload-without-azp"),
-    pytest.param(lambda: MINT.workload(azp=""), MINT.user, FORBIDDEN, id="workload-with-empty-azp"),
-    pytest.param(MINT.workload, lambda: MINT.user(azp=None), FORBIDDEN, id="user-without-azp"),
-    pytest.param(MINT.workload, lambda: MINT.user(azp=""), FORBIDDEN, id="user-with-empty-azp"),
-    pytest.param(
-        lambda: MINT.workload(client="unknown-app"),
-        lambda: MINT.user(azp="unknown-app"),
-        FORBIDDEN,
-        id="workload-of-an-unregistered-client",
-    ),
-    pytest.param(_long_lived_workload, MINT.user, FORBIDDEN, id="workload-living-over-300-s"),
-    pytest.param(
-        lambda: MINT.workload(sub=""), MINT.user, UNAUTHORIZED, id="workload-with-empty-subject"
-    ),
-    pytest.param(
-        lambda: MINT.workload(sub=None), MINT.user, FORBIDDEN, id="workload-without-subject"
-    ),
-    pytest.param(
-        MINT.workload,
-        lambda: MINT.user(azp=PRESENTATOR_CLIENT),
-        FORBIDDEN,
-        id="user-logged-in-through-another-app",
-    ),
-    pytest.param(
-        MINT.workload,
-        _user_with_the_workload_subject,
-        FORBIDDEN,
-        id="user-subject-equals-workload-subject",
-    ),
-    pytest.param(
-        lambda: MINT.workload(realm_access={"roles": []}),
-        lambda: "not.a.jwt",
-        UNAUTHORIZED,
-        id="an-unusable-token-answers-before-a-forbidden-one",
-    ),
-]
-
-
 @pytest.mark.parametrize(("workload_token", "user_token", "code"), TOKEN_REJECTIONS)
 def test_tokens_that_do_not_bind_one_app_to_one_user_are_refused(
     service, workload_token: TokenFor, user_token: TokenFor, code
@@ -458,7 +332,7 @@ def test_tokens_that_do_not_bind_one_app_to_one_user_are_refused(
 def test_every_unusable_credential_answers_the_same_body(service):
     bodies = {
         post_run(service, run_headers(None, MINT.user())).content,
-        post_run(service, run_headers(_expired_workload(), MINT.user())).content,
+        post_run(service, run_headers(expired_workload(), MINT.user())).content,
         post_run(service, run_headers(MINT.workload(), MINT.user(aud="account"))).content,
     }
 
@@ -664,7 +538,7 @@ def test_a_single_chunk_over_the_limit_is_refused_without_being_buffered():
     chunk_size = 16 * MAX_REQUEST_BYTES
     chunk = b"x" * chunk_size
     app = create_app(
-        service_config(), runners=runners_that_start_no_run(), fetch_key_set=MINT.fetch_key_set
+        service_config(), runners=unused_runners(), fetch_key_set=MINT.fetch_key_set
     )
     headers = run_headers(MINT.workload(), MINT.user())
     tracemalloc.start()

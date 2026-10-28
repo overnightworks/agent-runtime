@@ -734,7 +734,7 @@ class ScriptedRunner:
             yield event
 
 
-def runners_that_start_no_run() -> Runners:
+def unused_runners() -> Runners:
     return Runners(cli=ScriptedRunner([]))
 
 

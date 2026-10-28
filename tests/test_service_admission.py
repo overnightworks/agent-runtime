@@ -20,6 +20,8 @@ import httpx
 import pytest
 from starlette.requests import ClientDisconnect
 from tests.support.bounds import TEST_WAIT_SECONDS, within_the_bound
+from tests.support.held_runner_support import HeldRunner
+from tests.support.request_limits_support import QUOTATION_MARKS_256, TUNED_AT_THE_LIMIT
 from tests.support.service_support import (
     API_GROUP,
     LONGEST_AGENT,
@@ -43,7 +45,6 @@ from tests.support.service_support import (
     service_config,
     shared_mint,
 )
-from tests.test_service_capability import QUOTATION_MARKS_256, TUNED_AT_THE_LIMIT
 from webauth.https_client import KeySetFetchError
 
 from agent_runtime.errors import ContainmentLost, RetainedGroup
@@ -61,29 +62,6 @@ PLACES: Final = 2
 MINT = TokenMint()
 FINAL = (FinalEvent(text="done"),)
 BOB_ON_THE_API_ROUTE = {"groups": [SONGMAKER_GROUP, API_GROUP], "sub": "user-bob"}
-
-
-class HeldRunner:
-    """A CLI runner whose runs stay open until a test lets them go, each for a bounded time."""
-
-    def __init__(self) -> None:
-        self.entered = threading.Event()
-        self.gates: list[threading.Event] = []
-        self._everything_proceeds = threading.Event()
-
-    async def run(self, admitted):
-        gate = threading.Event()
-        self.gates.append(gate)
-        self.entered.set()
-        if self._everything_proceeds.is_set():
-            gate.set()
-        await asyncio.to_thread(gate.wait, TEST_WAIT_SECONDS)
-        yield FinalEvent(text="done")
-
-    def proceed_all(self) -> None:
-        self._everything_proceeds.set()
-        for gate in self.gates:
-            gate.set()
 
 
 @dataclass

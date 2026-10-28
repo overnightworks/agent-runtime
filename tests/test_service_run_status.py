@@ -24,12 +24,13 @@ from tests.support.service_support import (
     instant,
     post_run,
     run_headers,
-    runners_that_start_no_run,
     served,
     service_config,
+    shared_mint,
+    unused_runners,
 )
+from tests.support.token_rejection_support import TOKEN_REJECTIONS
 from tests.support.wire_builders import started, succeeded
-from tests.test_service_entrance import MINT, TOKEN_REJECTIONS
 from webauth.https_client import KeySetFetchError
 
 from agent_runtime_client.wire import PROTOCOL_VERSION, RejectionCode, RunState, RunStatus
@@ -37,6 +38,7 @@ from agent_runtime_service.app import create_app
 from agent_runtime_service.identity import Principal
 from agent_runtime_service.run_records import RunRecorder, RunRecords
 
+MINT = shared_mint()
 ALICE = Principal(TEST_ISSUER, "user-alice")
 BOB = Principal(TEST_ISSUER, "user-bob")
 ALICE_ELSEWHERE = Principal("https://elsewhere.test/realms/x", "user-alice")
@@ -95,7 +97,7 @@ def seeded() -> Seeded:
 def service(seeded: Seeded) -> Iterator[str]:
     app = create_app(
         service_config(),
-        runners=runners_that_start_no_run(),
+        runners=unused_runners(),
         records=seeded.records,
         fetch_key_set=MINT.fetch_key_set,
     )
@@ -217,7 +219,7 @@ def test_an_unfetchable_key_set_answers_unavailable_for_every_id(seeded: Seeded)
 
     app = create_app(
         service_config(),
-        runners=runners_that_start_no_run(),
+        runners=unused_runners(),
         records=seeded.records,
         fetch_key_set=unreachable_issuer,
     )
@@ -268,7 +270,7 @@ def test_a_get_without_an_id_is_not_a_status_read(service):
 
 def test_a_second_app_over_the_same_configuration_remembers_nothing(seeded: Seeded):
     restarted = create_app(
-        service_config(), runners=runners_that_start_no_run(), fetch_key_set=MINT.fetch_key_set
+        service_config(), runners=unused_runners(), fetch_key_set=MINT.fetch_key_set
     )
 
     with served(restarted) as base_url:
