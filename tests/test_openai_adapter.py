@@ -7,14 +7,17 @@ import json
 
 import httpx
 import pytest
+from tests.support.openai_completions import (
+    assert_closed_refusal,
+    caller_error,
+    completion,
+    malformed_completions,
+    provider_call,
+    tool_completion,
+)
 
 from agent_runtime.errors import ProviderUnavailableError, SafeRouteReasonCode
 from agent_runtime.openai_adapter import complete_openai_compatible_text
-
-
-def completion(*, text="answer", **message):
-    return {"choices": [{"message": {"role": "assistant", "content": text, **message},
-                         "finish_reason": "stop"}]}
 
 
 def complete(response):
@@ -46,30 +49,6 @@ def test_http_status_is_checked_before_json(status, body):
     assert raised.value.reason.code is SafeRouteReasonCode.API_HTTP_ERROR
     assert raised.value.__context__ is None
     assert raised.value.__cause__ is None
-
-
-def malformed_completions():
-    yield from [None, [], {}, {"choices": []}, {"choices": False}, {"choices": [None]},
-                {"choices": [{"message": []}]}, {"choices": [{}]}]
-    for field, values in {
-        "content": ["", None, False, [], {}], "role": [None, "user", False],
-        "tool_calls": [False, {}, "", [{"function": {"arguments": "private"}}]],
-        "function_call": [False, {}, "", {"name": "tool"}],
-    }.items():
-        for value in values:
-            yield completion(**{field: value}) if field != "content" else completion(text=value)
-    for field in ["role", "content"]:
-        payload = completion()
-        del payload["choices"][0]["message"][field]
-        yield payload
-    for finish in [None, False, "", "unknown", "length", "content_filter", "tool_calls",
-                   "function_call"]:
-        payload = completion()
-        payload["choices"][0]["finish_reason"] = finish
-        yield payload
-    payload = completion()
-    del payload["choices"][0]["finish_reason"]
-    yield payload
 
 
 @pytest.mark.parametrize("payload", list(malformed_completions()))
@@ -148,18 +127,6 @@ def test_released_sync_call_keeps_its_json_and_timeout_contract(monkeypatch):
         model="model", prompt="question", system="system", timeout=17) == "done"
 
 
-def caller_error():
-    request = httpx.Request("POST", "http://fake", headers={
-        "Authorization": "Bearer synthetic-ambient-secret"})
-    return httpx.ReadError("synthetic-ambient-secret", request=request)
-
-
-def assert_closed_refusal(error):
-    assert error.__context__ is None
-    assert error.__cause__ is None
-    assert "synthetic-ambient-secret" not in str(error)
-
-
 @pytest.mark.parametrize("status,body,reason", [
     (503, b"unavailable", SafeRouteReasonCode.API_HTTP_ERROR),
     (200, b"invalid json", SafeRouteReasonCode.API_PROTOCOL_ERROR),
@@ -185,17 +152,6 @@ def test_empty_completed_text_is_a_protocol_refusal():
     with pytest.raises(ProviderUnavailableError) as raised:
         complete(response)
     assert raised.value.reason.code is SafeRouteReasonCode.API_PROTOCOL_ERROR
-
-
-def tool_completion(calls=None, text=None):
-    return {"choices": [{"message": {"role": "assistant", "content": text,
-        "tool_calls": calls if calls is not None else [provider_call()]},
-        "finish_reason": "tool_calls"}]}
-
-
-def provider_call(identity="provider-1", name="echo", arguments='{"value": 7}'):
-    return {"id": identity, "type": "function", "function": {
-        "name": name, "arguments": arguments}}
 
 
 def strict_complete(response):

@@ -58,7 +58,7 @@ jobs:
       - name: Ruff
         env:
           PYTHONPATH: src:packages/client/src:packages/service/src
-        run: uv run --locked --no-sync --no-build ruff check src tests packages
+        run: uv run --locked --no-sync --no-build ruff check src tests packages conftest.py
 
       - name: Import boundaries
         env:
@@ -69,7 +69,7 @@ jobs:
         env:
           PYTHONPATH: src:packages/client/src:packages/service/src
         run: >-
-          uv run --locked --no-sync --no-build pytest tests -q
+          uv run --locked --no-sync --no-build pytest -q
           --cov=src --cov=packages/client/src --cov=packages/service/src
           --cov-report=xml:coverage.xml
 
@@ -276,7 +276,7 @@ jobs:
       - name: Tests
         env:
           PYTHONPATH: src:packages/client/src:packages/service/src
-        run: uv run --no-sync --no-build pytest tests -q
+        run: uv run --no-sync --no-build pytest -q
 
   quality:
     needs: [checks, keycloak-token-shapes, dependency-floors]
