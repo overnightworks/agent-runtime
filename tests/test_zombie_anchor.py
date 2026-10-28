@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 from tests.support import anchored_support
 from tests.support.anchored_support import (
+    EXIT_WITH_LINE,
     NOBODY,
     P_PIDFD,
     RUNNING,
@@ -37,9 +38,6 @@ from tests.support.bounds import TEST_WAIT_SECONDS
 from agent_runtime.spawn import closed_environment
 
 SUPPORT_MODULE = Path(anchored_support.__file__)
-EXIT_WITH_LINE = (
-    "import sys\nline = sys.stdin.readline()\nsys.exit(int(line) if line.strip() else 0)\n"
-)
 FORBIDDEN_NUMBERED_OPERATIONS = {"kill", "killpg", "waitpid", "wait", "wait3", "wait4"}
 KERNEL_BINDINGS = {"pidfd_open", "pidfd_send_signal", "_waitid", "wait_for_exits"}
 

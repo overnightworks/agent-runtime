@@ -16,9 +16,8 @@ from typing import Literal
 
 import pytest
 from tests.support.anchored_kernel import RecordingKernel, join_watcher, watcher_thread
-from tests.support.anchored_support import ChildCleanup, OwnedChild
+from tests.support.anchored_support import EXIT_WITH_LINE, ChildCleanup, OwnedChild
 from tests.support.bounds import TEST_WAIT_SECONDS, within_the_bound
-from tests.test_zombie_anchor import EXIT_WITH_LINE
 
 from agent_runtime import spawn
 from agent_runtime.spawn import (
