@@ -445,6 +445,7 @@ BODY_REJECTIONS = [
         for label, version in (
             ("version-1", 1),
             ("older-version", 2),
+            ("previous-protocol-version", 3),
             ("newer-version", PROTOCOL_VERSION + 1),
             ("version-as-a-numeric-string", str(PROTOCOL_VERSION)),
             ("v-as-a-string", "1"),

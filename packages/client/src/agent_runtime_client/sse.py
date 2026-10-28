@@ -18,7 +18,6 @@ frame whose ``event`` line, which the encoder writes first, says ``succeeded``.
 from __future__ import annotations
 
 import json
-import math
 import re
 from enum import Enum, auto
 from typing import Any, Final
@@ -29,6 +28,7 @@ from agent_runtime_client.wire import (
     MAX_SUCCEEDED_FRAME_BYTES,
     RunEvent,
     Succeeded,
+    base64_length,
     is_run_event,
     refuse_non_json_constant,
 )
@@ -40,7 +40,7 @@ _LINE_FEED: Final = ord("\n")
 _FRAME_FIELDS: Final = frozenset({"id", "event", "data"})
 _IGNORED_FIELD: Final = "retry"
 _COMMENT_MARK: Final = ":"
-_SUCCEEDED: Final = "succeeded"
+_SUCCEEDED: Final = Succeeded.model_fields["type"].default
 
 Decoded = RunEvent | StreamViolation
 
@@ -68,7 +68,8 @@ def encode_event(event: RunEvent) -> bytes:
         raise EventTooLarge(
             f"a {event.type} frame of {len(frame)} bytes exceeds {_ceiling_of(event.type)} bytes"
         )
-    if _exceeds_without_files(event, len(frame)):
+    files = event.files if event.type == _SUCCEEDED else ()
+    if len(frame) - sum(base64_length(len(file.content)) for file in files) > MAX_EVENT_BYTES:
         raise EventTooLarge(
             f"a succeeded frame of {len(frame)} bytes exceeds {MAX_EVENT_BYTES} bytes "
             "without its files' base64"
@@ -80,10 +81,13 @@ def _ceiling_of(event_type: str) -> int:
     return MAX_SUCCEEDED_FRAME_BYTES if event_type == _SUCCEEDED else MAX_EVENT_BYTES
 
 
-def _exceeds_without_files(event: RunEvent, frame_bytes: int) -> bool:
-    if not isinstance(event, Succeeded):
-        return False
-    files_base64 = sum(4 * math.ceil(len(file.content) / 3) for file in event.files)
+def _exceeds_without_files(raw: dict[str, Any], frame_bytes: int) -> bool:
+    # Judged on the raw object, so a frame that also breaks the schema is still
+    # refused for its size first; a content that is no string has no length here.
+    files = raw.get("files")
+    entries = files if isinstance(files, list) else []
+    contents = [entry.get("content") for entry in entries if isinstance(entry, dict)]
+    files_base64 = sum(len(content) for content in contents if isinstance(content, str))
     return frame_bytes - files_base64 > MAX_EVENT_BYTES
 
 
@@ -225,11 +229,11 @@ class RunStreamDecoder:
                 kind=ViolationKind.EVENT_TYPE_MISMATCH,
                 detail="the frame's event field is not its data's type",
             )
+        if event_type == _SUCCEEDED and _exceeds_without_files(raw, frame_bytes):
+            return _oversized(MAX_EVENT_BYTES)
         event = parse_event(raw)
         if isinstance(event, StreamViolation):
             return event
-        if _exceeds_without_files(event, frame_bytes):
-            return _oversized(MAX_EVENT_BYTES)
         if frame_id != str(event.seq):
             return StreamViolation(
                 kind=ViolationKind.ID_MISMATCH,

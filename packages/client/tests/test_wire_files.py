@@ -17,7 +17,6 @@ from agent_runtime_client.run_stream import StreamViolation, ViolationKind, pars
 from agent_runtime_client.wire import (
     MAX_RUN_FILE_NAME_BYTES,
     MAX_RUN_FILES_BYTES,
-    PROTOCOL_VERSION,
     RunFile,
     Succeeded,
 )
@@ -166,14 +165,10 @@ def test_a_malformed_content_never_appears_in_a_violation() -> None:
     assert SECRET_MARKER not in detail
 
 
-def test_a_name_that_breaks_a_rule_never_puts_its_file_content_in_a_violation() -> None:
-    detail = _violation(_raw([{"name": "a/b", "content": SECRET_MARKER}])).detail
+def test_a_clash_between_files_never_puts_their_content_in_a_violation() -> None:
+    twin = {"name": "a", "content": SECRET_MARKER}
 
+    detail = _violation(_raw([twin, twin])).detail
+
+    assert "unique" in detail
     assert SECRET_MARKER not in detail
-
-
-@pytest.mark.parametrize("version", [PROTOCOL_VERSION - 1, float(PROTOCOL_VERSION)])
-def test_an_event_of_another_version_or_a_float_version_is_unsupported(version: object) -> None:
-    raw = {**_raw([]), "v": version}
-
-    assert _violation(raw).kind is ViolationKind.UNSUPPORTED_VERSION

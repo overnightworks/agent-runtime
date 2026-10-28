@@ -38,13 +38,19 @@ from pydantic import (
 
 from agent_runtime_client.tools import ToolEffect
 
+
+def base64_length(size: int) -> int:
+    """The characters of the padded base64 of ``size`` bytes."""
+    return 4 * -(-size // 3)
+
+
 PROTOCOL_VERSION: Final = 4
 MAX_EVENT_BYTES: Final = 1_048_576
 MAX_RUN_FILES_BYTES: Final = 33_554_432
 MAX_RUN_FILE_NAME_BYTES: Final = 255
 # Base64 pads each file separately, so the allowance for the files' contents is
 # the ceiling's own base64 length; the frame rules live in ``sse``.
-MAX_SUCCEEDED_FRAME_BYTES: Final = MAX_EVENT_BYTES + 4 * math.ceil(MAX_RUN_FILES_BYTES / 3)
+MAX_SUCCEEDED_FRAME_BYTES: Final = MAX_EVENT_BYTES + base64_length(MAX_RUN_FILES_BYTES)
 MAX_TOOL_INPUT_DEPTH: Final = 128
 MAX_MESSAGE_LENGTH: Final = 500
 MAX_AGENT_LENGTH: Final = 64

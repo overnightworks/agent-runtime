@@ -7,7 +7,8 @@ event off the contract named once, with nothing decoded after it.
 
 from __future__ import annotations
 
-import math
+import base64
+import json
 from collections.abc import Iterator
 from typing import Any
 
@@ -331,11 +332,11 @@ def test_the_decoder_refuses_a_line_before_it_outgrows_the_limit() -> None:
 
 
 def _base64_bytes(file: RunFile) -> int:
-    return 4 * math.ceil(len(file.content) / 3)
+    return len(base64.b64encode(file.content))
 
 
 def _written(event: Succeeded) -> bytes:
-    # Written by hand so a frame the encoder refuses can still reach the decoder.
+    # Written by hand only so a frame the encoder refuses can still reach the decoder.
     return f"id: {event.seq}\nevent: succeeded\ndata: {event.model_dump_json()}\n\n".encode()
 
 
@@ -358,12 +359,12 @@ def _decode_split(frame: bytes) -> list[Decoded]:
 
 def _succeeded_with_non_file_part(size: int, files: tuple[RunFile, ...]) -> Succeeded:
     bare = succeeded(1, "x", files)
-    non_file = len(_written(bare)) - sum(_base64_bytes(file) for file in files)
+    non_file = len(encode_event(bare)) - sum(_base64_bytes(file) for file in files)
     return succeeded(1, "x" * (size - non_file + 1), files)
 
 
-def _non_file_part(event: Succeeded) -> int:
-    return len(_written(event)) - sum(_base64_bytes(file) for file in event.files)
+def _non_file_part(encoded: bytes, event: Succeeded) -> int:
+    return len(encoded) - sum(_base64_bytes(file) for file in event.files)
 
 
 def _a_file_of(size: int, name: str = "big") -> RunFile:
@@ -399,7 +400,7 @@ def test_the_non_file_part_may_be_exactly_the_event_limit_and_no_more() -> None:
     at_limit = _succeeded_with_non_file_part(MAX_EVENT_BYTES, files)
     over_limit = _succeeded_with_non_file_part(MAX_EVENT_BYTES + 1, files)
 
-    assert _non_file_part(at_limit) == MAX_EVENT_BYTES
+    assert _non_file_part(encode_event(at_limit), at_limit) == MAX_EVENT_BYTES
     assert _decode(OPENING, encode_event(at_limit))[1] == at_limit
     assert _decode_split(encode_event(at_limit))[1] == at_limit
     with pytest.raises(EventTooLarge, match=str(MAX_EVENT_BYTES)):
@@ -410,19 +411,40 @@ def test_the_non_file_part_may_be_exactly_the_event_limit_and_no_more() -> None:
 
 
 def test_files_that_base64_padding_pushes_over_the_frame_ceiling_are_refused_both_ways() -> None:
-    small_files = tuple(RunFile(name=f"f{number:06d}", content=b"x") for number in range(20_000))
-    big = _a_file_of(MAX_RUN_FILES_BYTES - len(small_files), "big")
-    files = (*small_files, big)
+    # One byte and the rest less one: together exactly the ceiling, yet each pads on its own.
+    files = (_a_file_of(1, "small"), _a_file_of(MAX_RUN_FILES_BYTES - 1, "big"))
     event = _succeeded_with_non_file_part(MAX_EVENT_BYTES, files)
     frame = _written(event)
 
-    assert _non_file_part(event) == MAX_EVENT_BYTES
     assert len(frame) > MAX_SUCCEEDED_FRAME_BYTES
     with pytest.raises(EventTooLarge, match=str(MAX_SUCCEEDED_FRAME_BYTES)):
         encode_event(event)
     for decoded in (_decode(OPENING, frame), _decode_split(frame)):
         assert decoded[-1].kind is ViolationKind.OVERSIZED_FRAME
         assert str(MAX_SUCCEEDED_FRAME_BYTES) in decoded[-1].detail
+
+
+def _frame_breaking_the_schema_beyond_the_event_limit() -> bytes:
+    # Fits under the frame ceiling, but its words alone fill the event limit, and
+    # its seq of -1 breaks the schema as well.
+    event = {
+        "v": PROTOCOL_VERSION,
+        "seq": -1,
+        "type": "succeeded",
+        "text": "x" * MAX_EVENT_BYTES,
+        "files": [],
+    }
+    return f"id: -1\nevent: succeeded\ndata: {json.dumps(event)}\n\n".encode()
+
+
+@pytest.mark.parametrize("decode", [lambda frame: _decode(OPENING, frame), _decode_split])
+def test_a_succeeded_frame_over_the_event_limit_without_files_is_oversized_before_its_schema(
+    decode: Any,
+) -> None:
+    violation = decode(_frame_breaking_the_schema_beyond_the_event_limit())[-1]
+
+    assert violation.kind is ViolationKind.OVERSIZED_FRAME
+    assert str(MAX_EVENT_BYTES) in violation.detail
 
 
 @pytest.mark.parametrize("make", [lambda: heartbeat(2), lambda: text(2, "words")])

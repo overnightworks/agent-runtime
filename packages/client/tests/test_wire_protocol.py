@@ -124,7 +124,7 @@ def test_every_variant_round_trips_through_its_json(raw: dict[str, object]) -> N
             {**wire("heartbeat", 1), "v": 1}, ViolationKind.UNSUPPORTED_VERSION, id="older version"
         ),
         pytest.param(
-            {**wire("heartbeat", 1), "v": 2},
+            {**wire("heartbeat", 1), "v": PROTOCOL_VERSION - 1},
             ViolationKind.UNSUPPORTED_VERSION,
             id="previous protocol version",
         ),
@@ -502,7 +502,7 @@ def test_a_violation_detail_shows_at_most_a_bounded_slice_of_untrusted_text(
     ("event_type", "fields"),
     [
         pytest.param("assistant_text", {"text": "\ud800"}, id="assistant text"),
-        pytest.param("succeeded", {"text": "\ud800"}, id="final text"),
+        pytest.param("succeeded", {"text": "\ud800", "files": []}, id="final text"),
         pytest.param(
             "tool_call",
             {"tool_use_id": "c", "name": "\ud800", "input": {}, "effect": "read_only"},
