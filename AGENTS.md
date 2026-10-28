@@ -68,5 +68,5 @@ request that precedes the tag raises all seven version literals together:
 the three `pyproject.toml` files, `agent_runtime.__version__`, core's exact
 `overnightworks-agent-runtime-client` pin, and the service's exact pins on core and
 client.
-`tests/test_distribution_contract.py` fails while they disagree, because uv
+`tests/test_agent_runtime_distribution_contract.py` fails while they disagree, because uv
 ignores those pins inside the workspace.

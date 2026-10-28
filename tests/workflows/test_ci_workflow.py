@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-_REPOSITORY = Path(__file__).resolve().parents[1]
+_REPOSITORY = Path(__file__).resolve().parents[2]
 _WORKFLOW = _REPOSITORY / ".github" / "workflows" / "ci.yml"
 _DECLARED_PYTHON_MINORS = ["3.12", "3.13", "3.14", "3.15"]
 

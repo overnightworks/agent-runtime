@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from ruamel.yaml import YAML
 
-_WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "release.yml"
+_WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
 _REPOSITORY = "overnightworks/agent-runtime"
 _MIGRATION_LINK = (
     "**Breaking release.** Read [Migrating to 0.3.0]"

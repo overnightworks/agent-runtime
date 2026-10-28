@@ -1,7 +1,7 @@
 """S6: a start whose watcher launch raises leaves no child, and no watcher touches the pid.
 
 The module name matches no ``python_files`` pattern, so ``pytest tests`` never collects it. Only
-``test_anchored_start`` names it, one row at a time, on the command line of a disposable
+``test_spawn_anchored_start`` names it, one row at a time, on the command line of a disposable
 interpreter. Running it directly would run S6 in that pytest's own process, where a failed
 cleanup leaves threads and patches behind.
 """
