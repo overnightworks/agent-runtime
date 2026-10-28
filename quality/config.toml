@@ -49,4 +49,4 @@ reason = "tests the fake app in tests/support/mcp_app_fake.py"
 [[layout.allow]]
 path = "tests/test_async_claude_spawn_seam.py"
 rule = "test-layout"
-reason = "tests the async Claude child seam and its guard in tests/support/provider_test_support.py"
+reason = "tests the async Claude child seam in tests/support/provider_test_support.py and guards that it stays the only door"
