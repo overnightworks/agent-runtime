@@ -1,0 +1,8 @@
+claim_id = "5c8900b72a4741a48997cf39451aaa5c"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "29df0f74c1c507542dfae0d7d04001f9deb812f1"
+branch = "claude/issue-554-codex-tool-items-pass"
+scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "packages/service/tests/test_cli_runner_codex_profile.py", "src/agent_runtime/codex/run.py", "tests/test_codex_run.py"]
+opened_commit = "1616b6a041b9afd907401c80cff412df5c27b058"
+whole_reason = "One decoder contract change: the Codex decoder admitting tool items, the two test modules that pin the old refusal, and the operations, decision-record and migration text that say what it now does belong together, or main is red or untrue between commits."
