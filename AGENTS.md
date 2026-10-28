@@ -40,8 +40,8 @@ proves it. The traps it cannot show:
 
 ```bash
 uv sync --all-packages --extra dev --extra image
-uv run pytest tests -q
-uv run ruff check src tests packages
+uv run pytest -q
+uv run ruff check src tests packages conftest.py
 uv run lint-imports
 uv build --all-packages
 ```
