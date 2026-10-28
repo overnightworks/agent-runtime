@@ -72,6 +72,12 @@ The optional API runner serves buffered text and granted app tools through the
 configured gateway; it takes no subscription place. Both routes use the app's
 MCP origin and trust configuration. The CLI and API runners are installed independently.
 
+`[runs] max_files_bytes` (default 8,388,608) limits all files of one run together; a
+value above 33,554,432, the wire's ceiling, stops startup with exit 2 naming
+`runs.max_files_bytes`. Files over it end the run `failed: limit_exceeded`, and any other
+refused entry of the run's output folder ends it `failed: provider_error`. `max_bytes`
+counts a `succeeded` frame without its files. A run may end with files and empty words.
+
 ## Configure the API text route
 
 Set `[identity] api_groups` and `[api]` together; either alone stops startup.

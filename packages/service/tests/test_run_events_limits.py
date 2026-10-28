@@ -28,7 +28,15 @@ from agent_runtime.events import (
     ToolCallEvent,
     ToolResultEvent,
 )
-from agent_runtime_client.wire import MAX_EVENT_BYTES, Failed, FailureCode, Succeeded
+from agent_runtime.run_output import RunOutputCause, RunOutputRefused
+from agent_runtime_client.wire import (
+    MAX_EVENT_BYTES,
+    Failed,
+    FailureCode,
+    RunFile,
+    Succeeded,
+    base64_length,
+)
 from agent_runtime_service.app import create_app
 from agent_runtime_service.config import RunConfig
 from agent_runtime_service.run_events import TOO_MANY_TOOL_CALLS_MESSAGE, TOO_MUCH_DATA_MESSAGE
@@ -310,3 +318,51 @@ def test_a_served_run_refuses_the_call_past_the_configured_limit():
     assert [event.type for event in events] == ["run_started", "tool_call", "tool_result", "failed"]
     assert isinstance(events[-1], Failed)
     assert events[-1].code is FailureCode.LIMIT_EXCEEDED
+
+
+@in_loop
+async def test_a_refused_output_over_the_limit_ends_the_run_as_limit_exceeded():
+    async with driven() as drive:
+        drive.runner.release(RunOutputRefused(RunOutputCause.OVER_LIMIT))
+        await drive.finished()
+
+    assert (failure_of(drive).code, failure_of(drive).message) == (
+        FailureCode.LIMIT_EXCEEDED,
+        TOO_MUCH_DATA_MESSAGE,
+    )
+
+
+FILE_OF_A_MEBIBYTE = RunFile(name="big.bin", content=bytes(1024 * 1024))
+
+
+@pytest.mark.parametrize(("margin", "succeeds"), [(0, True), (-1, False)])
+@in_loop
+async def test_the_byte_budget_counts_a_succeeded_frame_without_its_files_base64(margin, succeeds):
+    final = FinalEvent(text="Done.", files=(FILE_OF_A_MEBIBYTE,))
+    reference = await run_released([final], RunConfig())
+    files_base64 = base64_length(len(FILE_OF_A_MEBIBYTE.content))
+    without_files = reference.frame_sizes[-1] - files_base64
+
+    drive = await run_released([final], RunConfig(max_bytes=without_files + margin))
+
+    assert isinstance(drive.terminal[1], Succeeded) is succeeds
+    if not succeeds:
+        assert (failure_of(drive).code, failure_of(drive).message) == (
+            FailureCode.LIMIT_EXCEEDED,
+            TOO_MUCH_DATA_MESSAGE,
+        )
+
+
+@in_loop
+async def test_files_whose_names_alone_pass_the_frame_cap_end_the_run_as_a_provider_error():
+    names = tuple(RunFile(name=f"{n:03d}".ljust(255, "x"), content=b"") for n in range(4200))
+
+    async with driven(runs=RunConfig(max_bytes=64 * MAX_EVENT_BYTES)) as drive:
+        drive.runner.release(FinalEvent(text="Done.", files=names))
+        await drive.finished()
+
+    assert (failure_of(drive).code, failure_of(drive).message) == (
+        FailureCode.PROVIDER_ERROR,
+        "The provider's succeeded cannot be sent.",
+    )
+    assert "succeeded" not in drive.types

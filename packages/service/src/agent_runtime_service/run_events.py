@@ -48,6 +48,7 @@ from agent_runtime.events import (
     ToolCallEvent,
     ToolResultEvent,
 )
+from agent_runtime.run_output import RunOutputCause, RunOutputRefused
 from agent_runtime_client.run_stream import RunStream
 from agent_runtime_client.sse import EventTooLarge, encode_event
 from agent_runtime_client.tools import ToolEffect
@@ -63,6 +64,7 @@ from agent_runtime_client.wire import (
     Succeeded,
     ToolCall,
     ToolResult,
+    base64_length,
 )
 from agent_runtime_service.admission import Lease
 from agent_runtime_service.config import RunConfig
@@ -90,6 +92,7 @@ UNMAPPABLE_EVENT_MESSAGE: Final = "The provider sent an event the service cannot
 INVALID_EVENT_MESSAGE: Final = "The provider sent an event that is not valid."
 TOO_MANY_TOOL_CALLS_MESSAGE: Final = "The run made too many tool calls."
 TOO_MUCH_DATA_MESSAGE: Final = "The run sent too much data."
+OUTPUT_REFUSED_MESSAGE: Final = "The run's output files were refused."
 _SERVICE_WRITTEN: Final = (RunStarted, Heartbeat, Failed)
 
 
@@ -118,6 +121,12 @@ def _failure_of(refusal: _Unsendable | _OverBudget) -> _DecidedFailure:
 
 _CONTAINMENT_LOST: Final = _DecidedFailure(FailureCode.PROVIDER_ERROR, RUNNER_FAILED_MESSAGE)
 _COMMIT_FAILED: Final = _DecidedFailure(FailureCode.PROVIDER_ERROR, RUNNER_FAILED_MESSAGE)
+
+
+def _files_base64_length(event: RunEvent) -> int:
+    if not isinstance(event, Succeeded):
+        return 0
+    return sum(base64_length(len(file.content)) for file in event.files)
 
 
 async def run_frames(
@@ -260,6 +269,12 @@ class _WireRun:
         match outcome:
             case RunnerExhausted():
                 self.decide_failure(FailureCode.PROVIDER_ERROR, NO_ANSWER_MESSAGE)
+            case RunnerRaised(error=RunOutputRefused(cause=cause)):
+                over_limit = cause is RunOutputCause.OVER_LIMIT
+                self.decide_failure(
+                    FailureCode.LIMIT_EXCEEDED if over_limit else FailureCode.PROVIDER_ERROR,
+                    TOO_MUCH_DATA_MESSAGE if over_limit else OUTPUT_REFUSED_MESSAGE,
+                )
             case RunnerRaised(error=error):
                 if not reported_by_the_quarantine(error):
                     log_failure(log, f"The runner of run {self._run_id} failed", error)
@@ -308,8 +323,8 @@ class _WireRun:
                 return ToolResult(
                     **header, tool_use_id=tool_use_id, content=content, is_error=is_error
                 )
-            case FinalEvent(text=text):
-                return Succeeded(**header, text=text, files=())
+            case FinalEvent(text=text, files=files):
+                return Succeeded(**header, text=text, files=files)
         raise _Unsendable(UNMAPPABLE_EVENT_MESSAGE)
 
     def _tool_call(self, core_event: ToolCallEvent, header: dict[str, object]) -> ToolCall:
@@ -327,7 +342,7 @@ class _WireRun:
             frame = encode_event(event)
         except (EventTooLarge, PydanticSerializationError) as error:
             raise _Unsendable(f"The provider's {event.type} cannot be sent.") from error
-        self._charge(event, len(frame))
+        self._charge(event, len(frame) - _files_base64_length(event))
         violation = self._stream.accept(event)
         if violation is not None:
             raise _Unsendable(f"The provider broke the run's stream rules: {violation.kind}.")

@@ -48,6 +48,7 @@ from agent_runtime.events import (
     ToolResultEvent,
 )
 from agent_runtime.grok import transport as grok_cli_adapter
+from agent_runtime.run_output import RunOutputCause, RunOutputRefused
 from agent_runtime_client.tools import ToolEffect
 from agent_runtime_client.wire import (
     MAX_EVENT_BYTES,
@@ -56,6 +57,7 @@ from agent_runtime_client.wire import (
     Failed,
     FailureCode,
     RunEvent,
+    RunFile,
     RunRequest,
     RunState,
     RunStatus,
@@ -67,7 +69,11 @@ from agent_runtime_service.app import create_app
 from agent_runtime_service.config import Provider, RunConfig
 from agent_runtime_service.identity import Principal
 from agent_runtime_service.routing import Cli
-from agent_runtime_service.run_events import run_frames
+from agent_runtime_service.run_events import (
+    INVALID_EVENT_MESSAGE,
+    OUTPUT_REFUSED_MESSAGE,
+    run_frames,
+)
 from agent_runtime_service.run_liveness import LoopClock
 from agent_runtime_service.run_records import RunRecords
 from agent_runtime_service.runners import AdmittedRun, Runner
@@ -319,3 +325,47 @@ def test_the_run_record_of_a_refused_tool_call_holds_the_failed_ending_but_not_t
     assert (status.state, status.failure_code) == (RunState.FAILED, FailureCode.PROVIDER_ERROR)
     assert A_CANARY.encode() not in response.content
     assert not reaches_text(records, [A_CANARY])
+
+
+def test_a_final_answers_files_reach_the_succeeded_event_with_their_names_and_bytes():
+    files = (RunFile(name="a.txt", content=b"abc"), RunFile(name="b.bin", content=b""))
+
+    terminal = _terminal(_scripted(FinalEvent(text="Done.", files=files)))
+
+    assert isinstance(terminal, Succeeded)
+    assert terminal.files == files
+
+
+def test_a_final_answer_without_words_succeeds_beside_a_file():
+    files = (RunFile(name="a.txt", content=b"abc"),)
+
+    terminal = _terminal(_scripted(FinalEvent(text="", files=files)))
+
+    assert isinstance(terminal, Succeeded)
+    assert (terminal.text, terminal.files) == ("", files)
+
+
+def test_files_whose_names_repeat_end_the_run_as_an_invalid_event_and_send_nothing_of_them():
+    twice = (RunFile(name="a.txt", content=b"one"), RunFile(name="a.txt", content=b"two"))
+
+    raw = _scripted(FinalEvent(text="Done.", files=twice))
+
+    terminal = _terminal(raw)
+    assert isinstance(terminal, Failed)
+    assert (terminal.code, terminal.message) == (FailureCode.PROVIDER_ERROR, INVALID_EVENT_MESSAGE)
+    assert b'"succeeded"' not in raw
+
+
+@pytest.mark.parametrize(
+    "cause", [cause for cause in RunOutputCause if cause is not RunOutputCause.OVER_LIMIT]
+)
+def test_a_refused_output_ends_the_run_with_the_services_own_text_and_no_log_line_of_its_own(
+    cause, caplog
+):
+    caplog.set_level(logging.DEBUG)
+
+    terminal = _terminal(_scripted(RunOutputRefused(cause)))
+
+    assert isinstance(terminal, Failed)
+    assert (terminal.code, terminal.message) == (FailureCode.PROVIDER_ERROR, OUTPUT_REFUSED_MESSAGE)
+    assert [r for r in caplog.records if r.name == run_events.__name__] == []

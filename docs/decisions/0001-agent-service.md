@@ -248,7 +248,8 @@ body rules be fixed before the build.
   (default 120) and `max_duration_s` (default 600), which must satisfy
   heartbeat < stall <= idle < maximum, and the
   budget `max_tool_calls` (default 30) and `max_bytes` (default 4 MiB,
-  4194304), and `max_parallel_cli_runs` (default 5), all positive integers
+  4194304), `max_files_bytes` (default 8 MiB, at most the wire's 32 MiB) and
+  `max_parallel_cli_runs` (default 5), all positive integers
   outside that ordering;
   `[profiles.<name>]` at most one profile, for Claude, with a required `token_file`;
   `[cli]` the private `working_root` (an existing directory the service user
@@ -1260,6 +1261,10 @@ Piece 2 of A1a3 (`agent_service.run_events`, the budget beside `seq`):
     not counted, so the byte budget never keeps a terminal from being queued;
     a dropped client gets none. The per-frame cap stays
     `provider_error` and may exceed a small `max_bytes`.
+
+**Amendment (28.10.2026, #552, #488).** A `succeeded` frame is counted without the
+base64 of its files, and the files of one run are a separate budget,
+`max_files_bytes`, which the core's collector enforces.
 17. An event the budget refuses is charged nothing, takes no `seq` and is never
     recorded by `RunStream`; the limit terminal takes the `seq` it would have had. The
     order is encode, budget (calls before bytes), stream rules, send.
