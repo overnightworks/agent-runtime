@@ -1,8 +1,0 @@
-claim_id = "98e00ae195074a41a8da7892a0f1977e"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "63b541f75b74a81c4b010a7ab67135d2b8c81c8b"
-branch = "claude/issue-526-s4-config-support"
-scope = [".github/host-vocabulary-allowed.txt", "quality/baseline.toml", "tests/support/private_removal_support.py", "tests/support/service_config_support.py", "tests/test_run_directories.py", "tests/test_service_app_runs.py", "tests/test_service_check.py", "tests/test_service_cli_version.py", "tests/test_service_codex_startup.py", "tests/test_service_config.py", "tests/test_service_process_hardening.py", "tests/test_service_signing.py", "tests/test_service_transport_logging.py"]
-opened_commit = "a07f2fc41b845e932efa0509005ca43843cb715a"
-whole_reason = "One extraction: three test modules' shared code moves into two support modules and their eight importers switch together."
