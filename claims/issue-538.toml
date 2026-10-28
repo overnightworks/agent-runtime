@@ -1,0 +1,8 @@
+claim_id = "398ceb6373ce4963aa4aebd671135208"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "ce29fc71e3ea8da5c0a69ac49461a0820accd9e2"
+branch = "claude/issue-538-s8c-service-tests-relay"
+scope = [".github/host-vocabulary-allowed.txt", "packages/service/tests", "quality/baseline.toml", "tests/test_relayed_events.py", "tests/test_service_api_runner.py", "tests/test_service_api_runner_tools.py", "tests/test_service_app_tools.py", "tests/test_service_cli_runner.py", "tests/test_service_cli_runner_tools.py", "tests/test_service_containment_ending.py", "tests/test_service_run_recording.py", "tests/test_service_run_tools.py", "tests/test_service_run_tools_session.py", "tests/test_service_tool_relay.py", "tests/test_service_tool_relay_barrier.py", "tests/test_service_tool_relay_lifecycle.py", "tests/test_service_tool_relay_protocol.py"]
+opened_commit = "f03aab386c7b7f487361c23e52083740574dc56c"
+whole_reason = "One rename batch: the three oversized files, their baseline keys, the held clone pair and the one literal that names a moved file must move together."
