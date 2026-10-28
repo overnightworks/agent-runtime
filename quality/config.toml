@@ -21,3 +21,7 @@ reason = "the uv workspace's member distributions"
 [[root.allow]]
 entry = "legal/"
 reason = "the privacy section the service ships from its release tag"
+
+[[root.allow]]
+entry = "conftest.py"
+reason = "the pytest root plugin that loads the suite fixtures; the pinned quality version reads [root] and has no [layout] table"
