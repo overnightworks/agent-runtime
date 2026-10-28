@@ -23,7 +23,7 @@ from unittest.mock import Mock
 
 import pytest
 from PIL import Image
-from provider_test_support import (
+from tests.support.provider_test_support import (
     A_CALLER_CANARY,
     A_RUNNER_FAILURE_CANARY,
     A_TOOL_FAILURE_MESSAGE,

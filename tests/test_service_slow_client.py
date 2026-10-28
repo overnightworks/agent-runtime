@@ -14,7 +14,7 @@ import sys
 import uuid
 
 import pytest
-from service_support import (
+from tests.support.service_support import (
     QUIET,
     ClientSocket,
     Drive,

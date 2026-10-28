@@ -13,7 +13,7 @@ import math
 import uuid
 
 import pytest
-from provider_test_support import (
+from tests.support.provider_test_support import (
     A_CANARY,
     a_call_to_an_undeclared_tool_carrying,
     cli_rounds_runner,
@@ -22,7 +22,7 @@ from provider_test_support import (
     grok_cli_outcome,
     grok_tool_round_lines,
 )
-from service_support import (
+from tests.support.service_support import (
     LISTED_MODEL,
     SONGMAKER_TOOLS,
     ScriptedRunner,
@@ -37,7 +37,7 @@ from service_support import (
     service_config,
     with_placeholder_run_id,
 )
-from test_service_entrance import MINT
+from tests.test_service_entrance import MINT
 
 from agent_runtime.errors import TextToolCallRejectedError
 from agent_runtime.events import (

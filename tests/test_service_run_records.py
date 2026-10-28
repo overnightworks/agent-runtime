@@ -15,8 +15,8 @@ from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
-from service_support import WallClock, instant, reaches_text
-from wire_builders import (
+from tests.support.service_support import WallClock, instant, reaches_text
+from tests.support.wire_builders import (
     RUN_ID,
     call,
     cancelled,

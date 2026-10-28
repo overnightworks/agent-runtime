@@ -9,14 +9,14 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-from bounds import TEST_WAIT_SECONDS
-from mcp_server_support import (
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.mcp_server_support import (
     ISSUED_AT,
     VERIFICATION_KEY,
     RecordingHandlers,
     minted_capability,
 )
-from service_support import (
+from tests.support.service_support import (
     fake_app_authority,  # noqa: F401 - a fixture, requested by name
     listening_loopback_socket,
     served,

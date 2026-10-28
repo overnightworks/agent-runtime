@@ -10,12 +10,12 @@ from pathlib import Path
 
 import coverage
 import pytest
-from anchored_support import IMPORT_ROOT_PRELUDE, ChildCleanup, absolute_import_roots
-from bounds import TEST_WAIT_SECONDS
+from tests.support.anchored_support import IMPORT_ROOT_PRELUDE, ChildCleanup, absolute_import_roots
+from tests.support.bounds import TEST_WAIT_SECONDS
 
 from agent_runtime.spawn import ChildProcess, closed_environment
 
-CASES_MODULE = Path(__file__).with_name("anchored_start_cases.py")
+CASES_MODULE = Path(__file__).parent / "support" / "anchored_start_cases.py"
 ROW_INTERPRETER_SECONDS = 8 * TEST_WAIT_SECONDS
 """A failing row chains seven bounded waits (the seam's, the outcome's join, the exit's worker
 join, the watcher's readiness and its join, the cleanup's teardown, the session anchor's

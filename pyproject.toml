@@ -55,6 +55,8 @@ select = ["E", "F", "W", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["--import-mode=importlib"]
+pythonpath = ["."]
 markers = [
     "keycloak: needs the test Keycloak at KEYCLOAK_URL (the keycloak-token-shapes CI job).",
 ]

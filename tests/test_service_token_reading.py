@@ -17,7 +17,7 @@ import httpx
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from jwt.algorithms import ECAlgorithm
-from service_support import (
+from tests.support.service_support import (
     SONGMAKER_CLIENT,
     TEST_JWKS_URL,
     ScriptedRunner,

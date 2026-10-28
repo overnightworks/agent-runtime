@@ -41,9 +41,9 @@ from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 
 import pytest
-from anchored_kernel import join_watcher, watcher_thread
-from anchored_support import ChildCleanup
-from bounds import TEST_WAIT_SECONDS
+from tests.support.anchored_kernel import join_watcher, watcher_thread
+from tests.support.anchored_support import ChildCleanup
+from tests.support.bounds import TEST_WAIT_SECONDS
 
 from agent_runtime import spawn
 from agent_runtime.spawn import (

@@ -17,7 +17,7 @@ import uvicorn
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import dsa, ec, ed25519, rsa
 from jwt.algorithms import RSAAlgorithm
-from service_support import (
+from tests.support.service_support import (
     CALLED_PLAINLY_OR_FROM_AN_ACTIVE_HANDLER,
     called_from,
     everything_a_refusal_holds,
@@ -26,7 +26,7 @@ from service_support import (
     reaches_private_key,
     written_key_file,
 )
-from test_service_config import SIGNING_KEY_LINE, VALID_CONFIG, _written
+from tests.test_service_config import SIGNING_KEY_LINE, VALID_CONFIG, _written
 from webauth.jwt_verification import JwtVerifier, Rejected, RejectionReason, VerifiedClaims
 
 from agent_runtime_service.cli import EXIT_BAD_CONFIG, main

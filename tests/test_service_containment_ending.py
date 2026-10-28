@@ -19,7 +19,7 @@ from functools import partial
 
 import anyio
 import pytest
-from service_support import (
+from tests.support.service_support import (
     CUT_BY_ITS_SCOPE,
     BrokenClock,
     Drive,

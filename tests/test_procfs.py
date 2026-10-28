@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from typing import BinaryIO
 
 import pytest
-from provider_test_support import PROC_DEVICE, PROC_MOUNT_POINT, mountinfo_line
+from tests.support.provider_test_support import PROC_DEVICE, PROC_MOUNT_POINT, mountinfo_line
 
 from agent_runtime import procfs
 from agent_runtime.procfs import (

@@ -10,9 +10,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import pytest
-from bounds import TEST_WAIT_SECONDS
 from pydantic import SecretStr
-from relay_support import (
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.relay_support import (
     OWNER_ANSWER,
     OWNER_BODY,
     RUN_ID,

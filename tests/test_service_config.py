@@ -15,11 +15,11 @@ from typing import Any
 
 import pytest
 import uvicorn
-from api_support import API_SECTION
-from mcp_app_fake import TestAuthority
-from provider_test_support import fake_cli_executable
 from pydantic import ValidationError
-from service_support import (
+from tests.support.api_support import API_SECTION
+from tests.support.mcp_app_fake import TestAuthority
+from tests.support.provider_test_support import fake_cli_executable
+from tests.support.service_support import (
     CALLED_PLAINLY_OR_FROM_AN_ACTIVE_HANDLER,
     PINNED_CLAUDE_VERSION,
     PROCESS_TOKEN,

@@ -19,9 +19,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from provider_test_support import a_codex_login, write_claude_token_file
-from service_support import TEST_ISSUER, _service_config_document, reaches_text
-from test_service_codex_profile import (
+from tests.support.provider_test_support import a_codex_login, write_claude_token_file
+from tests.support.service_support import TEST_ISSUER, _service_config_document, reaches_text
+from tests.test_service_codex_profile import (
     a_service_fake,
     codex_document,
     write_login,

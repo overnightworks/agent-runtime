@@ -33,7 +33,7 @@ proves it. The traps it cannot show:
   `agent_runtime.process.run_cli_bounded` owns start, stdin, first line,
   deadline, and process-group cleanup, and the async Claude turns run on
   `spawn.AnchoredChild`, whose leader only its own handle reaps.
-- Tests use the builders in `tests/provider_test_support.py` rather than a
+- Tests use the builders in `tests/support/provider_test_support.py` rather than a
   second set of fakes.
 
 ## Checks

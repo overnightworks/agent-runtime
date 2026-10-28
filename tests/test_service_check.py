@@ -7,12 +7,12 @@ from pathlib import Path
 
 import pytest
 import uvicorn
-from provider_test_support import fake_cli_executable
-from service_support import (
+from tests.support.provider_test_support import fake_cli_executable
+from tests.support.service_support import (
     logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
 )
-from test_service_cli_version import PRINTS_THE_PIN, _config_file_naming, working_root  # noqa: F401
-from test_service_config import (
+from tests.test_service_cli_version import PRINTS_THE_PIN, _config_file_naming, working_root  # noqa: F401
+from tests.test_service_config import (
     MCP_SECTION,
     VALID_CONFIG,
     _written,

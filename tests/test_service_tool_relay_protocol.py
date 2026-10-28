@@ -7,8 +7,8 @@ from http import HTTPStatus
 from typing import Any
 
 import pytest
-from capability_support import canary_token, capability_carrying
-from relay_support import (
+from tests.support.capability_support import canary_token, capability_carrying
+from tests.support.relay_support import (
     ConnectionEnded,
     Delivery,
     RawClient,
@@ -20,10 +20,10 @@ from relay_support import (
     json_rpc,
     port_of,
 )
-from relay_support import (
+from tests.support.relay_support import (
     post_message as post_message_with,
 )
-from service_support import failure_lines
+from tests.support.service_support import failure_lines
 
 from agent_runtime_client.mcp_wire import (
     ACKNOWLEDGEMENT,

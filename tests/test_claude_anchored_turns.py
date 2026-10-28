@@ -20,18 +20,29 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
-from anchored_kernel import WatcherStarts, join_watcher, recorded_watcher_starts
-from anchored_leaders import spawn_warnings
-from anchored_support import GONE, ChildCleanup, pidfd_open, pidfd_send_signal, wait_for_exits
-from bounds import TEST_WAIT_SECONDS
-from descendant_support import (
+from tests.support.anchored_kernel import WatcherStarts, join_watcher, recorded_watcher_starts
+from tests.support.anchored_leaders import spawn_warnings
+from tests.support.anchored_support import (
+    GONE,
+    ChildCleanup,
+    pidfd_open,
+    pidfd_send_signal,
+    wait_for_exits,
+)
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.descendant_support import (
     CONSUMES_STDIN,
     WAITS_WITHOUT_READING_STDIN,
     Handshake,
     lingering_descendant,
     process_identity,
 )
-from provider_test_support import EventGate, ScenarioDeadline, held_claude_slots, run_bounded
+from tests.support.provider_test_support import (
+    EventGate,
+    ScenarioDeadline,
+    held_claude_slots,
+    run_bounded,
+)
 
 from agent_runtime.claude import provider
 from agent_runtime.events import FinalEvent, StreamEvent

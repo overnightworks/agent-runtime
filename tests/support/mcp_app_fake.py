@@ -26,11 +26,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Final
 
-from bounds import TEST_WAIT_SECONDS
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
+from tests.support.bounds import TEST_WAIT_SECONDS
 
 LOOPBACK: Final = "127.0.0.1"
 CERTIFICATE_HOST: Final = "localhost"

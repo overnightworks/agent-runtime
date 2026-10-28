@@ -11,7 +11,7 @@ import asyncio
 import logging
 
 import pytest
-from service_support import (
+from tests.support.service_support import (
     QUIET,
     BrokenClock,
     Drive,

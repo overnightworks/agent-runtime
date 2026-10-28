@@ -12,8 +12,8 @@
 "src/agent_runtime/claude/provider.py" = 2156
 "src/agent_runtime/process.py" = 2417
 "src/agent_runtime/spawn.py" = 1137
-"tests/provider_test_support.py" = 2195
-"tests/service_support.py" = 1543
+"tests/support/provider_test_support.py" = 2189
+"tests/support/service_support.py" = 1543
 "tests/test_anchored_group_signal.py" = 812
 "tests/test_catalog.py" = 1045
 "tests/test_claude_provider.py" = 5486
@@ -53,7 +53,7 @@
 [function_lines."src/agent_runtime/tool_loop.py"]
 "stream_tool_loop" = 60
 
-[function_lines."tests/provider_test_support.py"]
+[function_lines."tests/support/provider_test_support.py"]
 "ScriptedClaudeChild.__init__" = 64
 "a_fake_claude" = 66
 

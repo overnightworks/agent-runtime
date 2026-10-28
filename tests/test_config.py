@@ -15,14 +15,14 @@ from functools import partial
 from pathlib import Path
 
 import pytest
-from provider_test_support import (
+from pydantic import ValidationError
+from tests.support.provider_test_support import (
     CALLER_CONTEXTS,
     override_grok_runtime,
     override_provider_runtime,
     override_turn_runtime,
     shell_child,
 )
-from pydantic import ValidationError
 
 from agent_runtime.catalog import (
     ProviderRoute,

@@ -6,8 +6,8 @@ from collections.abc import Awaitable, Callable
 from http import HTTPStatus
 
 import pytest
-from bounds import TEST_WAIT_SECONDS
-from relay_support import (
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.relay_support import (
     RUN_ID,
     AbsorbingOwner,
     Delivery,
@@ -29,7 +29,7 @@ from relay_support import (
     retained_relay_tasks,
     yield_until,
 )
-from service_support import StepClock
+from tests.support.service_support import StepClock
 
 from agent_runtime_client.mcp_wire import JSON_MEDIA_TYPE, HttpAnswer
 from agent_runtime_service.tool_relay import (

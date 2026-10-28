@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 from unittest import mock
 
-from bounds import TEST_WAIT_SECONDS
+from tests.support.bounds import TEST_WAIT_SECONDS
 
 from agent_runtime.spawn import ChildProcess
 

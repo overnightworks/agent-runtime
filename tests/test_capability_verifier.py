@@ -13,7 +13,7 @@ from uuid import UUID
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
-from service_support import generated_rsa_key, pem_of
+from tests.support.service_support import generated_rsa_key, pem_of
 
 from agent_runtime_client.capability import CAPABILITY_TOKEN_TYPE, MAX_CAPABILITY_CHARACTERS
 from agent_runtime_client.mcp_server import (

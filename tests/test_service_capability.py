@@ -17,10 +17,10 @@ from pathlib import Path
 
 import httpx
 import pytest
-from capability_support import capability_carrying, constructed_token
 from jwt.algorithms import RSAAlgorithm
-from provider_test_support import formatted_log_text
-from service_support import (
+from tests.support.capability_support import capability_carrying, constructed_token
+from tests.support.provider_test_support import formatted_log_text
+from tests.support.service_support import (
     API_GROUP,
     COWRITER,
     LAST_TOOL_NAME_LENGTH_AT_THE_LIMIT,

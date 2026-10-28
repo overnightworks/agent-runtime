@@ -29,11 +29,11 @@ from functools import partial
 from pathlib import Path
 from unittest.mock import patch
 
-import provider_test_support
 import pytest
-from bounds import TEST_WAIT_SECONDS
-from descendant_support import process_start_time
-from provider_test_support import (
+from tests.support import provider_test_support
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.descendant_support import process_start_time
+from tests.support.provider_test_support import (
     A_RUNNER_FAILURE_CANARY,
     ANOTHER_RUNNER_FAILURE_CANARY,
     CLI_RUNTIME_OVERRIDES,
@@ -1677,7 +1677,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, sys.argv[3])
-from provider_test_support import KillUntilGoneResult, fake_cli_process
+from tests.support.provider_test_support import KillUntilGoneResult, fake_cli_process
 
 from agent_runtime import process
 from agent_runtime.config import ProviderRuntimeConfig, configure
@@ -3120,7 +3120,7 @@ def _run_home_script(script: str, tmp_path: Path) -> list[str]:
             script,
             current_config().model_dump_json(),
             str(source),
-            str(Path(__file__).parent),
+            str(Path(__file__).parent.parent),
         ],
         capture_output=True,
         text=True,

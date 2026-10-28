@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from anchored_kernel import (
+from tests.support.anchored_kernel import (
     OBSERVE_EXIT,
     CensusRecorder,
     EventLog,
@@ -24,7 +24,7 @@ from anchored_kernel import (
     install_kernel,
     join_watcher,
 )
-from anchored_leaders import (
+from tests.support.anchored_leaders import (
     LEADER_AND_GRANDCHILD_WAITING,
     LEADER_WITH_GRANDCHILD,
     InstrumentedLock,
@@ -34,7 +34,7 @@ from anchored_leaders import (
     spawn_warnings,
     start_bound,
 )
-from anchored_support import (
+from tests.support.anchored_support import (
     GONE,
     IMPORT_ROOT_PRELUDE,
     RUNNING,
@@ -45,8 +45,8 @@ from anchored_support import (
     pidfd_open,
     wait_for_exits,
 )
-from bounds import TEST_WAIT_SECONDS
-from provider_test_support import call_within_deadline
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.provider_test_support import call_within_deadline
 
 from agent_runtime import procfs, spawn
 from agent_runtime.procfs import GroupCensus, RealProcView, group_census

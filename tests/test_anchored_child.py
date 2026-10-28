@@ -12,7 +12,7 @@ import warnings
 from pathlib import Path
 
 import pytest
-from anchored_kernel import (
+from tests.support.anchored_kernel import (
     CONSUME_STOP_REPORT,
     OBSERVE_EXIT,
     WATCHER_THREAD_PREFIX,
@@ -21,9 +21,9 @@ from anchored_kernel import (
     join_watcher,
     watcher_names,
 )
-from anchored_leaders import SPAWN_LOGGER, ExitProbe, Leaders, spawn_warnings
-from anchored_support import SIGKILLED, ChildCleanup, Exited
-from bounds import TEST_WAIT_SECONDS
+from tests.support.anchored_leaders import SPAWN_LOGGER, ExitProbe, Leaders, spawn_warnings
+from tests.support.anchored_support import SIGKILLED, ChildCleanup, Exited
+from tests.support.bounds import TEST_WAIT_SECONDS
 
 from agent_runtime import spawn
 from agent_runtime.spawn import AnchorState

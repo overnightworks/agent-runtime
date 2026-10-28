@@ -11,7 +11,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from provider_test_support import (
+from tests.support.provider_test_support import (
     a_claude_cli_child,
     held_claude_slots,
     install_claude_cli_children,

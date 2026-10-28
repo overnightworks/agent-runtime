@@ -9,8 +9,8 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-from provider_test_support import A_CANARY, A_TOOL_FAILURE_MESSAGE, formatted_log_text
 from pydantic import SecretStr
+from tests.support.provider_test_support import A_CANARY, A_TOOL_FAILURE_MESSAGE, formatted_log_text
 
 from agent_runtime import tool_loop
 from agent_runtime.errors import TextToolCallRejectedError

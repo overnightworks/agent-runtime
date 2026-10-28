@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from service_support import (
+from tests.support.service_support import (
     TEST_ISSUER,
     WallClock,
     answer_of,
@@ -28,9 +28,9 @@ from service_support import (
     served,
     service_config,
 )
-from test_service_entrance import MINT, TOKEN_REJECTIONS
+from tests.support.wire_builders import started, succeeded
+from tests.test_service_entrance import MINT, TOKEN_REJECTIONS
 from webauth.https_client import KeySetFetchError
-from wire_builders import started, succeeded
 
 from agent_runtime_client.wire import PROTOCOL_VERSION, RejectionCode, RunState, RunStatus
 from agent_runtime_service.app import create_app

@@ -19,7 +19,7 @@ import anyio
 import httpx
 import pytest
 from fastapi import FastAPI
-from service_support import (
+from tests.support.service_support import (
     ADMITTED_AGENTS,
     API_GROUP,
     COWRITER,
@@ -45,7 +45,7 @@ from service_support import (
     service_config,
     service_config_file,
 )
-from test_service_codex_profile import CODEX_NAME, a_config_with_both_providers
+from tests.test_service_codex_profile import CODEX_NAME, a_config_with_both_providers
 from webauth.https_client import KeySetFetchError
 from webauth.jwt_verification import KEY_SET_REFRESH_COOLDOWN_SECONDS
 

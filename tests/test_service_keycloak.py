@@ -17,7 +17,7 @@ from collections.abc import Iterator
 from uuid import uuid4
 
 import pytest
-from service_support import (
+from tests.support.service_support import (
     COWRITER,
     LISTED_MODEL,
     PRESENTATOR_CLIENT,
@@ -37,7 +37,8 @@ from service_support import (
     service_config,
     with_placeholder_run_id,
 )
-from test_keycloak_token_shapes import (
+from tests.support.wire_builders import started
+from tests.test_keycloak_token_shapes import (
     CLIENT_SECRETS,
     KEYCLOAK_URL,
     USER_LOGIN_CLIENT,
@@ -49,7 +50,6 @@ from test_keycloak_token_shapes import (
 )
 from webauth.https_client import KeySetFetchError
 from webauth.jwt_verification import KEY_SET_REFRESH_COOLDOWN_SECONDS
-from wire_builders import started
 
 from agent_runtime.events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import PROTOCOL_VERSION, RejectionCode, RunState, RunStatus

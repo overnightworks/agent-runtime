@@ -7,8 +7,8 @@ import json
 
 import httpx
 import pytest
-from mcp_app_fake import ScriptedApp, TestAuthority, serving, tool_listing
-from service_support import (
+from tests.support.mcp_app_fake import ScriptedApp, TestAuthority, serving, tool_listing
+from tests.support.service_support import (
     API_GROUP,
     SONGMAKER_GROUP,
     TokenMint,
@@ -16,8 +16,8 @@ from service_support import (
     run_body,
     run_headers,
 )
-from test_openai_adapter import provider_call, tool_completion
-from test_service_api_runner import (
+from tests.test_openai_adapter import provider_call, tool_completion
+from tests.test_service_api_runner import (
     CONFIGURED_MODEL,
     answer,
     configured,
@@ -166,7 +166,7 @@ def test_checked_offer_alone_supplies_schemas_and_omits_missing_description(tmp_
 def test_service_budget_or_recording_refusal_preserves_acceptance_boundary(
     tmp_path, monkeypatch, boundary,
 ):
-    from mcp_app_fake import rpc_result
+    from tests.support.mcp_app_fake import rpc_result
 
     from agent_runtime_service.run_records import RunRecorder
 
@@ -212,7 +212,7 @@ def test_service_budget_or_recording_refusal_preserves_acceptance_boundary(
 
 @pytest.mark.parametrize("outcome", ["error", "lost"])
 def test_tool_error_and_lost_response_are_results_without_retry(tmp_path, monkeypatch, outcome):
-    from mcp_app_fake import DROPPED, rpc_result
+    from tests.support.mcp_app_fake import DROPPED, rpc_result
 
     authority = TestAuthority(tmp_path)
     requests = []
@@ -242,8 +242,8 @@ def test_tool_error_and_lost_response_are_results_without_retry(tmp_path, monkey
 def test_protected_values_never_escape_the_allowed_headers(
     tmp_path, monkeypatch, caplog, secret_kind, location,
 ):
-    from mcp_app_fake import rpc_result
-    from service_support import record_signed_tokens
+    from tests.support.mcp_app_fake import rpc_result
+    from tests.support.service_support import record_signed_tokens
 
     signed = record_signed_tokens(monkeypatch)
     authority = TestAuthority(tmp_path)
@@ -301,7 +301,7 @@ def test_protected_values_never_escape_the_allowed_headers(
 def test_protected_value_assembled_across_rounds_refuses_completing_round(
     tmp_path, monkeypatch, secret_kind, completing_tool_round,
 ):
-    from service_support import record_signed_tokens
+    from tests.support.service_support import record_signed_tokens
 
     signed = record_signed_tokens(monkeypatch)
     authority = TestAuthority(tmp_path)
@@ -334,8 +334,8 @@ def admitted_tools(origin):
     from dataclasses import replace
     from uuid import uuid4
 
-    from capability_support import canary_token, capability_carrying
-    from service_support import alice_admitted_run
+    from tests.support.capability_support import canary_token, capability_carrying
+    from tests.support.service_support import alice_admitted_run
 
     from agent_runtime_client.wire import RunRequest
     from agent_runtime_service.capability import Capability
@@ -432,7 +432,7 @@ def test_unanswered_or_rpc_refusal_never_becomes_success(tmp_path, monkeypatch, 
 def test_cancellation_and_composition_failure_close_session_and_http_client(
     tmp_path, monkeypatch, phase,
 ):
-    from mcp_app_fake import HeldRequests
+    from tests.support.mcp_app_fake import HeldRequests
 
     from agent_runtime_service import api_runner
 
@@ -511,7 +511,7 @@ async def assert_supervised_tool_ending(app, socket, mint, ending):
 
 
 def tool_socket(mint):
-    from service_support import ClientSocket
+    from tests.support.service_support import ClientSocket
 
     class ToolSocket(ClientSocket):
         first = True
@@ -541,8 +541,8 @@ async def end_tool_run(socket, clock, limits, ending):
 def test_service_supervision_closes_tool_run_at_disconnect_or_deadline(
     tmp_path, monkeypatch, ending,
 ):
-    from mcp_app_fake import HeldRequests
-    from service_support import StepClock, SteppedLoop, shared_mint
+    from tests.support.mcp_app_fake import HeldRequests
+    from tests.support.service_support import StepClock, SteppedLoop, shared_mint
 
     authority = TestAuthority(tmp_path)
     clock = StepClock()
@@ -606,7 +606,7 @@ def test_initial_reflection_refuses_before_session_or_gateway_and_clears_ambient
 ):
     from dataclasses import replace
 
-    from test_openai_adapter import assert_closed_refusal, caller_error
+    from tests.test_openai_adapter import assert_closed_refusal, caller_error
 
     authority = TestAuthority(tmp_path)
     clients = fake_gateway(monkeypatch, lambda request: pytest.fail("reflected input sent HTTP"))

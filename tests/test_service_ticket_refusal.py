@@ -13,7 +13,7 @@ from collections.abc import Iterator
 
 import httpx
 import pytest
-from service_support import (
+from tests.support.service_support import (
     ScriptedRunner,
     TokenMint,
     asgi_post_status,

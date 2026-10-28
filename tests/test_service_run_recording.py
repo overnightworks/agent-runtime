@@ -29,7 +29,8 @@ from typing import Any
 
 import anyio
 import pytest
-from service_support import (
+from starlette.requests import ClientDisconnect
+from tests.support.service_support import (
     CUT_BY_ITS_SCOPE,
     MOST_BUSY_TURNS_BEFORE_THE_RUN_NEVER_SETTLES,
     STRAY_CANCELLATION_CANARY,
@@ -63,7 +64,6 @@ from service_support import (
     the_app_on,
     tool_call,
 )
-from starlette.requests import ClientDisconnect
 
 from agent_runtime.events import (
     AssistantTextEvent,

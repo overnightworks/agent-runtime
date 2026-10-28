@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from provider_test_support import (
+from tests.support.provider_test_support import (
     ExitOnKill,
     ScenarioDeadline,
     ScriptedClaudeChild,

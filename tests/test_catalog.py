@@ -18,7 +18,8 @@ from pathlib import Path
 
 import httpx
 import pytest
-from provider_test_support import (
+from pydantic import SecretStr
+from tests.support.provider_test_support import (
     A_CODEX_LOGIN_WITH_INVALID_UTF8,
     CLAUDE_MODEL_CATALOG_STDOUT,
     CLI_RUNTIME_OVERRIDES,
@@ -37,7 +38,6 @@ from provider_test_support import (
     override_codex_runtime,
     override_provider_runtime,
 )
-from pydantic import SecretStr
 
 from agent_runtime import catalog, process
 from agent_runtime.catalog import (

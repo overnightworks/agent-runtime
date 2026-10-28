@@ -19,7 +19,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from service_support import (
+from tests.support.service_support import (
     API_GROUP,
     LISTED_MODEL,
     MALFORMED_AGENTS,
@@ -41,7 +41,7 @@ from service_support import (
     run_headers,
     served,
 )
-from wire_builders import started
+from tests.support.wire_builders import started
 
 from agent_runtime.events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.agents import load_agent

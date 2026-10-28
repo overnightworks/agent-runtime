@@ -1,9 +1,9 @@
 import asyncio
 
-import bounds
 import pytest
-from bounds import within_the_bound
-from relay_support import close_bounded
+from tests.support import bounds
+from tests.support.bounds import within_the_bound
+from tests.support.relay_support import close_bounded
 
 
 async def settle_after_a_loop_turn[T](value: T, cancelled: list[bool] | None = None) -> T:

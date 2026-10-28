@@ -19,8 +19,8 @@ from typing import Final
 
 import anyio
 import pytest
-from provider_test_support import Recorded, ScriptedAnchoredChild, operations
-from service_support import (
+from tests.support.provider_test_support import Recorded, ScriptedAnchoredChild, operations
+from tests.support.service_support import (
     CUT_BY_ITS_SCOPE,
     STRAY_CANCELLATION_CANARY,
     ClientSocket,

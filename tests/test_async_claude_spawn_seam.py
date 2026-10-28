@@ -26,8 +26,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from bounds import TEST_WAIT_SECONDS
-from provider_test_support import (
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.provider_test_support import (
     EventGate,
     ScenarioDeadline,
     a_claude_cli_child,

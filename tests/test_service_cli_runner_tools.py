@@ -25,18 +25,18 @@ from typing import Any
 
 import httpx
 import pytest
-from anchored_support import ChildCleanup
-from bounds import TEST_WAIT_SECONDS
-from capability_support import canary_token, capability_carrying
-from cli_tools_support import (
+from tests.support.anchored_support import ChildCleanup
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.capability_support import canary_token, capability_carrying
+from tests.support.cli_tools_support import (
     ChildCapture,
     ClaudeCall,
     ToolApp,
     a_relay_calling_claude,
     a_tool_app,
 )
-from descendant_support import DescendantRow
-from mcp_app_fake import (
+from tests.support.descendant_support import DescendantRow
+from tests.support.mcp_app_fake import (
     HeldRequest,
     HeldRequests,
     RecordedRequest,
@@ -44,7 +44,7 @@ from mcp_app_fake import (
     TestAuthority,
     rpc_result,
 )
-from provider_test_support import (
+from tests.support.provider_test_support import (
     INIT_LINE,
     SUCCESS_LINE,
     TEXT_LINE,
@@ -55,7 +55,7 @@ from provider_test_support import (
     held_claude_slots,
     line,
 )
-from relay_support import (
+from tests.support.relay_support import (
     RawClient,
     RelayDoor,
     json_rpc,
@@ -64,7 +64,7 @@ from relay_support import (
     post_message,
     yield_until,
 )
-from service_support import (
+from tests.support.service_support import (
     LISTED_MODEL,
     PINNED_CLAUDE_VERSION,
     SteppedLoop,
@@ -76,7 +76,7 @@ from service_support import (
     post_run,
     run_body,
 )
-from test_service_cli_runner import (
+from tests.test_service_cli_runner import (
     FIRST_LOGIN,
     LOGIN_FILES_GONE_BAD,
     SECOND_LOGIN,
@@ -96,10 +96,10 @@ from test_service_cli_runner import (
     through_the_service_entry,
     trusting,
 )
-from test_service_cli_runner import (
+from tests.test_service_cli_runner import (
     post_a_run as post_a_run_naming,
 )
-from test_service_run_tools import Stall
+from tests.test_service_run_tools import Stall
 
 import agent_runtime_service.cli_runner as cli_runner_module
 from agent_runtime import spawn

@@ -22,9 +22,9 @@ import anyio
 import httpcore._backends.anyio as httpcore_anyio
 import httpx
 import pytest
-from bounds import TEST_WAIT_SECONDS, within_the_bound
-from capability_support import canary_token, capability_carrying
-from mcp_app_fake import (
+from tests.support.bounds import TEST_WAIT_SECONDS, within_the_bound
+from tests.support.capability_support import canary_token, capability_carrying
+from tests.support.mcp_app_fake import (
     CERTIFICATE_HOST,
     FakeResponse,
     McpAppFake,
@@ -34,7 +34,7 @@ from mcp_app_fake import (
     serving,
     tool_listing,
 )
-from relay_support import (
+from tests.support.relay_support import (
     RUN_ID,
     RawClient,
     RelayDoor,
@@ -47,7 +47,7 @@ from relay_support import (
     relay_tasks,
     yield_until,
 )
-from service_support import (
+from tests.support.service_support import (
     StepClock,
     SteppedLoop,
     failure_lines,

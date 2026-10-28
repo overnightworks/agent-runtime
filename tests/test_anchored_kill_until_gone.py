@@ -19,9 +19,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import pytest
-from anchored_kernel import CensusRecorder, EventLog, GroupSignalCall, GroupSignalModel
-from anchored_leaders import LEADER_AND_GRANDCHILD_WAITING, Leaders, open_door
-from anchored_support import (
+from tests.support.anchored_kernel import (
+    CensusRecorder,
+    EventLog,
+    GroupSignalCall,
+    GroupSignalModel,
+)
+from tests.support.anchored_leaders import LEADER_AND_GRANDCHILD_WAITING, Leaders, open_door
+from tests.support.anchored_support import (
     GONE,
     RUNNING,
     SIGKILLED,
@@ -31,7 +36,7 @@ from anchored_support import (
     pidfd_open,
     wait_for_exits,
 )
-from bounds import TEST_WAIT_SECONDS, within_the_bound
+from tests.support.bounds import TEST_WAIT_SECONDS, within_the_bound
 
 from agent_runtime import spawn
 from agent_runtime.procfs import GroupCensus

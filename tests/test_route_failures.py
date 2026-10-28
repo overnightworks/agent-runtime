@@ -11,12 +11,12 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 
 import pytest
-from provider_test_support import (
+from pydantic import BaseModel, SecretStr
+from tests.support.provider_test_support import (
     A_CANARY,
     SAMPLE_TOOL_CATALOG,
     a_call_to_an_undeclared_tool_carrying,
 )
-from pydantic import BaseModel, SecretStr
 
 from agent_runtime import dispatch
 from agent_runtime.errors import (

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from cryptography.hazmat.primitives import serialization
-from service_support import generated_rsa_key
+from tests.support.service_support import generated_rsa_key
 
 from agent_runtime_client.capability import CapabilityClaims
 from agent_runtime_client.mcp_server import CapabilityVerificationKey, McpTool
