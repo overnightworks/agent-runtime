@@ -309,7 +309,7 @@ class _WireRun:
                     **header, tool_use_id=tool_use_id, content=content, is_error=is_error
                 )
             case FinalEvent(text=text):
-                return Succeeded(**header, text=text)
+                return Succeeded(**header, text=text, files=())
         raise _Unsendable(UNMAPPABLE_EVENT_MESSAGE)
 
     def _tool_call(self, core_event: ToolCallEvent, header: dict[str, object]) -> ToolCall:

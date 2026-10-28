@@ -7,6 +7,9 @@ event off the contract named once, with nothing decoded after it.
 
 from __future__ import annotations
 
+import base64
+import json
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -24,13 +27,17 @@ from agent_runtime_client.sse import (
 )
 from agent_runtime_client.wire import (
     MAX_EVENT_BYTES,
+    MAX_RUN_FILES_BYTES,
+    MAX_SUCCEEDED_FRAME_BYTES,
     MAX_TOOL_INPUT_DEPTH,
     PROTOCOL_VERSION,
     AssistantText,
     Heartbeat,
     RejectionCode,
     RunEvent,
+    RunFile,
     RunRejection,
+    Succeeded,
 )
 
 A_RUN: list[RunEvent] = [
@@ -322,3 +329,143 @@ def test_the_decoder_refuses_a_line_before_it_outgrows_the_limit() -> None:
     assert decoder.feed(b"data: " + b"x" * (MAX_EVENT_BYTES - len(b"data: "))) == []
     (violation,) = decoder.feed(b"x")
     assert violation.kind is ViolationKind.OVERSIZED_FRAME
+
+
+def _base64_bytes(file: RunFile) -> int:
+    return len(base64.b64encode(file.content))
+
+
+def _written(event: Succeeded) -> bytes:
+    # Written by hand only so a frame the encoder refuses can still reach the decoder.
+    return f"id: {event.seq}\nevent: succeeded\ndata: {event.model_dump_json()}\n\n".encode()
+
+
+def _pieces(frame: bytes, size: int = 65_536) -> Iterator[bytes]:
+    for position in range(min(64, len(frame))):
+        yield frame[position : position + 1]
+    for position in range(64, len(frame), size):
+        yield frame[position : position + size]
+
+
+def _decode_split(frame: bytes) -> list[Decoded]:
+    decoder = RunStreamDecoder()
+    decoded = decoder.feed(OPENING)
+    for piece in _pieces(frame):
+        decoded += decoder.feed(piece)
+        if decoded and isinstance(decoded[-1], StreamViolation):
+            return decoded
+    return decoded + decoder.close()
+
+
+def _succeeded_with_non_file_part(size: int, files: tuple[RunFile, ...]) -> Succeeded:
+    bare = succeeded(1, "x", files)
+    non_file = len(encode_event(bare)) - sum(_base64_bytes(file) for file in files)
+    return succeeded(1, "x" * (size - non_file + 1), files)
+
+
+def _non_file_part(encoded: bytes, event: Succeeded) -> int:
+    return len(encoded) - sum(_base64_bytes(file) for file in event.files)
+
+
+def _a_file_of(size: int, name: str = "big") -> RunFile:
+    return RunFile(name=name, content=bytes(size))
+
+
+@pytest.fixture(scope="module")
+def ceiling_frame() -> tuple[Succeeded, bytes]:
+    event = succeeded(1, "", (_a_file_of(MAX_RUN_FILES_BYTES),))
+    return event, encode_event(event)
+
+
+def test_a_run_with_files_round_trips_whole_and_in_splits() -> None:
+    event = succeeded(1, "Done.", (_a_file_of(100_000, "b"), RunFile(name="a", content=b"")))
+    frame = encode_event(event)
+
+    assert _decode(OPENING, frame)[1] == event
+    assert _decode_split(frame)[1] == event
+
+
+def test_files_of_exactly_the_ceiling_travel_both_ways(
+    ceiling_frame: tuple[Succeeded, bytes],
+) -> None:
+    event, frame = ceiling_frame
+
+    assert MAX_EVENT_BYTES < len(frame) <= MAX_SUCCEEDED_FRAME_BYTES
+    assert _decode(OPENING, frame)[1] == event
+    assert _decode_split(frame)[1] == event
+
+
+def test_the_non_file_part_may_be_exactly_the_event_limit_and_no_more() -> None:
+    files = (_a_file_of(1_000),)
+    at_limit = _succeeded_with_non_file_part(MAX_EVENT_BYTES, files)
+    over_limit = _succeeded_with_non_file_part(MAX_EVENT_BYTES + 1, files)
+
+    assert _non_file_part(encode_event(at_limit), at_limit) == MAX_EVENT_BYTES
+    assert _decode(OPENING, encode_event(at_limit))[1] == at_limit
+    assert _decode_split(encode_event(at_limit))[1] == at_limit
+    with pytest.raises(EventTooLarge, match=str(MAX_EVENT_BYTES)):
+        encode_event(over_limit)
+    for decoded in (_decode(OPENING, _written(over_limit)), _decode_split(_written(over_limit))):
+        assert decoded[-1].kind is ViolationKind.OVERSIZED_FRAME
+        assert str(MAX_EVENT_BYTES) in decoded[-1].detail
+
+
+def test_files_that_base64_padding_pushes_over_the_frame_ceiling_are_refused_both_ways() -> None:
+    # One byte and the rest less one: together exactly the ceiling, yet each pads on its own.
+    files = (_a_file_of(1, "small"), _a_file_of(MAX_RUN_FILES_BYTES - 1, "big"))
+    event = _succeeded_with_non_file_part(MAX_EVENT_BYTES, files)
+    frame = _written(event)
+
+    assert _non_file_part(frame, event) == MAX_EVENT_BYTES
+    assert len(frame) > MAX_SUCCEEDED_FRAME_BYTES
+    with pytest.raises(EventTooLarge, match=str(MAX_SUCCEEDED_FRAME_BYTES)):
+        encode_event(event)
+    for decoded in (_decode(OPENING, frame), _decode_split(frame)):
+        assert decoded[-1].kind is ViolationKind.OVERSIZED_FRAME
+        assert str(MAX_SUCCEEDED_FRAME_BYTES) in decoded[-1].detail
+
+
+def _frame_breaking_the_schema_beyond_the_event_limit() -> bytes:
+    # Fits under the frame ceiling, but its words alone fill the event limit, and
+    # its seq of -1 breaks the schema as well.
+    event = {
+        "v": PROTOCOL_VERSION,
+        "seq": -1,
+        "type": "succeeded",
+        "text": "x" * MAX_EVENT_BYTES,
+        "files": [],
+    }
+    return f"id: -1\nevent: succeeded\ndata: {json.dumps(event)}\n\n".encode()
+
+
+@pytest.mark.parametrize("decode", [lambda frame: _decode(OPENING, frame), _decode_split])
+def test_a_succeeded_frame_over_the_event_limit_without_files_is_oversized_before_its_schema(
+    decode: Any,
+) -> None:
+    violation = decode(_frame_breaking_the_schema_beyond_the_event_limit())[-1]
+
+    assert violation.kind is ViolationKind.OVERSIZED_FRAME
+    assert str(MAX_EVENT_BYTES) in violation.detail
+
+
+@pytest.mark.parametrize("make", [lambda: heartbeat(2), lambda: text(2, "words")])
+def test_another_frame_stays_at_the_event_limit_right_after_a_large_succeeded(make: Any) -> None:
+    large = encode_event(succeeded(1, "", (_a_file_of(2 * MAX_EVENT_BYTES),)))
+    padding = b'"seq":2,"pad":"' + b"x" * MAX_EVENT_BYTES + b'"'
+    oversized = encode_event(make()).replace(b'"seq":2', padding)
+    decoder = RunStreamDecoder()
+
+    assert [type(item) for item in decoder.feed(OPENING + large)] == [type(A_RUN[0]), Succeeded]
+    (violation,) = decoder.feed(oversized)
+    assert violation.kind is ViolationKind.OVERSIZED_FRAME
+    assert str(MAX_EVENT_BYTES) in violation.detail
+
+
+def test_a_large_succeeded_whose_data_precedes_its_event_is_oversized() -> None:
+    frame = encode_event(succeeded(1, "", (_a_file_of(2 * MAX_EVENT_BYTES),)))
+    id_line, event_line, data_line, *_ = frame.split(b"\n")
+    reordered = b"\n".join([id_line, data_line, event_line, b"", b""])
+
+    for decoded in (_decode(OPENING, reordered), _decode_split(reordered)):
+        assert decoded[-1].kind is ViolationKind.OVERSIZED_FRAME
+        assert str(MAX_EVENT_BYTES) in decoded[-1].detail

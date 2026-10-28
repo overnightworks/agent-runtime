@@ -140,7 +140,7 @@ SCRIPT_FRAMES = (
     '"content":"Verse one","is_error":false}\n\n'
     "id: 4\nevent: succeeded\n"
     f'data: {{"v":{PROTOCOL_VERSION},"run_id":"{RUN}","seq":4,"type":"succeeded",'
-    '"text":"Here is a second verse."}\n\n'
+    '"text":"Here is a second verse.","files":[]}\n\n'
 ).encode()
 
 

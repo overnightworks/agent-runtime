@@ -84,7 +84,7 @@ def _frozen_frames(route: str) -> bytes:
         f'"text":"Hello from the {route}."}}\n\n'
         "id: 2\nevent: succeeded\n"
         f'data: {{"v":{PROTOCOL_VERSION},"run_id":"{RUN}","seq":2,'
-        f'"type":"succeeded","text":"{route} done."}}\n\n'
+        f'"type":"succeeded","text":"{route} done.","files":[]}}\n\n'
     ).encode()
 
 

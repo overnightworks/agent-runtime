@@ -100,7 +100,7 @@ WIRE_VARIANTS = {
     ),
     "tool_result": wire("tool_result", 3, tool_use_id="call-1", content="saved", is_error=False),
     "heartbeat": wire("heartbeat", 4),
-    "succeeded": wire("succeeded", 5, text="Done."),
+    "succeeded": wire("succeeded", 5, text="Done.", files=[]),
     "failed": wire("failed", 5, code="provider_error", message="The provider refused."),
     "cancelled": wire("cancelled", 5),
 }
@@ -124,15 +124,17 @@ def test_every_variant_round_trips_through_its_json(raw: dict[str, object]) -> N
             {**wire("heartbeat", 1), "v": 1}, ViolationKind.UNSUPPORTED_VERSION, id="older version"
         ),
         pytest.param(
-            {**wire("heartbeat", 1), "v": 2},
+            {**wire("heartbeat", 1), "v": PROTOCOL_VERSION - 1},
             ViolationKind.UNSUPPORTED_VERSION,
             id="previous protocol version",
         ),
         pytest.param(
-            {**wire("heartbeat", 1), "v": 4}, ViolationKind.UNSUPPORTED_VERSION, id="newer version"
+            {**wire("heartbeat", 1), "v": PROTOCOL_VERSION + 1},
+            ViolationKind.UNSUPPORTED_VERSION,
+            id="newer version",
         ),
         pytest.param(
-            {**wire("assistant_text", 1, text="hi", tone="warm"), "v": 4},
+            {**wire("assistant_text", 1, text="hi", tone="warm"), "v": PROTOCOL_VERSION + 1},
             ViolationKind.UNSUPPORTED_VERSION,
             id="newer version with a field this client does not know",
         ),
@@ -142,7 +144,7 @@ def test_every_variant_round_trips_through_its_json(raw: dict[str, object]) -> N
             id="version true",
         ),
         pytest.param(
-            {**wire("heartbeat", 1), "v": 3.0},
+            {**wire("heartbeat", 1), "v": float(PROTOCOL_VERSION)},
             ViolationKind.UNSUPPORTED_VERSION,
             id="version as a float",
         ),
@@ -305,7 +307,7 @@ def test_a_rejection_body_round_trips_through_its_json(code: RejectionCode) -> N
     "body",
     [
         pytest.param({**REJECTION, "v": True}, id="version true"),
-        pytest.param({**REJECTION, "v": 3.0}, id="version as a float"),
+        pytest.param({**REJECTION, "v": float(PROTOCOL_VERSION)}, id="version as a float"),
         pytest.param({"code": "busy", "message": "Another run is active."}, id="no version"),
         pytest.param(
             {**REJECTION, "message": "x" * (MAX_MESSAGE_LENGTH + 1)}, id="message too long"
@@ -381,7 +383,7 @@ def test_a_status_body_names_its_state_and_codes_as_enums() -> None:
             for missing in STATUS
         ),
         pytest.param({**STATUS, "v": True}, id="version true"),
-        pytest.param({**STATUS, "v": 3.0}, id="version as a float"),
+        pytest.param({**STATUS, "v": float(PROTOCOL_VERSION)}, id="version as a float"),
         pytest.param({**STATUS, "v": 1}, id="version 1"),
         pytest.param({**STATUS, "events": 0}, id="no events"),
         pytest.param({**STATUS, "events": True}, id="events true"),
@@ -500,7 +502,7 @@ def test_a_violation_detail_shows_at_most_a_bounded_slice_of_untrusted_text(
     ("event_type", "fields"),
     [
         pytest.param("assistant_text", {"text": "\ud800"}, id="assistant text"),
-        pytest.param("succeeded", {"text": "\ud800"}, id="final text"),
+        pytest.param("succeeded", {"text": "\ud800", "files": []}, id="final text"),
         pytest.param(
             "tool_call",
             {"tool_use_id": "c", "name": "\ud800", "input": {}, "effect": "read_only"},

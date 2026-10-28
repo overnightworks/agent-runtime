@@ -2,6 +2,12 @@
 
 Read by a host bumping its pin; each release that breaks a host has one section, newest first.
 
+## Migrating to 0.11.0
+
+| Before (0.10.0) | Now |
+| --- | --- |
+| Wire protocol 3: `succeeded` carried `text` alone, a `v: 3` body was admitted and the client read `v: 3` events | Protocol 4: `PROTOCOL_VERSION = 4`. `Succeeded.files` is required on every `succeeded` (`[]` for none) and holds `RunFile(name, content)` values, with `content` as bytes in Python and canonical base64 on the wire ([wire.md](wire.md)). `Succeeded.text` may be empty beside at least one file. A `v: 3` body gets 400 `unsupported_version`, and the 0.11.0 client refuses a `v: 3` event. The service and its apps switch on one day; the two do not coexist. |
+
 ## Migrating to 0.10.0
 
 The service configuration names a default model, which an app and an agent may override. The service reads them at admission, and the run request and the agent file name no model.

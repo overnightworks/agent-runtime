@@ -14,6 +14,7 @@ from agent_runtime_client.wire import (
     FailureCode,
     Heartbeat,
     RouteKind,
+    RunFile,
     RunStarted,
     Succeeded,
     ToolCall,
@@ -78,8 +79,8 @@ def heartbeat(seq: int, run_id: UUID = RUN_ID) -> Heartbeat:
     return Heartbeat(v=PROTOCOL_VERSION, run_id=run_id, seq=seq)
 
 
-def succeeded(seq: int, words: str = "Done.") -> Succeeded:
-    return Succeeded(v=PROTOCOL_VERSION, run_id=RUN_ID, seq=seq, text=words)
+def succeeded(seq: int, words: str = "Done.", files: tuple[RunFile, ...] = ()) -> Succeeded:
+    return Succeeded(v=PROTOCOL_VERSION, run_id=RUN_ID, seq=seq, text=words, files=files)
 
 
 def cancelled(seq: int) -> Cancelled:
