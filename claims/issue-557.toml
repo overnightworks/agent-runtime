@@ -1,0 +1,8 @@
+claim_id = "9f4211c0397f42c19eac16f905e8e138"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "0dace422b70bc9270826a3cfb49f687f22c562d5"
+branch = "claude/issue-557-claude-run-module"
+scope = ["docs/MIGRATING.md", "docs/host.md", "packages/service/src/agent_runtime_service/cli_runner.py", "packages/service/tests/test_tool_relay.py", "quality/baseline.toml", "src/agent_runtime/claude/provider.py", "src/agent_runtime/claude/run.py", "src/agent_runtime/config.py", "tests/test_claude_run.py"]
+opened_commit = "ac02b8f4a04de69b2843157eaeaad527d1fb1952"
+whole_reason = "One move: the Claude run code leaves provider.py for the new run.py, so its importers, the two documents that name the old path, the migration row and the lowered baseline entry change in the same commit, or main is red between them."
