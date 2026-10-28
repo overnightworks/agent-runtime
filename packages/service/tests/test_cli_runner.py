@@ -2,7 +2,7 @@
 
 HTTP rows serve the real app on a loopback socket and run a fake Claude program as a real
 child; no installed core configuration exists in any of them. The tool path has its own module
-(``test_service_cli_runner_tools``). A tool-free run opens no connection to an app, so these
+(``test_cli_runner_tools``). A tool-free run opens no connection to an app, so these
 rows give the runner no TLS context.
 """
 

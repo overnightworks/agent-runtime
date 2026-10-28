@@ -1,6 +1,6 @@
 # Measured by `quality baseline write`. Entries only ever go down.
 
-[ccn."tests/test_service_run_recording.py"]
+[ccn."packages/service/tests/test_run_records_recording.py"]
 "_end_a_run" = 22
 
 [ccn."tests/test_zombie_anchor.py"]
@@ -9,6 +9,11 @@
 [file_lines]
 "packages/service/src/agent_runtime_service/run_liveness.py" = 810
 "packages/service/src/agent_runtime_service/tool_relay.py" = 928
+"packages/service/tests/test_app_tools.py" = 1087
+"packages/service/tests/test_cli_runner_tools.py" = 1717
+"packages/service/tests/test_run_records_recording.py" = 2034
+"packages/service/tests/test_tool_relay.py" = 1309
+"packages/service/tests/test_tool_relay_barrier.py" = 2010
 "src/agent_runtime/claude/provider.py" = 2156
 "src/agent_runtime/process.py" = 2417
 "src/agent_runtime/spawn.py" = 1137
@@ -23,17 +28,18 @@
 "tests/test_process.py" = 6199
 "tests/test_process_run_directories.py" = 841
 "tests/test_procfs.py" = 838
-"tests/test_service_app_tools.py" = 1087
 "tests/test_service_capability.py" = 869
-"tests/test_service_cli_runner.py" = 764
-"tests/test_service_cli_runner_tools.py" = 1717
 "tests/test_service_config.py" = 1446
 "tests/test_service_quarantine.py" = 870
-"tests/test_service_run_recording.py" = 2034
-"tests/test_service_tool_relay.py" = 1309
-"tests/test_service_tool_relay_barrier.py" = 2010
 "tests/test_spawn_anchored_group_signal.py" = 812
 "tests/test_text_tool_protocol.py" = 888
+
+[function_lines."packages/service/tests/test_cli_runner_tools.py"]
+"a_tool_run" = 63
+"test_a_real_group_keeps_its_place_through_the_service_until_the_reap_ends" = 75
+
+[function_lines."packages/service/tests/test_run_records_recording.py"]
+"_end_a_run" = 94
 
 [function_lines."src/agent_runtime/claude/provider.py"]
 "_call_cli" = 67
@@ -73,15 +79,11 @@
 "test_parallel_cold_asks_share_one_failure" = 67
 "test_private_credential_home_never_follows_an_inner_directory_swapped_for_a_symlink" = 73
 
-[function_lines."tests/test_service_cli_runner_tools.py"]
-"a_tool_run" = 63
-"test_a_real_group_keeps_its_place_through_the_service_until_the_reap_ends" = 75
-
-[function_lines."tests/test_service_run_recording.py"]
-"_end_a_run" = 94
-
 [function_lines."tests/test_spawn_anchored_group_signal.py"]
 "test_a_kill_and_census_runs_in_one_hold_that_keeps_a_release_waiting" = 63
+
+[clones."packages/service/tests/test_run_events_containment_ending.py"]
+test_a_client_leaving_behind_a_decided_answer_still_ends_provider_error_on_a_loss = [["packages/service/tests/test_run_records_recording.py", "test_a_run_whose_terminal_was_decided_is_recorded_when_the_held_close_is_released"]]
 
 [clones."src/agent_runtime/codex/protocol.py"]
 event_item = [["src/agent_runtime/codex/transport.py", "_completed_agent_message"]]
@@ -116,9 +118,6 @@ _header_of = [["tests/test_service_signing.py", "_header_of"]]
 [clones."tests/test_service_config.py"]
 _token_file_with = [["tests/test_service_signing.py", "_file_with"]]
 "test_a_path_swapped_after_the_open_is_judged_by_the_opened_token_file.open_then_swap" = [["tests/test_service_signing.py", "test_a_path_swapped_after_the_open_still_loads_the_opened_file.open_then_swap"]]
-
-[clones."tests/test_service_containment_ending.py"]
-test_a_client_leaving_behind_a_decided_answer_still_ends_provider_error_on_a_loss = [["tests/test_service_run_recording.py", "test_a_run_whose_terminal_was_decided_is_recorded_when_the_held_close_is_released"]]
 
 [clones."tests/test_spawn_anchored_kill_until_gone.py"]
 test_a_late_wait_never_starts_an_attempt_at_or_after_the_deadline = [["tests/test_spawn_blocking_anchored_child.py", "test_a_late_wait_never_starts_an_attempt_at_or_after_the_deadline"]]
