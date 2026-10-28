@@ -34,12 +34,11 @@ from tests.support.provider_test_support import (
 from agent_runtime.claude.provider import (
     CLAUDE_CLI_LOGIN_REFUSED_DETAIL,
     CLAUDE_CLI_UNAVAILABLE_DETAIL,
-    ClaudeRun,
-    ClaudeStreamDecoder,
     CliLoginRefusedError,
     UnavailableError,
     _ClaudeLineDecoder,
 )
+from agent_runtime.claude.run import ClaudeRun, ClaudeStreamDecoder
 from agent_runtime.cli_run import (
     RelayAccess,
     RunSurfaceRefused,
