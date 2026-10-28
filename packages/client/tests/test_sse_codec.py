@@ -416,6 +416,7 @@ def test_files_that_base64_padding_pushes_over_the_frame_ceiling_are_refused_bot
     event = _succeeded_with_non_file_part(MAX_EVENT_BYTES, files)
     frame = _written(event)
 
+    assert _non_file_part(frame, event) == MAX_EVENT_BYTES
     assert len(frame) > MAX_SUCCEEDED_FRAME_BYTES
     with pytest.raises(EventTooLarge, match=str(MAX_SUCCEEDED_FRAME_BYTES)):
         encode_event(event)

@@ -7,6 +7,7 @@ bytes and the ceiling on all contents together.
 
 from __future__ import annotations
 
+import base64
 import json
 
 import pytest
@@ -166,9 +167,11 @@ def test_a_malformed_content_never_appears_in_a_violation() -> None:
 
 
 def test_a_clash_between_files_never_puts_their_content_in_a_violation() -> None:
-    twin = {"name": "a", "content": SECRET_MARKER}
+    encoded_marker = base64.b64encode(SECRET_MARKER.encode()).decode()
+    twin = {"name": "a", "content": encoded_marker}
 
     detail = _violation(_raw([twin, twin])).detail
 
     assert "unique" in detail
     assert SECRET_MARKER not in detail
+    assert encoded_marker not in detail
