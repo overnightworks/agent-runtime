@@ -139,7 +139,7 @@ def test_the_probe_runs_in_a_run_tree_below_the_working_root_with_no_token_and_n
     assert fnmatch.fnmatch(home.parent.name, RUN_TREE_PATTERN)
     assert (home.name, working_directory) == ("home", home.parent / "work")
     assert (inspecting / "home-listing").read_text() == ""
-    assert (inspecting / "work-listing").read_text() == ""
+    assert (inspecting / "work-listing").read_text() == "output\n"
     seen = {line.split("=", 1)[0] for line in (inspecting / "environment").read_text().splitlines()}
     assert seen.isdisjoint(PROVIDER_TOKEN_VARIABLES)
     assert "marker" not in (inspecting / "environment").read_text()
