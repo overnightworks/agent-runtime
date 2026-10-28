@@ -1,8 +1,0 @@
-claim_id = "68ed691835cb440a990e082d1d25d6cb"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "63b541f75b74a81c4b010a7ab67135d2b8c81c8b"
-branch = "claude/issue-524-s3-support-extract"
-scope = [".github/host-vocabulary-allowed.txt", "tests/support/api_runner_support.py", "tests/support/keycloak_realm.py", "tests/support/openai_completions.py", "tests/test_keycloak_token_shapes.py", "tests/test_openai_adapter.py", "tests/test_service_api_runner.py", "tests/test_service_api_runner_tools.py", "tests/test_service_keycloak.py"]
-opened_commit = "6c0e1a4b06f6f1d9ef6a56429d16481955c2ace5"
-whole_reason = "One extraction: three test modules' shared code moves into three support modules and their five importers switch together."
