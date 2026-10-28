@@ -1,0 +1,8 @@
+claim_id = "eb7a77fd5a8a41359a0cd1cd859baf33"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "7305ae536a7cf2c21b87b1fd65f75dd8181da5ad"
+branch = "claude/issue-531-s6-root-mirror-names"
+scope = ["AGENTS.md", "quality/baseline.toml", "tests/support/anchored_leaders.py", "tests/support/anchored_start_cases.py", "tests/support/anchored_support.py", "tests/test_anchor_lifecycle.py", "tests/test_anchored_child.py", "tests/test_anchored_door.py", "tests/test_anchored_group_signal.py", "tests/test_anchored_kill_until_gone.py", "tests/test_anchored_release.py", "tests/test_anchored_start.py", "tests/test_anchored_support.py", "tests/test_async_claude_spawn_seam.py", "tests/test_blocking_anchored_child.py", "tests/test_bounded_runner_containment.py", "tests/test_ci_workflow.py", "tests/test_distribution_contract.py", "tests/test_last_holder_removal.py", "tests/test_release_workflow.py", "tests/test_route_failures.py", "tests/test_run_directories.py", "tests/test_zombie_anchor.py"]
+opened_commit = "ec84c14bb45305e9a6f22b130d5bdb8928c7c705"
+whole_reason = "One rename batch: the root tests take their mirror names, the workflow tests change folder, and the three pointers and one constant that name them follow together."
