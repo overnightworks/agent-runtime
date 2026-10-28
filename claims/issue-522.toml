@@ -1,8 +1,0 @@
-claim_id = "39cab82ee921479e8143a8944e066889"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "f45baacded1d8e9a9148416244be6bd0b91eeca8"
-branch = "claude/issue-522-tests-support"
-scope = [".github/host-vocabulary-allowed.txt", ".github/workflows/ci.yml", "AGENTS.md", "packages/service/tests", "pyproject.toml", "quality/baseline.toml", "tests"]
-opened_commit = "52c0af9c054afd9a84a6938134acf5e721d4ceb1"
-whole_reason = "One import-mode switch: each helper's new spelling must reach all of its importers in the same commit, so the 17 moves and about 100 respelled test files land together."
