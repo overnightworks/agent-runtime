@@ -15,8 +15,8 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 
 import pytest
-from bounds import TEST_WAIT_SECONDS
-from mcp_app_fake import (
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.mcp_app_fake import (
     CERTIFICATE_HOST,
     HeldRequests,
     McpAppFake,
@@ -24,7 +24,7 @@ from mcp_app_fake import (
     rpc_result,
     serving,
 )
-from service_support import fake_app_authority  # noqa: F401 - a fixture, requested by name
+from tests.support.service_support import fake_app_authority  # noqa: F401 - a fixture, requested by name
 
 ANSWER = {"content": [{"type": "text", "text": "saved"}]}
 

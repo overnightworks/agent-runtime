@@ -16,10 +16,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
-import anchored_support
 import pytest
-from anchored_kernel import watcher_thread
-from anchored_support import (
+from tests.support import anchored_support
+from tests.support.anchored_kernel import watcher_thread
+from tests.support.anchored_support import (
     GONE,
     RUNNING,
     SIGKILLED,
@@ -35,8 +35,8 @@ from anchored_support import (
     popen_bare,
     state,
 )
-from bounds import TEST_WAIT_SECONDS
-from test_zombie_anchor import EXIT_WITH_LINE
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.test_zombie_anchor import EXIT_WITH_LINE
 
 from agent_runtime.spawn import ChildProcess, closed_environment
 

@@ -1,11 +1,5 @@
 """Library-local test support for the ``agent_runtime`` package tests.
 
-A sibling ``conftest.py`` in this directory would make ``from conftest import``
-ambiguous under pytest's prepend import mode — the root ``tests/conftest.py``
-and this package's own ``conftest.py`` both import as ``conftest``. The lib
-tests therefore reach their shared helpers here, by basename, which resolves
-the same way wherever the suite runs.
-
 Self-contained by design: it imports only ``agent_runtime`` and the standard
 library, never a host application. The deployment facts below are the package's
 own sample — a notes host with its twelve tools — not
@@ -51,9 +45,9 @@ from typing import Any, Final, Protocol
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from anchored_kernel import join_watcher, recorded_watcher_starts
-from anchored_support import ChildCleanup
-from bounds import TEST_WAIT_SECONDS
+from tests.support.anchored_kernel import join_watcher, recorded_watcher_starts
+from tests.support.anchored_support import ChildCleanup
+from tests.support.bounds import TEST_WAIT_SECONDS
 
 from agent_runtime import anchored_turn, lost_groups, process, spawn
 from agent_runtime.anchored_turn import CliProcessPool, ReapBounds

@@ -19,10 +19,10 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
-from bounds import TEST_WAIT_SECONDS
-from capability_support import canary_token, capability_carrying
-from relay_support import RUN_ID, RecordingApp, yield_until
-from service_support import alice_admitted_run, failure_lines, service_config
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.capability_support import canary_token, capability_carrying
+from tests.support.relay_support import RUN_ID, RecordingApp, yield_until
+from tests.support.service_support import alice_admitted_run, failure_lines, service_config
 
 import agent_runtime_service.cli_runner as cli_runner_module
 from agent_runtime.errors import ContainmentLost, RetainedGroup

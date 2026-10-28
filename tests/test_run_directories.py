@@ -19,9 +19,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from anchored_leaders import spawn_warnings
-from anchored_support import GONE, ChildCleanup
-from provider_test_support import (
+from tests.support.anchored_leaders import spawn_warnings
+from tests.support.anchored_support import GONE, ChildCleanup
+from tests.support.provider_test_support import (
     DESTINATION_FAULTS,
     REAL_REAP_BOUNDS,
     TREE_PATTERN,

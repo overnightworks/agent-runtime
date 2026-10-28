@@ -16,14 +16,14 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 
 import pytest
-from anchored_kernel import (
+from tests.support.anchored_kernel import (
     KernelModel,
     WatcherStarts,
     install_kernel,
     join_watcher,
     recorded_watcher_starts,
 )
-from anchored_leaders import (
+from tests.support.anchored_leaders import (
     ALL_PHASES,
     LEADER_WITH_GRANDCHILD,
     Leaders,
@@ -31,7 +31,7 @@ from anchored_leaders import (
     open_door,
     spawn_warnings,
 )
-from anchored_support import (
+from tests.support.anchored_support import (
     GONE,
     SIGKILLED,
     ChildCleanup,
@@ -39,8 +39,8 @@ from anchored_support import (
     pidfd_send_signal,
     wait_for_exits,
 )
-from bounds import TEST_WAIT_SECONDS, within_the_bound
-from provider_test_support import (
+from tests.support.bounds import TEST_WAIT_SECONDS, within_the_bound
+from tests.support.provider_test_support import (
     Hold,
     Recorded,
     ScriptedAnchoredChild,

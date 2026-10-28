@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import provider_test_support
 import pytest
-from provider_test_support import (
+from tests.support import provider_test_support
+from tests.support.provider_test_support import (
     Hold,
     RunnerFailureWatch,
     fake_cli_process,

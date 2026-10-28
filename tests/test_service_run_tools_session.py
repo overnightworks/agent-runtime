@@ -12,11 +12,19 @@ import anyio
 import httpcore._backends.anyio as httpcore_anyio
 import httpx
 import pytest
-from bounds import TEST_WAIT_SECONDS, within_the_bound
-from mcp_app_fake import FakeResponse, Responder, rpc_result, tool_listing
-from relay_support import RUN_ID, RawClient, json_rpc, parked_at, port_of, post_message, yield_until
-from service_support import fake_app_authority  # noqa: F401 - a fixture, requested by name
-from test_service_run_tools import (
+from tests.support.bounds import TEST_WAIT_SECONDS, within_the_bound
+from tests.support.mcp_app_fake import FakeResponse, Responder, rpc_result, tool_listing
+from tests.support.relay_support import (
+    RUN_ID,
+    RawClient,
+    json_rpc,
+    parked_at,
+    port_of,
+    post_message,
+    yield_until,
+)
+from tests.support.service_support import fake_app_authority  # noqa: F401 - a fixture, requested by name
+from tests.test_service_run_tools import (
     CALLS_EVENT,
     CAPABILITY,
     CLIENT_EVENT,

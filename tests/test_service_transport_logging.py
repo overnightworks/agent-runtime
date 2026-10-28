@@ -22,15 +22,15 @@ from pathlib import Path
 
 import pytest
 import uvicorn
-from capability_support import capability_carrying
-from mcp_app_fake import (
+from tests.support.capability_support import capability_carrying
+from tests.support.mcp_app_fake import (
     CERTIFICATE_HOST,
     FakeResponse,
     ScriptedApp,
     TestAuthority,
     serving,
 )
-from service_support import (
+from tests.support.service_support import (
     UNTOUCHED_LOGGER,
     LoggerState,
     fake_app_authority,  # noqa: F401 - a fixture, requested by name
@@ -38,7 +38,7 @@ from service_support import (
     plain_service_config,
     runners_that_start_no_run,
 )
-from test_service_cli_version import PRINTS_THE_PIN, _config_file_naming, _printing
+from tests.test_service_cli_version import PRINTS_THE_PIN, _config_file_naming, _printing
 
 import agent_runtime_service.app as app_module
 from agent_runtime_service.app import create_app

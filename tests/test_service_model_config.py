@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from service_support import (
+from tests.support.service_support import (
     LISTED_MODEL,
     TEST_ISSUER,
     UNLISTED_MODEL,

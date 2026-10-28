@@ -22,10 +22,10 @@ from http import HTTPStatus
 from typing import Any
 
 import pytest
-from bounds import TEST_WAIT_SECONDS, within_the_bound
-from capability_support import canary_token, capability_carrying
-from mcp_app_fake import CERTIFICATE_HOST, McpAppFake, ScriptedApp, serving
-from relay_support import (
+from tests.support.bounds import TEST_WAIT_SECONDS, within_the_bound
+from tests.support.capability_support import canary_token, capability_carrying
+from tests.support.mcp_app_fake import CERTIFICATE_HOST, McpAppFake, ScriptedApp, serving
+from tests.support.relay_support import (
     RUN_ID,
     Delivery,
     HoldingSteppedLoop,
@@ -44,7 +44,7 @@ from relay_support import (
     task_named,
     yield_until,
 )
-from service_support import (
+from tests.support.service_support import (
     alice_admitted_run,
     decoded_events,
     failure_lines,

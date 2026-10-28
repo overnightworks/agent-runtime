@@ -12,11 +12,10 @@ import threading
 from collections.abc import Iterator
 from pathlib import Path
 
-import bounds
-import provider_test_support
 import pytest
 import uvicorn
-from provider_test_support import (
+from tests.support import bounds, provider_test_support
+from tests.support.provider_test_support import (
     Hold,
     RunnerFailureWatch,
     fail_the_directory_named,
@@ -24,20 +23,20 @@ from provider_test_support import (
     fake_cli_process,
     install_cli_door,
 )
-from service_support import (
+from tests.support.service_support import (
     PINNED_CLAUDE_VERSION,
     logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
     process_token_file,
 )
-from test_run_directories import (
+from tests.test_run_directories import (
     REMOVAL_FAILED,
     removal_errors,
     remove_the_leftover,
     rmtree_refused,
     the_only_tree,
 )
-from test_service_codex_profile import a_login_file
-from test_service_config import (
+from tests.test_service_codex_profile import a_login_file
+from tests.test_service_config import (
     CLAUDE_VERSION_LINE,
     CLI_SECTION,
     VALID_CONFIG,

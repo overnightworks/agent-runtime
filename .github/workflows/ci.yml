@@ -160,7 +160,7 @@ jobs:
             "$GITHUB_WORKSPACE"/dist/overnightworks_agent_runtime_service-*-py3-none-any.whl
           cd "$proof"
           "$proof/venv/bin/python" -I -c 'import agent_runtime_service.app; print("imported", agent_runtime_service.app.__name__)'
-          "$proof/venv/bin/python" -I "$GITHUB_WORKSPACE/tests/wheel_smoke/app_tools_discovery.py"
+          "$proof/venv/bin/python" -I "$GITHUB_WORKSPACE/packages/service/tests/e2e/app_tools_discovery.py"
           printf 'from agent_runtime_service.tool_relay import RelayAccess\n' > relay_consumer.py
           uvx pyright@1.1.414 --pythonpath "$proof/venv/bin/python" relay_consumer.py
           printf '[identity]\nissuer = "https://issuer.test"\n' > bad.toml

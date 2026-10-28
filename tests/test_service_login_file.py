@@ -12,12 +12,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from provider_test_support import (
+from tests.support.provider_test_support import (
     CANARY_ACCESS_TOKEN,
     CANARY_ID_TOKEN,
     SAMPLE_CLAUDE_SETUP_TOKEN,
 )
-from service_login_support import (  # noqa: F401 - the fixtures are named in their decorators
+from tests.support.service_login_support import (  # noqa: F401 - the fixtures are named in their decorators
     CANARY_FOREIGN,
     CANARY_REFRESH,
     CODEX_FILE_REFUSAL,
@@ -40,7 +40,7 @@ from service_login_support import (  # noqa: F401 - the fixtures are named in th
     what_the_writer_returned,
     what_was_said,
 )
-from service_support import reaches_text
+from tests.support.service_support import reaches_text
 
 import agent_runtime_service.config as service_config
 import agent_runtime_service.login_file as login_file

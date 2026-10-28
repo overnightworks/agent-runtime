@@ -11,9 +11,9 @@ import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
-import anchored_support
 import pytest
-from anchored_support import (
+from tests.support import anchored_support
+from tests.support.anchored_support import (
     NOBODY,
     P_PIDFD,
     RUNNING,
@@ -32,7 +32,7 @@ from anchored_support import (
     state,
     zombie_anchor_session,
 )
-from bounds import TEST_WAIT_SECONDS
+from tests.support.bounds import TEST_WAIT_SECONDS
 
 from agent_runtime.spawn import closed_environment
 

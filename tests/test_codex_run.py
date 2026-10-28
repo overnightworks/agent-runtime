@@ -15,12 +15,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from anchored_leaders import spawn_warnings
-from anchored_support import GONE, ChildCleanup
-from codex_support import PRECONDITIONS_MARKER
-from codex_support import a_fake_codex as a_fake_codex_expecting
-from descendant_support import DescendantRow, Handshake, lingering_descendant
-from provider_test_support import (
+from tests.support.anchored_leaders import spawn_warnings
+from tests.support.anchored_support import GONE, ChildCleanup
+from tests.support.codex_support import PRECONDITIONS_MARKER
+from tests.support.codex_support import a_fake_codex as a_fake_codex_expecting
+from tests.support.descendant_support import DescendantRow, Handshake, lingering_descendant
+from tests.support.provider_test_support import (
     CANARY_ACCESS_TOKEN,
     CANARY_ID_TOKEN,
     a_codex_login,

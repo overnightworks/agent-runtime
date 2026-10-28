@@ -13,7 +13,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from provider_test_support import (
+from pydantic import SecretStr
+from tests.support.provider_test_support import (
     A_CODEX_LOGIN_WITH_INVALID_UTF8,
     CLAUDE_MODEL_CATALOG_STDOUT,
     a_claude_cli_child,
@@ -27,7 +28,6 @@ from provider_test_support import (
     override_turn_runtime,
     remove_the_codex_turn_block_with_no_login_and_no_binary,
 )
-from pydantic import SecretStr
 
 import agent_runtime
 from agent_runtime import dispatch

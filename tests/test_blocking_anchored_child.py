@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
-from anchored_kernel import (
+from tests.support.anchored_kernel import (
     CensusRecorder,
     EventLog,
     GroupSignalCall,
@@ -25,11 +25,16 @@ from anchored_kernel import (
     KernelModel,
     install_kernel,
 )
-from anchored_leaders import Leaders
-from anchored_support import GONE, SIGKILLED, ChildCleanup, Exited, OwnedChild
-from bounds import TEST_WAIT_SECONDS
-from descendant_support import DescendantRow, Handshake, lingering_descendant, process_identity
-from provider_test_support import make_the_first_parent_close_of_a_door_fail
+from tests.support.anchored_leaders import Leaders
+from tests.support.anchored_support import GONE, SIGKILLED, ChildCleanup, Exited, OwnedChild
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.descendant_support import (
+    DescendantRow,
+    Handshake,
+    lingering_descendant,
+    process_identity,
+)
+from tests.support.provider_test_support import make_the_first_parent_close_of_a_door_fail
 
 from agent_runtime import spawn
 from agent_runtime.procfs import GroupCensus

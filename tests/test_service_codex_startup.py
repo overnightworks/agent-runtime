@@ -14,20 +14,20 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from provider_test_support import (
+from pydantic import ValidationError
+from tests.support.provider_test_support import (
     CANARY_ACCESS_TOKEN,
     CANARY_ID_TOKEN,
     a_codex_login,
 )
-from pydantic import ValidationError
-from service_support import (
+from tests.support.service_support import (
     TEST_ISSUER,
     _service_config_document,
     everything_a_refusal_holds,
     logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
     reaches_text,
 )
-from test_service_codex_profile import (
+from tests.test_service_codex_profile import (
     CODEX_PIN,
     LOGIN_NAME,
     a_config,
@@ -41,7 +41,7 @@ from test_service_codex_profile import (
     write_login,
     written,
 )
-from test_service_config import _refused_on_one_line
+from tests.test_service_config import _refused_on_one_line
 
 from agent_runtime.secret_file import MAX_SECRET_FILE_BYTES
 from agent_runtime_service.cli import main

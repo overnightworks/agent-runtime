@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 from pydantic import ValidationError
-from wire_builders import call, heartbeat, result, started, succeeded, text
+from tests.support.wire_builders import call, heartbeat, result, started, succeeded, text
 
 from agent_runtime_client import sse as sse_module
 from agent_runtime_client.run_stream import StreamViolation, ViolationKind

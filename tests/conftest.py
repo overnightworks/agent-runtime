@@ -24,17 +24,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from anchored_kernel import CensusRecorder
-from anchored_leaders import (
-    ALL_PHASES,
-    Leaders,
-    asyncio_errors,
-    spawn_warnings,
-    unclosed_resources,
-)
-from anchored_support import ChildCleanup, ZombieAnchor, child_cleanup_scope, zombie_anchor_session
-from descendant_support import Handshake, open_handshake
-from provider_test_support import MCP_TOOL_NAMES, close_fake_cli_pipes, write_claude_token_file
 
 from agent_runtime import procfs
 from agent_runtime.config import (
@@ -48,6 +37,30 @@ from agent_runtime.config import (
     TurnRuntimeConfig,
     configure,
     reset_config,
+)
+
+# Assertion rewriting must be registered before the helpers below are imported, hence E402.
+pytest.register_assert_rewrite("tests.support")
+
+from tests.support.anchored_kernel import CensusRecorder  # noqa: E402
+from tests.support.anchored_leaders import (  # noqa: E402
+    ALL_PHASES,
+    Leaders,
+    asyncio_errors,
+    spawn_warnings,
+    unclosed_resources,
+)
+from tests.support.anchored_support import (  # noqa: E402
+    ChildCleanup,
+    ZombieAnchor,
+    child_cleanup_scope,
+    zombie_anchor_session,
+)
+from tests.support.descendant_support import Handshake, open_handshake  # noqa: E402
+from tests.support.provider_test_support import (  # noqa: E402
+    MCP_TOOL_NAMES,
+    close_fake_cli_pipes,
+    write_claude_token_file,
 )
 
 PR_GET_DUMPABLE = 3

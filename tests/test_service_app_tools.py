@@ -1,6 +1,6 @@
 """The upstream MCP client reaches an app over verified TLS and speaks only the JSON-only profile.
 
-Every scenario drives ``open_app_tools`` against ``tests/mcp_app_fake.py``, a
+Every scenario drives ``open_app_tools`` against ``tests/support/mcp_app_fake.py``, a
 server on real TLS sockets with a test CA generated per session. The client
 never reads from the network without an external deadline here.
 """
@@ -19,9 +19,9 @@ from typing import Any
 
 import httpx
 import pytest
-from bounds import TEST_WAIT_SECONDS
-from capability_support import capability_carrying
-from mcp_app_fake import (
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.capability_support import capability_carrying
+from tests.support.mcp_app_fake import (
     ACKNOWLEDGED,
     CERTIFICATE_HOST,
     DROPPED,
@@ -37,7 +37,7 @@ from mcp_app_fake import (
     serving,
     tool_listing,
 )
-from service_support import fake_app_authority  # noqa: F401 - a fixture, requested by name
+from tests.support.service_support import fake_app_authority  # noqa: F401 - a fixture, requested by name
 
 from agent_runtime_client.mcp_wire import NON_TEXT_BLOCK_MESSAGE, WireRefusal
 from agent_runtime_client.wire import MAX_EVENT_BYTES

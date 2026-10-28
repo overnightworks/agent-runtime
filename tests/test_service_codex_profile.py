@@ -16,11 +16,12 @@ from typing import Any
 
 import pytest
 import uvicorn
-from anchored_support import ChildCleanup
-from cli_tools_support import a_tool_app
-from codex_support import PRECONDITIONS_MARKER, a_fake_codex
-from mcp_app_fake import TestAuthority
-from provider_test_support import (
+from pydantic import ValidationError
+from tests.support.anchored_support import ChildCleanup
+from tests.support.cli_tools_support import a_tool_app
+from tests.support.codex_support import PRECONDITIONS_MARKER, a_fake_codex
+from tests.support.mcp_app_fake import TestAuthority
+from tests.support.provider_test_support import (
     CANARY_ACCESS_TOKEN,
     CANARY_ID_TOKEN,
     SYSTEM_TEXT,
@@ -29,8 +30,7 @@ from provider_test_support import (
     a_private_root,
     held_slots,
 )
-from pydantic import ValidationError
-from service_support import (
+from tests.support.service_support import (
     API_GROUP,
     LISTED_MODEL,
     PINNED_CLAUDE_VERSION,
@@ -52,8 +52,8 @@ from service_support import (
     run_body,
     run_headers,
 )
-from test_codex_run import DONE, THREAD, a_message, an_item, line
-from test_service_cli_runner import (
+from tests.test_codex_run import DONE, THREAD, a_message, an_item, line
+from tests.test_service_cli_runner import (
     MINT,
     THREE_MESSAGE_TURN,
     HeldReap,

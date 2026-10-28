@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
-from provider_test_support import (
+from tests.support.provider_test_support import (
     A_STREAMED_LINE,
     SAMPLE_CLAUDE_SETUP_TOKEN,
     UNSOUND_TOKEN_FILES,

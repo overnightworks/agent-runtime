@@ -28,11 +28,11 @@ from urllib.parse import urlsplit
 
 import pytest
 import uvicorn
-from anchored_support import GONE, ChildCleanup
-from bounds import TEST_WAIT_SECONDS
 from fastapi import FastAPI
-from mcp_app_fake import TestAuthority
-from provider_test_support import (
+from tests.support.anchored_support import GONE, ChildCleanup
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.mcp_app_fake import TestAuthority
+from tests.support.provider_test_support import (
     INIT_LINE,
     SUCCESS_LINE,
     SYSTEM_TEXT,
@@ -51,7 +51,7 @@ from provider_test_support import (
     own_real_children,
     the_only_tree,
 )
-from service_support import (
+from tests.support.service_support import (
     ALICE,
     LISTED_MODEL,
     PINNED_CLAUDE_VERSION,

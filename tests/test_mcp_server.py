@@ -15,7 +15,10 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-from mcp_server_support import (
+from starlette.applications import Starlette
+from starlette.responses import PlainTextResponse
+from starlette.routing import Route
+from tests.support.mcp_server_support import (
     ISSUED_AT,
     LIFETIME,
     OTHER_RUN_ID,
@@ -26,9 +29,6 @@ from mcp_server_support import (
     minted_capability,
     signature_segment_of,
 )
-from starlette.applications import Starlette
-from starlette.responses import PlainTextResponse
-from starlette.routing import Route
 
 from agent_runtime_client.mcp_server import HandlerFailureWithheld, McpServer, McpTool
 from agent_runtime_client.mcp_wire import ToolOutcome

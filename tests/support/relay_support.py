@@ -16,8 +16,8 @@ from urllib.parse import urlsplit
 
 import h11
 import pytest
-from bounds import TEST_WAIT_SECONDS, within_the_bound
-from service_support import StepClock, SteppedLoop
+from tests.support.bounds import TEST_WAIT_SECONDS, within_the_bound
+from tests.support.service_support import StepClock, SteppedLoop
 
 from agent_runtime.cli_run import RelayAccess
 from agent_runtime_client.mcp_wire import (

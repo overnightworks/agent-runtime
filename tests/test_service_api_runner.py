@@ -7,9 +7,9 @@ import json
 
 import httpx
 import pytest
-from api_support import write_api_credentials
 from pydantic import ValidationError
-from service_support import (
+from tests.support.api_support import write_api_credentials
+from tests.support.service_support import (
     API_GROUP,
     LISTED_MODEL,
     SONGMAKER_GROUP,
@@ -20,8 +20,8 @@ from service_support import (
     run_headers,
     service_config,
 )
-from service_support import logging_state_snapshot as logging_state_snapshot
-from test_openai_adapter import assert_closed_refusal, caller_error, malformed_completions
+from tests.support.service_support import logging_state_snapshot as logging_state_snapshot
+from tests.test_openai_adapter import assert_closed_refusal, caller_error, malformed_completions
 
 from agent_runtime.config import reset_config
 from agent_runtime_client.wire import AssistantText, Failed, FailureCode, Succeeded
@@ -221,7 +221,7 @@ def test_credentials_are_hidden_and_selected_by_app(tmp_path):
 
 
 def test_rotation_to_per_app_only_keys_is_a_file_only_change(tmp_path, monkeypatch):
-    from service_support import PRESENTATOR_CLIENT, SONGMAKER_CLIENT
+    from tests.support.service_support import PRESENTATOR_CLIENT, SONGMAKER_CLIENT
 
     config = configured(tmp_path)
     sent = []
@@ -284,7 +284,7 @@ def test_invalid_rotated_credentials_refuse_before_http(tmp_path, monkeypatch, c
 def test_fragmented_reflection_reaches_no_frame_record_or_log(
     tmp_path, monkeypatch, caplog, reflected,
 ):
-    from service_support import record_signed_tokens
+    from tests.support.service_support import record_signed_tokens
 
     config = configured(tmp_path)
     signed = record_signed_tokens(monkeypatch)
@@ -344,7 +344,7 @@ def test_the_api_runner_is_installed_beside_the_cli_runner(tmp_path):
 async def test_buffered_http_keeps_heartbeats_and_closes_on_every_ending(
     tmp_path, monkeypatch, ending,
 ):
-    from service_support import ClientSocket, StepClock, shared_mint
+    from tests.support.service_support import ClientSocket, StepClock, shared_mint
 
     from agent_runtime_client.sse import RunStreamDecoder
 
@@ -435,7 +435,7 @@ def test_config_refuses_partial_or_contradictory_gateway_settings(tmp_path, api)
 def test_https_uses_only_the_explicit_ca_and_hostname_verification(tmp_path, monkeypatch):
     import ssl
 
-    from mcp_app_fake import TestAuthority
+    from tests.support.mcp_app_fake import TestAuthority
 
     authority = TestAuthority(tmp_path)
     config = configured(tmp_path, completion_url="https://gateway/v1/chat/completions",
@@ -485,7 +485,12 @@ def test_removed_model_is_never_substituted_retried_or_routed_to_cli(tmp_path, m
 
 
 def test_full_cli_capacity_does_not_block_the_real_api_runner(tmp_path, monkeypatch):
-    from service_support import SUBSCRIPTION_GROUP, ClientSocket, GatedRunner, shared_mint
+    from tests.support.service_support import (
+        SUBSCRIPTION_GROUP,
+        ClientSocket,
+        GatedRunner,
+        shared_mint,
+    )
 
     from agent_runtime_service.runners import Runners
 
@@ -529,7 +534,7 @@ def test_process_entry_installs_the_api_route_beside_the_probed_cli_program(
     tmp_path, monkeypatch, logging_state_restored,
 ):
     import uvicorn
-    from mcp_app_fake import TestAuthority
+    from tests.support.mcp_app_fake import TestAuthority
 
     from agent_runtime_service import cli
     from agent_runtime_service import config as configuration
@@ -601,7 +606,7 @@ async def test_runner_refusal_removes_active_caller_chain(tmp_path, monkeypatch,
     from dataclasses import replace
     from uuid import uuid4
 
-    from service_support import alice_admitted_run
+    from tests.support.service_support import alice_admitted_run
 
     from agent_runtime_client.wire import RunRequest
     from agent_runtime_service.routing import Api
@@ -638,7 +643,7 @@ async def test_runner_refusal_removes_active_caller_chain(tmp_path, monkeypatch,
 
 
 def test_api_ca_startup_refusal_names_its_own_configuration(tmp_path, monkeypatch, capsys):
-    from mcp_app_fake import TestAuthority
+    from tests.support.mcp_app_fake import TestAuthority
 
     from agent_runtime_service import cli
     from agent_runtime_service import config as configuration

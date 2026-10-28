@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from provider_test_support import a_codex_login
-from service_login_support import (  # noqa: F401 - the fixtures are named in their decorators
+from tests.support.provider_test_support import a_codex_login
+from tests.support.service_login_support import (  # noqa: F401 - the fixtures are named in their decorators
     CANARY_FOREIGN,
     CANARY_REFRESH,
     CODEX_FILE_REFUSAL,
@@ -43,7 +43,7 @@ from service_login_support import (  # noqa: F401 - the fixtures are named in th
     what_the_writer_returned,
     what_was_said,
 )
-from test_service_codex_profile import (
+from tests.test_service_codex_profile import (
     no_installed_core_runtime,  # noqa: F401 - an autouse fixture
     write_login,
 )

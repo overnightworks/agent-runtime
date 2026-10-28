@@ -9,7 +9,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, fields
 
 import pytest
-from provider_test_support import (
+from pydantic import ValidationError
+from tests.support.provider_test_support import (
     A_CALLER_CANARY,
     CALLER_CONTEXTS,
     DEEPLY_NESTED_JSON,
@@ -17,7 +18,6 @@ from provider_test_support import (
     SAMPLE_TOOL_MARKUP,
     CallerCanaryError,
 )
-from pydantic import ValidationError
 
 from agent_runtime.text_tool_protocol import (
     FinalText,

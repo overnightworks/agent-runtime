@@ -7,7 +7,7 @@ import enum
 
 import anyio
 import pytest
-from service_support import in_loop
+from tests.support.service_support import in_loop
 
 from agent_runtime.outlasting import level_cancellation, outlast, wait_outlasting_cancellation
 

@@ -18,11 +18,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from anchored_leaders import spawn_warnings
-from anchored_support import GONE, ChildCleanup
-from bounds import TEST_WAIT_SECONDS
-from descendant_support import DescendantRow, Handshake, lingering_descendant
-from provider_test_support import (
+from tests.support.anchored_leaders import spawn_warnings
+from tests.support.anchored_support import GONE, ChildCleanup
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.descendant_support import DescendantRow, Handshake, lingering_descendant
+from tests.support.provider_test_support import (
     REAL_REAP_BOUNDS,
     ScriptedClaudeChild,
     a_child_that_outlives_sigkill,

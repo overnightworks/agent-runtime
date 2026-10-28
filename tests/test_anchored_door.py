@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from anchored_kernel import (
+from tests.support.anchored_kernel import (
     GroupSignalModel,
     KernelModel,
     install_kernel,
@@ -22,10 +22,10 @@ from anchored_kernel import (
     watcher_names,
     watcher_thread,
 )
-from anchored_leaders import Leaders, asyncio_errors, open_door
-from anchored_support import GONE, SIGKILLED, ChildCleanup, Exited
-from bounds import within_the_bound
-from provider_test_support import make_the_first_parent_close_of_a_door_fail
+from tests.support.anchored_leaders import Leaders, asyncio_errors, open_door
+from tests.support.anchored_support import GONE, SIGKILLED, ChildCleanup, Exited
+from tests.support.bounds import within_the_bound
+from tests.support.provider_test_support import make_the_first_parent_close_of_a_door_fail
 
 from agent_runtime import procfs, spawn
 from agent_runtime.procfs import GroupCensus

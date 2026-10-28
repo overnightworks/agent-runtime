@@ -21,8 +21,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from descendant_support import Handshake
-from mcp_app_fake import (
+from tests.support.descendant_support import Handshake
+from tests.support.mcp_app_fake import (
     CERTIFICATE_HOST,
     McpAppFake,
     RecordedRequest,

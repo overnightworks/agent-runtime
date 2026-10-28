@@ -17,9 +17,9 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from anchored_support import ChildCleanup
-from bounds import TEST_WAIT_SECONDS
-from descendant_support import DescendantRow, Handshake, lingering_descendant
+from tests.support.anchored_support import ChildCleanup
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.descendant_support import DescendantRow, Handshake, lingering_descendant
 
 from agent_runtime.process import CliRunReason, run_catalog_cli, run_cli_bounded
 from agent_runtime.spawn import ChildProcess, closed_environment

@@ -18,8 +18,8 @@ from dataclasses import dataclass, field
 
 import httpx
 import pytest
-from capability_support import capability_carrying
-from mcp_app_fake import (
+from tests.support.capability_support import capability_carrying
+from tests.support.mcp_app_fake import (
     CERTIFICATE_HOST,
     FakeResponse,
     McpAppFake,
@@ -28,7 +28,7 @@ from mcp_app_fake import (
     TestAuthority,
     serving,
 )
-from service_support import (
+from tests.support.service_support import (
     failure_lines,
     fake_app_authority,  # noqa: F401 - a fixture, requested by name
 )

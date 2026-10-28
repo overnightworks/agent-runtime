@@ -7,7 +7,7 @@ import json
 import pickle
 
 import pytest
-from provider_test_support import (
+from tests.support.provider_test_support import (
     A_CODEX_LOGIN_WITH_INVALID_UTF8,
     CANARY_ACCESS_TOKEN,
     CANARY_ID_TOKEN,

@@ -18,8 +18,9 @@ from typing import Final
 
 import httpx
 import pytest
-from bounds import TEST_WAIT_SECONDS, within_the_bound
-from service_support import (
+from starlette.requests import ClientDisconnect
+from tests.support.bounds import TEST_WAIT_SECONDS, within_the_bound
+from tests.support.service_support import (
     API_GROUP,
     LONGEST_AGENT,
     SONGMAKER_GROUP,
@@ -42,8 +43,7 @@ from service_support import (
     service_config,
     shared_mint,
 )
-from starlette.requests import ClientDisconnect
-from test_service_capability import QUOTATION_MARKS_256, TUNED_AT_THE_LIMIT
+from tests.test_service_capability import QUOTATION_MARKS_256, TUNED_AT_THE_LIMIT
 from webauth.https_client import KeySetFetchError
 
 from agent_runtime.errors import ContainmentLost, RetainedGroup

@@ -13,7 +13,7 @@ import weakref
 from collections.abc import Callable
 
 import pytest
-from anchored_kernel import (
+from tests.support.anchored_kernel import (
     CONSUME_STOP_REPORT,
     OBSERVE_EXIT,
     WATCHER_THREAD_PREFIX,
@@ -24,7 +24,7 @@ from anchored_kernel import (
     install_kernel,
     join_watcher,
 )
-from anchored_leaders import (
+from tests.support.anchored_leaders import (
     SPAWN_LOGGER,
     ExitProbe,
     InstrumentedLock,
@@ -34,9 +34,9 @@ from anchored_leaders import (
     spawn_warnings,
     start_bound,
 )
-from anchored_support import GONE, ChildCleanup, Exited, OwnedChild
-from bounds import TEST_WAIT_SECONDS
-from provider_test_support import call_within_deadline
+from tests.support.anchored_support import GONE, ChildCleanup, Exited, OwnedChild
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.provider_test_support import call_within_deadline
 
 from agent_runtime import spawn
 from agent_runtime.spawn import AnchorState, AnchorStateError, ChildIdentityLost

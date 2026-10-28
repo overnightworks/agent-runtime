@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import pytest
-from anchored_kernel import (
+from tests.support.anchored_kernel import (
     WATCHER_THREAD_PREFIX,
     GroupSignalCall,
     GroupSignalModel,
@@ -26,9 +26,9 @@ from anchored_kernel import (
     WaitpidAnswer,
     install_kernel,
 )
-from anchored_leaders import ExitProbe, InstrumentedLock, Leaders, spawn_warnings
-from anchored_support import GONE, ChildCleanup, OwnedChild, kill_children
-from bounds import TEST_WAIT_SECONDS
+from tests.support.anchored_leaders import ExitProbe, InstrumentedLock, Leaders, spawn_warnings
+from tests.support.anchored_support import GONE, ChildCleanup, OwnedChild, kill_children
+from tests.support.bounds import TEST_WAIT_SECONDS
 
 from agent_runtime import spawn
 from agent_runtime.spawn import ChildIdentityLost

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from provider_test_support import (
+from tests.support.provider_test_support import (
     GROK_LOGGED_IN,
     SAMPLE_TOOL_CATALOG,
     override_grok_runtime,

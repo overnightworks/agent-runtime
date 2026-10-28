@@ -15,9 +15,9 @@ from types import SimpleNamespace
 
 import pytest
 import uvicorn
-from service_support import logging_state_snapshot  # noqa: F401 - a fixture, requested by name
-from test_service_cli_version import _config_file_naming, _logged_program
-from test_service_config import VALID_CONFIG, _written
+from tests.support.service_support import logging_state_snapshot  # noqa: F401 - a fixture, requested by name
+from tests.test_service_cli_version import _config_file_naming, _logged_program
+from tests.test_service_config import VALID_CONFIG, _written
 
 import agent_runtime_service.config as service_config
 import agent_runtime_service.process_hardening as hardening

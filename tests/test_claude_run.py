@@ -10,9 +10,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from anchored_leaders import spawn_warnings
-from anchored_support import GONE, ChildCleanup
-from provider_test_support import (
+from pydantic import SecretStr
+from tests.support.anchored_leaders import spawn_warnings
+from tests.support.anchored_support import GONE, ChildCleanup
+from tests.support.provider_test_support import (
     HISTORY_STDIN_LINE,
     INIT_LINE,
     RELAY_CONFIG,
@@ -29,7 +30,6 @@ from provider_test_support import (
     held_claude_slots,
     line,
 )
-from pydantic import SecretStr
 
 from agent_runtime.claude.provider import (
     CLAUDE_CLI_LOGIN_REFUSED_DETAIL,

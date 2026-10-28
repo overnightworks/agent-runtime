@@ -8,7 +8,7 @@ limit needs the clock to move for its own sake, so nothing sleeps.
 from __future__ import annotations
 
 import pytest
-from service_support import (
+from tests.support.service_support import (
     Drive,
     ScriptedRunner,
     TokenMint,

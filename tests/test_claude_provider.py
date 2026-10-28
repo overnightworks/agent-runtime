@@ -24,9 +24,10 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import anyio
-import provider_test_support
 import pytest
-from provider_test_support import (
+from pydantic import SecretStr
+from tests.support import provider_test_support
+from tests.support.provider_test_support import (
     A_RUNNER_FAILURE_CANARY,
     A_STREAMED_LINE,
     CLAUDE_MODEL_CATALOG_STDOUT,
@@ -69,7 +70,6 @@ from provider_test_support import (
     traceback_frames_hold,
     write_claude_token_file,
 )
-from pydantic import SecretStr
 
 from agent_runtime import anchored_turn, lost_groups, process, spawn
 from agent_runtime.claude import provider
