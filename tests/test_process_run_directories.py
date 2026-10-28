@@ -109,7 +109,7 @@ os.symlink(outside_directory, os.path.join(home, "outside-dir"))
 HOME_AFTER_THE_LEADER = [
     ".cli", ".cli.json", "cli-tmp", "outside-dir", "outside-file", "prompt",
 ]
-WORK_AFTER_THE_LEADER = ["result"]
+WORK_AFTER_THE_LEADER = ["output", "result"]
 
 
 @pytest.fixture
@@ -189,7 +189,7 @@ def test_a_run_needs_no_installed_runtime(private_root: Path) -> None:
 
 @pytest.mark.parametrize("umask", (0o022, 0o277, 0o000), ids=oct)
 @pytest.mark.parametrize("files", ({}, FILES), ids=("no-files", "files"))
-def test_a_run_gets_a_private_home_a_separate_empty_work_directory_and_exact_files(
+def test_a_run_gets_a_private_home_a_work_directory_with_an_empty_output_and_exact_files(
     private_root: Path, umask: int, files: dict[str, bytes],
 ) -> None:
     previous_umask = os.umask(umask)
@@ -204,8 +204,7 @@ def test_a_run_gets_a_private_home_a_separate_empty_work_directory_and_exact_fil
     expected = {
         ".": (0o700, None),
         tree.name: (0o700, None),
-        f"{tree.name}/home": (0o700, None),
-        f"{tree.name}/work": (0o700, None),
+        **{f"{tree.name}/{name}": (0o700, None) for name in ("home", "work", "work/output")},
         **{f"{tree.name}/home/{name}": (0o600, content) for name, content in files.items()},
     }
     assert (snapshot, tree.name.startswith("agent-run-"), tree.parent) == (

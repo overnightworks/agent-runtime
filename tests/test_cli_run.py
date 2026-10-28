@@ -193,7 +193,7 @@ async def collect(
     adapter: LineScriptAdapter,
     seen: list[StreamEvent],
 ) -> None:
-    async for event in astream_cli_run(root, adapter):
+    async for event in astream_cli_run(root, adapter, max_files_bytes=1024):
         seen.append(event)
 
 
@@ -274,7 +274,7 @@ def test_the_child_runs_in_the_runs_own_directories(
         home_listing,
         mode,
         tree.name.startswith("agent-run-"),
-    ) == (tree / "work", tree / "home", "", "run-file,", "600", True)
+    ) == (tree / "work", tree / "home", "output,", "run-file,", "600", True)
 
 
 def test_the_group_is_gone_and_the_tree_removed_before_the_ending(
@@ -296,7 +296,7 @@ def test_the_group_is_gone_and_the_tree_removed_before_the_ending(
     at_the_ending: list[tuple[bool, int, list[Path]]] = []
 
     async def scenario() -> None:
-        async for event in astream_cli_run(root, adapter):
+        async for event in astream_cli_run(root, adapter, max_files_bytes=1024):
             if isinstance(event, FinalEvent):
                 at_the_ending.append(
                     (row.descendant_is_dead(), held_slots(pool), list(private_root.iterdir()))
@@ -312,7 +312,7 @@ async def close_after_the_first_event(
     root: PrivateWorkingRoot,
     adapter: LineScriptAdapter,
 ) -> None:
-    events = astream_cli_run(root, adapter)
+    events = astream_cli_run(root, adapter, max_files_bytes=1024)
     assert await anext(events) == text("a")
     await events.aclose()
 
@@ -324,7 +324,7 @@ async def cancel_after_the_first_event(
     first_seen = asyncio.Event()
 
     async def consume() -> None:
-        async for _ in astream_cli_run(root, adapter):
+        async for _ in astream_cli_run(root, adapter, max_files_bytes=1024):
             first_seen.set()
 
     consumer = asyncio.create_task(consume())
@@ -385,7 +385,7 @@ def test_a_start_that_fails_raises_at_the_first_step_and_leaves_nothing(
     taken = pool.reserve() if pool_is_taken else None
 
     async def scenario() -> tuple[list[Path], list[Path], int]:
-        events = astream_cli_run(root, adapter)
+        events = astream_cli_run(root, adapter, max_files_bytes=1024)
         before_the_first_step = list(private_root.iterdir())
         with pytest.raises(expected_error):
             await anext(events)
@@ -527,7 +527,7 @@ def test_a_retained_group_keeps_its_tree_until_confirmed(
     adapter = LineScriptAdapter(CLAUDE_CLI_PROCESS_POOL)
 
     async def scenario() -> None:
-        events = astream_cli_run(root, adapter)
+        events = astream_cli_run(root, adapter, max_files_bytes=1024)
         assert await anext(events) == text("a")
         async with without_waiting_on_stderr():
             with pytest.raises(ContainmentLost) as lost:
@@ -555,7 +555,7 @@ def test_a_group_unconfirmed_after_a_clean_end_raises_instead_of_the_ending(
     adapter = LineScriptAdapter(CLAUDE_CLI_PROCESS_POOL)
 
     async def scenario() -> None:
-        events = astream_cli_run(root, adapter)
+        events = astream_cli_run(root, adapter, max_files_bytes=1024)
         assert await anext(events) == text("a")
         async with without_waiting_on_stderr():
             with pytest.raises(ContainmentLost) as lost:
@@ -588,7 +588,7 @@ def test_a_failed_reap_keeps_the_original_failure_as_its_context(
         adapter = LineScriptAdapter(CLAUDE_CLI_PROCESS_POOL, refusal=refusal)
 
         async def scenario() -> None:
-            events = astream_cli_run(root, adapter)
+            events = astream_cli_run(root, adapter, max_files_bytes=1024)
             assert await anext(events) == text("a")
             await child.stderr_failed.wait()
             async with without_waiting_on_stderr():

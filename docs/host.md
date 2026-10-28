@@ -81,9 +81,11 @@ with `include_input=False`, which matters to a host that logs configuration erro
 the reference.
 
 The subscription run the agent service drives (`cli_run.astream_cli_run(root,
-adapter)`, with `claude.provider.ClaudeRun` as Claude's adapter and `codex.run.CodexRun` as Codex's, in directories
+adapter, max_files_bytes=...)`, with `claude.provider.ClaudeRun` as Claude's adapter and `codex.run.CodexRun` as Codex's, in directories
 from `process.run_directories`) takes every fact as an explicit argument and reads
-no installed configuration. A login the provider's CLI refuses ends the run with
+no installed configuration. The ending, a `FinalEvent`, carries `files`: the regular files
+the run left in its output folder, as the wire's `RunFile` values in name order. A login the
+provider's CLI refuses ends the run with
 `errors.CliLoginRefusedError`, for every provider; Claude's
 `claude.provider.CliLoginRefusedError` is a subclass of it.
 
@@ -212,8 +214,8 @@ until the process exits; `cli_settle_deadline(deadline)` is the deadline plus
 reads no installed configuration. `root` is a `PrivateWorkingRoot`; the names in
 `files` are checked on entry, before anything is created. Below the root the run
 gets one tree, `agent-run-XXXXXXXX/`, with `home/` (the child's `HOME` and
-`TMPDIR`) and a separate empty `work/`, each 0700, and each file is written
-exclusively into `home/` at 0600. The modes keep a run's files from other users,
+`TMPDIR`) and a separate `work/` that holds one empty `output/`, each 0700, and each
+file is written exclusively into `home/` at 0600. The modes keep a run's files from other users,
 not from another process of the same user or from root, and the removal gives no
 containment against concurrent moves by processes of the same Unix user. The tree is removed once,
 after the context ended and the last reservation was released, so a retained group
@@ -227,6 +229,19 @@ mounted into the root; that is a deployment condition the library does not check
 A tree that cannot be removed is logged once by class or reason, never with its
 path, is never retried and stays until the host clears the root. The process
 docstrings carry the rest.
+
+**A subscription run's output.** `cli_run.astream_cli_run` reads `output/` once, after the
+decoder has judged a clean ending and the process group is confirmed gone, and before the
+tree's removal; the ending is yielded after the removal attempt. A run that is cancelled,
+fails, or loses containment yields no ending and reads nothing. Every entry must be a
+regular file with one name: the read opens the tree, `work/` and `output/` one below the
+other without following a link, opens each entry without following a link or waiting on a
+pipe, and reads at most `max_files_bytes` plus one byte in all, synchronously. `max_files_bytes`
+is a required non-negative `int` argument, never a default. Anything else ends the run with
+`run_output.RunOutputRefused`, whose `cause` is a closed `RunOutputCause` (a replaced
+folder, a link, an entry that is not a regular file, a second name, a name the wire
+refuses, the limit, an unreadable entry) and whose message, log line and chain carry no
+name, path or content.
 
 ## Sandbox
 
