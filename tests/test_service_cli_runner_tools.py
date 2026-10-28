@@ -64,19 +64,7 @@ from tests.support.relay_support import (
     post_message,
     yield_until,
 )
-from tests.support.service_support import (
-    LISTED_MODEL,
-    PINNED_CLAUDE_VERSION,
-    SteppedLoop,
-    assert_rejected,
-    decoded_events,
-    failure_lines,
-    fake_app_authority,  # noqa: F401 - a fixture, requested by name
-    logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
-    post_run,
-    run_body,
-)
-from tests.test_service_cli_runner import (
+from tests.support.service_cli_runner_support import (
     FIRST_LOGIN,
     LOGIN_FILES_GONE_BAD,
     SECOND_LOGIN,
@@ -96,8 +84,20 @@ from tests.test_service_cli_runner import (
     through_the_service_entry,
     trusting,
 )
-from tests.test_service_cli_runner import (
+from tests.support.service_cli_runner_support import (
     post_a_run as post_a_run_naming,
+)
+from tests.support.service_support import (
+    LISTED_MODEL,
+    PINNED_CLAUDE_VERSION,
+    SteppedLoop,
+    assert_rejected,
+    decoded_events,
+    failure_lines,
+    fake_app_authority,  # noqa: F401 - a fixture, requested by name
+    logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
+    post_run,
+    run_body,
 )
 from tests.test_service_run_tools import Stall
 

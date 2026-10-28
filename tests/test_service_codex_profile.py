@@ -15,63 +15,70 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import uvicorn
-from pydantic import ValidationError
 from tests.support.anchored_support import ChildCleanup
 from tests.support.cli_tools_support import a_tool_app
-from tests.support.codex_support import PRECONDITIONS_MARKER, a_fake_codex
+from tests.support.codex_support import (
+    DONE,
+    PRECONDITIONS_MARKER,
+    THREAD,
+    a_message,
+    an_item,
+    codex_line,
+)
+from tests.support.core_runtime_support import (
+    no_installed_core_runtime,  # noqa: F401 - an autouse fixture
+)
 from tests.support.mcp_app_fake import TestAuthority
 from tests.support.provider_test_support import (
     CANARY_ACCESS_TOKEN,
     CANARY_ID_TOKEN,
-    SYSTEM_TEXT,
     a_codex_login,
-    a_fake_claude,
-    a_private_root,
     held_slots,
 )
-from tests.support.service_support import (
-    API_GROUP,
-    LISTED_MODEL,
-    PINNED_CLAUDE_VERSION,
-    SONGMAKER_GROUP,
-    SONGMAKER_ORIGIN,
-    SONGMAKER_TOOLS,
-    SUBSCRIPTION_GROUP,
-    TEST_ISSUER,
-    _service_config_document,
-    _toml_lines,
-    assert_rejected,
-    decoded_events,
-    failure_lines,
-    fake_app_authority,  # noqa: F401 - a fixture, requested by name
-    logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
-    post_run,
-    process_token_file,
-    record_signed_tokens,
-    run_body,
-    run_headers,
-)
-from tests.test_codex_run import DONE, THREAD, a_message, an_item, line
-from tests.test_service_cli_runner import (
+from tests.support.service_cli_runner_support import (
     MINT,
     THREE_MESSAGE_TURN,
     HeldReap,
+    a_held_reap,  # noqa: F401 - the fixture is named in its decorator
     all_children_gone,
     drive_over_http,
     headers,
-    held_reap,  # noqa: F401 - a fixture, requested by name
     leave_after,
     post_a_run,
     private_root_of,
     shown,
     status_of,
 )
+from tests.support.service_codex_support import (
+    CODEX_LOGIN_NAME,
+    CODEX_MODEL,
+    a_codex_config,
+    a_codex_login_file,
+    a_document_with_both,
+    a_service_fake,
+    codex_document,
+    write_login,
+)
+from tests.support.service_support import (
+    API_GROUP,
+    LISTED_MODEL,
+    SONGMAKER_GROUP,
+    SONGMAKER_TOOLS,
+    SUBSCRIPTION_GROUP,
+    assert_rejected,
+    decoded_events,
+    failure_lines,
+    fake_app_authority,  # noqa: F401 - a fixture, requested by name
+    logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
+    post_run,
+    record_signed_tokens,
+    run_body,
+    run_headers,
+)
 
 import agent_runtime_service.cli_runner as cli_runner
 from agent_runtime.cli_run import RelayAccess
 from agent_runtime.codex.run import CODEX_CLI_PROCESS_POOL
-from agent_runtime.config import reset_config
 from agent_runtime_client.wire import (
     FailureCode,
     RejectionCode,
@@ -84,130 +91,18 @@ from agent_runtime_service.run_events import RUNNER_FAILED_MESSAGE
 from agent_runtime_service.run_liveness import LoopClock
 from agent_runtime_service.runners import AdmittedRun, Runners
 
-CODEX_MODEL = "gpt-5.5"
-CODEX_PIN = "0.163.0"
-VERSION_LINE = f"codex-cli {CODEX_PIN}"
-TURN_STDIN = "User: a\n\nAssistant: b\n\nUser: c"
 CANARY = "cli-text-canary-3b71"
 PARKED = "exec sleep 600"
-ANSWER = (THREAD, a_message("done"), DONE)
-LOGIN_NAME = "codex-login.json"
-
-
-@pytest.fixture(autouse=True)
-def no_installed_core_runtime() -> None:
-    reset_config()
-
-
-@pytest.fixture
-def served(monkeypatch: pytest.MonkeyPatch, logging_state_restored: None) -> list[dict[str, Any]]:
-    runs: list[dict[str, Any]] = []
-    monkeypatch.setattr(uvicorn, "run", lambda app, **where: runs.append(where))
-    return runs
-
-
-def write_login(path: Path, contents: bytes, mode: int = 0o600) -> Path:
-    """Write the login beside the file and move it over the file, as ``mv -T`` does."""
-    beside = path.with_name(path.name + ".new")
-    beside.write_bytes(contents)
-    beside.chmod(mode)
-    beside.replace(path)
-    return path
-
-
-def a_login_file(directory: Path, contents: bytes | None = None) -> Path:
-    return write_login(directory / LOGIN_NAME, a_codex_login() if contents is None else contents)
-
-
-def a_service_fake(directory: Path, stream: tuple[bytes, ...] = ANSWER, then: str = "exit 0", **kw):
-    return a_fake_codex(
-        directory,
-        stream,
-        then,
-        system_text=SYSTEM_TEXT,
-        expected_stdin=TURN_STDIN,
-        version_line=VERSION_LINE,
-        **kw,
-    )
-
-
-def codex_document(
-    tmp_path: Path,
-    binary: Path,
-    login_file: Path,
-    *,
-    runs: dict[str, object] | None = None,
-    songmaker: dict[str, object] | None = None,
-) -> dict[str, Any]:
-    document = _service_config_document(TEST_ISSUER, runs, songmaker)
-    if songmaker is None:
-        del document["apps"]["songmaker"]["mcp_origin"]
-    document["defaults"] = {"model": f"{Provider.OPENAI}/{CODEX_MODEL}"}
-    document["cli"] = {
-        "working_root": str(a_private_root(tmp_path)),
-        Provider.OPENAI.value: {
-            "binary": str(binary),
-            "version": CODEX_PIN,
-            "models": [CODEX_MODEL],
-        },
-    }
-    document["cli"][Provider.OPENAI]["token_file"] = str(login_file)
-    return document
-
-
-def with_claude_beside(document: dict[str, Any], claude: Path) -> dict[str, Any]:
-    document["cli"][Provider.ANTHROPIC] = {
-        "binary": str(claude),
-        "version": PINNED_CLAUDE_VERSION,
-        "models": [LISTED_MODEL],
-        "token_file": str(process_token_file()),
-    }
-    return document
-
-
-def a_document_with_both(tmp_path: Path, stream: tuple[bytes, ...] = ANSWER) -> dict[str, Any]:
-    """Claude and Codex tables, each with a stand-in program of its own under ``tmp_path``."""
-    claude_directory = tmp_path / "claude-directory"
-    claude_directory.mkdir()
-    codex = codex_document(tmp_path, a_service_fake(tmp_path, stream), a_login_file(tmp_path))
-    return with_claude_beside(codex, a_fake_claude(claude_directory))
-
-
-def a_config(document: dict[str, Any]) -> ServiceConfig:
-    return ServiceConfig.model_validate(document)
-
-
-CODEX_NAME = f"{Provider.OPENAI}/{CODEX_MODEL}"
-
-
-def a_config_with_both_providers(tmp_path: Path) -> ServiceConfig:
-    """``service_config`` plus a listed ``[cli.openai]`` table."""
-    document = a_document_with_both(tmp_path)
-    document["defaults"] = {"model": f"{Provider.ANTHROPIC}/{LISTED_MODEL}"}
-    document["apps"]["songmaker"]["mcp_origin"] = SONGMAKER_ORIGIN
-    return a_config(document)
-
-
-def written(tmp_path: Path, document: dict[str, Any]) -> Path:
-    path = tmp_path / "agent-runtime-service.toml"
-    path.write_text("\n".join(_toml_lines(document)) + "\n", encoding="utf-8")
-    return path
-
-
-def the_refusal_of(document: dict[str, Any]) -> str:
-    with pytest.raises(ValidationError) as refused:
-        a_config(document)
-    return str(refused.value)
 
 
 # Runs through ``POST /runs`` with the stand-in CLI.
 
 
 def a_codex_service(tmp_path: Path, **options: Any) -> tuple[ServiceConfig, Path]:
-    login = a_login_file(tmp_path)
+    login = a_codex_login_file(tmp_path)
     capture = tmp_path / "capture"
     binary = a_service_fake(tmp_path, capture=capture, **options.pop("fake", {}))
-    return a_config(codex_document(tmp_path, binary, login, **options)), capture
+    return a_codex_config(codex_document(tmp_path, binary, login, **options)), capture
 
 
 def argv_of(capture: Path) -> list[str]:
@@ -237,7 +132,7 @@ def test_a_login_file_swapped_between_two_runs_serves_the_next_run_without_a_res
     tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     config, capture = a_codex_service(tmp_path)
-    login = tmp_path / LOGIN_NAME
+    login = tmp_path / CODEX_LOGIN_NAME
 
     def scenario(base_url: str) -> list[str]:
         post_a_run(base_url)
@@ -276,7 +171,7 @@ def test_a_login_file_gone_bad_fails_its_run_before_the_program_and_a_repair_ser
     spoil: Callable[[Path], None],
 ) -> None:
     config, capture = a_codex_service(tmp_path, runs={"max_parallel_cli_runs": 1})
-    login = tmp_path / LOGIN_NAME
+    login = tmp_path / CODEX_LOGIN_NAME
     spoil(login)
 
     def scenario(base_url: str) -> tuple[Any, ...]:
@@ -299,7 +194,7 @@ def test_a_login_file_gone_bad_fails_its_run_before_the_program_and_a_repair_ser
     assert [(event, kind) for event, kind, _ in failure_lines(caplog)] == [
         (f"The runner of run {failed[0].run_id} failed", "UnsoundSecretFile")
     ]
-    leaks = (LOGIN_NAME, str(tmp_path), CANARY_ACCESS_TOKEN, CANARY_ID_TOKEN)
+    leaks = (CODEX_LOGIN_NAME, str(tmp_path), CANARY_ACCESS_TOKEN, CANARY_ID_TOKEN)
     assert [leak for leak in leaks if leak in caplog.text] == []
 
 
@@ -307,14 +202,14 @@ def test_a_login_file_gone_bad_fails_its_run_before_the_program_and_a_repair_ser
     ("stream", "then", "failure_class"),
     [
         pytest.param(
-            (line(type="turn.failed", error={"message": f"401 {CANARY}"}),),
+            (codex_line(type="turn.failed", error={"message": f"401 {CANARY}"}),),
             "exit 1",
             "CodexTurnFailed",
             id="failed-turn-with-a-bare-401",
         ),
         pytest.param(
             (
-                line(
+                codex_line(
                     type="turn.failed",
                     error={"message": f"unexpected status 401 Unauthorized: {CANARY}"},
                 ),
@@ -375,7 +270,7 @@ def test_a_second_codex_run_beyond_the_limit_is_busy_and_never_goes_to_the_api_r
     tmp_path: Path,
     child_cleanup: ChildCleanup,
     monkeypatch: pytest.MonkeyPatch,
-    held_reap: HeldReap,  # noqa: F811
+    held_reap: HeldReap,
 ) -> None:
     config, _capture = a_codex_service(
         tmp_path,
@@ -402,16 +297,16 @@ def test_a_tool_request_on_the_codex_table_is_refused_before_any_place_capabilit
     authority: TestAuthority,
     child_cleanup: ChildCleanup,
     monkeypatch: pytest.MonkeyPatch,
-    held_reap: HeldReap,  # noqa: F811
+    held_reap: HeldReap,
 ) -> None:
     signed = record_signed_tokens(monkeypatch)
     both = run_headers(MINT.workload(), MINT.user((SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP)))
     with a_tool_app(authority) as app:
-        config = a_config(
+        config = a_codex_config(
             codex_document(
                 tmp_path,
                 a_service_fake(tmp_path, (THREAD, a_message("one")), PARKED),
-                a_login_file(tmp_path),
+                a_codex_login_file(tmp_path),
                 runs={"max_parallel_cli_runs": 1},
                 songmaker={"mcp_origin": app.origin},
             )
@@ -445,11 +340,11 @@ def test_the_same_codex_request_without_tools_runs_even_for_an_app_with_a_tool_o
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     with a_tool_app(authority) as app:
-        config = a_config(
+        config = a_codex_config(
             codex_document(
                 tmp_path,
                 a_service_fake(tmp_path, (THREAD, a_message("one"), DONE)),
-                a_login_file(tmp_path),
+                a_codex_login_file(tmp_path),
                 songmaker={"mcp_origin": app.origin},
             )
         )
@@ -473,7 +368,7 @@ def test_a_codex_run_given_a_relay_is_refused_by_an_exception_not_an_assert(
     launch = cli_runner.ProviderLaunch(
         Provider.OPENAI,
         a_service_fake(tmp_path),
-        a_login_file(tmp_path),
+        a_codex_login_file(tmp_path),
         max_tool_calls=1,
         tool_timeout_seconds=1.0,
     )
@@ -516,6 +411,6 @@ def test_a_run_goes_to_the_table_of_the_configured_models_provider(
     if app_model is not None:
         document["apps"]["songmaker"]["model"] = app_model
 
-    events = drive_over_http(child_cleanup, monkeypatch, a_config(document), post_a_run)
+    events = drive_over_http(child_cleanup, monkeypatch, a_codex_config(document), post_a_run)
 
     assert shown(events)[-1] == ("succeeded", answer)

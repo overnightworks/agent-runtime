@@ -24,6 +24,7 @@ from tests.support.provider_test_support import (
     removal_errors,
     the_only_tree,
 )
+from tests.support.service_codex_support import a_codex_login_file
 from tests.support.service_config_support import (
     PRINTS_THE_PIN,
     VALID_CONFIG,
@@ -40,7 +41,6 @@ from tests.support.service_support import (
     logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
     process_token_file,
 )
-from tests.test_service_codex_profile import a_login_file
 
 import agent_runtime.process as core_process
 from agent_runtime.config import reset_config
@@ -415,7 +415,11 @@ def test_with_both_programs_pinned_both_are_probed_and_the_first_miss_refuses_na
         process_token_file(),
     )
     codex, codex_calls = _a_pin(
-        tmp_path / "codex", "codex-cli 0.163.1\n", "0.163.0", CodexProgram, a_login_file(tmp_path)
+        tmp_path / "codex",
+        "codex-cli 0.163.1\n",
+        "0.163.0",
+        CodexProgram,
+        a_codex_login_file(tmp_path),
     )
     cli = CliConfig(working_root=str(working_root), anthropic=claude, openai=codex)
 

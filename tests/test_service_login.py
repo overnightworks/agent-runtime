@@ -17,7 +17,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from tests.support.core_runtime_support import (
+    no_installed_core_runtime,  # noqa: F401 - an autouse fixture
+)
 from tests.support.provider_test_support import a_codex_login
+from tests.support.service_codex_support import write_login
 from tests.support.service_login_support import (  # noqa: F401 - the fixtures are named in their decorators
     CANARY_FOREIGN,
     CANARY_REFRESH,
@@ -42,10 +46,6 @@ from tests.support.service_login_support import (  # noqa: F401 - the fixtures a
     the_signals_received,
     what_the_writer_returned,
     what_was_said,
-)
-from tests.test_service_codex_profile import (
-    no_installed_core_runtime,  # noqa: F401 - an autouse fixture
-    write_login,
 )
 
 import agent_runtime_service.config as service_config

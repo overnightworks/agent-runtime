@@ -20,13 +20,13 @@ from typing import Any
 
 import pytest
 from tests.support.provider_test_support import a_codex_login, write_claude_token_file
-from tests.support.service_support import TEST_ISSUER, _service_config_document, reaches_text
-from tests.test_service_codex_profile import (
+from tests.support.service_codex_support import (
     a_service_fake,
     codex_document,
     write_login,
-    written,
+    written_document,
 )
+from tests.support.service_support import TEST_ISSUER, _service_config_document, reaches_text
 
 import agent_runtime_service.config as service_config
 import agent_runtime_service.login as login
@@ -87,7 +87,7 @@ def an_installation(tmp_path: Path, provider: Provider, *, old: bool = True) -> 
         if old:
             write_claude_token_file(path, OLD_CLAUDE_TOKEN.strip())
         document = _service_config_document(TEST_ISSUER, None, None, token_file=path)
-    config = written(tmp_path, document)
+    config = written_document(tmp_path, document)
     status = path.stat() if old else None
     return Installation(
         config,
@@ -230,9 +230,7 @@ def an_old_file_fails(monkeypatch: pytest.MonkeyPatch, name: str, sibling: Path)
     monkeypatch.setattr(os, name, refusing)
 
 
-def run(
-    installation: Installation, stream: io.BytesIO, said: Said, *extra: str
-) -> tuple[int, str]:
+def run(installation: Installation, stream: io.BytesIO, said: Said, *extra: str) -> tuple[int, str]:
     with said.watching():
         status = main(installation.command(*extra), stream)
     return status, said.descriptor

@@ -17,7 +17,14 @@ from typing import Any
 import pytest
 from tests.support.anchored_leaders import spawn_warnings
 from tests.support.anchored_support import GONE, ChildCleanup
-from tests.support.codex_support import PRECONDITIONS_MARKER
+from tests.support.codex_support import (
+    DONE,
+    PRECONDITIONS_MARKER,
+    THREAD,
+    a_message,
+    an_item,
+    codex_line,
+)
 from tests.support.codex_support import a_fake_codex as a_fake_codex_expecting
 from tests.support.descendant_support import DescendantRow, Handshake, lingering_descendant
 from tests.support.provider_test_support import (
@@ -84,30 +91,18 @@ def a_run(**changes: Any) -> CodexRun:
     return CodexRun(**{**fields, **changes})
 
 
-def line(**fields: Any) -> bytes:
-    return (json.dumps(fields) + "\n").encode()
-
-
-def an_item(event_type: str, item_type: str, **item: Any) -> bytes:
-    return line(type=event_type, item={"id": "item_0", "type": item_type, **item})
-
-
-def a_message(text: str) -> bytes:
-    return an_item("item.completed", "agent_message", text=text)
-
-
-THREAD = line(type="thread.started", thread_id="thread")
-TURN = line(type="turn.started")
+TURN = codex_line(type="turn.started")
 NOTICE = an_item("item.completed", "error", message=CLI_TEXT)
-DONE = line(type="turn.completed", usage={})
-REFUSED_TURN = line(
+REFUSED_TURN = codex_line(
     type="turn.failed",
     error={
         "message": f"unexpected status 401 Unauthorized: {CLI_TEXT}, url: https://x.test/, "
         "request id: 401-abc"
     },
 )
-RECONNECTING = line(type="error", message=f"Reconnecting... 1/5 (401 Unauthorized {CLI_TEXT})")
+RECONNECTING = codex_line(
+    type="error", message=f"Reconnecting... 1/5 (401 Unauthorized {CLI_TEXT})"
+)
 HAPPY_STREAM = (THREAD, NOTICE, TURN, a_message("first"), a_message("second"), DONE)
 
 
@@ -277,7 +272,7 @@ def test_the_happy_stream_is_its_text_events_then_the_last_message() -> None:
 
 
 def test_a_reconnect_notice_before_the_turn_completes_still_succeeds() -> None:
-    notice = line(type="error", message=f"Reconnecting... 1/5 {CLI_TEXT}")
+    notice = codex_line(type="error", message=f"Reconnecting... 1/5 {CLI_TEXT}")
 
     assert decoded_and_ended((THREAD, notice, TURN, a_message("answer"), DONE)) == [
         AssistantTextEvent(text="answer"),
@@ -319,31 +314,35 @@ def test_a_tool_item_ends_the_run_at_its_first_event(event_type: str, item_type:
             id="unknown-item",
         ),
         pytest.param(
-            CodexUnknownStreamPart, (line(type="turn.surprise", text=CLI_TEXT),), id="unknown-event"
+            CodexUnknownStreamPart,
+            (codex_line(type="turn.surprise", text=CLI_TEXT),),
+            id="unknown-event",
         ),
         pytest.param(CodexUnreadableLine, (f"not json {CLI_TEXT}\n".encode(),), id="not-json"),
         pytest.param(CodexUnreadableLine, (b'["list"]\n',), id="not-an-object"),
-        pytest.param(CodexUnreadableLine, (line(text=CLI_TEXT),), id="no-event-type"),
-        pytest.param(CodexUnreadableLine, (line(type="item.completed"),), id="item-event-no-item"),
+        pytest.param(CodexUnreadableLine, (codex_line(text=CLI_TEXT),), id="no-event-type"),
+        pytest.param(
+            CodexUnreadableLine, (codex_line(type="item.completed"),), id="item-event-no-item"
+        ),
         pytest.param(
             CodexTurnFailed,
-            (line(type="turn.failed", error={"message": f"401 {CLI_TEXT}"}),),
+            (codex_line(type="turn.failed", error={"message": f"401 {CLI_TEXT}"}),),
             id="failed-turn-with-a-bare-401",
         ),
         pytest.param(
             CodexTurnFailed,
-            (line(type="turn.failed", error={"message": f"usage limit reached {CLI_TEXT}"}),),
+            (codex_line(type="turn.failed", error={"message": f"usage limit reached {CLI_TEXT}"}),),
             id="failed-turn-usage-limit",
         ),
-        pytest.param(CodexTurnFailed, (line(type="turn.failed"),), id="failed-turn-no-error"),
+        pytest.param(CodexTurnFailed, (codex_line(type="turn.failed"),), id="failed-turn-no-error"),
         pytest.param(
             CodexUnreadableLine,
-            (line(type="turn.failed", error=CLI_TEXT),),
+            (codex_line(type="turn.failed", error=CLI_TEXT),),
             id="failed-turn-error-not-an-object",
         ),
         pytest.param(
             CodexUnreadableLine,
-            (line(type="turn.failed", error={"message": [CLI_TEXT]}),),
+            (codex_line(type="turn.failed", error={"message": [CLI_TEXT]}),),
             id="failed-turn-message-not-a-string",
         ),
         pytest.param(CliLoginRefusedError, (REFUSED_TURN,), id="failed-turn-login-refused"),
@@ -487,7 +486,7 @@ def test_the_group_is_gone_and_the_tree_removed_before_the_final_event(
             id="tool-item",
         ),
         pytest.param(
-            (line(type="turn.failed", error={"message": f"401 {CLI_TEXT}"}),),
+            (codex_line(type="turn.failed", error={"message": f"401 {CLI_TEXT}"}),),
             "exit 1",
             CodexTurnFailed,
             id="failed-turn-with-a-bare-401",
