@@ -7,7 +7,7 @@ owns, not values this package may guess. Its catalog and turn paths
 therefore read them from one frozen value the host installs once per process
 via :func:`configure`, instead of reaching into an application settings
 module; the subscription run
-(:class:`agent_runtime.claude.provider.ClaudeRun`, in the directories of
+(:class:`agent_runtime.claude.run.ClaudeRun`, in the directories of
 :func:`agent_runtime.process.run_directories`) and the working root
 (:class:`PrivateWorkingRoot`) take them as explicit arguments instead.
 
