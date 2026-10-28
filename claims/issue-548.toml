@@ -1,8 +1,0 @@
-claim_id = "ce93da92a2134105a9ab9b55d8cbcd3f"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "3a28c2a84ee91149f9f272144708c3f745a618c1"
-branch = "claude/issue-548-protocol-4-files"
-scope = ["docs/MIGRATING.md", "docs/wire.md", "packages/client/src/agent_runtime_client/sse.py", "packages/client/src/agent_runtime_client/wire.py", "packages/client/tests/test_sse_codec.py", "packages/client/tests/test_wire_files.py", "packages/client/tests/test_wire_protocol.py", "packages/service/src/agent_runtime_service/run_events.py", "packages/service/tests/test_app_entrance.py", "packages/service/tests/test_app_keycloak.py", "packages/service/tests/test_run_events.py", "tests/support/wire_builders.py"]
-opened_commit = "8a1bae6019e545227bc627b743785bc8f3cd3326"
-whole_reason = "One wire version change: the client contract, its one service producer and every file that pins the succeeded frame or the version move together, or the tree is red between commits."
