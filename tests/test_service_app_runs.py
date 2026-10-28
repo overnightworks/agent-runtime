@@ -273,16 +273,18 @@ def test_p9_an_unreachable_key_set_is_unavailable_for_the_apps_own_run():
 
 
 @pytest.mark.parametrize(
-    "headers",
+    "make_headers",
     [
-        pytest.param({}, id="w1-no-token"),
-        pytest.param({"Agent-Workload-Token": "garbage"}, id="w2-garbage"),
-        pytest.param({"Agent-Workload-Token": _expired_workload()}, id="w2-expired"),
-        pytest.param({"Agent-Workload-Token": OTHER_MINT.workload()}, id="w2-unknown-key"),
+        pytest.param(lambda: {}, id="w1-no-token"),
+        pytest.param(lambda: {"Agent-Workload-Token": "garbage"}, id="w2-garbage"),
+        pytest.param(lambda: {"Agent-Workload-Token": _expired_workload()}, id="w2-expired"),
+        pytest.param(
+            lambda: {"Agent-Workload-Token": OTHER_MINT.workload()}, id="w2-unknown-key"
+        ),
     ],
 )
-def test_w1_w2_a_missing_or_unverifiable_workload_token_is_unauthorized(service, headers):
-    assert_rejected(service.start(headers), RejectionCode.UNAUTHORIZED, 401)
+def test_w1_w2_a_missing_or_unverifiable_workload_token_is_unauthorized(service, make_headers):
+    assert_rejected(service.start(make_headers()), RejectionCode.UNAUTHORIZED, 401)
     assert service.started == 0
 
 
