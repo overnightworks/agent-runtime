@@ -1262,9 +1262,10 @@ Piece 2 of A1a3 (`agent_service.run_events`, the budget beside `seq`):
     a dropped client gets none. The per-frame cap stays
     `provider_error` and may exceed a small `max_bytes`.
 
-**Amendment (28.10.2026, #552, #488).** A `succeeded` frame is counted without the
-base64 of its files, and the files of one run are a separate budget,
-`max_files_bytes`, which the core's collector enforces.
+    **Amendment (28.10.2026, #552, #488).** A `succeeded` frame is counted without the
+    base64 of its files, and the files of one run are a separate budget,
+    `max_files_bytes`, which the core's collector enforces.
+
 17. An event the budget refuses is charged nothing, takes no `seq` and is never
     recorded by `RunStream`; the limit terminal takes the `seq` it would have had. The
     order is encode, budget (calls before bytes), stream rules, send.

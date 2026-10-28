@@ -23,6 +23,7 @@ from tests.support.service_cli_runner_support import (
     status_of,
 )
 
+from agent_runtime_client.sse import encode_event
 from agent_runtime_client.wire import (
     MAX_RUN_FILES_BYTES,
     MAX_SUCCEEDED_FRAME_BYTES,
@@ -116,6 +117,9 @@ def test_the_configured_limit_decides_whether_a_runs_files_come_back(
     assert events[-1].type == ending
     if ending == "failed":
         assert shown(events)[-1] == OVER_LIMIT
+    else:
+        (note,) = _files_of(events)
+        assert len(note.content) == size
     assert list(root.iterdir()) == []
 
 
@@ -151,7 +155,7 @@ def test_a_run_at_the_wire_ceiling_returns_a_file_of_that_size_in_one_frame(
 
     (big,) = _files_of(events)
     assert (big.name, len(big.content)) == ("big", MAX_RUN_FILES_BYTES)
-    assert len(events[-1].model_dump_json()) <= MAX_SUCCEEDED_FRAME_BYTES
+    assert len(encode_event(events[-1])) <= MAX_SUCCEEDED_FRAME_BYTES
 
 
 def test_a_run_whose_words_are_empty_succeeds_beside_a_file(tmp_path, child_cleanup, monkeypatch):

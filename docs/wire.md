@@ -168,8 +168,10 @@ the capability's token or signature is replaced by an empty 500.
 ## What a run keeps
 
 The service has no database. The messages, the tool calls and results, the
-answer and the files a run returns pass through its memory only; the run's tree and
-its `output/` are gone when the frame is built ([host.md](host.md) owns the order). For subscription runs, the service writes
+answer and the files a run returns pass through its memory only. The core attempts to
+remove the run's tree, `output/` included, before the frame is built; a removal that fails or
+is refused is logged and does not stop the frame ([host.md](host.md) owns the order and the
+cleanup-failure policy). For subscription runs, the service writes
 the system prompt and, when the run offers tools, the tool relay's connection file
 with its per-run secret into the run's private tree ([host.md](host.md), "A subscription run's
 directories", owns the layout, the modes and when the tree is removed). What the
