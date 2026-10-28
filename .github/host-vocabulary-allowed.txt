@@ -1,5 +1,6 @@
 ^tests/test_service_
 ^tests/support/service_support\.py:
+^tests/support/service_config_support\.py:
 ^tests/test_keycloak_token_shapes\.py:
 ^tests/keycloak/realm\.json:
 ^docs/decisions/0001-agent-service\.md:

@@ -20,6 +20,9 @@ from tests.support.provider_test_support import (
     CANARY_ID_TOKEN,
     a_codex_login,
 )
+from tests.support.service_config_support import (
+    refused_on_one_line,
+)
 from tests.support.service_support import (
     TEST_ISSUER,
     _service_config_document,
@@ -41,7 +44,6 @@ from tests.test_service_codex_profile import (
     write_login,
     written,
 )
-from tests.test_service_config import _refused_on_one_line
 
 from agent_runtime.secret_file import MAX_SECRET_FILE_BYTES
 from agent_runtime_service.cli import main
@@ -67,7 +69,7 @@ def test_a_program_reporting_another_version_stops_the_start_naming_both(
     document = codex_document(tmp_path, binary, a_login_file(tmp_path))
     document["cli"][Provider.OPENAI]["version"] = "0.164.0"
 
-    refusal = _refused_on_one_line(written(tmp_path, document), capsys)
+    refusal = refused_on_one_line(written(tmp_path, document), capsys)
 
     assert refusal == f"cli.openai.version: {binary} reports {CODEX_PIN}, not the pinned 0.164.0"
 
@@ -142,7 +144,7 @@ def test_a_login_file_that_is_not_a_sound_codex_login_stops_the_start_naming_the
     login = make(tmp_path)
     document = codex_document(tmp_path, a_service_fake(tmp_path), login)
 
-    refusal = _refused_on_one_line(written(tmp_path, document), capsys)
+    refusal = refused_on_one_line(written(tmp_path, document), capsys)
 
     assert refusal.startswith(f"cli.openai.token_file: {login} {reason}")
     assert [c for c in (CANARY_ACCESS_TOKEN, CANARY_ID_TOKEN) if c in refusal] == []
@@ -222,6 +224,6 @@ def test_a_leftover_profiles_or_route_table_stops_the_start_naming_its_field(
     document = codex_document(tmp_path, a_service_fake(tmp_path), a_login_file(tmp_path))
     reduce(lambda table, name: table[name], table_path, document)[key] = value
 
-    refusal = _refused_on_one_line(written(tmp_path, document), capsys)
+    refusal = refused_on_one_line(written(tmp_path, document), capsys)
 
     assert refusal.startswith(f"{refused_field}:")

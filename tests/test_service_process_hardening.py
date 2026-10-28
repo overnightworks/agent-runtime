@@ -15,9 +15,13 @@ from types import SimpleNamespace
 
 import pytest
 import uvicorn
+from tests.support.service_config_support import (
+    VALID_CONFIG,
+    config_file_naming,
+    logged_program,
+    written,
+)
 from tests.support.service_support import logging_state_snapshot  # noqa: F401 - a fixture, requested by name
-from tests.test_service_cli_version import _config_file_naming, _logged_program
-from tests.test_service_config import VALID_CONFIG, _written
 
 import agent_runtime_service.config as service_config
 import agent_runtime_service.process_hardening as hardening
@@ -60,7 +64,7 @@ def served(monkeypatch, logging_state_restored):
 
 @pytest.fixture
 def valid_config(tmp_path):
-    return _written(tmp_path, VALID_CONFIG)
+    return written(tmp_path, VALID_CONFIG)
 
 
 @pytest.fixture
@@ -168,8 +172,8 @@ def test_an_unprivileged_start_hardens_before_it_reads_the_config(
 
 def test_an_unprivileged_start_serves_and_still_probes_the_program(tmp_path, served):
     probe_log = tmp_path / "probe-starts"
-    program = _logged_program(tmp_path, probe_log)
-    config_file = _config_file_naming(tmp_path, program)
+    program = logged_program(tmp_path, probe_log)
+    config_file = config_file_naming(tmp_path, program)
 
     assert main(["--config", str(config_file)]) == 0
 
@@ -310,7 +314,7 @@ def _yama_ptrace_scope() -> int:
 def test_a_same_user_child_granted_ptracer_permission_cannot_read_the_service_after_hardening(
     tmp_path,
 ):
-    config_file = _written(tmp_path, VALID_CONFIG)
+    config_file = written(tmp_path, VALID_CONFIG)
     arguments = [READER, ENVIRONMENT_CANARY, MEMORY_CANARY.decode(), str(BOUND_SECONDS // 3)]
 
     service = subprocess.Popen(

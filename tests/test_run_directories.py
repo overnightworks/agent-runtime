@@ -21,6 +21,11 @@ from typing import Any
 import pytest
 from tests.support.anchored_leaders import spawn_warnings
 from tests.support.anchored_support import GONE, ChildCleanup
+from tests.support.private_removal_support import (
+    REMOVAL_FAILED,
+    remove_the_leftover,
+    rmtree_refused,
+)
 from tests.support.provider_test_support import (
     DESTINATION_FAULTS,
     REAL_REAP_BOUNDS,
@@ -73,7 +78,6 @@ from agent_runtime.spawn import ChildProcess, ChildProcessSpecificationError, cl
 PROMPT = "multi-line\nnon-ASCII text: grüße, 日本語\n".encode()
 FILES = {"prompt": PROMPT, "empty": b""}
 NAME_REFUSED = "A run file needs a single path component as its name"
-REMOVAL_FAILED = "private credential home removal failed (PermissionError)"
 RESERVATIONS_CLOSED = "reservations are closed"
 OUTSIDE_FILE_BYTES = b"the profile's login\n"
 LEADER_SCRIPT = """\
@@ -154,17 +158,6 @@ def mkdtemp_must_not_run(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(process.tempfile, "mkdtemp", forbidden)
 
 
-def refuse_to_remove(_path: Any, *_arguments: Any, **_keywords: Any) -> None:
-    raise PermissionError(errno.EACCES, "synthetic refusal")
-
-
-@contextmanager
-def rmtree_refused(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    with monkeypatch.context() as patched:
-        patched.setattr(process.shutil, "rmtree", refuse_to_remove)
-        yield
-
-
 @contextmanager
 def rmtree_counted(
     monkeypatch: pytest.MonkeyPatch, events: list[str] | None = None,
@@ -179,10 +172,6 @@ def rmtree_counted(
     with monkeypatch.context() as patched:
         patched.setattr(process.shutil, "rmtree", counted)
         yield seen
-
-
-def remove_the_leftover(tree: Path) -> None:
-    shutil.rmtree(tree)
 
 
 def test_a_run_needs_no_installed_runtime(private_root: Path) -> None:

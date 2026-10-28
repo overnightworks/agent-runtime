@@ -17,8 +17,25 @@ import pytest
 import uvicorn
 from pydantic import ValidationError
 from tests.support.api_support import API_SECTION
-from tests.support.mcp_app_fake import TestAuthority
 from tests.support.provider_test_support import fake_cli_executable
+from tests.support.service_config_support import (
+    CLAUDE_BINARY_LINE,
+    CLAUDE_VERSION_LINE,
+    CLI_SECTION,
+    MCP_SECTION,
+    MODELS_LINE,
+    SIGNING_KEY_LINE,
+    SIGNING_SECTION,
+    SONGMAKER_ORIGIN_LINE,
+    SUBSCRIPTION_GROUPS_LINE,
+    TOKEN_FILE_LINE,
+    VALID_CONFIG,
+    WORKING_ROOT_LINE,
+    assert_startup_refuses,
+    cli_section,
+    refused_on_one_line,
+    written,
+)
 from tests.support.service_support import (
     CALLED_PLAINLY_OR_FROM_AN_ACTIVE_HANDLER,
     PINNED_CLAUDE_VERSION,
@@ -27,7 +44,6 @@ from tests.support.service_support import (
     everything_a_refusal_holds,
     logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
     process_claude_cli,
-    process_signing_key_file,
     process_token_file,
     process_working_root,
     reaches_private_key,
@@ -45,57 +61,8 @@ from agent_runtime_service.config import (
     load_config,
 )
 
-SONGMAKER_ORIGIN_LINE = 'mcp_origin = "https://songmaker.internal"\n'
-SIGNING_KEY_LINE = f"key_file = {json.dumps(str(process_signing_key_file()))}"
-SIGNING_SECTION = f"[signing]\n{SIGNING_KEY_LINE}\n\n"
-MCP_CA_FILE = TestAuthority(process_signing_key_file().parent).ca_file
-MCP_SECTION = f"[mcp]\nca_file = {json.dumps(str(MCP_CA_FILE))}\n\n"
-TOKEN_FILE_LINE = f"token_file = {json.dumps(str(process_token_file()))}"
-CLAUDE_BINARY_LINE = f"binary = {json.dumps(str(process_claude_cli()))}"
-CLAUDE_VERSION_LINE = f'version = "{PINNED_CLAUDE_VERSION}"'
 ROOT_MARKER = "synthetic-private-root-marker"
-WORKING_ROOT_LINE = f"working_root = {json.dumps(str(process_working_root().path))}"
-
-
-MODELS_LINE = 'models = ["sonnet", "opus"]'
-
-
-def cli_section(
-    *, binary: str, version: str, root: str, models: str = MODELS_LINE, token: str = TOKEN_FILE_LINE
-) -> str:
-    root_lines = f"{root}\n" if root else ""
-    program_lines = "".join(f"{line}\n" for line in (binary, version, models, token) if line)
-    program_table = f"[cli.{Provider.ANTHROPIC}]\n{program_lines}\n" if program_lines else ""
-    return f"[cli]\n{root_lines}\n{program_table}"
-
-
-CLI_SECTION = cli_section(
-    binary=CLAUDE_BINARY_LINE, version=CLAUDE_VERSION_LINE, root=WORKING_ROOT_LINE
-)
 TOOLS_LINE = 'tools = { read_song = "read_only" }'
-
-SUBSCRIPTION_GROUPS_LINE = (
-    'subscription_groups = ["/old-subscription-members", "/subscription-members"]'
-)
-
-VALID_CONFIG = f"""
-defaults = {{ model = "{Provider.ANTHROPIC}/sonnet" }}
-[identity]
-issuer = "https://keycloak.test/realms/agent-test"
-jwks_url = "https://keycloak.test/realms/agent-test/protocol/openid-connect/certs"
-audience = "agent-test-audience"
-{SUBSCRIPTION_GROUPS_LINE}
-api_groups = ["/api-members"]
-group_claim = "member-groups"
-
-[server]
-host = "127.0.0.1"
-port = 8099
-
-{CLI_SECTION}{SIGNING_SECTION}{MCP_SECTION}{API_SECTION}
-[apps.songmaker]
-workload_client = "songmaker-test"
-{SONGMAKER_ORIGIN_LINE}"""
 
 
 @pytest.fixture(autouse=True)
@@ -104,12 +71,6 @@ def _never_really_serve(monkeypatch):
         raise AssertionError("a refused configuration reached serving")
 
     monkeypatch.setattr(uvicorn, "run", fail_instead_of_binding_a_port)
-
-
-def _written(tmp_path: Path, text: str) -> Path:
-    path = tmp_path / "agent-runtime-service.toml"
-    path.write_text(text, encoding="utf-8")
-    return path
 
 
 def test_loading_a_file_does_not_run_the_program_its_cli_section_names(tmp_path):
@@ -121,13 +82,13 @@ def test_loading_a_file_does_not_run_the_program_its_cli_section_names(tmp_path)
         cli_section(binary=binary_line, version=CLAUDE_VERSION_LINE, root=WORKING_ROOT_LINE),
     )
 
-    load_config(_written(tmp_path, text))
+    load_config(written(tmp_path, text))
 
     assert not probe_log.exists()
 
 
 def test_a_valid_file_loads_with_its_configured_identity_and_the_documented_defaults(tmp_path):
-    config = load_config(_written(tmp_path, VALID_CONFIG))
+    config = load_config(written(tmp_path, VALID_CONFIG))
 
     assert config.identity.audience == "agent-test-audience"
     assert config.identity.subscription_groups == {
@@ -147,19 +108,19 @@ def test_a_valid_file_loads_with_its_configured_identity_and_the_documented_defa
 
 
 def test_an_installation_without_an_origin_needs_no_signing_section(tmp_path):
-    assert load_config(_written(tmp_path, _without_origin_and_signing())).signing is None
+    assert load_config(written(tmp_path, _without_origin_and_signing())).signing is None
 
 
 def test_a_leftover_tools_table_of_an_app_stops_startup_naming_the_field(tmp_path, capsys):
     text = _with(SONGMAKER_ORIGIN_LINE, f"{TOOLS_LINE}\n{SONGMAKER_ORIGIN_LINE}")
 
-    assert _refused_on_one_line(_written(tmp_path, text), capsys).startswith("apps.songmaker.tools")
+    assert refused_on_one_line(written(tmp_path, text), capsys).startswith("apps.songmaker.tools")
 
 
 def test_o11_a_leftover_models_table_of_an_app_stops_startup_naming_the_field(tmp_path, capsys):
     text = VALID_CONFIG + f'\n[apps.songmaker.models]\ncowriter = "{Provider.ANTHROPIC}/sonnet"\n'
 
-    assert _refused_on_one_line(_written(tmp_path, text), capsys).startswith(
+    assert refused_on_one_line(written(tmp_path, text), capsys).startswith(
         "apps.songmaker.models"
     )
 
@@ -233,11 +194,6 @@ def _with_key_set_url(url: str) -> str:
         'jwks_url = "https://keycloak.test/realms/agent-test/protocol/openid-connect/certs"',
         f'jwks_url = "{url}"',
     )
-
-
-def assert_startup_refuses(tmp_path, capsys, text, named_field):
-    assert main(["--config", str(_written(tmp_path, text))]) == EXIT_BAD_CONFIG
-    assert named_field in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
@@ -364,7 +320,7 @@ def test_run_limits_given_as_integers_or_floats_load(tmp_path, max_duration_s):
         f"heartbeat_interval_s = 20\nidle_timeout_s = 90\nmax_duration_s = {max_duration_s}"
     )
 
-    runs = load_config(_written(tmp_path, text)).runs
+    runs = load_config(written(tmp_path, text)).runs
 
     assert (runs.heartbeat_interval_s, runs.idle_timeout_s, runs.max_duration_s) == (
         20,
@@ -377,7 +333,7 @@ def test_run_limits_given_as_integers_or_floats_load(tmp_path, max_duration_s):
 def test_a_stall_timeout_between_heartbeat_and_idle_loads(tmp_path, stall_timeout_s):
     text = _with_runs(f"stall_timeout_s = {stall_timeout_s}")
 
-    runs = load_config(_written(tmp_path, text)).runs
+    runs = load_config(written(tmp_path, text)).runs
 
     assert runs.stall_timeout_s == stall_timeout_s
 
@@ -385,22 +341,15 @@ def test_a_stall_timeout_between_heartbeat_and_idle_loads(tmp_path, stall_timeou
 def test_run_budgets_given_in_the_file_load(tmp_path):
     text = _with_runs("max_tool_calls = 5\nmax_bytes = 2097152")
 
-    runs = load_config(_written(tmp_path, text)).runs
+    runs = load_config(written(tmp_path, text)).runs
 
     assert (runs.max_tool_calls, runs.max_bytes) == (5, 2097152)
 
 
 def test_an_explicit_parallel_run_limit_loads_and_gives_that_many_places(tmp_path):
-    runs = load_config(_written(tmp_path, _with_runs("max_parallel_cli_runs = 2"))).runs
+    runs = load_config(written(tmp_path, _with_runs("max_parallel_cli_runs = 2"))).runs
 
     assert runs.max_parallel_cli_runs == 2
-
-
-def _refused_on_one_line(path: Path, capsys) -> str:
-    assert main(["--config", str(path)]) == EXIT_BAD_CONFIG
-    refusal = capsys.readouterr().err
-    assert refusal.count("\n") == 1
-    return refusal.removeprefix(f"agent-runtime-service: refusing to start: {path}: ").rstrip("\n")
 
 
 MEMBER_NAMED_WITH_A_NEWLINE = '"extra\\nfield" = 1'
@@ -424,7 +373,7 @@ MEMBER_NAMED_WITH_A_NEWLINE = '"extra\\nfield" = 1'
 def test_an_unexpected_member_with_a_newline_in_its_name_is_refused_on_one_line(
     tmp_path, capsys, config_text, refusal
 ):
-    assert _refused_on_one_line(_written(tmp_path, config_text), capsys) == refusal
+    assert refused_on_one_line(written(tmp_path, config_text), capsys) == refusal
 
 
 def _config_path_with_a_newline(tmp_path: Path) -> Path:
@@ -480,7 +429,7 @@ PRESENTATOR_ON_SONGMAKERS_ORIGIN = (
 
 
 def _with_origin(tmp_path: Path, origin: str) -> Path:
-    return _written(tmp_path, _with(SONGMAKER_ORIGIN_LINE, f"mcp_origin = {json.dumps(origin)}\n"))
+    return written(tmp_path, _with(SONGMAKER_ORIGIN_LINE, f"mcp_origin = {json.dumps(origin)}\n"))
 
 
 @pytest.mark.parametrize(
@@ -501,7 +450,7 @@ def test_an_app_with_a_canonical_https_origin_and_a_signing_key_loads(tmp_path, 
 
 
 def test_an_app_without_an_origin_and_without_signing_has_no_capability_scope(tmp_path):
-    config = load_config(_written(tmp_path, _without_origin_and_signing()))
+    config = load_config(written(tmp_path, _without_origin_and_signing()))
 
     assert config.apps["songmaker"].mcp_origin is None
     assert config.capability_scope("songmaker", ["read_song"]) is None
@@ -534,15 +483,15 @@ def test_an_app_without_an_origin_and_without_signing_has_no_capability_scope(tm
 def test_an_origin_the_format_refuses_stops_startup_naming_the_field(
     tmp_path, capsys, origin, refusal
 ):
-    assert _refused_on_one_line(_with_origin(tmp_path, origin), capsys) == (
+    assert refused_on_one_line(_with_origin(tmp_path, origin), capsys) == (
         f"apps.songmaker.mcp_origin: {refusal}"
     )
 
 
 def test_two_apps_on_one_origin_stop_startup_naming_the_second(tmp_path, capsys):
-    config_file = _written(tmp_path, VALID_CONFIG + PRESENTATOR_ON_SONGMAKERS_ORIGIN)
+    config_file = written(tmp_path, VALID_CONFIG + PRESENTATOR_ON_SONGMAKERS_ORIGIN)
 
-    assert _refused_on_one_line(config_file, capsys) == (
+    assert refused_on_one_line(config_file, capsys) == (
         "apps.presentator.mcp_origin: https://songmaker.internal is already"
         " the MCP origin of app 'songmaker'"
     )
@@ -580,7 +529,7 @@ SECOND_APP_ON_THE_SAME_CLIENT = '\n[apps."pres\\nentator"]\nworkload_client = "s
     ],
 )
 def test_a_name_with_a_newline_is_shown_escaped_once_on_one_line(tmp_path, capsys, text, refusal):
-    assert _refused_on_one_line(_written(tmp_path, text), capsys) == refusal
+    assert refused_on_one_line(written(tmp_path, text), capsys) == refusal
 
 
 @pytest.mark.parametrize(
@@ -596,7 +545,7 @@ def test_an_app_name_that_is_not_one_group_segment_stops_startup_naming_the_app(
 ):
     text = VALID_CONFIG.replace("[apps.songmaker]", f"[apps.{table_name}]")
 
-    refusal = _refused_on_one_line(_written(tmp_path, text), capsys)
+    refusal = refused_on_one_line(written(tmp_path, text), capsys)
 
     assert refusal.startswith(f"apps.{shown_name}: ")
 
@@ -609,9 +558,9 @@ ORIGIN_WITHOUT_SIGNING_REFUSAL = (
 
 
 def test_an_origin_without_a_signing_section_stops_startup_naming_the_field(tmp_path, capsys):
-    config_file = _written(tmp_path, ORIGIN_WITHOUT_SIGNING)
+    config_file = written(tmp_path, ORIGIN_WITHOUT_SIGNING)
 
-    assert _refused_on_one_line(config_file, capsys) == ORIGIN_WITHOUT_SIGNING_REFUSAL
+    assert refused_on_one_line(config_file, capsys) == ORIGIN_WITHOUT_SIGNING_REFUSAL
 
 
 NO_ORIGIN = VALID_CONFIG.replace(SONGMAKER_ORIGIN_LINE, "")
@@ -622,9 +571,9 @@ ORIGIN_WITHOUT_CA_FILE_REFUSAL = (
 
 @pytest.mark.parametrize("mcp_section", ["", "[mcp]\n\n"], ids=["no-table", "empty-table"])
 def test_an_app_origin_without_mcp_ca_file_is_refused_at_startup(tmp_path, capsys, mcp_section):
-    config_file = _written(tmp_path, VALID_CONFIG.replace(MCP_SECTION, mcp_section))
+    config_file = written(tmp_path, VALID_CONFIG.replace(MCP_SECTION, mcp_section))
 
-    assert _refused_on_one_line(config_file, capsys) == ORIGIN_WITHOUT_CA_FILE_REFUSAL
+    assert refused_on_one_line(config_file, capsys) == ORIGIN_WITHOUT_CA_FILE_REFUSAL
 
 
 @pytest.mark.parametrize(
@@ -633,7 +582,7 @@ def test_an_app_origin_without_mcp_ca_file_is_refused_at_startup(tmp_path, capsy
 def test_no_origin_needs_no_mcp_ca_file(tmp_path, mcp_section):
     text = NO_ORIGIN.replace(MCP_SECTION, mcp_section)
 
-    assert load_config(_written(tmp_path, text)).apps["songmaker"].mcp_origin is None
+    assert load_config(written(tmp_path, text)).apps["songmaker"].mcp_origin is None
 
 
 def test_a_missing_mcp_ca_file_does_not_stop_startup_while_no_app_declares_an_origin(
@@ -642,14 +591,14 @@ def test_a_missing_mcp_ca_file_does_not_stop_startup_while_no_app_declares_an_or
     absent = tmp_path / "absent-ca.pem"
     text = NO_ORIGIN.replace(MCP_SECTION, f"[mcp]\nca_file = {json.dumps(str(absent))}\n\n")
 
-    assert main(["--config", str(_written(tmp_path, text))]) == 0
+    assert main(["--config", str(written(tmp_path, text))]) == 0
     assert len(served_apps) == 1
 
 
 def test_a_relative_mcp_ca_file_is_refused_by_the_configuration(tmp_path, capsys):
     text = VALID_CONFIG.replace(MCP_SECTION, '[mcp]\nca_file = "ca.pem"\n\n')
 
-    assert _refused_on_one_line(_written(tmp_path, text), capsys).startswith("mcp.ca_file: ")
+    assert refused_on_one_line(written(tmp_path, text), capsys).startswith("mcp.ca_file: ")
 
 
 def test_a_missing_mcp_ca_file_stops_startup_naming_the_key(tmp_path, capsys):
@@ -829,9 +778,9 @@ def test_an_unsound_token_file_stops_startup_with_one_line_naming_field_and_path
     tmp_path, capsys, monkeypatch, arrange, reason
 ):
     token_file = arrange(tmp_path, monkeypatch)
-    config_file = _written(tmp_path, _token_config(token_file))
+    config_file = written(tmp_path, _token_config(token_file))
 
-    refusal = _refused_on_one_line(config_file, capsys)
+    refusal = refused_on_one_line(config_file, capsys)
 
     assert refusal == f"{TOKEN_FILE_FIELD}: {token_file} {reason}"
     assert CANARY not in refusal
@@ -842,7 +791,7 @@ def test_an_unsound_token_file_stops_startup_with_one_line_naming_field_and_path
 def test_an_unsound_token_file_leaks_no_content_into_the_refusal_or_what_it_holds(
     tmp_path, monkeypatch, arrange, reason, inside_active_handler
 ):
-    config_file = _written(tmp_path, _token_config(arrange(tmp_path, monkeypatch)))
+    config_file = written(tmp_path, _token_config(arrange(tmp_path, monkeypatch)))
 
     with pytest.raises(ConfigError) as refusal:
         called_from(lambda: load_config(config_file), inside_active_handler)
@@ -854,9 +803,9 @@ def test_an_unsound_token_file_leaks_no_content_into_the_refusal_or_what_it_hold
 
 @pytest.mark.parametrize("token_file", ["secrets/claude.token", "~/.secrets/claude.token"])
 def test_a_relative_token_path_is_refused_naming_the_field(tmp_path, capsys, token_file):
-    config_file = _written(tmp_path, _token_config(token_file))
+    config_file = written(tmp_path, _token_config(token_file))
 
-    assert _refused_on_one_line(config_file, capsys) == (
+    assert refused_on_one_line(config_file, capsys) == (
         f"{TOKEN_FILE_FIELD}: {token_file} must be an absolute path to the token file;"
         " ~ is not expanded"
     )
@@ -868,7 +817,7 @@ def test_a_sound_token_file_loads_with_or_without_a_trailing_newline_keeping_its
 ):
     token_file = _token_file_with(tmp_path, (CANARY + trailing).encode(), 0o400)
 
-    config = load_config(_written(tmp_path, _token_config(str(token_file))))
+    config = load_config(written(tmp_path, _token_config(str(token_file))))
 
     assert config.cli.anthropic.token_file == token_file
 
@@ -889,7 +838,7 @@ def test_a_token_file_is_refused_without_content_where_os_lacks_an_open_flag(
 def test_the_checked_token_never_shows_in_the_repr_text_or_dump_of_the_configuration(tmp_path):
     token_file = _token_file_with(tmp_path, CANARY.encode())
 
-    config = load_config(_written(tmp_path, _token_config(str(token_file))))
+    config = load_config(written(tmp_path, _token_config(str(token_file))))
 
     assert not reaches_text([repr(config), str(config), repr(config.cli)], [CANARY])
     assert CANARY not in config.model_dump_json()
@@ -909,7 +858,7 @@ def test_a_path_swapped_after_the_open_is_judged_by_the_opened_token_file(tmp_pa
 
     monkeypatch.setattr(os, "open", open_then_swap)
 
-    config = load_config(_written(tmp_path, _token_config(str(token_file))))
+    config = load_config(written(tmp_path, _token_config(str(token_file))))
 
     assert config.cli.anthropic.token_file == token_file
 
@@ -944,7 +893,7 @@ def test_a_valid_document_reaches_serving(tmp_path, served_apps, monkeypatch):
         lambda config, **keywords: app_configs.append(config) or create_app(config, **keywords),
     )
 
-    assert main(["--config", str(config_file := _written(tmp_path, VALID_CONFIG))]) == 0
+    assert main(["--config", str(config_file := written(tmp_path, VALID_CONFIG))]) == 0
 
     assert [config.cli for config in app_configs] == [load_config(config_file).cli]
 
@@ -985,7 +934,7 @@ TABLE_RULE_REFUSALS = [
 def test_a_table_the_service_cannot_serve_stops_startup_naming_the_field(
     tmp_path, capsys, text, refusal
 ):
-    assert _refused_on_one_line(_written(tmp_path, text), capsys).startswith(refusal)
+    assert refused_on_one_line(written(tmp_path, text), capsys).startswith(refusal)
 
 
 @pytest.mark.parametrize("inside_active_handler", CALLED_PLAINLY_OR_FROM_AN_ACTIVE_HANDLER)
@@ -1002,7 +951,7 @@ def test_a_refused_relationship_holds_no_token_or_key_in_what_the_refusal_holds(
     tmp_path, text, refusal, inside_active_handler
 ):
     with pytest.raises(ConfigError) as refused:
-        called_from(lambda: load_config(_written(tmp_path, text)), inside_active_handler)
+        called_from(lambda: load_config(written(tmp_path, text)), inside_active_handler)
 
     held = everything_a_refusal_holds(refused.value)
     assert refusal in str(refused.value)
@@ -1032,7 +981,7 @@ def test_a_name_with_a_control_character_is_refused_on_one_line_with_no_raw_cont
     tmp_path, capsys, arrange, field, control, shown_name
 ):
     name = f'"a{control}b"'
-    refusal = _refused_on_one_line(_written(tmp_path, arrange(name)), capsys)
+    refusal = refused_on_one_line(written(tmp_path, arrange(name)), capsys)
 
     assert field in refusal
     assert shown_name in refusal
@@ -1057,7 +1006,7 @@ def test_a_name_with_a_control_character_is_refused_on_one_line_with_no_raw_cont
 def test_a_document_with_several_defects_is_refused_on_one_line_naming_one_of_them(
     tmp_path, capsys, text, fields
 ):
-    refusal = _refused_on_one_line(_written(tmp_path, text), capsys)
+    refusal = refused_on_one_line(written(tmp_path, text), capsys)
 
     assert any(field in refusal for field in fields)
 
@@ -1101,7 +1050,7 @@ def test_a_program_binary_that_is_not_an_absolute_path_is_refused_by_field(
         cli_section(binary=binary_line, version=CLAUDE_VERSION_LINE, root=WORKING_ROOT_LINE),
     )
 
-    assert _refused_on_one_line(_written(tmp_path, text), capsys) == refusal
+    assert refused_on_one_line(written(tmp_path, text), capsys) == refusal
 
 
 @pytest.mark.parametrize(
@@ -1125,7 +1074,7 @@ def test_a_pinned_version_that_is_not_three_integers_is_refused_by_field(
         cli_section(binary=CLAUDE_BINARY_LINE, version=version_line, root=WORKING_ROOT_LINE),
     )
 
-    assert _refused_on_one_line(_written(tmp_path, text), capsys) == refusal
+    assert refused_on_one_line(written(tmp_path, text), capsys) == refusal
 
 
 def _with_models(models_line: str) -> str:
@@ -1151,7 +1100,7 @@ def _with_models(models_line: str) -> str:
 def test_a_claude_program_without_a_models_array_in_the_grammar_is_refused_by_field(
     tmp_path, capsys, models_line
 ):
-    refusal = _refused_on_one_line(_written(tmp_path, _with_models(models_line)), capsys)
+    refusal = refused_on_one_line(written(tmp_path, _with_models(models_line)), capsys)
 
     assert refusal.startswith("cli.anthropic.models")
 
@@ -1163,7 +1112,7 @@ def test_a_claude_program_without_a_models_array_in_the_grammar_is_refused_by_fi
     ],
 )
 def test_a_claude_program_lists_the_models_it_serves(tmp_path, models_line, listed):
-    config = load_config(_written(tmp_path, _with_models(models_line)))
+    config = load_config(written(tmp_path, _with_models(models_line)))
 
     assert config.subscription_models() == {Provider.ANTHROPIC: listed}
 
@@ -1239,7 +1188,7 @@ def _the_probe_never_started(probe_log: Path) -> bool:
 
 
 def test_a_cli_table_loads_its_working_root_and_each_program_table(tmp_path):
-    config = load_config(_written(tmp_path, VALID_CONFIG))
+    config = load_config(written(tmp_path, VALID_CONFIG))
 
     assert config.cli.working_root == process_working_root()
     assert list(config.cli.programs()) == [Provider.ANTHROPIC]
@@ -1252,7 +1201,7 @@ def _config_naming_a_marked_root(tmp_path: Path, make_the_root: bool) -> Path:
     if make_the_root:
         _private_directory(marked_root)
     program = fake_cli_executable(tmp_path, {("--version",): "any"})
-    return _written(tmp_path, _cli_naming_the_working_root(_root_line(str(marked_root)), program))
+    return written(tmp_path, _cli_naming_the_working_root(_root_line(str(marked_root)), program))
 
 
 def test_a_loaded_config_shows_no_working_root_in_its_repr_or_str(tmp_path):
@@ -1278,7 +1227,7 @@ def test_a_cli_section_without_a_working_root_is_refused_before_any_probe(tmp_pa
     program = fake_cli_executable(tmp_path, {("--version",): "any"}, calls_log=probe_log)
     text = _cli_naming_the_working_root("", program)
 
-    refusal = _refused_on_one_line(_written(tmp_path, text), capsys)
+    refusal = refused_on_one_line(written(tmp_path, text), capsys)
 
     assert refusal == "cli.working_root: Field required"
     assert _the_probe_never_started(probe_log)
@@ -1293,7 +1242,7 @@ def test_a_working_root_that_is_not_private_stops_the_start_naming_only_its_viol
     root = arrange(tmp_path)
     text = _cli_naming_the_working_root(_root_line(root), program)
 
-    refusal = _refused_on_one_line(_written(tmp_path, text), capsys)
+    refusal = refused_on_one_line(written(tmp_path, text), capsys)
 
     assert refusal == f"cli.working_root: not private: {violation}"
     assert _the_probe_never_started(probe_log)
@@ -1307,7 +1256,7 @@ def test_a_working_root_owned_by_another_user_stops_the_start_naming_only_its_vi
     text = _cli_naming_the_working_root(_root_line(str(root)), program)
     _core_config_seeing(monkeypatch, geteuid=lambda: os.stat(root).st_uid + 1)
 
-    refusal = _refused_on_one_line(_written(tmp_path, text), capsys)
+    refusal = refused_on_one_line(written(tmp_path, text), capsys)
 
     assert refusal == "cli.working_root: not private: foreign_owner"
 
@@ -1324,7 +1273,7 @@ def test_a_working_root_that_cannot_be_inspected_stops_the_start_without_the_fai
 
     _core_config_seeing(monkeypatch, lstat=refuse_to_inspect)
 
-    refusal = _refused_on_one_line(_written(tmp_path, text), capsys)
+    refusal = refused_on_one_line(written(tmp_path, text), capsys)
 
     assert refusal == "cli.working_root: not private: uninspectable"
 
@@ -1333,7 +1282,7 @@ def test_a_working_root_that_is_not_a_string_is_refused_without_echoing_it(tmp_p
     program = fake_cli_executable(tmp_path, {("--version",): "any"})
     text = _cli_naming_the_working_root("working_root = 7", program)
 
-    refusal = _refused_on_one_line(_written(tmp_path, text), capsys)
+    refusal = refused_on_one_line(written(tmp_path, text), capsys)
 
     assert (
         refusal
@@ -1349,7 +1298,7 @@ def test_a_bad_working_root_and_a_bad_token_file_are_both_named_on_one_line(tmp_
         TOKEN_FILE_LINE, f"token_file = {json.dumps(str(unreadable))}"
     )
 
-    refusal = _refused_on_one_line(_written(tmp_path, text), capsys)
+    refusal = refused_on_one_line(written(tmp_path, text), capsys)
 
     fields = [part.split(":", 1)[0] for part in refusal.split("; ")]
     assert sorted(fields) == [TOKEN_FILE_FIELD, "cli.working_root"]
@@ -1392,7 +1341,7 @@ def test_the_former_flat_program_keys_stop_the_start_naming_each_key(
     program_text = cli_text.replace(CLAUDE_BINARY_LINE, logged_binary_line)
     text = VALID_CONFIG.replace(CLI_SECTION, program_text)
 
-    assert _refused_on_one_line(_written(tmp_path, text), capsys) == refusal
+    assert refused_on_one_line(written(tmp_path, text), capsys) == refusal
     assert _the_probe_never_started(probe_log)
 
 
@@ -1405,7 +1354,7 @@ def test_a_table_for_an_obsolete_or_unknown_provider_stops_the_start(
     table = f'[cli.{provider}]\nbinary = {json.dumps(str(program))}\nversion = "1.0.60"\n\n'
     text = VALID_CONFIG.replace(CLI_SECTION, ROOT_ONLY_CLI + table)
 
-    refusal = _refused_on_one_line(_written(tmp_path, text), capsys)
+    refusal = refused_on_one_line(written(tmp_path, text), capsys)
 
     assert refusal == f"cli.{provider}: Extra inputs are not permitted"
     assert _the_probe_never_started(probe_log)
@@ -1415,7 +1364,7 @@ def test_the_working_root_belongs_to_the_cli_table_not_to_a_program(tmp_path, ca
     program = cli_section(binary=CLAUDE_BINARY_LINE, version=CLAUDE_VERSION_LINE, root="")
     text = VALID_CONFIG.replace(CLI_SECTION, program.rstrip("\n") + f"\n{WORKING_ROOT_LINE}\n\n")
 
-    assert _refused_on_one_line(_written(tmp_path, text), capsys) == (
+    assert refused_on_one_line(written(tmp_path, text), capsys) == (
         "cli.working_root: Field required;"
         " cli.anthropic.working_root: Extra inputs are not permitted"
     )
@@ -1424,7 +1373,7 @@ def test_the_working_root_belongs_to_the_cli_table_not_to_a_program(tmp_path, ca
 def test_a_second_signing_table_is_refused_as_a_duplicate_table(tmp_path, capsys):
     text = VALID_CONFIG + f"\n{SIGNING_SECTION}"
 
-    assert _refused_on_one_line(_written(tmp_path, text), capsys).startswith("not TOML")
+    assert refused_on_one_line(written(tmp_path, text), capsys).startswith("not TOML")
 
 
 def _songmaker(**members: Any) -> AppConfig:
