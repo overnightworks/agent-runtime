@@ -11,25 +11,30 @@ import gc
 import hashlib
 import logging
 import os
-from collections.abc import AsyncIterator, Callable, Coroutine, Iterator, Mapping
+from collections.abc import AsyncIterator, Callable, Coroutine
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import pytest
-from tests.support.anchored_leaders import spawn_warnings
 from tests.support.anchored_support import GONE, ChildCleanup
 from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.cli_run_support import (
+    LineScriptAdapter,
+    ScriptRefused,
+    a_drive,  # noqa: F401 - the fixture is named in its decorator
+    a_pool,  # noqa: F401 - the fixture is named in its decorator
+    a_private_working_root,  # noqa: F401 - the fixture is named in its decorator
+    a_root,  # noqa: F401 - the fixture is named in its decorator
+    ended,
+    text,
+)
 from tests.support.descendant_support import DescendantRow, Handshake, lingering_descendant
 from tests.support.provider_test_support import (
-    REAL_REAP_BOUNDS,
     ScriptedClaudeChild,
     a_child_that_outlives_sigkill,
     a_claude_cli_child,
-    a_private_root,
     confirm_the_retained_group_gone,
-    drive_real_children,
     drive_scripted,
     held_claude_slots,
     held_slots,
@@ -40,12 +45,10 @@ from agent_runtime import lost_groups
 from agent_runtime.anchored_turn import CliProcessPool, CliProcessPoolSaturated
 from agent_runtime.claude.provider import CLAUDE_CLI_PROCESS_POOL
 from agent_runtime.cli_run import (
-    CliRunStart,
     CliStreamLineTooLong,
     RelayState,
     RunSurface,
     RunSurfaceRefused,
-    StepEvent,
     SurfaceVerdict,
     astream_cli_run,
     examine_announcement,
@@ -54,15 +57,13 @@ from agent_runtime.cli_run import (
 from agent_runtime.config import PrivateWorkingRoot, reset_config
 from agent_runtime.errors import ContainmentLost
 from agent_runtime.events import (
-    AssistantTextEvent,
     FinalEvent,
     StreamEvent,
     ToolCallEvent,
 )
 from agent_runtime.procfs import GroupCensus
-from agent_runtime.spawn import ChildProcess, KillUntilGoneResult, closed_environment
+from agent_runtime.spawn import KillUntilGoneResult
 
-SHELL = Path("/bin/sh")
 ABSENT_BINARY = Path("/nonexistent/cli-binary")
 LINE_LIMIT_BYTES = 1024
 NON_ASCII_PAYLOAD = "grüße, 日本語\nzweite Zeile\n\nletzte".encode()
@@ -74,20 +75,8 @@ LEADER_BLOCKS_AFTER_SAYING = "echo say:a; exec sleep 60\n"
 ONE_LINE_ONLY = [b"say:a\n"]
 
 
-class ScriptRefused(Exception):
-    """The decoder's closed failure at a ``fail`` line."""
-
-
 class StartRefused(Exception):
     """The adapter's own failure while building the run."""
-
-
-def text(value: str) -> AssistantTextEvent:
-    return AssistantTextEvent(text=value)
-
-
-def ended(returncode: int) -> FinalEvent:
-    return FinalEvent(text=f"Final rc={returncode}")
 
 
 READS_IN_ORDER = [
@@ -96,85 +85,6 @@ READS_IN_ORDER = [
     text("b"),
     ended(0),
 ]
-
-
-class LineScriptDecoder:
-    def __init__(self, refusal: Exception) -> None:
-        self._refusal = refusal
-        self.returncodes: list[int] = []
-
-    def events_of(self, line: bytes) -> list[StepEvent]:
-        kind, _, value = line.decode().strip().partition(":")
-        if kind == "say":
-            return [text(value)]
-        if kind == "call":
-            return [ToolCallEvent(tool_use_id=value, name="tool", input={})]
-        if kind == "fail":
-            raise self._refusal
-        return []
-
-    def ending(self, returncode: int) -> FinalEvent:
-        self.returncodes.append(returncode)
-        return ended(returncode)
-
-
-@dataclass
-class LineScriptAdapter:
-    pool: CliProcessPool
-    script: str = ""
-    stdin: bytes = b""
-    files: Mapping[str, bytes] = field(default_factory=dict)
-    line_limit_bytes: int = 1024 * 1024
-    binary: Path = SHELL
-    refusal: Exception = field(default_factory=ScriptRefused)
-    start_failure: Exception | None = None
-    decoders: list[LineScriptDecoder] = field(default_factory=list)
-
-    def run_files(self) -> Mapping[str, bytes]:
-        return self.files
-
-    def start(self, home: Path, working_directory: Path) -> CliRunStart:
-        if self.start_failure is not None:
-            raise self.start_failure
-        decoder = LineScriptDecoder(self.refusal)
-        self.decoders.append(decoder)
-        child = ChildProcess(
-            binary=self.binary,
-            arguments=("-c", self.script),
-            environment=closed_environment(home),
-            working_directory=working_directory,
-        )
-        return CliRunStart(child, self.stdin, decoder)
-
-
-@pytest.fixture
-def private_root(tmp_path: Path) -> Path:
-    return a_private_root(tmp_path)
-
-
-@pytest.fixture
-def root(private_root: Path) -> PrivateWorkingRoot:
-    return PrivateWorkingRoot(private_root)
-
-
-@pytest.fixture
-def pool() -> CliProcessPool:
-    return CliProcessPool(limit=1, name="cli run test", reap=REAL_REAP_BOUNDS)
-
-
-@pytest.fixture
-def drive(
-    pool: CliProcessPool,
-    child_cleanup: ChildCleanup,
-    thread_failures: list[Any],
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> Iterator[Callable[[Coroutine[Any, Any, Any]], Any]]:
-    yield lambda scenario: drive_real_children(child_cleanup, monkeypatch, scenario)
-    assert [child_cleanup.state(owned) is GONE for owned in child_cleanup.listed()] == [
-        True for _ in child_cleanup.listed()
-    ]
-    assert (held_slots(pool), thread_failures, spawn_warnings(caplog)) == (0, [], [])
 
 
 @asynccontextmanager

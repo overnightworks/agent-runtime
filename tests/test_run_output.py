@@ -11,26 +11,29 @@ import os
 import shutil
 import socket
 import threading
-from collections.abc import Callable, Coroutine, Iterator
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any
 
 import pytest
-from tests.support.anchored_leaders import spawn_warnings
-from tests.support.anchored_support import GONE, ChildCleanup
+from tests.support.anchored_support import ChildCleanup
 from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.cli_run_support import (
+    EndingRefused,
+    LineScriptAdapter,
+    a_drive,  # noqa: F401 - the fixture is named in its decorator
+    a_pool,  # noqa: F401 - the fixture is named in its decorator
+    a_private_working_root,  # noqa: F401 - the fixture is named in its decorator
+    a_root,  # noqa: F401 - the fixture is named in its decorator
+)
 from tests.support.provider_test_support import (
-    REAL_REAP_BOUNDS,
     a_private_root,
-    drive_real_children,
     fail_the_directory_named,
     held_slots,
 )
 
 import agent_runtime.run_output as run_output
 from agent_runtime.anchored_turn import CliProcessPool
-from agent_runtime.cli_run import CliRunStart, StepEvent, astream_cli_run
+from agent_runtime.cli_run import astream_cli_run
 from agent_runtime.config import PrivateWorkingRoot, reset_config
 from agent_runtime.events import FinalEvent, StreamEvent
 from agent_runtime.process import (
@@ -40,10 +43,8 @@ from agent_runtime.process import (
     run_directories,
 )
 from agent_runtime.run_output import RunOutputCause, RunOutputRefused, collect_output
-from agent_runtime.spawn import ChildProcess, closed_environment
 from agent_runtime_client.wire import RunFile
 
-SHELL = Path("/bin/sh")
 LIMIT = 16
 MARKER = "marker-4c1f9a"
 ONE_TEBIBYTE = 1024**4
@@ -284,72 +285,12 @@ def test_a_refusal_carries_no_name_path_or_content_in_its_message_log_or_chain(
     ) == (False, None, None, True)
 
 
-@dataclass
-class ScriptAdapter:
-    pool: CliProcessPool
-    script: str
-    returncodes_refused: bool = False
-    line_limit_bytes: int = 1024
-
-    def run_files(self) -> dict[str, bytes]:
-        return {}
-
-    def start(self, home: Path, working_directory: Path) -> CliRunStart:
-        child = ChildProcess(
-            binary=SHELL,
-            arguments=("-c", self.script),
-            environment=closed_environment(home),
-            working_directory=working_directory,
-        )
-        return CliRunStart(child, b"", EndingDecoder())
-
-
-class DecoderRefused(Exception):
-    """The decoder's own failure for a run that did not end cleanly."""
-
-
-class EndingDecoder:
-    def events_of(self, line: bytes) -> list[StepEvent]:
-        return []
-
-    def ending(self, returncode: int) -> FinalEvent:
-        if returncode != 0:
-            raise DecoderRefused
-        return FinalEvent(text="done")
-
-
-@pytest.fixture
-def private_root(tmp_path: Path) -> Path:
-    return a_private_root(tmp_path)
-
-
-@pytest.fixture
-def root(private_root: Path) -> PrivateWorkingRoot:
-    return PrivateWorkingRoot(private_root)
-
-
-@pytest.fixture
-def pool() -> CliProcessPool:
-    return CliProcessPool(limit=1, name="run output test", reap=REAL_REAP_BOUNDS)
-
-
-@pytest.fixture
-def drive(
-    pool: CliProcessPool,
-    child_cleanup: ChildCleanup,
-    thread_failures: list[Any],
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> Iterator[Callable[[Coroutine[Any, Any, Any]], Any]]:
-    yield lambda scenario: drive_real_children(child_cleanup, monkeypatch, scenario)
-    assert [child_cleanup.state(owned) is GONE for owned in child_cleanup.listed()] == [
-        True for _ in child_cleanup.listed()
-    ]
-    assert (held_slots(pool), thread_failures, spawn_warnings(caplog)) == (0, [], [])
+def a_script_that_ends_strictly(pool: CliProcessPool, script: str) -> LineScriptAdapter:
+    return LineScriptAdapter(pool, script, refuses_failed_ending=True)
 
 
 async def events_of(
-    root: PrivateWorkingRoot, adapter: ScriptAdapter, limit: int = LIMIT,
+    root: PrivateWorkingRoot, adapter: LineScriptAdapter, limit: int = LIMIT,
 ) -> list[StreamEvent]:
     return [event async for event in astream_cli_run(root, adapter, max_files_bytes=limit)]
 
@@ -360,7 +301,7 @@ WRITES_TWO_FILES = "printf abc > output/a; : > output/b\n"
 def test_the_files_arrive_in_the_ending_after_the_group_is_gone_and_the_tree_removed(
     drive, root: PrivateWorkingRoot, private_root: Path, pool: CliProcessPool,
 ) -> None:
-    adapter = ScriptAdapter(pool, WRITES_TWO_FILES)
+    adapter = a_script_that_ends_strictly(pool, WRITES_TWO_FILES)
     at_the_ending: list[tuple[int, list[Path]]] = []
 
     async def scenario() -> list[StreamEvent]:
@@ -372,7 +313,7 @@ def test_the_files_arrive_in_the_ending_after_the_group_is_gone_and_the_tree_rem
 
     assert drive(scenario()) == [
         FinalEvent(
-            text="done",
+            text="Final rc=0",
             files=(RunFile(name="a", content=b"abc"), RunFile(name="b", content=b"")),
         )
     ]
@@ -382,15 +323,15 @@ def test_the_files_arrive_in_the_ending_after_the_group_is_gone_and_the_tree_rem
 def test_a_run_gets_an_empty_output_folder_at_start_and_a_run_that_writes_nothing_has_no_files(
     drive, root: PrivateWorkingRoot, pool: CliProcessPool,
 ) -> None:
-    adapter = ScriptAdapter(pool, 'test -d output && test -z "$(ls -A output)"\n')
+    adapter = a_script_that_ends_strictly(pool, 'test -d output && test -z "$(ls -A output)"\n')
 
-    assert drive(events_of(root, adapter)) == [FinalEvent(text="done", files=())]
+    assert drive(events_of(root, adapter)) == [FinalEvent(text="Final rc=0", files=())]
 
 
 def test_a_refused_collection_ends_the_run_with_its_cause_and_leaves_no_tree(
     drive, root: PrivateWorkingRoot, private_root: Path, pool: CliProcessPool,
 ) -> None:
-    adapter = ScriptAdapter(pool, "ln -s /nonexistent output/link\n")
+    adapter = a_script_that_ends_strictly(pool, "ln -s /nonexistent output/link\n")
 
     async def scenario() -> RunOutputCause:
         with pytest.raises(RunOutputRefused) as refused:
@@ -404,10 +345,10 @@ def test_a_refused_collection_ends_the_run_with_its_cause_and_leaves_no_tree(
 def test_a_decoder_that_refuses_the_ending_is_judged_before_anything_is_read(
     drive, root: PrivateWorkingRoot, pool: CliProcessPool,
 ) -> None:
-    adapter = ScriptAdapter(pool, "mkfifo output/pipe; exit 3\n")
+    adapter = a_script_that_ends_strictly(pool, "mkfifo output/pipe; exit 3\n")
 
     async def scenario() -> None:
-        with pytest.raises(DecoderRefused):
+        with pytest.raises(EndingRefused):
             await events_of(root, adapter)
 
     drive(scenario())
@@ -417,7 +358,7 @@ def test_a_run_collects_its_files_without_installed_configuration(
     drive, root: PrivateWorkingRoot, pool: CliProcessPool,
 ) -> None:
     reset_config()
-    adapter = ScriptAdapter(pool, WRITES_TWO_FILES)
+    adapter = a_script_that_ends_strictly(pool, WRITES_TWO_FILES)
 
     (final,) = drive(events_of(root, adapter))
 
@@ -433,7 +374,7 @@ def test_a_limit_that_is_not_a_non_negative_int_raises_before_any_tree_or_child_
     child_cleanup: ChildCleanup,
     limit: object,
 ) -> None:
-    adapter = ScriptAdapter(pool, WRITES_TWO_FILES)
+    adapter = a_script_that_ends_strictly(pool, WRITES_TWO_FILES)
 
     async def scenario() -> None:
         events = astream_cli_run(root, adapter, max_files_bytes=limit)  # type: ignore[arg-type]
@@ -449,9 +390,10 @@ def test_a_failing_output_folder_creation_becomes_the_environment_error_and_leav
     private_root: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fail_the_directory_named(monkeypatch, "output", OSError("no space"))
+    working_root = PrivateWorkingRoot(private_root)
 
     with pytest.raises(CliEnvironmentUnavailableError) as refused:
-        with run_directories(PrivateWorkingRoot(private_root), {}):
+        with run_directories(working_root, {}):
             pytest.fail("the run must not start")
 
     assert (refused.value.cause, list(private_root.iterdir())) == (
