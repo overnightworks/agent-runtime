@@ -1,8 +1,0 @@
-claim_id = "07733d1738e64d9ab9edf4bc9a868912"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "ce29fc71e3ea8da5c0a69ac49461a0820accd9e2"
-branch = "claude/issue-537-s8b-service-tests-config"
-scope = ["packages/service/tests", "quality/baseline.toml", "tests/test_service_admission.py", "tests/test_service_app_gate.py", "tests/test_service_app_runs.py", "tests/test_service_capability.py", "tests/test_service_config.py", "tests/test_service_limits.py", "tests/test_service_liveness.py", "tests/test_service_quarantine.py", "tests/test_service_reflected_failure_log.py", "tests/test_service_run_events.py", "tests/test_service_run_records.py", "tests/test_service_run_status.py", "tests/test_service_signing.py", "tests/test_service_slow_client.py", "tests/test_service_ticket_refusal.py"]
-opened_commit = "9a2dd50cadfc31b44f1269e2b28094e10609c4bd"
-whole_reason = "One rename batch: the files of three held clone pairs must move together, with their baseline keys, or the pairs report as new."
