@@ -455,7 +455,7 @@ def test_a_failure_is_logged_by_its_class_and_stack_never_by_its_text_notes_or_c
             "test_a_failure_is_logged_by_its_class_and_stack_never_by_its_text_notes_or_chain",
         )
     ]
-    assert "test_service_run_recording.py:" in caplog.text
+    assert "test_run_records_recording.py:" in caplog.text
     assert "canary" not in caplog.text
 
 

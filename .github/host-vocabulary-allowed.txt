@@ -1,4 +1,3 @@
-^tests/test_service_
 ^packages/service/tests/test_
 ^tests/support/service_support\.py:
 ^tests/support/service_config_support\.py:
@@ -6,7 +5,6 @@
 ^tests/support/service_codex_support\.py:
 ^tests/support/run_tools_support\.py:
 ^tests/support/token_rejection_support\.py:
-^packages/service/tests/test_identity_keycloak_token_shapes\.py:
 ^tests/support/keycloak_realm\.py:
 ^packages/service/tests/fixtures/keycloak/realm\.json:
 ^docs/decisions/0001-agent-service\.md:
