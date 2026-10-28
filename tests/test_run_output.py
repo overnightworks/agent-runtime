@@ -392,9 +392,9 @@ def test_a_failing_output_folder_creation_becomes_the_environment_error_and_leav
     fail_the_directory_named(monkeypatch, "output", OSError("no space"))
     working_root = PrivateWorkingRoot(private_root)
 
+    entering = run_directories(working_root, {})
     with pytest.raises(CliEnvironmentUnavailableError) as refused:
-        with run_directories(working_root, {}):
-            pytest.fail("the run must not start")
+        entering.__enter__()
 
     assert (refused.value.cause, list(private_root.iterdir())) == (
         CliEnvironmentCause.HOME_NOT_CREATED, [],
