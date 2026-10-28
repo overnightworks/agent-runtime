@@ -24,4 +24,29 @@ reason = "the privacy section the service ships from its release tag"
 
 [[root.allow]]
 entry = "conftest.py"
-reason = "the pytest root plugin that loads the suite fixtures; the pinned quality version reads [root] and has no [layout] table"
+reason = "the pytest root plugin that loads the suite fixtures for the whole tree"
+
+[[layout.allow]]
+path = "tests/test_anchored_support.py"
+rule = "test-layout"
+reason = "tests the test child owner tests/support/anchored_support.py"
+
+[[layout.allow]]
+path = "tests/test_zombie_anchor.py"
+rule = "test-layout"
+reason = "tests the session zombie anchor in tests/support/anchored_support.py"
+
+[[layout.allow]]
+path = "tests/test_bounds.py"
+rule = "test-layout"
+reason = "tests the wait bounds in tests/support/bounds.py"
+
+[[layout.allow]]
+path = "tests/test_mcp_app_fake_held_response.py"
+rule = "test-layout"
+reason = "tests the fake app in tests/support/mcp_app_fake.py"
+
+[[layout.allow]]
+path = "tests/test_async_claude_spawn_seam.py"
+rule = "test-layout"
+reason = "tests the async Claude child seam and its guard in tests/support/provider_test_support.py"
