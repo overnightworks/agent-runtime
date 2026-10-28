@@ -50,6 +50,8 @@ def without_the_api(config):
 
 
 PAID_AGENT = "paid-agent"
+
+
 async def service_response(config, **body):
     mint = TokenMint()
     app = create_app(config, runners=installed_runners(config, None, LoopClock()),
