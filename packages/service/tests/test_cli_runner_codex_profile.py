@@ -317,12 +317,28 @@ def test_a_codex_run_is_held_to_the_configured_files_limit(
     assert list(private_root_of(config).iterdir()) == []
 
 
+@pytest.mark.parametrize(
+    "stream",
+    [
+        pytest.param((codex_line(type="turn.started"), DONE), id="no-items"),
+        pytest.param(
+            (
+                codex_line(type="turn.started"),
+                an_item("item.completed", "command_execution", command=CANARY),
+                DONE,
+            ),
+            id="tool-items",
+        ),
+    ],
+)
 def test_a_codex_run_without_words_succeeds_beside_a_file(
-    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    stream: tuple[bytes, ...],
 ) -> None:
     config, _capture = a_codex_service(
-        tmp_path,
-        fake={"stream": (codex_line(type="turn.started"), DONE), "then": "printf abc > output/a"},
+        tmp_path, fake={"stream": stream, "then": "printf abc > output/a"}
     )
 
     events = drive_over_http(child_cleanup, monkeypatch, config, post_a_run)
@@ -359,25 +375,6 @@ def test_codex_tool_items_reach_no_frame_status_or_log_and_the_answer_succeeds(
     assert shown(events) == [("assistant_text", "done"), ("succeeded", "done")]
     seen = f"{[e.model_dump_json() for e in events]} {status.model_dump_json()} {caplog.text}"
     assert CANARY not in seen
-
-
-def test_a_codex_run_with_tool_items_and_a_file_but_no_words_succeeds_with_the_file(
-    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    stream = (
-        codex_line(type="turn.started"),
-        an_item("item.completed", "command_execution", command=CANARY),
-        DONE,
-    )
-    config, _capture = a_codex_service(
-        tmp_path, fake={"stream": stream, "then": "printf abc > output/a"}
-    )
-
-    events = drive_over_http(child_cleanup, monkeypatch, config, post_a_run)
-
-    terminal = events[-1]
-    assert isinstance(terminal, Succeeded)
-    assert (terminal.text, terminal.files) == ("", (RunFile(name="a", content=b"abc"),))
 
 
 def test_neither_the_program_arguments_nor_the_service_log_hold_a_login_value(

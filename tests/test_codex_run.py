@@ -318,9 +318,24 @@ def test_tool_items_around_the_answer_leave_only_the_answer_and_its_final_text()
 
 
 def test_a_tool_item_after_the_answer_changes_nothing() -> None:
-    late = an_item("item.completed", "command_execution", command=CLI_TEXT)
+    late = an_item("item.completed", "command_execution", command=CLI_TEXT, text=CLI_TEXT)
 
     assert decoded_and_ended((a_message("answer"), late, DONE)) == [
+        AssistantTextEvent(text="answer"),
+        FinalEvent(text="answer"),
+    ]
+
+
+@pytest.mark.parametrize("field_value", [None, 7, {"nested": CLI_TEXT}, [CLI_TEXT]])
+@pytest.mark.parametrize("item_type", TOOL_ITEM_TYPES)
+def test_a_tool_item_is_dropped_whatever_shape_its_other_fields_have(
+    item_type: str, field_value: object
+) -> None:
+    odd = an_item(
+        "item.completed", item_type, text=field_value, command=field_value, status=field_value
+    )
+
+    assert decoded_and_ended((TURN, odd, a_message("answer"), DONE)) == [
         AssistantTextEvent(text="answer"),
         FinalEvent(text="answer"),
     ]
@@ -373,6 +388,11 @@ def test_a_tool_item_masks_neither_a_failed_turn_nor_a_missing_completion(
             CodexUnreadableLine,
             (codex_line(type="item.started", item={"id": "item_0", "command": CLI_TEXT}),),
             id="item-without-type",
+        ),
+        pytest.param(
+            CodexUnreadableLine,
+            (an_item("item.completed", "agent_message", text=[CLI_TEXT]),),
+            id="message-text-not-a-string",
         ),
         pytest.param(
             CodexTurnFailed,

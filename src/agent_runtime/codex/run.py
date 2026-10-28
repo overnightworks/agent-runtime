@@ -118,6 +118,9 @@ class _Item(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     type: str
+
+
+class _MessageItem(_Item):
     text: str = ""
 
 
@@ -133,6 +136,13 @@ class _ItemEvent(BaseModel):
 
     type: str
     item: _Item
+
+
+class _MessageEvent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    type: str
+    item: _MessageItem
 
 
 class _TurnError(BaseModel):
@@ -162,7 +172,7 @@ class CodexStreamDecoder:
     def events_of(self, line: bytes) -> Sequence[StepEvent]:
         event = self._parsed(line, _StreamEvent)
         if event.type in _ITEM_EVENT_TYPES:
-            return self._item_events(self._parsed(line, _ItemEvent))
+            return self._item_events(line, self._parsed(line, _ItemEvent))
         if event.type == "turn.completed":
             self._completed = True
         elif event.type == "turn.failed":
@@ -189,15 +199,15 @@ class CodexStreamDecoder:
         except ValidationError:
             _fail(CodexUnreadableLine())
 
-    def _item_events(self, event: _ItemEvent) -> list[StepEvent]:
+    def _item_events(self, line: bytes, event: _ItemEvent) -> list[StepEvent]:
         item = event.item
         if item.type == _AGENT_MESSAGE:
-            return self._message_events(event.type, item)
+            return self._message_events(event.type, self._parsed(line, _MessageEvent).item)
         if item.type not in _DROPPED_ITEM_TYPES:
             _fail(CodexUnknownStreamPart())
         return []
 
-    def _message_events(self, event_type: str, item: _Item) -> list[StepEvent]:
+    def _message_events(self, event_type: str, item: _MessageItem) -> list[StepEvent]:
         if event_type != "item.completed":
             return []
         self._answer = item.text.strip()
