@@ -537,8 +537,8 @@ def test_a_claude_run_streams_through_the_neutral_entry(
     seen: list[StreamEvent] = []
 
     async def scenario() -> None:
-        async for event in astream_cli_run(PrivateWorkingRoot(private_root), run):
-            seen.append(event)
+        events = astream_cli_run(PrivateWorkingRoot(private_root), run, max_files_bytes=0)
+        seen.extend([event async for event in events])
 
     drive_real_children(child_cleanup, monkeypatch, scenario())
 
@@ -572,8 +572,8 @@ def test_a_claude_run_with_a_relay_reads_its_private_relay_config_through_the_ne
     seen: list[StreamEvent] = []
 
     async def scenario() -> None:
-        async for event in astream_cli_run(PrivateWorkingRoot(private_root), run):
-            seen.append(event)
+        events = astream_cli_run(PrivateWorkingRoot(private_root), run, max_files_bytes=0)
+        seen.extend([event async for event in events])
 
     drive_real_children(child_cleanup, monkeypatch, scenario())
 
@@ -818,8 +818,8 @@ def test_a_refused_init_ends_the_run_when_it_is_read(
     refusals: list[RunSurfaceRefused] = []
 
     async def collect() -> None:
-        async for event in astream_cli_run(PrivateWorkingRoot(private_root), run):
-            seen.append(event)
+        events = astream_cli_run(PrivateWorkingRoot(private_root), run, max_files_bytes=0)
+        seen.extend([event async for event in events])
 
     async def scenario() -> None:
         with pytest.raises(RunSurfaceRefused) as refusal:

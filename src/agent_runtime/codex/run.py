@@ -181,7 +181,7 @@ class CodexStreamDecoder:
         _fail(CodexTurnFailed())
 
     def ending(self, returncode: int) -> FinalEvent:
-        if not self._completed or returncode != 0 or not self._answer:
+        if not self._completed or returncode != 0:
             _fail(CodexAnswerMissing())
         return FinalEvent(text=self._answer)
 

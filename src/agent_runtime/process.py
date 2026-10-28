@@ -415,6 +415,7 @@ CODEX_CLI_BINARY_MISSING_DETAIL: Final = "the configured Codex CLI binary is not
 RUN_TREE_PREFIX: Final = "agent-run-"
 RUN_HOME_DIRECTORY_NAME: Final = "home"
 RUN_WORK_DIRECTORY_NAME: Final = "work"
+RUN_OUTPUT_DIRECTORY_NAME: Final = "output"
 RUN_FILE_MODE: Final = 0o600
 _RUN_DIRECTORY_MODE: Final = 0o700
 _RUN_FILE_NAME_DETAIL: Final = "A run file needs a single path component as its name"
@@ -1601,21 +1602,14 @@ class RunTreeRemovalRefusal(StrEnum):
     MOUNT_TABLE_UNREADABLE = "mount_table_unreadable"
 
 
+@dataclass(frozen=True)
 class RunDirectories:
-    """One run's home and working directory; built only by :func:`run_directories`."""
+    """One run's home, work and output directories; built only by :func:`run_directories`."""
 
-    def __init__(self, tree: Path, removal: LastHolderRemoval) -> None:
-        self._home = tree / RUN_HOME_DIRECTORY_NAME
-        self._working_directory = tree / RUN_WORK_DIRECTORY_NAME
-        self._removal = removal
-
-    @property
-    def home(self) -> Path:
-        return self._home
-
-    @property
-    def working_directory(self) -> Path:
-        return self._working_directory
+    home: Path
+    working_directory: Path
+    output: Path
+    _removal: LastHolderRemoval = field(repr=False)
 
     def reserve(self) -> HolderReservation:
         return self._removal.reserve()
@@ -1659,8 +1653,11 @@ def _create_run_directories(root: PrivateWorkingRoot, files: Mapping[str, bytes]
         removal = LastHolderRemoval(functools.partial(_remove_run_tree, tree))
         rollback.callback(removal.close)
         os.chmod(tree, _RUN_DIRECTORY_MODE)
-        directories = RunDirectories(tree, removal)
-        for directory in (directories.home, directories.working_directory):
+        work = tree / RUN_WORK_DIRECTORY_NAME
+        directories = RunDirectories(
+            tree / RUN_HOME_DIRECTORY_NAME, work, work / RUN_OUTPUT_DIRECTORY_NAME, removal
+        )
+        for directory in (directories.home, directories.working_directory, directories.output):
             directory.mkdir(mode=_RUN_DIRECTORY_MODE)
             os.chmod(directory, _RUN_DIRECTORY_MODE)
         for name, content in files.items():

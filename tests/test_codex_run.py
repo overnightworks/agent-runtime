@@ -371,8 +371,6 @@ def test_a_stream_that_is_unknown_unreadable_or_failed_ends_closed_without_cli_t
     [
         pytest.param((a_message("answer"), DONE), 1, id="nonzero-exit-after-completion"),
         pytest.param((TURN, a_message("answer")), 0, id="no-turn-completed"),
-        pytest.param((TURN, DONE), 0, id="no-agent-message"),
-        pytest.param((a_message("  \n"), DONE), 0, id="blank-agent-message"),
         pytest.param((), 0, id="empty-stream"),
     ],
 )
@@ -381,6 +379,19 @@ def test_a_run_without_a_completed_answered_clean_turn_ends_with_no_answer(
 ) -> None:
     with pytest.raises(CodexAnswerMissing):
         decoded_and_ended(stream, returncode)
+
+
+@pytest.mark.parametrize(
+    "stream",
+    [
+        pytest.param((TURN, DONE), id="no-agent-message"),
+        pytest.param((a_message("  \n"), DONE), id="blank-agent-message"),
+    ],
+)
+def test_a_completed_clean_turn_without_words_ends_with_empty_text_for_the_wire_to_decide(
+    stream: tuple[bytes, ...],
+) -> None:
+    assert decoded_and_ended(stream)[-1] == FinalEvent(text="")
 
 
 def test_a_notice_of_a_refused_login_does_not_fail_a_turn_that_completes() -> None:
@@ -433,7 +444,7 @@ def drive(
 
 
 async def collected(root: PrivateWorkingRoot, run: CodexRun) -> list[StreamEvent]:
-    return [event async for event in astream_cli_run(root, run)]
+    return [event async for event in astream_cli_run(root, run, max_files_bytes=1024)]
 
 
 def test_a_run_through_the_neutral_entry_streams_in_order_and_leaves_nothing_behind(
@@ -464,7 +475,9 @@ def test_the_group_is_gone_and_the_tree_removed_before_the_final_event(
     at_the_final_event: list[tuple[bool, int, list[Path]]] = []
 
     async def scenario() -> None:
-        async for event in astream_cli_run(PrivateWorkingRoot(private_root), run):
+        async for event in astream_cli_run(
+            PrivateWorkingRoot(private_root), run, max_files_bytes=1024
+        ):
             if isinstance(event, FinalEvent):
                 at_the_final_event.append(
                     (row.descendant_is_dead(), held_slots(run.pool), list(private_root.iterdir()))

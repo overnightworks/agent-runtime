@@ -14,6 +14,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from agent_runtime_client.wire import RunFile
+
 
 class StreamEvent(BaseModel):
     """Base class for every event a provider turn streams.
@@ -49,5 +51,11 @@ class ToolResultEvent(StreamEvent):
 
 
 class FinalEvent(StreamEvent):
+    """A turn's ending: its words and the files its run left in its output folder.
+
+    Only a CLI run collects files; every other producer leaves ``files`` empty.
+    """
+
     type: Literal["final"] = "final"
     text: str
+    files: tuple[RunFile, ...] = ()

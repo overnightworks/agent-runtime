@@ -3,8 +3,9 @@
 ``astream_cli_run`` makes the run's directories, starts the adapter's child on
 :func:`anchored_turn_child`, writes its stdin, turns each stdout line into events
 through the adapter's decoder and drains stderr unkept. The group is confirmed
-gone and the tree's removal attempted before the ending is yielded; a group that
-cannot be confirmed raises ``ContainmentLost`` instead of an answer. A decoder
+gone, the decoder has judged the exit and the output folder is read before the tree's
+removal is attempted and the ending is yielded; a group that cannot be confirmed raises
+``ContainmentLost`` instead of an answer. A decoder
 judges what its CLI announced at the start as a :class:`RunSurface` through
 :func:`examine_announcement`, and a refused announcement ends the run with
 ``RunSurfaceRefused``. :func:`read_line` and :func:`settle_drain` are the one
@@ -34,6 +35,7 @@ from agent_runtime.events import (
     ToolResultEvent,
 )
 from agent_runtime.process import run_directories
+from agent_runtime.run_output import collect_output
 from agent_runtime.spawn import ChildProcess
 
 log = logging.getLogger(__name__)
@@ -170,10 +172,23 @@ async def read_line(stdout: asyncio.StreamReader) -> bytes:
         raise_without_chain(CliStreamLineTooLong("A CLI output line exceeded its limit."))
 
 
+def _is_file_limit(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
 async def astream_cli_run(
-    root: PrivateWorkingRoot, adapter: CliRunAdapter
+    root: PrivateWorkingRoot, adapter: CliRunAdapter, *, max_files_bytes: int
 ) -> AsyncIterator[StreamEvent]:
-    """Stream one run's events; the ending comes last, after the reap and the removal attempt."""
+    """Stream one run's events; the ending comes last, after the reap and the removal attempt.
+
+    The ending is built once the group is confirmed gone and still inside the tree: the
+    decoder judges the exit first, and only a clean ending reads the output folder, at most
+    ``max_files_bytes`` in all, into the ending's files. A refused collection raises
+    ``RunOutputRefused``. A run that is stopped, fails, or loses containment has no ending
+    and reads nothing.
+    """
+    if not _is_file_limit(max_files_bytes):
+        raise ValueError("max_files_bytes must be a non-negative int")
     with run_directories(root, adapter.run_files()) as directories:
         start = adapter.start(directories.home, directories.working_directory)
         pool = adapter.pool
@@ -196,4 +211,6 @@ async def astream_cli_run(
                 returncode = await proc.exited()
             finally:
                 await settle_drain(drain)
-    yield start.decoder.ending(returncode)
+        final = start.decoder.ending(returncode)
+        ending = final.model_copy(update={"files": collect_output(directories, max_files_bytes)})
+    yield ending

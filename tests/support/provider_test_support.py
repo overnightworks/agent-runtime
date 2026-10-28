@@ -2167,7 +2167,7 @@ def a_fake_claude(
         "IFS= read -r stdin_line\n"
         f'[ "$stdin_line" = {shlex.quote(stdin_line.decode().strip())} ] || exit 13\n'
         '[ -n "$CLAUDE_CODE_OAUTH_TOKEN" ] || exit 14\n'
-        '[ -z "$(ls -A)" ] || exit 15\n'
+        '[ "$(ls -A)" = output ] || exit 15\n'
         f"{token_check}{turns_check}{relay_check}{capture_run}"
         f"cat <<'EOF'\n{stream_text}EOF\n"
         f"{then}\n"

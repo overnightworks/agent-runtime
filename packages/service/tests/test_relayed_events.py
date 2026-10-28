@@ -572,7 +572,9 @@ def a_runner_behind(
         return tools
 
     monkeypatch.setattr(cli_runner_module.RunTools, "open", open_the_scripted_tools)
-    monkeypatch.setattr(cli_runner_module, "astream_cli_run", lambda _root, _adapter: core.stream())
+    monkeypatch.setattr(
+        cli_runner_module, "astream_cli_run", lambda _root, _adapter, **_keywords: core.stream()
+    )
     runner = CliRunner(
         service_config(), tls_context=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT), clock=LoopClock()
     )

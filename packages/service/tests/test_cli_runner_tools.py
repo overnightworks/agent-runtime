@@ -1452,8 +1452,8 @@ def core_events_seen(monkeypatch: pytest.MonkeyPatch) -> list[StreamEvent]:
     seen: list[StreamEvent] = []
     core = cli_runner_module.astream_cli_run
 
-    async def recording(root: PrivateWorkingRoot, adapter: CliRunAdapter):
-        async for event in core(root, adapter):
+    async def recording(root: PrivateWorkingRoot, adapter: CliRunAdapter, **keywords: int):
+        async for event in core(root, adapter, **keywords):
             seen.append(event)
             yield event
 

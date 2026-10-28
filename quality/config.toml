@@ -50,3 +50,9 @@ reason = "tests the fake app in tests/support/mcp_app_fake.py"
 path = "tests/test_async_claude_spawn_seam.py"
 rule = "test-layout"
 reason = "tests the async Claude child seam in tests/support/provider_test_support.py and guards that it stays the only door"
+
+[[gate.loosened]]
+what = 'import contract "inside the core, only the routers import a provider package; the machinery below them never does" changes source_modules'
+item = "#550"
+date = 2026-10-28
+reason = "agent_runtime.run_output joins the forbidden contract, which tightens it; the gate counts any field change as a loosening (overnightworks/quality#217)"

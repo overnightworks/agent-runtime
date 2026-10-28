@@ -7,6 +7,7 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | Before (0.10.0) | Now |
 | --- | --- |
 | Wire protocol 3: `succeeded` carried `text` alone, a `v: 3` body was admitted and the client read `v: 3` events | Protocol 4: `PROTOCOL_VERSION = 4`. `Succeeded.files` is required on every `succeeded` (`[]` for none) and holds `RunFile(name, content)` values, with `content` as bytes in Python and canonical base64 on the wire ([wire.md](wire.md)). `Succeeded.text` may be empty beside at least one file. A `v: 3` body gets 400 `unsupported_version`, and the 0.11.0 client refuses a `v: 3` event. The service and its apps switch on one day; the two do not coexist. |
+| A host that called `cli_run.astream_cli_run(root, adapter)` got a `FinalEvent` with `text` alone, and a Codex run whose answer was empty failed as `CodexAnswerMissing` | `astream_cli_run(root, adapter, *, max_files_bytes)` requires the limit as a non-negative `int` (otherwise `ValueError`). `FinalEvent.files` holds the regular files the run left in `work/output/` (an empty folder every run gets), read after the group is confirmed gone; an entry that is not a single-named regular file, or files over the limit, raise `run_output.RunOutputRefused` with a closed `cause`. A Codex run that completes with empty words now ends with a `FinalEvent` whose `text` is empty, for the wire to decide. |
 
 ## Migrating to 0.10.0
 

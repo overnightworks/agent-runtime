@@ -1507,6 +1507,11 @@ holds its place can free it. The limit lives in one process,
 because the service runs one replica with one worker (A1d). There is no queue and
 no fallback to the API route.
 
+**Amendment (28.10.2026, #550, #488).** The working directory holds one empty `output/` at
+the start, under the ruling that every run gets an output folder. After the process group
+is confirmed gone and before the tree is removed, the core reads its top-level regular
+files, each with one name and never through a link, and carries them in the turn's ending.
+
 **Consequence.** Subscription runs are bounded by that limit, and a full service says
 so instead of waiting.
 
