@@ -34,6 +34,7 @@ WORKING_ROOT_LINE = f"working_root = {json.dumps(str(process_working_root().path
 
 MODELS_LINE = 'models = ["sonnet", "opus"]'
 
+
 def cli_section(
     *, binary: str, version: str, root: str, models: str = MODELS_LINE, token: str = TOKEN_FILE_LINE
 ) -> str:
@@ -41,6 +42,7 @@ def cli_section(
     program_lines = "".join(f"{line}\n" for line in (binary, version, models, token) if line)
     program_table = f"[cli.{Provider.ANTHROPIC}]\n{program_lines}\n" if program_lines else ""
     return f"[cli]\n{root_lines}\n{program_table}"
+
 
 CLI_SECTION = cli_section(
     binary=CLAUDE_BINARY_LINE, version=CLAUDE_VERSION_LINE, root=WORKING_ROOT_LINE

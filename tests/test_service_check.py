@@ -79,7 +79,7 @@ def _root_user(tmp_path: Path, monkeypatch) -> Path:
     ],
 )
 def test_a_check_refuses_with_the_starts_one_line_and_serves_nothing(
-    tmp_path, capsys, served, monkeypatch, working_root, configuration  # noqa: F811
+    tmp_path, capsys, served, monkeypatch, working_root, configuration
 ):
     path = configuration(tmp_path, monkeypatch)
 
