@@ -1,8 +1,0 @@
-claim_id = "60da0c85cdd142adb5be862786b330e5"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "7305ae536a7cf2c21b87b1fd65f75dd8181da5ad"
-branch = "claude/issue-530-s5-codex-support"
-scope = [".github/host-vocabulary-allowed.txt", "quality/baseline.toml", "tests/support/codex_support.py", "tests/support/core_runtime_support.py", "tests/support/service_cli_runner_support.py", "tests/support/service_codex_support.py", "tests/support/service_login_support.py", "tests/test_codex_run.py", "tests/test_service_app_runs.py", "tests/test_service_cli_runner.py", "tests/test_service_cli_runner_tools.py", "tests/test_service_cli_version.py", "tests/test_service_codex_profile.py", "tests/test_service_codex_startup.py", "tests/test_service_entrance.py", "tests/test_service_login.py"]
-opened_commit = "65689b5534da52a4d033bfbea4c76733b26813d6"
-whole_reason = "One extraction: three test modules' shared code moves into support modules and their eight importers switch together."
