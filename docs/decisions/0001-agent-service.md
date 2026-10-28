@@ -3091,6 +3091,16 @@ removed feature name would be refused, not ignored. Nothing vanished or was
 renamed on 0.163.0. Whether the tools are really off is a model-turn fact:
 deferred to C0b.
 
+  **Amendment (28.10.2026, #554, #488).** `codex features list` was run again on
+  `codex-cli 0.163.0` with `env -i` and `HOME` and `CODEX_HOME` set to one fresh empty
+  directory. All eleven names above still exist, none removed or renamed. Stable and on by
+  default, not switched off, with a name that denotes a model tool or a tool surface: `apps`,
+  `browser_use_external`, `browser_use_full_cdp_access`, `in_app_browser`, `view_image`,
+  `sleep_tool`, `tool_suggest`, `skill_search`, `skill_mcp_dependency_install`, `goals`,
+  `tool_call_mcp_elicitation`, `unified_exec_tty`, `write_stdin_approval`, `shell_snapshot`.
+  The measurement is name-level (name, stage, default); no model turn ran. The switches are
+  unchanged.
+
 **S1 system text.** Under `--strict-config` the keys `model_instructions_file`
 (with a real file), `developer_instructions` and `instructions` were all accepted
 by name (`thread.started`); the invented control was refused. Whether any
