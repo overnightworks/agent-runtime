@@ -184,7 +184,7 @@ def test_the_run_adapter_passes_the_routes_model(tmp_path: Path) -> None:
     )
 
     build = cli_runner.RUN_ADAPTERS[Provider.ANTHROPIC](launch)
-    adapter = build(cli_runner.RunInputs(turn, LISTED_MODEL, None))
+    adapter = build(cli_runner.RunInputs(turn, LISTED_MODEL, None, ()))
 
     arguments = adapter.start(tmp_path / "home", tmp_path / "work").child.arguments
     assert [a for a in arguments if a.startswith("--model")] == [f"--model={LISTED_MODEL}"]

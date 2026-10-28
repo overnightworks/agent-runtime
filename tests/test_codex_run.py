@@ -86,6 +86,7 @@ def a_run(**changes: Any) -> CodexRun:
         "system": SYSTEM_TEXT,
         "history": a_history(),
         "model": None,
+        "settings": (),
     }
     return CodexRun(**{**fields, **changes})
 
@@ -125,41 +126,10 @@ def decoded_and_ended(lines: tuple[bytes, ...], returncode: int = 0) -> list[Str
 BASE_ARGUMENTS = (
     "exec",
     "--json",
-    "--sandbox",
-    "read-only",
     "--skip-git-repo-check",
-    "--ignore-user-config",
     "--ignore-rules",
     "--ephemeral",
     "--strict-config",
-    "-c",
-    'approval_policy="never"',
-    "-c",
-    "mcp_servers={}",
-    "-c",
-    "features.shell_tool=false",
-    "-c",
-    "features.unified_exec=false",
-    "-c",
-    "features.browser_use=false",
-    "-c",
-    "features.computer_use=false",
-    "-c",
-    "features.multi_agent=false",
-    "-c",
-    "features.image_generation=false",
-    "-c",
-    "features.plugins=false",
-    "-c",
-    "features.hooks=false",
-    "-c",
-    'web_search="disabled"',
-    "-c",
-    "features.code_mode_host=false",
-    "-c",
-    "features.code_mode=false",
-    "-c",
-    "features.code_mode_only=false",
 )
 
 
@@ -231,7 +201,7 @@ def test_the_run_files_are_the_blanked_login_and_the_system_text() -> None:
     assert files["system-prompt"] == SYSTEM_TEXT.encode()
     assert files["auth.json"] == run.login.blanked_document
     assert json.loads(files["auth.json"])["tokens"]["refresh_token"] == ""
-    assert sorted(files) == ["auth.json", "system-prompt"]
+    assert sorted(files) == ["auth.json", "config.toml", "system-prompt"]
 
 
 def test_the_stdin_is_the_history_as_one_transcript_in_app_order(tmp_path: Path) -> None:

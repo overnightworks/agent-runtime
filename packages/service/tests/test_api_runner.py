@@ -13,6 +13,7 @@ from tests.support.api_runner_support import (
     answer,
     configured,
     fake_gateway,
+    with_cli_settings,
     with_default_model,
 )
 from tests.support.api_support import write_api_credentials
@@ -63,8 +64,13 @@ async def service_response(config, **body):
 
 
 @pytest.mark.parametrize("model", [CONFIGURED_MODEL, "grok/synthetic"])
-def test_api_only_service_passes_exact_model_and_no_identity(tmp_path, monkeypatch, model):
-    config = with_default_model(configured(tmp_path), model)
+@pytest.mark.parametrize(
+    "cli_settings", [{}, {"web_search": "live"}], ids=["no-cli-settings", "cli-settings"]
+)
+def test_api_only_service_passes_exact_model_and_no_identity(
+    tmp_path, monkeypatch, model, cli_settings
+):
+    config = with_cli_settings(with_default_model(configured(tmp_path), model), cli_settings)
     requests = []
 
     def upstream(request):

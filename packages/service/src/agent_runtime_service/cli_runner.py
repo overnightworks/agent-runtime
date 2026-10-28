@@ -29,6 +29,7 @@ from pydantic import SecretStr
 
 from agent_runtime.claude.provider import ClaudeRun
 from agent_runtime.cli_run import CliRunAdapter, RelayAccess, astream_cli_run
+from agent_runtime.cli_settings import CliSettings
 from agent_runtime.codex.run import CodexRun
 from agent_runtime.codex_login import CodexLogin
 from agent_runtime.config import PrivateWorkingRoot
@@ -54,11 +55,12 @@ class ProviderLaunch:
 
 @dataclass(frozen=True)
 class RunInputs:
-    """All of a run an adapter may see: its turn, the run's model and the relay's access."""
+    """All of a run an adapter may see: its turn, model, relay access and settings levels."""
 
     turn: Turn
     model: str
     relay: RelayAccess | None
+    settings: tuple[CliSettings, ...]
 
 
 LoggedInRun = Callable[[RunInputs], CliRunAdapter]
@@ -91,6 +93,7 @@ def _codex_run(launch: ProviderLaunch, login: CodexLogin, inputs: RunInputs) -> 
         inputs.turn.system,
         tuple(inputs.turn.messages),
         model=inputs.model,
+        settings=inputs.settings,
     )
 
 
@@ -137,6 +140,7 @@ class CliRunner:
         self._tls_context = tls_context
         self._clock = clock
         self._max_files_bytes = config.runs.max_files_bytes
+        self._settings_levels = config.cli_settings_levels
 
     async def run(self, admitted: AdmittedRun) -> AsyncGenerator[StreamEvent, None]:
         assert isinstance(admitted.route, Cli)
@@ -151,6 +155,9 @@ class CliRunner:
                     admitted.request.turn,
                     split_model(admitted.model)[1],
                     None if tools is None else tools.access,
+                    self._settings_levels(
+                        admitted.app, admitted.request.agent, admitted.route.provider
+                    ),
                 )
             )
             events = RelayedEvents(

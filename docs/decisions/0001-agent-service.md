@@ -1583,12 +1583,14 @@ the parallel-run limit stands once, in H7's Decision.
     - *Gegenbeispiel:* Der Dienst baut um jeden Lauf eine eigene Sandbox, damit auch ein fehlerhaftes Programm den Schlüssel nicht sieht (Q3 d, nicht gewählt).
     - *Default:* entfällt; wie formuliert entschieden.
     - *Beleg:* A1b-4a, A1b-5, A1b-7n, A1b-12b.
+    - *Re-ruled for Codex (28.10.2026, #488 card 4 and F5):* a built-in Codex tool that `cli_settings` switches on runs inside the CLI without a per-call approval, under Codex's own sandbox (`sandbox_mode`, default `read-only`, card 1). Claude's built-in tools stay off until K2b. The bold sentence stands; K2b rewords it for both CLIs.
 16. [ruled by the operator 17.10.2026: "OK"] **Kein Token steht in einer Befehlszeile, im Stream, in einer Antwort oder im Log, und die Capability erreicht das Claude-Programm nie.**
     - *Erbt (Kopf):* H7 „tokens never in argv, events or logs“ und A1a4 Punkt 14. Neu ist, dass die Capability nur noch die App erreicht. Das ändert H3 (`:242-243`) und den Zeilentext von #18 (Q1 = a, das Relay).
     - *Beispiel:* Wer auf dem Rechner `ps` aufruft, sieht in keiner Befehlszeile ein Token. Das Abo-Token steht nur in der Umgebung des Programms; dort lesen es der Benutzer des Dienstes und root. Schickt die App die Capability in einer Antwort zurück, wird die Antwort nicht weitergegeben, und der Lauf scheitert.
     - *Gegenbeispiel:* Die Capability steht, wie H3 heute sagt, in der 0600-MCP-Datei des Laufs. Das Programm könnte sie lesen und bis zu 10 Minuten lang die Werkzeuge der App in deinem Namen aufrufen (Betreiber-Ruling O4).
     - *Default:* entfällt; wie formuliert entschieden.
     - *Beleg:* A1b-0b1, A1b-4a, A1b-9b1, A1b-9b2, A1b-9c, A1b-10a2, A1b-10b2, A1b-11.
+    - *Re-ruled for Codex (28.10.2026, #488 card 4 and F5):* with a listed shell, file or code tool, injected text can read the signing key and the logins, and the model can repeat a token; this is accepted for now (F5). No token enters argv. The bold sentence stands; K2b rewords it.
 17. [ruled by the operator 17.10.2026: "OK"] **Kein Werkzeug läuft, bevor der Dienst genau diesen Aufruf angenommen hat. Kein Ergebnis erreicht das Modell, bevor der Dienst genau dieses Ergebnis angenommen hat.**
     - *Erbt (Kopf):* A1a3 Punkt 20 und #38. Die Wirkung in der App ist unumkehrbar, darum wird gesprochen entschieden.
     - *Beispiel:*
@@ -1598,6 +1600,7 @@ the parallel-run limit stands once, in H7's Decision.
     - *Gegenbeispiel:* Das Programm ruft die App selbst auf, und der Dienst meldet den Aufruf nur nachträglich. So arbeitet der Kern heute mit `--allowedTools` (Fakt 9).
     - *Default:* entfällt; wie formuliert entschieden.
     - *Beleg:* A1b-10b1, A1b-10b2, A1b-11.
+    - *Re-ruled for Codex (28.10.2026, #488 card 4 and F5):* app tools keep both barriers. A built-in tool the configuration switches on is not approved per call by the service. The bold sentence stands; K2b rewords it.
 20. [ruled by the operator 17.10.2026: "OK", als Quarantäne nach Q8] **Kann der Dienst nicht bestätigen, dass die Prozessgruppe eines Laufs leer ist, bleibt der Platz dieses Laufs belegt. Der Dienst versucht es im Hintergrund weiter, gibt genau diesen Platz frei, sobald die Gruppe leer ist, und schreibt eine ERROR-Zeile. Die anderen Plätze arbeiten weiter; der Dienst beendet sich nicht und startet nicht neu.**
     - *Neu* (Q8). Ein Überlebender verbraucht das Abo und könnte Werkzeuge rufen; darum geht sein Platz an keinen neuen Lauf.
     - *„Bestätigt“ heißt:* Der Dienst schickt der Prozessgruppe des Laufs SIGKILL und sieht danach in `/proc` keinen lebenden Prozess dieser Gruppe mehr, innerhalb der Frist ab dem ersten SIGKILL. Das gilt, solange der Gruppenführer nicht abgeholt ist und kein Mount `/proc` verdeckt. Ein Prozess, den das SIGKILL erreicht hat, kann keinen neuen Prozess mehr mit `fork` oder `clone` anhängen; darum genügt eine Zählung nach dem SIGKILL, und jeder lebende Prozess, den sie in der Gruppe sieht, verhindert die Bestätigung. Der beendete, noch nicht abgeholte Gruppenführer zählt nicht als lebend; der Dienst holt ihn erst danach ab, und bis dahin vergibt der Kernel seine Nummer an keinen anderen Prozess und keine andere Gruppe, sodass jedes Signal des Dienstes nur diesen Lauf trifft. Zeigt `/proc` nicht die eigene Sicht des Dienstes (kein procfs, ein anderer PID-Namespace, `hidepid`), ist das Ende nicht bestätigt, und der Platz bleibt belegt. `killpg(pgid, 0)` kann das Ende nicht bestätigen: Der nicht abgeholte Gruppenführer hält die Gruppe ansprechbar, und ein abgeholter gibt die Nummer frei.
@@ -3100,6 +3103,25 @@ deferred to C0b.
   `tool_call_mcp_elicitation`, `unified_exec_tty`, `write_stdin_approval`, `shell_snapshot`.
   The measurement is name-level (name, stage, default); no model turn ran. The switches are
   unchanged.
+
+  **Amendment (28.10.2026, #556, #488).** The switches are now the defaults of a
+  run-home `config.toml` under the operator's `cli_settings` (F1: adapter defaults, then
+  `[defaults]`, the app, the agent; tables merge per key, any other value replaces).
+  `--ignore-user-config` and the `--sandbox` flag are gone, and `sandbox_mode = "read-only"`
+  is a default. The named features are off by default; every other feature follows the pin.
+  Measured on `codex-cli 0.163.0` with `env -i`, a fresh home, `bwrap --unshare-net` and no
+  login, argv `exec --json --skip-git-repo-check --ignore-rules [--ephemeral] --strict-config
+  -c model_instructions_file=<file> -`, each run killed at 30 s after `turn.started`:
+  - M1: `invented_k1 = 1` in the home's `config.toml` exits 1, `unknown configuration field`,
+    no `thread.started`. So the file is read and `--strict-config` applies to it.
+  - M2: the rendered defaults reach `thread.started`; the rollout's `turn_context` says
+    `approval_policy` `never` and a `read-only` sandbox.
+  - M3: a project `.codex/config.toml` with an invented key, below an ancestor holding
+    `.git/HEAD`: untrusted, the run reaches `thread.started`; with `[projects."<ancestor>"]
+    trust_level = "trusted"` it exits 1, `unknown configuration field`.
+  - M4: with `approval_policy = "on-request"` the `turn_context` still says `never`; with
+    `approvals_reviewer = "auto_review"` added it says `on-request` and `auto_review`. The
+    sandbox stays `read-only` in both.
 
 **S1 system text.** Under `--strict-config` the keys `model_instructions_file`
 (with a real file), `developer_instructions` and `instructions` were all accepted

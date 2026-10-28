@@ -9,6 +9,26 @@ from pathlib import Path
 from typing import Any
 
 PRECONDITIONS_MARKER = "preconditions-passed"
+FEATURES_OFF = (
+    "shell_tool",
+    "unified_exec",
+    "browser_use",
+    "computer_use",
+    "multi_agent",
+    "image_generation",
+    "plugins",
+    "hooks",
+    "code_mode_host",
+    "code_mode",
+    "code_mode_only",
+)
+DEFAULT_SETTINGS: dict[str, Any] = {
+    "sandbox_mode": "read-only",
+    "approval_policy": "never",
+    "mcp_servers": {},
+    "web_search": "disabled",
+    "features": dict.fromkeys(FEATURES_OFF, False),
+}
 
 
 def codex_line(**fields: Any) -> bytes:
@@ -39,9 +59,10 @@ def a_fake_codex(
 ) -> Path:
     """A stand-in for the pinned CLI: a distinct exit code on a wrong run, else a marker file.
 
-    A run checks its home, the blanked login, the system file, the stdin transcript and the
-    isolation switch before it prints ``stream``; with ``capture`` it first records its
-    arguments and the login it was given. ``version_line`` is what ``--version`` prints.
+    A run checks its home, the blanked login, the system file, its settings file, the stdin
+    transcript and the ephemeral flag before it prints ``stream``; with ``capture`` it first
+    records its arguments, the login and the settings file it was given. ``version_line`` is
+    what ``--version`` prints.
     """
     stream_file = directory / "stream.jsonl"
     stream_file.write_bytes(b"".join(stream))
@@ -57,6 +78,7 @@ def a_fake_codex(
             f"mkdir -p {shlex.quote(str(capture))}\n"
             f"printf '%s\\n' \"$@\" > {shlex.quote(str(capture / 'argv'))}\n"
             f'cp "$CODEX_HOME/auth.json" {shlex.quote(str(capture / "auth.json"))}\n'
+            f'cp "$CODEX_HOME/config.toml" {shlex.quote(str(capture / "config.toml"))}\n'
         )
     )
     binary = directory / "codex"
@@ -66,6 +88,7 @@ def a_fake_codex(
         '[ "$CODEX_HOME" = "$HOME" ] || exit 10\n'
         '[ "$(stat -c %a "$CODEX_HOME/auth.json")" = 600 ] || exit 11\n'
         'grep -q \'"refresh_token": ""\' "$CODEX_HOME/auth.json" || exit 12\n'
+        '[ "$(stat -c %a "$CODEX_HOME/config.toml")" = 600 ] || exit 16\n'
         f'[ "$(cat "$CODEX_HOME/system-prompt")" = {shlex.quote(system_text)} ] || exit 13\n'
         f'[ "$(cat)" = {shlex.quote(expected_stdin)} ] || exit 14\n'
         'case " $* " in *" --ephemeral "*) ;; *) exit 15;; esac\n'

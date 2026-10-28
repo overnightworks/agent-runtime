@@ -51,6 +51,7 @@ name = inside the core, only the routers import a provider package; the machiner
 type = forbidden
 source_modules =
     agent_runtime.cli_run
+    agent_runtime.cli_settings
     agent_runtime.run_output
     agent_runtime.anchored_turn
     agent_runtime.lost_groups
