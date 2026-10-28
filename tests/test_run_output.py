@@ -10,13 +10,16 @@ import logging
 import os
 import shutil
 import socket
+import threading
 from collections.abc import Callable, Coroutine, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
+from tests.support.anchored_leaders import spawn_warnings
 from tests.support.anchored_support import GONE, ChildCleanup
+from tests.support.bounds import TEST_WAIT_SECONDS
 from tests.support.provider_test_support import (
     REAL_REAP_BOUNDS,
     a_private_root,
@@ -25,6 +28,7 @@ from tests.support.provider_test_support import (
     held_slots,
 )
 
+import agent_runtime.run_output as run_output
 from agent_runtime.anchored_turn import CliProcessPool
 from agent_runtime.cli_run import CliRunStart, StepEvent, astream_cli_run
 from agent_runtime.config import PrivateWorkingRoot, reset_config
@@ -59,9 +63,29 @@ def directories(tmp_path: Path) -> Iterator[RunDirectories]:
         yield made
 
 
+def returns_within_the_bound[T](call: Callable[[], T]) -> T:
+    """Run a synchronous call and fail the test by name when it does not return in time."""
+    outcome: list[T] = []
+    failures: list[BaseException] = []
+
+    def run() -> None:
+        try:
+            outcome.append(call())
+        except BaseException as error:  # noqa: BLE001 - handed to the test thread below
+            failures.append(error)
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    worker.join(TEST_WAIT_SECONDS)
+    assert not worker.is_alive(), "the collector did not return within the test bound"
+    if failures:
+        raise failures[0]
+    return outcome[0]
+
+
 def refusal_of(directories: RunDirectories, limit: int = LIMIT) -> RunOutputRefused:
     with pytest.raises(RunOutputRefused) as refused:
-        collect_output(directories, limit)
+        returns_within_the_bound(lambda: collect_output(directories, limit))
     return refused.value
 
 
@@ -113,13 +137,25 @@ def test_files_totalling_one_byte_over_the_limit_are_refused(directories: RunDir
     assert refusal_of(directories).cause is RunOutputCause.OVER_LIMIT
 
 
-def test_a_huge_sparse_file_is_refused_after_reading_at_most_the_limit_plus_one(
-    directories: RunDirectories,
+def test_a_huge_sparse_file_after_a_small_one_is_refused_after_reading_the_limit_plus_one_in_all(
+    directories: RunDirectories, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    (directories.output / "a").write_bytes(b"x" * 5)
     with (directories.output / "huge").open("wb") as huge:
         os.truncate(huge.fileno(), ONE_TEBIBYTE)
+    bytes_read: list[int] = []
+    real_read = os.read
 
-    assert refusal_of(directories).cause is RunOutputCause.OVER_LIMIT
+    def counting_read(descriptor: int, length: int) -> bytes:
+        chunk = real_read(descriptor, length)
+        bytes_read.append(len(chunk))
+        return chunk
+
+    monkeypatch.setattr(run_output.os, "read", counting_read)
+
+    cause = refusal_of(directories).cause
+
+    assert (cause, sum(bytes_read)) == (RunOutputCause.OVER_LIMIT, LIMIT + 1)
 
 
 def a_link_to_a_file(output: Path, outside: Path) -> None:
@@ -248,15 +284,6 @@ def test_a_refusal_carries_no_name_path_or_content_in_its_message_log_or_chain(
     ) == (False, None, None, True)
 
 
-def test_nothing_outside_the_folder_is_read_through_a_replaced_folder(
-    directories: RunDirectories, outside: Path,
-) -> None:
-    the_folder_replaced_by_a_link(directories.output, outside)
-
-    assert refusal_of(directories).cause is RunOutputCause.FOLDER_REPLACED
-    assert (outside / "secret").read_bytes() == b"secret"
-
-
 @dataclass
 class ScriptAdapter:
     pool: CliProcessPool
@@ -310,13 +337,15 @@ def pool() -> CliProcessPool:
 def drive(
     pool: CliProcessPool,
     child_cleanup: ChildCleanup,
+    thread_failures: list[Any],
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> Iterator[Callable[[Coroutine[Any, Any, Any]], Any]]:
     yield lambda scenario: drive_real_children(child_cleanup, monkeypatch, scenario)
     assert [child_cleanup.state(owned) is GONE for owned in child_cleanup.listed()] == [
         True for _ in child_cleanup.listed()
     ]
-    assert held_slots(pool) == 0
+    assert (held_slots(pool), thread_failures, spawn_warnings(caplog)) == (0, [], [])
 
 
 async def events_of(

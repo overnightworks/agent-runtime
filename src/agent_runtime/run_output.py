@@ -15,6 +15,7 @@ import os
 import stat
 from contextlib import ExitStack
 from enum import StrEnum
+from pathlib import Path
 from typing import Final, NoReturn
 
 from pydantic import ValidationError
@@ -75,7 +76,7 @@ def collect_output(directories: RunDirectories, max_files_bytes: int) -> tuple[R
         return tuple(files)
 
 
-def _open_folder(path: object, parent: int | None, descriptors: ExitStack) -> int:
+def _open_folder(path: str | Path, parent: int | None, descriptors: ExitStack) -> int:
     try:
         descriptor = os.open(path, _FOLDER_FLAGS, dir_fd=parent)
     except OSError as error:

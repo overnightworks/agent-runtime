@@ -87,7 +87,7 @@ from agent_runtime_client.wire import (
 from agent_runtime_service.capability import Capability
 from agent_runtime_service.cli_runner import CliRunner, mcp_tls_context
 from agent_runtime_service.config import Provider, ServiceConfig
-from agent_runtime_service.run_events import RUNNER_FAILED_MESSAGE
+from agent_runtime_service.run_events import INVALID_EVENT_MESSAGE, RUNNER_FAILED_MESSAGE
 from agent_runtime_service.run_liveness import LoopClock
 from agent_runtime_service.runners import AdmittedRun, Runners
 
@@ -249,6 +249,28 @@ def test_a_failing_codex_run_ends_with_the_services_text_and_its_closed_cause_on
     )
     assert [kind for _event, kind, _function in failure_lines(caplog)] == [failure_class]
     assert CANARY not in f"{[e.model_dump_json() for e in events]} {caplog.text}"
+
+
+def test_a_codex_run_without_words_or_a_file_ends_as_an_invalid_event_not_a_runner_failure(
+    tmp_path: Path,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    turn_without_words = (codex_line(type="turn.started"), DONE)
+    config, _capture = a_codex_service(tmp_path, fake={"stream": turn_without_words})
+
+    def scenario(base_url: str) -> Any:
+        events = post_a_run(base_url)
+        return events, status_of(base_url, events)
+
+    events, status = drive_over_http(child_cleanup, monkeypatch, config, scenario)
+
+    assert (shown(events), status.failure_code, failure_lines(caplog)) == (
+        [("failed", INVALID_EVENT_MESSAGE)],
+        FailureCode.PROVIDER_ERROR,
+        [],
+    )
 
 
 def test_neither_the_program_arguments_nor_the_service_log_hold_a_login_value(
