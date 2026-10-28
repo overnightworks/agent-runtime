@@ -54,7 +54,7 @@ line-length = 100
 select = ["E", "F", "W", "I"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "packages/client/tests"]
 addopts = ["--import-mode=importlib"]
 pythonpath = ["."]
 markers = [
