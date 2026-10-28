@@ -13,39 +13,26 @@ of `tests/keycloak/requirements.txt`.
 
 from __future__ import annotations
 
-import os
-import time
-from collections.abc import Mapping
-
-import httpx
 import pytest
-
-KEYCLOAK_URL = os.environ.get("KEYCLOAK_URL")
+from tests.support.keycloak_realm import (
+    AGENT_SERVICE_AUDIENCE,
+    CLIENT_SECRETS,
+    KEYCLOAK_URL,
+    USER_LOGIN_CLIENT,
+    USER_PASSWORDS,
+    Claims,
+    access_token,
+    token_verifier,
+)
 
 pytestmark = [
     pytest.mark.keycloak,
     pytest.mark.skipif(KEYCLOAK_URL is None, reason="KEYCLOAK_URL names no test Keycloak"),
 ]
 
-REALM = "agent-test"
-AGENT_SERVICE_AUDIENCE = "agent-service"
 WORKLOAD_ROLE = "agent-workload"
 MAX_ACCESS_TOKEN_SECONDS = 300
-USER_LOGIN_CLIENT = "songmaker-test"
 
-# Fixed test-only secrets of the throwaway realm in tests/keycloak/realm.json.
-CLIENT_SECRETS = {
-    "songmaker-test": "songmaker-test-secret",
-    "presentator-test": "presentator-test-secret",
-}
-USER_PASSWORDS = {
-    "alice": "alice-test-password",
-    "bob": "bob-test-password",
-    "carol": "carol-test-password",
-    "dave": "dave-test-password",
-    "erin": "erin-test-password",
-    "frank": "frank-test-password",
-}
 EXPECTED_GROUPS = {
     "alice": {"/subscription-members", "/apps/songmaker"},
     "bob": {"/api-members", "/apps/songmaker"},
@@ -58,57 +45,17 @@ EXPECTED_GROUPS = {
 WORKLOAD_CLIENTS = sorted(CLIENT_SECRETS)
 USERS = sorted(USER_PASSWORDS)
 
-Claims = Mapping[str, object]
-
-
-def _realm_url() -> str:
-    return f"{KEYCLOAK_URL}/realms/{REALM}"
-
-
-def _fetch_key_set_from_test_keycloak(_configured_url: str) -> bytes:
-    """The test Keycloak serves plain HTTP, while the verifier accepts only an
-    https key-set URL; its injected fetch is the seam that reads the same key
-    set from the realm's real certs endpoint instead."""
-    response = httpx.get(f"{_realm_url()}/protocol/openid-connect/certs", timeout=10)
-    response.raise_for_status()
-    return response.content
-
 
 @pytest.fixture(scope="module")
 def verify():
-    from webauth.jwt_verification import JwtVerifier, VerifiedClaims
-
-    verifier = JwtVerifier(
-        issuer=_realm_url(),
-        audiences=[AGENT_SERVICE_AUDIENCE],
-        jwks_url=f"https://keycloak.test/realms/{REALM}/protocol/openid-connect/certs",
-        leeway_seconds=0,
-        fetch_key_set=_fetch_key_set_from_test_keycloak,
-        wall_clock=time.time,
-        monotonic_clock=time.monotonic,
-    )
-
-    def verified_claims(access_token: str) -> Claims:
-        result = verifier.verify(access_token)
-        assert isinstance(result, VerifiedClaims), f"webauth rejected the token: {result}"
-        return result.claims
-
-    return verified_claims
-
-
-def _access_token(form: dict[str, str]) -> str:
-    response = httpx.post(f"{_realm_url()}/protocol/openid-connect/token", data=form, timeout=10)
-    assert response.status_code == 200, (
-        f"token endpoint answered {response.status_code}: {response.text}"
-    )
-    return response.json()["access_token"]
+    return token_verifier()
 
 
 @pytest.fixture(scope="module")
 def service_account_claims(verify) -> dict[str, Claims]:
     return {
         client: verify(
-            _access_token(
+            access_token(
                 {
                     "grant_type": "client_credentials",
                     "client_id": client,
@@ -124,7 +71,7 @@ def service_account_claims(verify) -> dict[str, Claims]:
 def user_claims(verify) -> dict[str, Claims]:
     return {
         user: verify(
-            _access_token(
+            access_token(
                 {
                     "grant_type": "password",
                     "client_id": USER_LOGIN_CLIENT,

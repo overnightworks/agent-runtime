@@ -17,6 +17,16 @@ from collections.abc import Iterator
 from uuid import uuid4
 
 import pytest
+from tests.support.keycloak_realm import (
+    CLIENT_SECRETS,
+    KEYCLOAK_URL,
+    USER_LOGIN_CLIENT,
+    USER_PASSWORDS,
+    access_token,
+    fetch_key_set_from_test_keycloak,
+    realm_url,
+    token_verifier,
+)
 from tests.support.service_support import (
     COWRITER,
     LISTED_MODEL,
@@ -38,16 +48,6 @@ from tests.support.service_support import (
     with_placeholder_run_id,
 )
 from tests.support.wire_builders import started
-from tests.test_keycloak_token_shapes import (
-    CLIENT_SECRETS,
-    KEYCLOAK_URL,
-    USER_LOGIN_CLIENT,
-    USER_PASSWORDS,
-    _access_token,
-    _fetch_key_set_from_test_keycloak,
-    _realm_url,
-    verify,  # noqa: F401 - a fixture, requested by name
-)
 from webauth.https_client import KeySetFetchError
 from webauth.jwt_verification import KEY_SET_REFRESH_COOLDOWN_SECONDS
 
@@ -89,7 +89,7 @@ def _frozen_frames(route: str) -> bytes:
 
 
 def _workload_token(client: str) -> str:
-    return _access_token(
+    return access_token(
         {
             "grant_type": "client_credentials",
             "client_id": client,
@@ -99,7 +99,7 @@ def _workload_token(client: str) -> str:
 
 
 def _user_token(user: str, login_client: str = USER_LOGIN_CLIENT) -> str:
-    return _access_token(
+    return access_token(
         {
             "grant_type": "password",
             "client_id": login_client,
@@ -111,6 +111,11 @@ def _user_token(user: str, login_client: str = USER_LOGIN_CLIENT) -> str:
 
 
 @pytest.fixture(scope="module")
+def verify():
+    return token_verifier()
+
+
+@pytest.fixture(scope="module")
 def runners() -> Runners:
     return Runners(cli=ScriptedRunner(CLI_SCRIPT), api=ScriptedRunner(API_SCRIPT))
 
@@ -118,9 +123,9 @@ def runners() -> Runners:
 @pytest.fixture(scope="module")
 def service(runners) -> Iterator[str]:
     app = create_app(
-        service_config(issuer=_realm_url()),
+        service_config(issuer=realm_url()),
         runners=runners,
-        fetch_key_set=_fetch_key_set_from_test_keycloak,
+        fetch_key_set=fetch_key_set_from_test_keycloak,
     )
     with served(app) as base_url:
         yield base_url
@@ -129,12 +134,12 @@ def service(runners) -> Iterator[str]:
 @pytest.fixture(scope="module")
 def own_agents_service(runners) -> Iterator[str]:
     config = service_config(
-        issuer=_realm_url(), songmaker={"agents": {COWRITER: {"runs_as_app": True}}}
+        issuer=realm_url(), songmaker={"agents": {COWRITER: {"runs_as_app": True}}}
     )
     enabled = {COWRITER: AgentConfig(runs_as_app=True)}
     presentator = config.apps["presentator"].model_copy(update={"agents": enabled})
     config = config.model_copy(update={"apps": {**config.apps, "presentator": presentator}})
-    app = create_app(config, runners=runners, fetch_key_set=_fetch_key_set_from_test_keycloak)
+    app = create_app(config, runners=runners, fetch_key_set=fetch_key_set_from_test_keycloak)
     with served(app) as base_url:
         yield base_url
 
@@ -142,7 +147,7 @@ def own_agents_service(runners) -> Iterator[str]:
 def test_k1_a_real_client_credentials_token_alone_runs_an_enabled_agent_on_its_groups_route(
     own_agents_service,
     runners,
-    verify,  # noqa: F811 - the imported fixture
+    verify,
 ):
     workload_token = _songmaker_workload()
     admitted_before = len(runners.api.admitted)
@@ -229,7 +234,7 @@ def test_a_user_of_one_app_is_forbidden_through_another_app_they_do_not_belong_t
     assert_rejected(response, RejectionCode.FORBIDDEN, 403)
 
 
-def test_only_the_user_who_started_a_run_reads_it_with_real_tokens(verify):  # noqa: F811 - the imported fixture
+def test_only_the_user_who_started_a_run_reads_it_with_real_tokens(verify):
     alice_claims = verify(_user_token("alice"))
     frank_claims = verify(_user_token("frank", PRESENTATOR_CLIENT))
     run_id, franks_songmaker_run = uuid4(), uuid4()
@@ -245,10 +250,10 @@ def test_only_the_user_who_started_a_run_reads_it_with_real_tokens(verify):  # n
         Principal(str(frank_claims["iss"]), str(frank_claims["sub"])),
     )
     app = create_app(
-        service_config(issuer=_realm_url()),
+        service_config(issuer=realm_url()),
         runners=runners_that_start_no_run(),
         records=records,
-        fetch_key_set=_fetch_key_set_from_test_keycloak,
+        fetch_key_set=fetch_key_set_from_test_keycloak,
     )
     with served(app) as base_url:
         songmaker = _songmaker_workload()
@@ -284,10 +289,10 @@ def test_a_token_of_an_unpublished_key_is_unavailable_once_the_key_set_origin_st
     def key_set_origin(url: str) -> bytes:
         if origin_stopped:
             raise KeySetFetchError("the key-set origin has stopped")
-        return _fetch_key_set_from_test_keycloak(url)
+        return fetch_key_set_from_test_keycloak(url)
 
     app = create_app(
-        service_config(issuer=_realm_url()),
+        service_config(issuer=realm_url()),
         runners=runners,
         fetch_key_set=key_set_origin,
         monotonic_clock=clock,
@@ -300,7 +305,7 @@ def test_a_token_of_an_unpublished_key_is_unavailable_once_the_key_set_origin_st
         clock.advance(KEY_SET_REFRESH_COOLDOWN_SECONDS)
         response = post_run(
             base_url,
-            run_headers(unpublished_key.workload(iss=_realm_url()), _user_token("alice")),
+            run_headers(unpublished_key.workload(iss=realm_url()), _user_token("alice")),
         )
 
     assert_rejected(response, RejectionCode.UNAVAILABLE, 503)

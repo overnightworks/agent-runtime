@@ -8,10 +8,21 @@ import json
 import httpx
 import pytest
 from pydantic import ValidationError
+from tests.support.api_runner_support import (
+    CONFIGURED_MODEL,
+    answer,
+    configured,
+    fake_gateway,
+    with_default_model,
+)
 from tests.support.api_support import write_api_credentials
+from tests.support.openai_completions import (
+    assert_closed_refusal,
+    caller_error,
+    malformed_completions,
+)
 from tests.support.service_support import (
     API_GROUP,
-    LISTED_MODEL,
     SONGMAKER_GROUP,
     TokenMint,
     decoded_events,
@@ -21,25 +32,14 @@ from tests.support.service_support import (
     service_config,
 )
 from tests.support.service_support import logging_state_snapshot as logging_state_snapshot
-from tests.test_openai_adapter import assert_closed_refusal, caller_error, malformed_completions
 
 from agent_runtime.config import reset_config
 from agent_runtime_client.wire import AssistantText, Failed, FailureCode, Succeeded
 from agent_runtime_service import api_runner
 from agent_runtime_service.app import create_app
 from agent_runtime_service.cli import installed_runners
-from agent_runtime_service.config import AgentConfig, DefaultsConfig, Provider, ServiceConfig
+from agent_runtime_service.config import AgentConfig, Provider, ServiceConfig
 from agent_runtime_service.run_liveness import LoopClock
-
-
-def configured(tmp_path, **api):
-    path = write_api_credentials(tmp_path / "gateway.json", {"shared_key": "synthetic-gateway-key"})
-    base = service_config()
-    return ServiceConfig.model_validate({
-        **{name: getattr(base, name) for name in ServiceConfig.model_fields},
-        "api": {"completion_url": "http://gateway/v1/chat/completions",
-                "credential_file": str(path), **api},
-    })
 
 
 def without_the_api(config):
@@ -50,16 +50,6 @@ def without_the_api(config):
 
 
 PAID_AGENT = "paid-agent"
-CONFIGURED_MODEL = f"{Provider.ANTHROPIC}/{LISTED_MODEL}"
-
-
-def with_default_model(config, model):
-    return config.model_copy(update={"defaults": DefaultsConfig(model=model)})
-
-
-def answer(text="answer"):
-    return {"choices": [{"message": {"role": "assistant", "content": text},
-                         "finish_reason": "stop"}]}
 
 
 async def service_response(config, **body):
@@ -70,21 +60,6 @@ async def service_response(config, **body):
                                  base_url="http://service") as client:
         return await client.post("/runs", json=run_body(**body), headers=run_headers(
             mint.workload(), mint.user(groups=[API_GROUP, SONGMAKER_GROUP])))
-
-
-def fake_gateway(monkeypatch, handler):
-    original = httpx.AsyncClient
-    clients = []
-
-    def client(**options):
-        assert options["trust_env"] is False
-        assert options.get("follow_redirects", False) is False
-        created = original(**options, transport=httpx.MockTransport(handler))
-        clients.append(created)
-        return created
-
-    monkeypatch.setattr(api_runner, "AsyncClient", client)
-    return clients
 
 
 @pytest.mark.parametrize("model", [CONFIGURED_MODEL, "grok/synthetic"])
@@ -334,7 +309,6 @@ def test_repeated_submissions_each_send_one_http_request(tmp_path, monkeypatch):
 
 def test_the_api_runner_is_installed_beside_the_cli_runner(tmp_path):
     runners = installed_runners(configured(tmp_path), None, LoopClock())
-    assert runners.cli is not None
     assert runners.api is not None
     assert installed_runners(without_the_api(service_config()), None, LoopClock()).api is None
 

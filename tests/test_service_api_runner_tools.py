@@ -7,7 +7,20 @@ import json
 
 import httpx
 import pytest
+from tests.support.api_runner_support import (
+    CONFIGURED_MODEL,
+    answer,
+    configured,
+    fake_gateway,
+    with_default_model,
+)
 from tests.support.mcp_app_fake import ScriptedApp, TestAuthority, serving, tool_listing
+from tests.support.openai_completions import (
+    assert_closed_refusal,
+    caller_error,
+    provider_call,
+    tool_completion,
+)
 from tests.support.service_support import (
     API_GROUP,
     SONGMAKER_GROUP,
@@ -15,14 +28,6 @@ from tests.support.service_support import (
     decoded_events,
     run_body,
     run_headers,
-)
-from tests.test_openai_adapter import provider_call, tool_completion
-from tests.test_service_api_runner import (
-    CONFIGURED_MODEL,
-    answer,
-    configured,
-    fake_gateway,
-    with_default_model,
 )
 
 from agent_runtime.config import reset_config
@@ -605,8 +610,6 @@ def test_initial_reflection_refuses_before_session_or_gateway_and_clears_ambient
     tmp_path, monkeypatch, field, secret_kind,
 ):
     from dataclasses import replace
-
-    from tests.test_openai_adapter import assert_closed_refusal, caller_error
 
     authority = TestAuthority(tmp_path)
     clients = fake_gateway(monkeypatch, lambda request: pytest.fail("reflected input sent HTTP"))
