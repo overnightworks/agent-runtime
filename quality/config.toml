@@ -53,6 +53,6 @@ reason = "tests the async Claude child seam in tests/support/provider_test_suppo
 
 [[gate.loosened]]
 what = 'import contract "inside the core, only the routers import a provider package; the machinery below them never does" changes source_modules'
-item = "#550"
+item = "#556"
 date = 2026-10-28
-reason = "agent_runtime.run_output joins the forbidden contract, which tightens it; the gate counts any field change as a loosening (overnightworks/quality#217)"
+reason = "agent_runtime.cli_settings joins the forbidden contract, which tightens it; the gate counts any field change as a loosening (overnightworks/quality#217)"

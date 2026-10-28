@@ -27,8 +27,10 @@ def test_a_merge_changes_none_of_its_inputs_and_shares_none_of_their_tables():
 
     result = merged(lower, upper)
     result["features"]["extra"] = 1
+    merged(lower)["features"]["extra"] = 1
 
-    assert (lower, upper) == before
+    inputs = (lower, upper)
+    assert inputs == before
 
 
 def test_tables_merge_per_key_so_a_lower_key_the_upper_level_leaves_out_stays():

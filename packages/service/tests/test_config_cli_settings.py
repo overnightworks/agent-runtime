@@ -23,6 +23,8 @@ from agent_runtime_service.config import Provider, ServiceConfig, load_config
 DEFAULTS_LINE = f'defaults = {{ model = "{Provider.ANTHROPIC}/sonnet" }}\n'
 APP = "songmaker"
 AGENT = "cowriter"
+DOCUMENTED_APP = "notes"
+DOCUMENTED_AGENT = "illustrator"
 LEVELS = {
     "defaults": "defaults",
     "app": f"apps.{APP}",
@@ -102,7 +104,7 @@ def test_a_key_another_owner_holds_stops_startup_naming_its_level_its_key_and_it
 ):
     text = with_settings(**{level: f'{key} = "{VALUE_CANARY}"'})
 
-    assert main(["--config", str(written(tmp_path, text))]) == EXIT_BAD_CONFIG
+    assert main(["--config", str(written(tmp_path, text)), "--check"]) == EXIT_BAD_CONFIG
 
     refusal = capsys.readouterr().err
     assert f"{LEVELS[level]}.cli_settings.openai: {key} is the service's; {OWNERS[key]}" in refusal
@@ -157,23 +159,24 @@ def test_a_quoted_dotted_key_stays_one_literal_key(tmp_path):
     }
 
 
-NATIVE_EXAMPLE = """
-[defaults.cli_settings.openai]
-web_search = "live"
+OPERATIONS_DOCUMENT = Path(__file__).parents[3] / "docs" / "operations.md"
+NATIVE_EXAMPLE = (
+    OPERATIONS_DOCUMENT.read_text(encoding="utf-8")
+    .split("## CLI settings", 1)[1]
+    .split("```toml\n", 1)[1]
+    .split("```", 1)[0]
+)
+THE_EXAMPLES_APP = f'\n[apps.{DOCUMENTED_APP}]\nworkload_client = "{DOCUMENTED_APP}-test"\n'
 
-[apps.songmaker.agents.cowriter.cli_settings.openai]
-features.image_generation = true
-"""
 
-
-def a_codex_run_of(config: ServiceConfig, agent: str) -> CodexRun:
+def a_codex_run_of(config: ServiceConfig, app: str, agent: str) -> CodexRun:
     return CodexRun(
         Path("/opt/codex/bin/codex"),
         assess_codex_login(a_codex_login()),
         "system",
         (TurnMessage(role="user", text="question"),),
         model=None,
-        settings=config.cli_settings_levels(APP, agent, Provider.OPENAI),
+        settings=config.cli_settings_levels(app, agent, Provider.OPENAI),
     )
 
 
@@ -181,9 +184,10 @@ def test_the_documented_example_reaches_the_run_file_as_codex_reads_it(tmp_path)
     text = VALID_CONFIG.replace(
         DEFAULTS_LINE, f'[defaults]\nmodel = "{Provider.ANTHROPIC}/sonnet"\n'
     )
-    config = loaded(tmp_path, text + NATIVE_EXAMPLE)
+    config = loaded(tmp_path, text + THE_EXAMPLES_APP + NATIVE_EXAMPLE)
 
-    settings = tomllib.loads(a_codex_run_of(config, AGENT).run_files()["config.toml"].decode())
+    run = a_codex_run_of(config, DOCUMENTED_APP, DOCUMENTED_AGENT)
+    settings = tomllib.loads(run.run_files()["config.toml"].decode())
 
     assert settings == {
         **DEFAULT_SETTINGS,
@@ -197,9 +201,10 @@ def test_the_quoted_variant_of_the_example_leaves_the_feature_off_and_adds_a_lit
     text = VALID_CONFIG.replace(
         DEFAULTS_LINE, f'[defaults]\nmodel = "{Provider.ANTHROPIC}/sonnet"\n'
     )
-    config = loaded(tmp_path, text + quoted)
+    config = loaded(tmp_path, text + THE_EXAMPLES_APP + quoted)
 
-    settings = tomllib.loads(a_codex_run_of(config, AGENT).run_files()["config.toml"].decode())
+    run = a_codex_run_of(config, DOCUMENTED_APP, DOCUMENTED_AGENT)
+    settings = tomllib.loads(run.run_files()["config.toml"].decode())
 
     assert (settings["features"]["image_generation"], settings["features.image_generation"]) == (
         False,

@@ -82,7 +82,7 @@ def written(tmp_path: Path, text: str) -> Path:
 
 
 def assert_startup_refuses(tmp_path, capsys, text, named_field):
-    assert main(["--config", str(written(tmp_path, text))]) == EXIT_BAD_CONFIG
+    assert main(["--config", str(written(tmp_path, text)), "--check"]) == EXIT_BAD_CONFIG
     assert named_field in capsys.readouterr().err
 
 

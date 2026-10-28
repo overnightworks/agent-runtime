@@ -165,8 +165,8 @@ requirements files) are the host's; see [Codex's loader](https://github.com/open
 
 Approval, measured on `codex-cli 0.163.0`: a headless `exec` run sets `approval_policy = never`
 itself, so `approval_policy` alone changes nothing in a run (its `turn_context` says `never`).
-With `approvals_reviewer = "auto_review"` the policy as written applies (`on-request`) and Codex's
-own reviewer decides each request. The service passes both keys through. A built-in tool the
+With `approvals_reviewer = "auto_review"` the configured `approval_policy` applies (measured:
+`on-request` when the file sets it) and Codex's own reviewer decides each request. The service passes both keys through. A built-in tool the
 configuration switches on runs inside the CLI without a per-call approval from the service.
 
 Four top-level keys of `cli_settings.openai` stop startup at any level (exit 2, `--check` agrees),

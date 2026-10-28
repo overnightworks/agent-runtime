@@ -81,7 +81,7 @@ with `include_input=False`, which matters to a host that logs configuration erro
 the reference.
 
 The subscription run the agent service drives (`cli_run.astream_cli_run(root,
-adapter, max_files_bytes=...)`, with `claude.provider.ClaudeRun` as Claude's adapter and `codex.run.CodexRun` as Codex's, in directories
+adapter, max_files_bytes=...)`, with `claude.run.ClaudeRun` as Claude's adapter and `codex.run.CodexRun` as Codex's, in directories
 from `process.run_directories`) takes every fact as an explicit argument and reads
 no installed configuration. The ending, a `FinalEvent`, carries `files`: the regular files
 the run left in its output folder, as the wire's `RunFile` values in name order. A login the

@@ -235,7 +235,9 @@ def _toml_key(key: str) -> str:
 def _toml_float(value: float) -> str:
     if math.isnan(value):
         return "nan"
-    return ("inf" if value > 0 else "-inf") if math.isinf(value) else repr(value)
+    if math.isinf(value):
+        return "inf" if value > 0 else "-inf"
+    return repr(value)
 
 
 def _toml_value(path: str, value: TomlValue) -> str:

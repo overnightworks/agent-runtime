@@ -27,7 +27,7 @@ from typing import Final
 
 from pydantic import SecretStr
 
-from agent_runtime.claude.provider import ClaudeRun
+from agent_runtime.claude.run import ClaudeRun
 from agent_runtime.cli_run import CliRunAdapter, RelayAccess, astream_cli_run
 from agent_runtime.cli_settings import CliSettings
 from agent_runtime.codex.run import CodexRun

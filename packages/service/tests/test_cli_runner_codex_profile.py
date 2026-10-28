@@ -551,7 +551,7 @@ def test_a_run_goes_to_the_table_of_the_configured_models_provider(
 # The operator's ``cli_settings`` reach the run as its settings file.
 
 LEVEL_SETTINGS = (
-    {"web_search": "live", "features": {"shell_tool": True, "plugins": True}},
+    {"web_search": "live", "features": False},
     {"features": {"plugins": False, "hooks": True}},
     {"features": {"image_generation": True}},
 )
@@ -571,21 +571,17 @@ def captured_settings(capture: Path) -> dict[str, Any]:
     return tomllib.loads((capture / "config.toml").read_text())
 
 
-def features_with(**switched: bool) -> dict[str, bool]:
-    return {**DEFAULT_SETTINGS["features"], **switched}
-
-
 @pytest.mark.parametrize(
     ("agent", "features"),
     [
         pytest.param(
             COWRITER,
-            features_with(shell_tool=True, hooks=True, image_generation=True),
+            {"plugins": False, "hooks": True, "image_generation": True},
             id="the-agent-with-a-table",
         ),
         pytest.param(
             "another-agent",
-            features_with(shell_tool=True, hooks=True),
+            {"plugins": False, "hooks": True},
             id="an-agent-without-one",
         ),
     ],

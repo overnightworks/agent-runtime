@@ -3122,6 +3122,20 @@ deferred to C0b.
   - M4: with `approval_policy = "on-request"` the `turn_context` still says `never`; with
     `approvals_reviewer = "auto_review"` added it says `on-request` and `auto_review`. The
     sandbox stays `read-only` in both.
+  Also measured on the pin, with `features list` in a fresh home (no login, no `exec`):
+  - The home's `config.toml` is read (`shell_tool false`, `image_generation true`). `-c`
+    ranks above the file (file `shell_tool = true`, `-c features.shell_tool=false` shows
+    `false`). A `-c` table replaces its whole subtree: `-c features.shell_tool=false -c
+    'features={image_generation=true}'` over an empty file shows `shell_tool true`, while the
+    same table over a file saying `shell_tool = false` keeps it `false`. That is why the
+    defaults live in the file.
+  - Project layer, working directory below an ancestor holding `.git/HEAD` and a
+    `.codex/config.toml` with `shell_tool = true`: no `projects` entry or
+    `trust_level = "untrusted"` leaves the home's file in force; `"trusted"` applies the
+    layer above the file, and `-c` ranks above it. With `.git` an empty directory (no `HEAD`)
+    even a trusted layer applies nothing.
+  - `profile = "x"` in the home's file exits 1 (`legacy profile = "x" config is no longer
+    supported`); `[profiles.x]` loads.
 
 **S1 system text.** Under `--strict-config` the keys `model_instructions_file`
 (with a real file), `developer_instructions` and `instructions` were all accepted
