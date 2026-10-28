@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 import uvicorn
 from pydantic import ValidationError
-from tests.support.codex_support import a_fake_codex
+from tests.support.codex_support import DONE, THREAD, a_fake_codex, a_message
 from tests.support.provider_test_support import (
     SYSTEM_TEXT,
     a_codex_login,
@@ -26,13 +26,7 @@ from tests.support.service_support import (
     TEST_ISSUER,
     _service_config_document,
     _toml_lines,
-    fake_app_authority,  # noqa: F401 - a fixture, requested by name
-    logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
     process_token_file,
-)
-from tests.test_codex_run import DONE, THREAD, a_message
-from tests.test_service_cli_runner import (
-    held_reap,  # noqa: F401 - a fixture, requested by name
 )
 
 from agent_runtime_service.config import Provider, ServiceConfig
@@ -55,8 +49,8 @@ ANSWER = (THREAD, a_message("done"), DONE)
 CODEX_LOGIN_NAME = "codex-login.json"
 
 
-@pytest.fixture
-def served_runs(
+@pytest.fixture(name="served_runs")
+def the_served_runs(
     monkeypatch: pytest.MonkeyPatch, logging_state_restored: None
 ) -> list[dict[str, Any]]:
     runs: list[dict[str, Any]] = []

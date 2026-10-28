@@ -47,6 +47,7 @@ from tests.support.service_cli_runner_support import (
     VERSION_LINE,
     HeldReap,
     a_config,
+    a_held_reap,  # noqa: F401 - the fixture is named in its decorator
     a_login_file,
     a_scripted_run,
     all_children_gone,
@@ -54,7 +55,6 @@ from tests.support.service_cli_runner_support import (
     drive_over_http,
     eventually,
     headers,
-    held_reap,  # noqa: F401 - a fixture, requested by name
     leave_after,
     login_the_child_saw,
     post_a_run,
@@ -469,7 +469,7 @@ def test_a_client_that_leaves_ends_the_cli_before_the_place_is_free(
     tmp_path: Path,
     child_cleanup: ChildCleanup,
     monkeypatch: pytest.MonkeyPatch,
-    held_reap: HeldReap,  # noqa: F811
+    held_reap: HeldReap,
 ) -> None:
     binary = a_parked_claude(tmp_path)
     config = a_config(tmp_path, binary, runs={"max_parallel_cli_runs": 1})
@@ -512,7 +512,7 @@ def in_stepped_loop(
     drive_real_children(child_cleanup, monkeypatch, scenario, loop_factory=SteppedLoop)
 
 
-async def settled_and_held(held_reap: HeldReap) -> None:  # noqa: F811
+async def settled_and_held(held_reap: HeldReap) -> None:
     await asyncio.to_thread(held_reap.wait_until_reached)
 
 
@@ -545,7 +545,7 @@ async def stopped_run_held_then_released(
     drive: Drive,
     client: ClientSocket,
     response: asyncio.Task[None],
-    held_reap: HeldReap,  # noqa: F811
+    held_reap: HeldReap,
     child_cleanup: ChildCleanup,
     config: ServiceConfig,
 ) -> StoppedRun:
@@ -606,7 +606,7 @@ def test_every_stop_reaps_the_cli_once_before_the_record_ends(
     tmp_path: Path,
     child_cleanup: ChildCleanup,
     monkeypatch: pytest.MonkeyPatch,
-    held_reap: HeldReap,  # noqa: F811
+    held_reap: HeldReap,
     runs: dict[str, object],
     blocks_the_client: bool,
     later_activity: bool,
@@ -651,7 +651,7 @@ def test_a_stop_at_a_yielded_event_closes_the_core_at_once(
     tmp_path: Path,
     child_cleanup: ChildCleanup,
     monkeypatch: pytest.MonkeyPatch,
-    held_reap: HeldReap,  # noqa: F811
+    held_reap: HeldReap,
 ) -> None:
     binary = a_parked_claude(tmp_path, for_the_client_socket=True, stream=PARKED_AFTER_THREE_TEXTS)
     config = a_config(tmp_path, binary, runs={"max_parallel_cli_runs": 1})

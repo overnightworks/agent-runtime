@@ -250,8 +250,8 @@ class HeldReap:
         assert self.reached.wait(TEST_WAIT_SECONDS), "the run was never stopped"
 
 
-@pytest.fixture
-def held_reap(monkeypatch: pytest.MonkeyPatch) -> Iterator[HeldReap]:
+@pytest.fixture(name="held_reap")
+def a_held_reap(monkeypatch: pytest.MonkeyPatch) -> Iterator[HeldReap]:
     hold = HeldReap()
     reap = spawn.AnchoredChild.kill_until_gone
 

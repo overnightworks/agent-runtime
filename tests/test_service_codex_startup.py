@@ -31,8 +31,8 @@ from tests.support.service_codex_support import (
     a_document_with_both,
     a_service_fake,
     codex_document,
-    served_runs,  # noqa: F401 - a fixture, requested by name
     the_refusal_of,
+    the_served_runs,  # noqa: F401 - the fixture is named in its decorator
     write_login,
     written_document,
 )
@@ -56,7 +56,7 @@ from agent_runtime_service.config import Provider
 
 def test_a_codex_table_starts_the_service_after_its_program_proves_its_pin(
     tmp_path: Path,
-    served_runs: list[dict[str, Any]],  # noqa: F811
+    served_runs: list[dict[str, Any]],
 ) -> None:
     document = codex_document(tmp_path, a_service_fake(tmp_path), a_codex_login_file(tmp_path))
 

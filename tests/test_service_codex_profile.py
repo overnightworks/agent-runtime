@@ -39,10 +39,10 @@ from tests.support.service_cli_runner_support import (
     MINT,
     THREE_MESSAGE_TURN,
     HeldReap,
+    a_held_reap,  # noqa: F401 - the fixture is named in its decorator
     all_children_gone,
     drive_over_http,
     headers,
-    held_reap,  # noqa: F401 - a fixture, requested by name
     leave_after,
     post_a_run,
     private_root_of,
@@ -270,7 +270,7 @@ def test_a_second_codex_run_beyond_the_limit_is_busy_and_never_goes_to_the_api_r
     tmp_path: Path,
     child_cleanup: ChildCleanup,
     monkeypatch: pytest.MonkeyPatch,
-    held_reap: HeldReap,  # noqa: F811
+    held_reap: HeldReap,
 ) -> None:
     config, _capture = a_codex_service(
         tmp_path,
@@ -297,7 +297,7 @@ def test_a_tool_request_on_the_codex_table_is_refused_before_any_place_capabilit
     authority: TestAuthority,
     child_cleanup: ChildCleanup,
     monkeypatch: pytest.MonkeyPatch,
-    held_reap: HeldReap,  # noqa: F811
+    held_reap: HeldReap,
 ) -> None:
     signed = record_signed_tokens(monkeypatch)
     both = run_headers(MINT.workload(), MINT.user((SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP)))
