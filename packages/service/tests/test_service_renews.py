@@ -195,7 +195,8 @@ def a_serving_process(
     files: CodexServiceFiles, port: int, *, release: Path | None = None
 ) -> Iterator[subprocess.Popen[bytes]]:
     """A real ``agent-runtime-service`` for ``files``; it and every stand-in end with the scope."""
-    with (files.configuration.parent / "service.log").open("wb") as output:
+    log = files.configuration.parent / "service.log"
+    with log.open("wb") as output:
         process = subprocess.Popen(  # noqa: S603 - the test's own interpreter and file
             [
                 sys.executable,
@@ -209,7 +210,7 @@ def a_serving_process(
             cwd=files.configuration.parent,
         )
         try:
-            _wait_until_serving(process, port)
+            _wait_until_serving(process, port, log)
             yield process
         finally:
             try:
@@ -244,11 +245,17 @@ def _a_free_port() -> int:
         return probe.getsockname()[1]
 
 
-def _wait_until_serving(process: subprocess.Popen[bytes], port: int) -> None:
+def _tail(log: Path, lines: int = 40) -> str:
+    return "\n".join(log.read_text(errors="replace").splitlines()[-lines:])
+
+
+def _wait_until_serving(process: subprocess.Popen[bytes], port: int, log: Path) -> None:
     deadline = time.monotonic() + TEST_WAIT_SECONDS
     while True:
-        assert process.poll() is None, "the service ended before it served"
-        assert time.monotonic() < deadline, "the service never served"
+        assert process.poll() is None, (
+            f"the service ended with {process.returncode} before it served:\n{_tail(log)}"
+        )
+        assert time.monotonic() < deadline, f"the service never served:\n{_tail(log)}"
         try:
             socket.create_connection(("127.0.0.1", port), timeout=POLL_SECONDS).close()
         except OSError:
