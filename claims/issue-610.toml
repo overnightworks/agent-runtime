@@ -1,0 +1,8 @@
+claim_id = "a0b38d4571934cb2b3e9e7ea63567719"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "a74fe5f5fa1bf8942e58b8b65154376502353601"
+branch = "claude/issue-610-r1-5-mount-point-refusal"
+scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "packages/service/src/agent_runtime_service/login_file.py", "packages/service/tests/test_login_file.py", "packages/service/tests/test_login_file_descriptor.py", "packages/service/tests/test_renewal_schedule.py"]
+opened_commit = "59e604a9793f7707de649e257aa4ba78ea216e96"
+whole_reason = "One refusal in the one writer's reserve step, its three proofs (writer, install command, renewer) and the three documents that promise it; a split would leave a document promising a refusal the code does not make."
