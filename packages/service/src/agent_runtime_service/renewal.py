@@ -309,6 +309,8 @@ class ProviderRenewer:
         now = self._wall_clock()
         timing = self._entry.timing(login.document, now)
         unreadable = timing if isinstance(timing, UnreadableTiming) else None
+        if unreadable is None:
+            self._unreadable_renewal_started = None
         if not self._is_due(timing, now):
             return self._abandoned(reserved, RenewalOutcome.NOT_DUE, source_timing=unreadable)
         run = self._entry.run(self._binary, login, now)
@@ -319,7 +321,6 @@ class ProviderRenewer:
 
     def _is_due(self, timing: CodexTiming | UnreadableTiming, now: int) -> bool:
         if isinstance(timing, CodexTiming):
-            self._unreadable_renewal_started = None
             return timing.is_due(now)
         started = self._unreadable_renewal_started
         recent = (
