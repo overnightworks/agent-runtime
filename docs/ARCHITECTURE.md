@@ -106,6 +106,51 @@ round, privacy and acceptance rules. `identity.api_groups` and `[api]` come toge
 either alone stops startup. Credential selection and rotation are described in
 [operations.md](operations.md#configure-the-api-text-route).
 
+## How a run gets its login
+
+The operator signs in once per provider; the service keeps that login in one file
+and gives every run only a copy that can use it, never renew it. Exactly one
+holder keeps a refresh token, and it is never a run.
+
+```mermaid
+flowchart LR
+    operator(["operator"])
+    terminal["the operator's own terminal login<br/>(separate, never touched)"]
+
+    subgraph service ["the agent service"]
+        claudefile["Claude login file<br/>one-year token, no refresh token"]
+        codexfile["Codex login file<br/>access token and refresh token"]
+    end
+
+    subgraph runs ["one run"]
+        claudeenv["CLAUDE_CODE_OAUTH_TOKEN<br/>in the child's environment"]
+        codexcopy["Codex copy in the run's private home<br/>refresh token blanked"]
+    end
+
+    operator -->|"claude setup-token, then<br/>agent-runtime-service-login"| claudefile
+    operator -->|"device-code sign-in in a home of its own, then<br/>agent-runtime-service-login"| codexfile
+    claudefile -->|"read at every run start"| claudeenv
+    codexfile -->|"copy for each run"| codexcopy
+    codexcopy -.->|"may use the access token,<br/>cannot renew it"| provider(["provider"])
+    claudeenv -.->|"may use the token"| provider
+    operator -.- terminal
+```
+
+*Question: where does each provider's subscription login live, and what does a run
+hold? Source: [operations.md](operations.md) (the login file and the login
+command), `agent_runtime.codex_login.blanked_copy`, `agent_runtime.claude.run`.*
+
+- **Claude.** `claude setup-token` prints a one-year token that has no refresh
+  token; the operator swaps it by hand. The service reads the file at every run
+  start and hands the token to the child only as `CLAUDE_CODE_OAUTH_TOKEN`.
+- **Codex.** A dedicated service login, separate from the operator's own terminal
+  login: two logins sharing one refresh token would rotate each other's away. A
+  run gets a `0600` copy in its private run home with `refresh_token` blanked, so it
+  can use the access token (about 240 hours measured) but cannot renew it.
+- **Grok.** The service refuses a Grok profile today; the route is not built.
+- **Who renews.** Nobody yet. The service does not renew a Codex login, so it lasts
+  its access token's life and the operator then signs in again.
+
 ## Crosscutting concepts
 
 **Host facts come from the host.** The library reaches back into no host.
