@@ -126,7 +126,7 @@ class CallerCheck:
     async def _checked_app_caller(self, workload_token: str | None) -> AppCaller:
         workload = await self._verified(workload_token)
         app = self._workload_app(workload)
-        assert workload.subject is not None  # _workload_app refused a token without one
+        assert workload.subject is not None  # noqa: S101 - _workload_app refused a token without one
         if not _is_unicode_text(workload.subject):
             raise _Refused(RejectionCode.UNAUTHORIZED)
         groups = self._groups(workload.claims)

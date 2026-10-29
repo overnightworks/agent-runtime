@@ -207,7 +207,7 @@ class RunTools:
 
     @property
     def access(self) -> RelayAccess:
-        assert self._relay is not None
+        assert self._relay is not None  # noqa: S101 - open() starts the relay before the tools are returned
         return self._relay.access
 
     @property
@@ -247,7 +247,7 @@ class RunTools:
         )
 
     async def _close_relay(self) -> None:
-        assert self._relay is not None
+        assert self._relay is not None  # noqa: S101 - open() starts the relay before the tools are returned
         failure = await _failure_of(self._relay.close(), f"run-tools:{self._run_id}:relay-close")
         if failure is not None:
             log_failure(log, f"Closing the relay of run {self._run_id} failed", failure)
