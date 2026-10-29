@@ -47,20 +47,25 @@ def _notice_for(tag: str, migrating: str, tmp_path: Path) -> str:
     return output.read_text(encoding="utf-8").removeprefix("notice=").rstrip("\n")
 
 
+def test_the_release_notice_links_the_migration_section_of_a_tag_that_has_one(tmp_path):
+    notice = _notice_for("v0.3.0", "# Title\n\n## Migrating to 0.3.0\n\ntext\n", tmp_path)
+
+    assert "/blob/v0.3.0/docs/MIGRATING.md#migrating-to-030)" in notice
+
+
 @pytest.mark.parametrize(
-    ("tag", "heading", "notice"),
+    ("tag", "heading"),
     [
-        ("v0.3.0", "## Migrating to 0.3.0", _MIGRATION_LINK),
-        ("v0.3.1", "## Migrating to 0.3.0", ""),
-        ("v0.3.0", "## Install", ""),
-        ("v0.3.0", "### Migrating to 0.3.0", ""),
+        ("v0.3.1", "## Migrating to 0.3.0"),
+        ("v0.3.0", "## Install"),
+        ("v0.3.0", "### Migrating to 0.3.0"),
     ],
-    ids=["tag with its section", "tag of another version", "no section", "section one level down"],
+    ids=["tag of another version", "no section", "section one level down"],
 )
-def test_the_release_notice_exists_only_for_a_tag_with_its_migration_section(
-    tmp_path, tag, heading, notice
+def test_the_release_notice_is_empty_for_a_tag_without_its_migration_section(
+    tmp_path, tag, heading
 ):
-    assert _notice_for(tag, f"# Title\n\n{heading}\n\ntext\n", tmp_path) == notice
+    assert _notice_for(tag, f"# Title\n\n{heading}\n\ntext\n", tmp_path) == ""
 
 
 def _wheel_list_output(tmp_path: Path) -> tuple[dict[str, bytes], str]:
@@ -153,24 +158,40 @@ def test_the_published_notes_without_a_migration_section_are_the_three_requireme
     assert notes == "\n".join(_INSTALL_LINES)
 
 
-def test_every_step_reference_of_a_release_job_names_a_step_of_that_job():
-    jobs = YAML(typ="safe").load(_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
-
-    dangling = {
+def _dangling_step_references(jobs: dict) -> set[str]:
+    """Step ids referenced anywhere in a job that none of its steps declares."""
+    return {
         reference
         for job in jobs.values()
-        for reference in re.findall(r"steps\.([\w-]+)\.", str(job["steps"]))
+        for reference in re.findall(r"steps\.([\w-]+)\.", str(job))
         if reference not in {step.get("id") for step in job["steps"]}
     }
 
-    assert dangling == set()
+
+def _workflow_jobs() -> dict:
+    return YAML(typ="safe").load(_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
+
+
+def test_every_step_reference_of_a_release_job_names_a_step_of_that_job():
+    assert _dangling_step_references(_workflow_jobs()) == set()
+
+
+@pytest.mark.parametrize("field", ["outputs", "env", "if"])
+def test_a_step_reference_outside_the_steps_of_a_job_is_found_when_it_dangles(field):
+    jobs = _workflow_jobs()
+    next(iter(jobs.values()))[field] = "${{ steps.missing.outputs.value }}"
+
+    assert _dangling_step_references(jobs) == {"missing"}
+
 
 def test_the_wheel_list_is_written_as_a_multiline_output_named_install(tmp_path):
     _, install = _wheel_list_output(tmp_path)
     lines = install.splitlines()
 
     opening, delimiter = lines[0].split("<<")
-    assert opening == "install"
+    read_name = re.search(r"steps\.install\.outputs\.([\w-]+)", _WORKFLOW.read_text("utf-8"))
+    assert read_name
+    assert opening == read_name.group(1)
     assert lines[-1] == delimiter
 
 
