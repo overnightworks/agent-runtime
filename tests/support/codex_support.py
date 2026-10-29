@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import shlex
 import stat
@@ -99,3 +100,10 @@ def a_fake_codex(
     )
     binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
     return binary
+
+
+def a_codex_access_token(payload: dict[str, Any] | bytes) -> str:
+    """A JWT-shaped access token whose claims are ``payload``; the signature is not a signature."""
+    claims = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+    segments = (b'{"alg":"none"}', claims, b"signature")
+    return ".".join(base64.urlsafe_b64encode(part).rstrip(b"=").decode() for part in segments)

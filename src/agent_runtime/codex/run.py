@@ -38,7 +38,7 @@ CODEX_CLI_PROCESS_POOL: Final = CliProcessPool(
 )
 
 _STREAM_BUFFER_LIMIT: Final = 4 * 1024 * 1024
-_AUTH_FILE_NAME: Final = "auth.json"
+AUTH_FILE_NAME: Final = "auth.json"
 _SYSTEM_PROMPT_FILE_NAME: Final = "system-prompt"
 _HOME_VARIABLE: Final = "CODEX_HOME"
 
@@ -237,7 +237,7 @@ class CodexRun:
 
     def run_files(self) -> Mapping[str, bytes]:
         return {
-            _AUTH_FILE_NAME: self.login.blanked_document,
+            AUTH_FILE_NAME: self.login.blanked_document,
             _SYSTEM_PROMPT_FILE_NAME: self.system.encode(),
             _CONFIG_FILE_NAME: toml_document(merged(_DEFAULT_SETTINGS, *self.settings)),
         }
