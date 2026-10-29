@@ -32,7 +32,14 @@ import agent_runtime_service.config as service_config
 import agent_runtime_service.login as login
 from agent_runtime_service.config import Provider
 from agent_runtime_service.login import main
-from agent_runtime_service.login_file import SwapRefused, swap_in_login_file, swap_sibling
+from agent_runtime_service.login_file import (
+    ReservedSwap,
+    SwapRefused,
+    SwapResult,
+    reserve_swap,
+    swap_in_login_file,
+    swap_sibling,
+)
 
 CANARY_REFRESH = "canary-refresh-token"
 CANARY_FOREIGN = "canary-foreign-text"
@@ -159,11 +166,11 @@ class Stream(io.BytesIO):
 
 
 @pytest.fixture(name="refusals")
-def what_the_writer_returned(monkeypatch: pytest.MonkeyPatch) -> list[SwapRefused | None]:
+def what_the_writer_returned(monkeypatch: pytest.MonkeyPatch) -> list[SwapResult]:
     """What the writer returned at each call, for the check that none holds a canary."""
-    returned: list[SwapRefused | None] = []
+    returned: list[SwapResult] = []
 
-    def recording(*arguments: Any) -> SwapRefused | None:
+    def recording(*arguments: Any) -> SwapResult:
         returned.append(swap_in_login_file(*arguments))
         return returned[-1]
 
@@ -244,7 +251,7 @@ def assert_not_written(
     installation: Installation,
     status: int,
     heard: str,
-    refusals: list[SwapRefused | None],
+    refusals: list[SwapResult],
     canaries: tuple[str, ...],
     reason: str,
 ) -> None:
@@ -255,3 +262,10 @@ def assert_not_written(
     assert reason in heard
     assert not any(canary in heard for canary in canaries)
     assert not reaches_text(refusals, canaries)
+
+
+def held_swap(login_path: Path) -> ReservedSwap:
+    """A reservation of the login's sibling, as a second writer would hold it."""
+    reservation = reserve_swap(login_path)
+    assert not isinstance(reservation, SwapRefused), reservation.reason
+    return reservation
