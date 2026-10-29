@@ -3834,6 +3834,56 @@ new rulings:
 - The run was not in the service's real run shape (no `bwrap`), and the write-back was
   done by the harness, not by the service's login writer.
 
+#### A1b-MX one real Codex picture through the service's own run
+
+**What ran.** Slice MX-b of #488, measured on 29.10.2026 (#580), at code revision
+`9af1b33`. Pinned `codex-cli 0.163.0`, model `gpt-6-astra`, the dedicated service
+Codex login: the service read the file for the run, and the harness read its
+values once, in memory only, to scan for leaks. One attempt, no retry; one sanitized
+record (`record-20261029T175959421403.json`, with `live-run.log`) in the operator's
+probe directory `488-mx/` outside the repository. The harness served the real
+`create_app` on a loopback socket with a test identity authority, posted one
+`POST /runs` for an agent whose `cli_settings.openai` turns on
+`features.image_generation` and `features.code_mode_host`, and decoded the stream
+with the client's `RunStreamDecoder`. The identity authority was a throwaway test one, not Keycloak.
+`[cli.openai] binary` was a wrapper that ran the pinned codex (sha256 prefix
+`399ff69c431c`, checked by the harness before the run) inside B1's outer
+`/usr/bin/bwrap`, with the run tree as the only writable mount. Observed outside this
+run's record (reviewer-reproduced on 29.10.2026): codex's own vendored `bwrap` cannot
+map its user namespace on this host, where `apparmor_restrict_unprivileged_userns`
+is 1.
+
+**Result.**
+- The run took 30.01 s and ended `succeeded`.
+- The stream held `run_started` 1, `heartbeat` 1 and `succeeded` 1.
+- `Succeeded.files` held exactly one file: a PNG of 993,283 bytes, 1536x1024.
+- The working root was empty and the private root was removed afterwards.
+- No string of the login appeared in any frame, status, log or the harness
+  process's stderr (`token_seen` false). The service does not forward the child's
+  stderr, so it was not observed.
+- No token, hash, email or account value is recorded, and no picture bytes or
+  answer text were kept.
+
+**What it means.** A picture comes back through the service's own `POST /runs`
+as `Succeeded.files`: the gap B1 left, which proved the picture with `CodexRun`
+alone, is closed for one run in the outer-`bwrap` shape.
+
+**What it does not prove.**
+- The deployed container's run shape, which edge owns: the run was on this host,
+  behind the wrapper.
+- That the picture is the requested one: the harness checks only the PNG signature
+  and the header's dimensions, with no decode and no look at the content.
+- Login renewal: the login was neither renewed nor written back.
+- Repeatability: one run, one attempt.
+- Picture formats other than PNG; only PNG dimensions are parsed.
+- That model code was cut off from the login or the network. The child's login is
+  `blanked_copy`: complete, with live access and id tokens and the account id, only
+  the refresh token blanked. It sat in the run home inside the writable tree, so model
+  code could read it. The outer `bwrap` shares the network without limit (internet
+  and every local listener, the harness's loopback port included), so model code could
+  have sent the access token out. The harness's own in-memory values were
+  unreachable. This is B1's posture: same mounts, no `--unshare-net` in either.
+
 ### A1b measured: claude 2.1.302
 
 Measured on 17.10.2026 on `$HOME/.local/share/claude/versions/2.1.302`
