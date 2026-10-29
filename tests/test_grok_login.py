@@ -82,10 +82,14 @@ def test_a_member_whose_name_only_resembles_a_renewal_name_is_kept() -> None:
         pytest.param(b'{"a": {"key": ""}}', GrokLoginVerdict.INCOMPLETE, id="empty-key"),
         pytest.param(b'{"a": {"key": null}}', GrokLoginVerdict.INCOMPLETE, id="null-key"),
         pytest.param(b'{"a": {"key": 1}}', GrokLoginVerdict.MALFORMED, id="key-not-a-string"),
-        pytest.param(b'{"realm": []}', GrokLoginVerdict.MALFORMED, id="realm-is-an-array"),
-        pytest.param(b'{"realm": "x"}', GrokLoginVerdict.MALFORMED, id="realm-is-a-string"),
+        pytest.param(b'{"realm": []}', GrokLoginVerdict.INCOMPLETE, id="realm-is-an-array"),
+        pytest.param(b'{"realm": "x"}', GrokLoginVerdict.INCOMPLETE, id="realm-is-a-string"),
         pytest.param(
-            b'{"a": {"key": "k"}, "b": 1}', GrokLoginVerdict.MALFORMED, id="usable-then-non-realm",
+            b'{"a": {"key": "k"}, "b": 1}', GrokLoginVerdict.USABLE, id="usable-then-non-realm",
+        ),
+        pytest.param(
+            b'{"a": {"key": "k"}, "b": {"key": 1}}', GrokLoginVerdict.MALFORMED,
+            id="usable-then-bad-key",
         ),
         pytest.param(b"not json", GrokLoginVerdict.MALFORMED, id="not-json"),
         pytest.param(b"[]", GrokLoginVerdict.MALFORMED, id="array"),
@@ -129,6 +133,7 @@ def test_a_login_neither_shows_nor_pickles_its_document() -> None:
     [
         pytest.param(b'{"realm": {"key": "k"}}', True, id="usable"),
         pytest.param(b'{"realm": {"key": ""}}', False, id="incomplete"),
+        pytest.param(b'{"realm": []}', False, id="realm-is-an-array"),
     ],
 )
 def test_readiness_and_copy_agree_on_a_usable_or_incomplete_login(
@@ -144,8 +149,8 @@ def test_readiness_and_copy_agree_on_a_usable_or_incomplete_login(
 
 @pytest.mark.parametrize(
     "document",
-    [b'{"realm": []}', b"[]", b"not json"],
-    ids=["realm-array", "array", "not-json"],
+    [b"[]", b"not json", b'{"a": {"key": 1}}'],
+    ids=["array", "not-json", "key-not-a-string"],
 )
 def test_a_malformed_login_is_refused_by_readiness_and_gets_no_copy(
     tmp_path: Path, document: bytes,

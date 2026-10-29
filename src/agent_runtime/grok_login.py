@@ -34,17 +34,16 @@ class GrokLogin:
 def assess_grok_login(document: bytes) -> GrokLogin:
     """Assess a login document: usable, without a key yet, or unreadable.
 
-    The document is a JSON object whose every member is a realm object; a realm's
-    ``key`` is absent or a string, and the login is usable once some realm has a
-    non-empty one.
+    The document is a JSON object. Its members that are objects are realms; any
+    other member is ignored, because the vendor may add members to its own file.
+    A realm's ``key`` is absent, null (counts as absent) or a string, and the
+    login is usable once some realm has a non-empty one.
     """
     try:
         parsed = json.loads(document.decode("utf-8"))
-        if not isinstance(parsed, dict) or not all(
-            isinstance(realm, dict) for realm in parsed.values()
-        ):
+        if not isinstance(parsed, dict):
             return GrokLogin(GrokLoginVerdict.MALFORMED)
-        keys = [realm.get("key") for realm in parsed.values()]
+        keys = [member.get("key") for member in parsed.values() if isinstance(member, dict)]
         if not all(key is None or isinstance(key, str) for key in keys):
             return GrokLogin(GrokLoginVerdict.MALFORMED)
         if not any(keys):
