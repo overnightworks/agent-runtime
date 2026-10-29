@@ -54,6 +54,7 @@ from tests.support.service_support import (
     run_body,
 )
 
+from agent_runtime.claude.run import TURNS_BEYOND_TOOL_CALLS
 from agent_runtime_client.wire import FailureCode, RunEvent
 from agent_runtime_service.cli_runner import CliRunner, mcp_tls_context
 from agent_runtime_service.config import (
@@ -87,6 +88,10 @@ def configured_for(
     agents = {**app.agents, COWRITER: AgentConfig(cli_settings=level)}
     apps = {**config.apps, app_name: app.model_copy(update={"agents": agents})}
     return config.model_copy(update={"apps": apps})
+
+
+def _tools_level(tools: list[str]) -> CliSettingsConfig:
+    return CliSettingsConfig(anthropic=ClaudeCliSettingsConfig(tools=tools))
 
 
 def announcing(*tools: str) -> tuple[bytes, ...]:
@@ -181,6 +186,61 @@ def test_an_agent_without_the_table_runs_exactly_as_a_run_without_cli_settings(
         sorted(path.name for path in (capture / "files").iterdir()),
         "CLAUDE_CONFIG_DIR" in environment_of(capture),
     ) == ("", "", False, False, ["system-prompt"], False)
+
+
+def test_a_tools_table_leaves_the_relay_config_and_the_turn_limit_as_without_one(
+    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    capture = tmp_path / "capture"
+    binary = a_fake_claude(tmp_path, stream=announcing("Bash"), capture=capture)
+    config = configured_for(a_config(tmp_path, binary), tools=["Bash"])
+
+    events = drive_over_http(child_cleanup, monkeypatch, config, post_a_run)
+
+    argv = argv_of(capture)
+    assert shown(events)[-1] == ("succeeded", "done")
+    assert "--mcp-config" not in argv
+    assert argv[argv.index("--max-turns") + 1] == str(
+        config.runs.max_tool_calls + TURNS_BEYOND_TOOL_CALLS
+    )
+
+
+@pytest.mark.parametrize(
+    ("defaults", "app", "tools_option"),
+    [
+        pytest.param(["Bash"], None, "Bash", id="defaults-reach-an-agent-without-a-table"),
+        pytest.param(["Bash"], ["Read"], "Read", id="app-replaces-defaults"),
+    ],
+)
+def test_the_tools_of_the_highest_level_that_sets_them_reach_the_run_as_its_tools_option(
+    tmp_path: Path,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    defaults: list[str],
+    app: list[str] | None,
+    tools_option: str,
+) -> None:
+    capture = tmp_path / "capture"
+    binary = a_fake_claude(tmp_path, stream=announcing(tools_option), capture=capture)
+    config = a_config(tmp_path, binary)
+    app_config = config.apps["songmaker"].model_copy(
+        update={"cli_settings": _tools_level(app) if app else CliSettingsConfig()}
+    )
+    config = config.model_copy(
+        update={
+            "defaults": config.defaults.model_copy(update={"cli_settings": _tools_level(defaults)}),
+            "apps": {**config.apps, "songmaker": app_config},
+        }
+    )
+
+    def as_an_agent_without_a_table(base_url: str) -> list[RunEvent]:
+        return run_as(base_url, ANOTHER_AGENT)
+
+    events = drive_over_http(child_cleanup, monkeypatch, config, as_an_agent_without_a_table)
+
+    argv = argv_of(capture)
+    assert shown(events)[-1] == ("succeeded", "done")
+    assert argv[argv.index("--tools") + 1] == tools_option
 
 
 def test_a_listed_tool_the_cli_does_not_announce_ends_the_run_and_the_log_names_it(
