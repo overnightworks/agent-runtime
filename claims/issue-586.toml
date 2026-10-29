@@ -1,0 +1,8 @@
+claim_id = "8a0e084fac8d443c87b53eea63f376cd"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "a6b9127c9d50f82f390e20985a7fc8a4b0c64613"
+branch = "claude/issue-586-webauth-0-25-0"
+scope = ["docs/MIGRATING.md", "packages/service/pyproject.toml", "packages/service/tests/fixtures/keycloak/requirements.in", "packages/service/tests/fixtures/keycloak/requirements.txt", "tests/support/service_support.py", "uv.lock"]
+opened_commit = "40f5bfc9f5f04ae4551f372fd20d86a24d19eb38"
+whole_reason = "One dependency pin moves in every file that names it: the service manifest, the lock, the Keycloak fixture's two requirement files, one test-support comment naming the verifier's version, and the release's migration row."
