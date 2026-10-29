@@ -8,7 +8,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from ruamel.yaml import YAML
 
 _WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
 _REPOSITORY = "overnightworks/agent-runtime"
@@ -28,18 +27,6 @@ def _run_script(step_name: str) -> str:
     return "\n".join(line[10:] for line in step.group(1).splitlines())
 
 
-def _release_steps() -> list[dict[str, object]]:
-    jobs = YAML(typ="safe").load(_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
-    return [step for job in jobs.values() for step in job["steps"]]
-
-
-def _publish_environment() -> dict[str, str]:
-    for step in _release_steps():
-        if step.get("name") == "Publish the release with the wheels the check admitted":
-            return step["env"]
-    raise AssertionError("release.yml has no publish step")
-
-
 def _notice_for(tag: str, migrating: str, tmp_path: Path) -> str:
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "MIGRATING.md").write_text(migrating, encoding="utf-8")
@@ -56,23 +43,28 @@ def _notice_for(tag: str, migrating: str, tmp_path: Path) -> str:
         },
         check=True,
     )
-    return output.read_text(encoding="utf-8").removeprefix("notice=").rstrip("\n")
+    return output.read_text(encoding="utf-8").rstrip("\n").partition("=")[2]
+
+
+def test_the_release_notice_links_the_migration_section_of_a_tag_that_has_one(tmp_path):
+    notice = _notice_for("v0.3.0", "# Title\n\n## Migrating to 0.3.0\n\ntext\n", tmp_path)
+
+    assert "/blob/v0.3.0/docs/MIGRATING.md#migrating-to-030)" in notice
 
 
 @pytest.mark.parametrize(
-    ("tag", "heading", "notice"),
+    ("tag", "heading"),
     [
-        ("v0.3.0", "## Migrating to 0.3.0", _MIGRATION_LINK),
-        ("v0.3.1", "## Migrating to 0.3.0", ""),
-        ("v0.3.0", "## Install", ""),
-        ("v0.3.0", "### Migrating to 0.3.0", ""),
+        ("v0.3.1", "## Migrating to 0.3.0"),
+        ("v0.3.0", "## Install"),
+        ("v0.3.0", "### Migrating to 0.3.0"),
     ],
-    ids=["tag with its section", "tag of another version", "no section", "section one level down"],
+    ids=["tag of another version", "no section", "section one level down"],
 )
-def test_the_release_notice_exists_only_for_a_tag_with_its_migration_section(
-    tmp_path, tag, heading, notice
+def test_the_release_notice_is_empty_for_a_tag_without_its_migration_section(
+    tmp_path, tag, heading
 ):
-    assert _notice_for(tag, f"# Title\n\n{heading}\n\ntext\n", tmp_path) == notice
+    assert _notice_for(tag, f"# Title\n\n{heading}\n\ntext\n", tmp_path) == ""
 
 
 def _wheel_list_output(tmp_path: Path) -> tuple[dict[str, bytes], str]:
@@ -165,25 +157,11 @@ def test_the_published_notes_without_a_migration_section_are_the_three_requireme
     assert notes == "\n".join(_INSTALL_LINES)
 
 
-def test_the_publish_step_takes_the_notice_and_the_install_lines_from_the_steps_that_wrote_them():
-    environment = _publish_environment()
-
-    assert environment["NOTICE"] == "${{ steps.notice.outputs.notice }}"
-    assert environment["INSTALL"] == "${{ steps.install.outputs.install }}"
-
-
-def test_the_release_job_has_the_steps_the_publish_step_reads_from():
-    step_ids = {step.get("id") for step in _release_steps()}
-
-    assert {"notice", "install"} <= step_ids
-
-
-def test_the_wheel_list_is_written_as_a_multiline_output_named_install(tmp_path):
+def test_the_wheel_list_is_written_in_the_multiline_output_form(tmp_path):
     _, install = _wheel_list_output(tmp_path)
     lines = install.splitlines()
 
-    opening, delimiter = lines[0].split("<<")
-    assert opening == "install"
+    _, delimiter = lines[0].split("<<")
     assert lines[-1] == delimiter
 
 

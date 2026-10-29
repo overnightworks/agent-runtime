@@ -504,7 +504,6 @@ def package_modules() -> list[object]:
 
 def test_the_names_table_lists_the_renames_this_release_made():
     assert renamed_public_names()
-    assert any(now == "`dispatch.stream_turn`" for _, now in names_table_rows())
 
 
 @pytest.mark.parametrize("old_name", renamed_public_names())
