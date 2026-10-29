@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import pickle
 from pathlib import Path
 
 import pytest
@@ -15,62 +16,151 @@ from tests.support.provider_test_support import (
 from agent_runtime import process
 from agent_runtime.errors import ProviderUnavailableError, SafeRouteReasonCode
 from agent_runtime.grok.transport import GrokCliToolTransport
-from agent_runtime.grok_login import blanked_copy
+from agent_runtime.grok_login import GrokLoginVerdict, assess_grok_login, blanked_copy
 from agent_runtime.process import (
+    CliLoginUnusableError,
     CliRunOutcome,
     CliRunReason,
     clear_agent_cli_caches,
     grok_cli_status,
+    grok_cli_token_is_present,
 )
 
 A_REFRESH_TOKEN = "canary-grok-refresh-token"
 A_KEPT_MEMBERS = {"key": "grok-synthetic-key", "expires_at": 1234, "scopes": ["a", "b"]}
 
 
+def a_document(**realm: object) -> bytes:
+    return json.dumps({"realm": {"key": "grok-synthetic-key", **realm}}).encode()
+
+
 @pytest.mark.parametrize("name", ["refresh_token", "refreshToken", "refresh"])
 @pytest.mark.parametrize("depth", [1, 2])
 def test_every_renewal_name_is_blanked_at_every_depth(name: str, depth: int) -> None:
     member = {name: A_REFRESH_TOKEN, **A_KEPT_MEMBERS}
-    document = member if depth == 1 else {"realm": member}
+    realm = {"key": "grok-synthetic-key", **(member if depth == 1 else {"nested": member})}
 
-    copy = blanked_copy(json.dumps(document).encode())
+    login = assess_grok_login(json.dumps({"realm": realm}).encode())
 
-    assert copy is not None
-    assert json.loads(copy) == (
-        {name: "", **A_KEPT_MEMBERS} if depth == 1 else {"realm": {name: "", **A_KEPT_MEMBERS}}
-    )
-    assert A_REFRESH_TOKEN.encode() not in copy
+    assert login.verdict is GrokLoginVerdict.USABLE
+    assert login.blanked_document is not None
+    blanked_member = {name: "", **A_KEPT_MEMBERS}
+    blanked_realm = blanked_member if depth == 1 else {"nested": blanked_member}
+    assert json.loads(login.blanked_document) == {
+        "realm": {"key": "grok-synthetic-key", **blanked_realm}
+    }
+    assert A_REFRESH_TOKEN.encode() not in login.blanked_document
 
 
 def test_a_renewal_member_inside_a_list_is_blanked() -> None:
-    document = {"realms": [{"refresh_token": A_REFRESH_TOKEN, "key": "k"}]}
+    document = a_document(realms=[{"refresh_token": A_REFRESH_TOKEN}])
 
-    copy = blanked_copy(json.dumps(document).encode())
+    copy = blanked_copy(document)
 
     assert copy is not None
-    assert json.loads(copy) == {"realms": [{"refresh_token": "", "key": "k"}]}
+    assert json.loads(copy)["realm"]["realms"] == [{"refresh_token": ""}]
 
 
 def test_a_member_whose_name_only_resembles_a_renewal_name_is_kept() -> None:
-    document = {"refresh_token_expiry": 5, "Refresh": "kept", "x.refresh_token": "kept"}
+    kept = {"refresh_token_expiry": 5, "Refresh": "kept", "x.refresh_token": "kept"}
 
-    assert json.loads(blanked_copy(json.dumps(document).encode()) or b"null") == document
+    copy = blanked_copy(a_document(**kept))
+
+    assert copy is not None
+    assert json.loads(copy)["realm"] == {"key": "grok-synthetic-key", **kept}
+
+
+@pytest.mark.parametrize(
+    ("document", "verdict"),
+    [
+        pytest.param(b'{"a": {"key": "k"}}', GrokLoginVerdict.USABLE, id="one-realm-with-key"),
+        pytest.param(
+            b'{"a": {}, "b": {"key": "k"}}', GrokLoginVerdict.USABLE, id="second-realm-has-key",
+        ),
+        pytest.param(b"{}", GrokLoginVerdict.INCOMPLETE, id="no-realm"),
+        pytest.param(b'{"a": {}}', GrokLoginVerdict.INCOMPLETE, id="realm-without-key"),
+        pytest.param(b'{"a": {"key": ""}}', GrokLoginVerdict.INCOMPLETE, id="empty-key"),
+        pytest.param(b'{"a": {"key": null}}', GrokLoginVerdict.INCOMPLETE, id="null-key"),
+        pytest.param(b'{"a": {"key": 1}}', GrokLoginVerdict.MALFORMED, id="key-not-a-string"),
+        pytest.param(b'{"realm": []}', GrokLoginVerdict.INCOMPLETE, id="realm-is-an-array"),
+        pytest.param(b'{"realm": "x"}', GrokLoginVerdict.INCOMPLETE, id="realm-is-a-string"),
+        pytest.param(
+            b'{"a": {"key": "k"}, "b": 1}', GrokLoginVerdict.USABLE, id="usable-then-non-realm",
+        ),
+        pytest.param(
+            b'{"a": {"key": "k"}, "b": {"key": 1}}', GrokLoginVerdict.MALFORMED,
+            id="usable-then-bad-key",
+        ),
+        pytest.param(b"not json", GrokLoginVerdict.MALFORMED, id="not-json"),
+        pytest.param(b"[]", GrokLoginVerdict.MALFORMED, id="array"),
+        pytest.param(b'"refresh_token"', GrokLoginVerdict.MALFORMED, id="string"),
+        pytest.param(b"null", GrokLoginVerdict.MALFORMED, id="null"),
+        pytest.param(b'{"a": "\xff"}', GrokLoginVerdict.MALFORMED, id="invalid-utf8"),
+        pytest.param(
+            '{"a": {"key": "k"}}'.encode("utf-16"), GrokLoginVerdict.MALFORMED, id="utf-16",
+        ),
+        pytest.param(
+            b'\xef\xbb\xbf{"a": {"key": "k"}}', GrokLoginVerdict.MALFORMED,
+            id="utf-8-byte-order-mark",
+        ),
+        pytest.param(b"[" * 100_000, GrokLoginVerdict.MALFORMED, id="excessive-nesting"),
+        pytest.param(
+            b'{"a": {"key": "k", "x": ' + b"[" * 100_000 + b"}}",
+            GrokLoginVerdict.MALFORMED, id="excessive-nesting-in-a-realm",
+        ),
+    ],
+)
+def test_a_login_document_has_one_verdict_and_only_a_usable_one_has_a_copy(
+    document: bytes, verdict: GrokLoginVerdict,
+) -> None:
+    login = assess_grok_login(document)
+
+    assert login.verdict is verdict
+    assert (login.blanked_document is not None) is (verdict is GrokLoginVerdict.USABLE)
+    assert blanked_copy(document) == login.blanked_document
+
+
+def test_a_login_neither_shows_nor_pickles_its_document() -> None:
+    login = assess_grok_login(a_document(refresh_token=A_REFRESH_TOKEN))
+
+    assert "grok-synthetic-key" not in repr(login)
+    with pytest.raises(TypeError):
+        pickle.dumps(login)
+
+
+@pytest.mark.parametrize(
+    ("document", "readiness"),
+    [
+        pytest.param(b'{"realm": {"key": "k"}}', True, id="usable"),
+        pytest.param(b'{"realm": {"key": ""}}', False, id="incomplete"),
+        pytest.param(b'{"realm": []}', False, id="realm-is-an-array"),
+    ],
+)
+def test_readiness_and_copy_agree_on_a_usable_or_incomplete_login(
+    tmp_path: Path, document: bytes, readiness: bool,
+) -> None:
+    source = tmp_path / "source"
+    source.write_bytes(document)
+    override_grok_runtime(token_file=source)
+
+    assert grok_cli_token_is_present() is readiness
+    assert (blanked_copy(document) is not None) is readiness
 
 
 @pytest.mark.parametrize(
     "document",
-    [
-        pytest.param(b"not json", id="not-json"),
-        pytest.param(b"[]", id="array"),
-        pytest.param(b'"refresh_token"', id="string"),
-        pytest.param(b"null", id="null"),
-        pytest.param(b'{"refresh_token": "\xff"}', id="invalid-utf8"),
-        pytest.param('{"a": 1}'.encode("utf-16"), id="utf-16"),
-        pytest.param(b'\xef\xbb\xbf{"a": 1}', id="utf-8-byte-order-mark"),
-        pytest.param(b"[" * 100_000, id="excessive-nesting"),
-    ],
+    [b"[]", b"not json", b'{"a": {"key": 1}}'],
+    ids=["array", "not-json", "key-not-a-string"],
 )
-def test_a_document_that_is_not_a_json_object_has_no_copy(document: bytes) -> None:
+def test_a_malformed_login_is_refused_by_readiness_and_gets_no_copy(
+    tmp_path: Path, document: bytes,
+) -> None:
+    source = tmp_path / "source"
+    source.write_bytes(document)
+    override_grok_runtime(token_file=source)
+
+    with pytest.raises(CliLoginUnusableError):
+        grok_cli_token_is_present()
     assert blanked_copy(document) is None
 
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import ctypes
 import gc
+import json
 import logging
 import subprocess
 import sys
@@ -41,6 +42,7 @@ from tests.support.anchored_support import (
 from tests.support.descendant_support import Handshake, open_handshake
 from tests.support.provider_test_support import (
     MCP_TOOL_NAMES,
+    a_grok_login,
     close_fake_cli_pipes,
     write_claude_token_file,
 )
@@ -108,8 +110,8 @@ def _configure_agent_provider_runtime(tmp_path: Path):
     claude_auth = write_claude_token_file(credentials / "claude-token")
     grok_auth = credentials / "grok.json"
     codex_auth = credentials / "codex.json"
-    for auth_file in (grok_auth, codex_auth):
-        auth_file.write_text("{}")
+    grok_auth.write_text(json.dumps(a_grok_login()))
+    codex_auth.write_text("{}")
     configure(
         _SAMPLE_RUNTIME.model_copy(
             update={

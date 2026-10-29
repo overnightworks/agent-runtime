@@ -4387,7 +4387,6 @@ def test_cancelling_a_line_channel_discards_unread_output() -> None:
     [
         ("grok", "not json", GROK_CLI_CREDENTIALS_INVALID_DETAIL),
         ("grok", "[]", GROK_CLI_CREDENTIALS_INVALID_DETAIL),
-        ("grok", '{"realm": []}', GROK_CLI_CREDENTIALS_INVALID_DETAIL),
         ("grok", '{"realm": {"key": 3}}', GROK_CLI_CREDENTIALS_INVALID_DETAIL),
         ("codex", "not json", CODEX_CLI_CREDENTIALS_INVALID_DETAIL),
         ("codex", "[]", CODEX_CLI_CREDENTIALS_INVALID_DETAIL),

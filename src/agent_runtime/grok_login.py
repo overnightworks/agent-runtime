@@ -1,11 +1,56 @@
-"""The copy of the Grok login a child may hold."""
+"""The one decider of whether a Grok login can start a child."""
 
 from __future__ import annotations
 
 import json
-from typing import Final
+from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import Final, NoReturn
 
 _RENEWAL_NAMES: Final = frozenset({"refresh_token", "refreshToken", "refresh"})
+
+
+class GrokLoginVerdict(StrEnum):
+    USABLE = "usable"
+    INCOMPLETE = "incomplete"
+    MALFORMED = "malformed"
+
+
+@dataclass(frozen=True)
+class GrokLogin:
+    """The verdict on a login document and, when usable, the copy a child may hold.
+
+    The blanked document keeps the access key, so it refuses to be shown or
+    serialised.
+    """
+
+    verdict: GrokLoginVerdict
+    blanked_document: bytes | None = field(default=None, repr=False)
+
+    def __reduce__(self) -> NoReturn:
+        raise TypeError("a Grok login holds credentials and cannot be serialised")
+
+
+def assess_grok_login(document: bytes) -> GrokLogin:
+    """Assess a login document: usable, without a key yet, or unreadable.
+
+    The document is a JSON object. Its members that are objects are realms; any
+    other member is ignored, because the vendor may add members to its own file.
+    A realm's ``key`` is absent, null (counts as absent) or a string, and the
+    login is usable once some realm has a non-empty one.
+    """
+    try:
+        parsed = json.loads(document.decode("utf-8"))
+        if not isinstance(parsed, dict):
+            return GrokLogin(GrokLoginVerdict.MALFORMED)
+        keys = [member.get("key") for member in parsed.values() if isinstance(member, dict)]
+        if not all(key is None or isinstance(key, str) for key in keys):
+            return GrokLogin(GrokLoginVerdict.MALFORMED)
+        if not any(keys):
+            return GrokLogin(GrokLoginVerdict.INCOMPLETE)
+        return GrokLogin(GrokLoginVerdict.USABLE, json.dumps(_blanked(parsed)).encode())
+    except (ValueError, RecursionError):
+        return GrokLogin(GrokLoginVerdict.MALFORMED)
 
 
 def blanked_copy(document: bytes) -> bytes | None:
@@ -13,19 +58,9 @@ def blanked_copy(document: bytes) -> bytes | None:
 
     A child that renews would rotate the operator's real refresh token and break
     the stored login, so every Grok child receives this copy instead of the
-    operator's file. A document that is not UTF-8 JSON, or not a JSON object, has
-    no copy.
+    operator's file. A document without a usable realm has no copy.
     """
-    try:
-        parsed = json.loads(document.decode("utf-8"))
-    except (ValueError, RecursionError):
-        return None
-    if not isinstance(parsed, dict):
-        return None
-    try:
-        return json.dumps(_blanked(parsed)).encode()
-    except RecursionError:
-        return None
+    return assess_grok_login(document).blanked_document
 
 
 def _blanked(value: object) -> object:
