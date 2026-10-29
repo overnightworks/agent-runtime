@@ -7,9 +7,6 @@ from pathlib import Path
 
 import pytest
 from tests.support.provider_test_support import fake_cli_executable
-from tests.support.service_codex_support import (
-    the_served_runs,  # noqa: F401 - the fixture is named in its decorator
-)
 from tests.support.service_config_support import (
     MCP_SECTION,
     VALID_CONFIG,
@@ -19,6 +16,9 @@ from tests.support.service_config_support import (
 )
 from tests.support.service_support import (
     logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
+)
+from tests.support.service_table_support import (
+    the_served_runs,  # noqa: F401 - the fixture is named in its decorator
 )
 
 import agent_runtime_service.process_hardening as hardening

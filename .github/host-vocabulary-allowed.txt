@@ -2,7 +2,7 @@
 ^tests/support/service_support\.py:
 ^tests/support/service_config_support\.py:
 ^tests/support/service_cli_runner_support\.py:
-^tests/support/service_codex_support\.py:
+^tests/support/service_table_support\.py:
 ^tests/support/run_tools_support\.py:
 ^tests/support/token_rejection_support\.py:
 ^tests/support/keycloak_realm\.py:

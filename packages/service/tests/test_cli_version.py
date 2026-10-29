@@ -23,10 +23,6 @@ from tests.support.provider_test_support import (
     removal_errors,
     the_only_tree,
 )
-from tests.support.service_codex_support import (
-    a_codex_login_file,
-    the_served_runs,  # noqa: F401 - the fixture is named in its decorator
-)
 from tests.support.service_config_support import (
     PRINTS_THE_PIN,
     VALID_CONFIG,
@@ -42,6 +38,10 @@ from tests.support.service_support import (
     PINNED_CLAUDE_VERSION,
     logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
     process_token_file,
+)
+from tests.support.service_table_support import (
+    a_codex_login_file,
+    the_served_runs,  # noqa: F401 - the fixture is named in its decorator
 )
 
 import agent_runtime.process as core_process

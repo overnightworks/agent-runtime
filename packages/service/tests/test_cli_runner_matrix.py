@@ -37,17 +37,17 @@ from tests.support.service_cli_runner_support import (
     shown,
     status_of,
 )
-from tests.support.service_codex_support import (
-    a_codex_config,
-    a_codex_login_file,
-    a_service_fake,
-    codex_document,
-)
 from tests.support.service_support import (
     decoded_events,
     get_run,
     post_run,
     run_body,
+)
+from tests.support.service_table_support import (
+    a_codex_config,
+    a_codex_login_file,
+    a_service_fake,
+    codex_document,
 )
 
 from agent_runtime_client.wire import (
