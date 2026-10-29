@@ -107,3 +107,32 @@ def a_codex_access_token(payload: dict[str, Any] | bytes) -> str:
     claims = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
     segments = (b'{"alg":"none"}', claims, b"signature")
     return ".".join(base64.urlsafe_b64encode(part).rstrip(b"=").decode() for part in segments)
+
+
+def a_renewing_fake_codex(directory: Path, renewed: bytes | None, then: str = "exit 0") -> Path:
+    """A stand-in for the pinned CLI on a renewal run: it renews the login it was given.
+
+    A run checks its home, a full login with an emptied access token and a non-empty refresh
+    token, the file credential store, the fixed stdin and the ephemeral flag, with a distinct
+    exit code for each wrong one. Then it copies ``renewed`` (if any) over the home's login and
+    runs ``then``.
+    """
+    document = directory / "renewed-login.json"
+    if renewed is not None:
+        document.write_bytes(renewed)
+    copy = f'cat {shlex.quote(str(document))} > "$CODEX_HOME/auth.json"\n' if renewed else ""
+    binary = directory / "codex"
+    binary.write_text(
+        "#!/bin/sh\n"
+        '[ "$CODEX_HOME" = "$HOME" ] || exit 10\n'
+        '[ "$(stat -c %a "$CODEX_HOME/auth.json")" = 600 ] || exit 11\n'
+        'grep -q \'"access_token": ""\' "$CODEX_HOME/auth.json" || exit 12\n'
+        'grep -q \'"refresh_token": ""\' "$CODEX_HOME/auth.json" && exit 13\n'
+        'grep -q \'cli_auth_credentials_store = "file"\' "$CODEX_HOME/config.toml" || exit 14\n'
+        "[ \"$(cat)\" = 'User: Say ok.' ] || exit 15\n"
+        'case " $* " in *" --ephemeral "*) ;; *) exit 16;; esac\n'
+        f"{copy}"
+        f"{then}\n"
+    )
+    binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
+    return binary
