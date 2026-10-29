@@ -300,9 +300,14 @@ only `[runs] max_duration_s` bounds it.
 reads the new document on standard input, checks it with the service's reader for that provider and
 swaps it in beside the old file; the next run reads it without a restart. It exits 0 when the
 file is written, 1 when it is not written and the old file stays, 2 when it refused before
-reading anything (the platform, the configuration, a provider without a table, or a leftover
-`.<file>.new` beside the login file, which is removed by hand), and 3 when it is not written and
-its own `.<file>.new`, which may hold the new login, is not confirmed gone: it names the path.
+reading anything (the platform, the configuration, a provider without a table, or a
+`.<file>.new` beside the login file, which may belong to a writer that still runs: stop the
+service and any other login command, confirm that no process the service started still runs,
+then remove it; one that appears while the command reads its input ends it with 1 and is left
+alone), and 3 when it is not written and its own `.<file>.new`, which may hold the new
+login, is not confirmed gone: it names the path. Exit 0 may say "written; durability not
+confirmed": the new login is in place, and a crash before the directory is written could bring
+back the old one, never a mix.
 It needs what the service's own start reads except the logins, and write access to the login
 file's directory, so run it as the service's own user: the new file is created 0600 and owned by
 whoever runs the command. A failure before the swap leaves the old file untouched. `--check` runs the

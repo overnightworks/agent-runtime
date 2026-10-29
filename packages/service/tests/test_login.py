@@ -26,6 +26,7 @@ from tests.support.service_login_support import (  # noqa: F401 - the fixtures a
     CANARY_REFRESH,
     CODEX_FILE_REFUSAL,
     GOOD_DOCUMENTS,
+    LINE_PREFIX,
     LOGIN_NAME,
     NEW_CLAUDE_TOKEN,
     RUN_THE_COMMAND,
@@ -36,6 +37,7 @@ from tests.support.service_login_support import (  # noqa: F401 - the fixtures a
     an_installation,
     an_old_file_fails,
     assert_not_written,
+    held_swap,
     line_of,
     reader_hook,
     run,
@@ -54,14 +56,14 @@ import agent_runtime_service.process_hardening as hardening
 from agent_runtime_service.cli import main as service_main
 from agent_runtime_service.config import Provider, load_config
 from agent_runtime_service.login import main
-from agent_runtime_service.login_file import SwapRefused
+from agent_runtime_service.login_file import SwappedDurably, SwapResult, held_sibling_sentence
 
 
 @pytest.mark.parametrize("interrupt", login.interrupt_signals(), ids=lambda number: number.name)
 def test_an_interrupt_while_reading_ends_the_read_and_a_second_one_is_disregarded(
     installation: Installation,
     said: Said,
-    refusals: list[SwapRefused | None],
+    refusals: list[SwapResult],
     recorded_signals: Callable[[], list[int]],
     monkeypatch: pytest.MonkeyPatch,
     interrupt: signal.Signals,
@@ -88,21 +90,65 @@ def test_an_interrupt_while_reading_ends_the_read_and_a_second_one_is_disregarde
     assert recorded_signals() == []
     assert set(handlers_when_reported) == {login._disregard}
 
+
 # The sibling and the commit point: matrix cells 9 to 12.
 
 
 def test_a_leftover_sibling_stops_the_command_before_it_reads_anything(
     installation: Installation, said: Said
 ) -> None:
-    installation.sibling.write_bytes(b"left by an earlier install")
+    installation.sibling.write_bytes(b"left over")
     stream = Stream(GOOD_DOCUMENTS[installation.provider])
 
     status, heard = run(installation, stream, said)
 
     assert (status, stream.was_read) == (2, False)
-    assert f"{installation.sibling} exists from an earlier install" in heard
+    assert heard == LINE_PREFIX + held_sibling_sentence(installation.sibling) + "\n"
+    assert "earlier install" not in heard
     assert installation.unchanged()
-    assert installation.sibling.read_bytes() == b"left by an earlier install"
+    assert installation.sibling.read_bytes() == b"left over"
+
+
+def test_a_holders_reservation_stops_the_command_before_it_reads_and_the_holder_still_commits(
+    installation: Installation, said: Said
+) -> None:
+    holder = held_swap(installation.login)
+    held = os.lstat(installation.sibling)
+    stream = Stream(GOOD_DOCUMENTS[installation.provider])
+
+    status, heard = run(installation, stream, said)
+
+    assert (status, stream.was_read) == (2, False)
+    assert heard == LINE_PREFIX + held_sibling_sentence(installation.sibling) + "\n"
+    assert os.lstat(installation.sibling) == held
+    assert holder.commit(b"holder\n", lambda path: None, replaces=None) == SwappedDurably()
+
+
+def test_a_reservation_made_while_the_command_reads_refuses_it_and_the_holder_still_commits(
+    installation: Installation, said: Said
+) -> None:
+    holders = []
+    held: list[os.stat_result] = []
+
+    def reserve_and_inspect() -> None:
+        holders.append(held_swap(installation.login))
+        held.append(os.lstat(installation.sibling))
+
+    stream = Stream(GOOD_DOCUMENTS[installation.provider], reserve_and_inspect)
+
+    status, heard = run(installation, stream, said)
+
+    assert status == 1
+    assert (
+        heard
+        == line_of(installation, f"not written: {held_sibling_sentence(installation.sibling)}")
+        + "\n"
+    )
+    assert installation.unchanged()
+    assert os.lstat(installation.sibling) == held[0]
+    assert holders[0].commit(b"holder\n", lambda path: None, replaces=None) == SwappedDurably()
+    assert installation.login.read_bytes() == b"holder\n"
+
 
 def test_a_leftover_check_that_cannot_inspect_the_sibling_refuses_before_reading(
     tmp_path: Path, said: Said, monkeypatch: pytest.MonkeyPatch

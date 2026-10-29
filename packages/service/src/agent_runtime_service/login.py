@@ -6,7 +6,9 @@ the one login writer.
 ``--check`` runs that reader on the file as it stands and reads no input; it does not prove the
 provider still accepts the login.
 
-Exit 0: written (or accepted). 1: not written, the old file stays (or the file is refused).
+Exit 0: written (or accepted); when the directory could not be synced after the rename the line
+says "written; durability not confirmed" and a crash before it is written could bring back the
+old login, never a mix. 1: not written, the old file stays (or the file is refused).
 2: refused before standard input was read. 3: not written, and the command's own sibling file is
 not confirmed gone.
 
@@ -27,10 +29,13 @@ from pathlib import Path
 from types import FrameType
 from typing import BinaryIO, Final
 
-from agent_runtime.secret_file import MAX_SECRET_FILE_BYTES, UnsoundSecretFile, shown_text
+from agent_runtime.secret_file import MAX_SECRET_FILE_BYTES, UnsoundSecretFile
 from agent_runtime_service.cli import EXIT_BAD_CONFIG
 from agent_runtime_service.login_file import (
+    SwappedDurabilityUnconfirmed,
     SwapRefused,
+    SwapResult,
+    held_sibling_sentence,
     swap_in_login_file,
     swap_sibling_or_refusal,
 )
@@ -97,7 +102,7 @@ def _document_read(standard_input: BinaryIO | None) -> bytes | SwapRefused:
 
 def _read_and_swapped(
     standard_input: BinaryIO | None, token_file: Path, read_login: Callable[[Path], object]
-) -> SwapRefused | None:
+) -> SwapResult:
     """Reads the document and swaps it in; returns closed values only."""
     document = _document_read(standard_input)
     if isinstance(document, SwapRefused):
@@ -140,17 +145,17 @@ def _installed(
         _say(f"{subject}: not written: {sibling.reason}")
         return EXIT_BAD_CONFIG
     if _sibling_left_over(sibling):
-        _say(
-            f"{shown_text(str(sibling))} exists from an earlier install and may"
-            " hold a login; remove it, then run this again"
-        )
+        _say(held_sibling_sentence(sibling))
         return EXIT_BAD_CONFIG
-    refused = _read_and_swapped(standard_input, token_file, read_login)
-    if refused is None:
+    result = _read_and_swapped(standard_input, token_file, read_login)
+    if isinstance(result, SwapRefused):
+        _say(f"{subject}: not written: {result.reason}")
+        return EXIT_REMAINS if result.sibling_remains else EXIT_NOT_WRITTEN
+    if isinstance(result, SwappedDurabilityUnconfirmed):
+        _say(f"{subject}: written; durability not confirmed: {result.reason}")
+    else:
         _say(f"{subject}: written")
-        return 0
-    _say(f"{subject}: not written: {refused.reason}")
-    return EXIT_REMAINS if refused.sibling_remains else EXIT_NOT_WRITTEN
+    return 0
 
 
 def _arguments(argv: Sequence[str] | None, providers: Iterable[str]) -> argparse.Namespace:
