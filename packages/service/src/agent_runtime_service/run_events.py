@@ -235,7 +235,7 @@ class _WireRun:
                 self._lease.release()
 
     def terminal_frame(self) -> bytes:
-        assert self._terminal_frame is not None  # noqa: S101 - callers ask only after the terminal frame is sent
+        assert self._terminal_frame is not None  # noqa: S101 - callers ask only after commit_terminal decided a terminal
         return self._terminal_frame
 
     def _committed_terminal(self, decided: Succeeded | _DecidedFailure) -> bytes:
