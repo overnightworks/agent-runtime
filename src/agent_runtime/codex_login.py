@@ -90,8 +90,8 @@ def _blanked_document(document: dict[str, object], tokens: dict[str, object]) ->
 
 
 class UnreadableTiming(StrEnum):
-    NO_ACCESS_TOKEN = "the document holds no access token"
-    NOT_A_TOKEN = "the access token's claims cannot be read"
+    NO_ACCESS_TOKEN = "the document holds no access token"  # noqa: S105 - closed cause text names no secret
+    NOT_A_TOKEN = "the access token's claims cannot be read"  # noqa: S105 - closed cause text names no secret
     CLAIM_MISSING = "iat or exp is missing"
     WRONG_TYPE = "iat or exp is not a JSON integer"
     OUT_OF_RANGE = "iat or exp is outside 1 to 2**53 - 1"
@@ -173,7 +173,7 @@ def _timing_of(claims: dict[str, object], now: int) -> CodexTiming | UnreadableT
 
 class CodexRenewalRefusal(StrEnum):
     NOT_USABLE = "the document is not a usable Codex login"
-    NO_REFRESH_TOKEN = "the login holds no refresh token"
+    NO_REFRESH_TOKEN = "the login holds no refresh token"  # noqa: S105 - closed cause text names no secret
 
 
 @dataclass(frozen=True)
