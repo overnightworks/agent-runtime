@@ -3771,8 +3771,11 @@ constants) and checked by offline rows against a local fake token endpoint:
   tokens whose `exp` was a float. Run 1 confirms it on the real login: it aged
   `last_refresh` by 30 days, the access token was still valid, and nothing was
   refreshed (`not_attempted`).
-- `login status` showed no refresh attempt offline. A refresh on a 401 exists in the
-  source and was not exercised.
+- `login status` showed no refresh attempt offline.
+- A third trigger ran on the fake backend: a 401 on a still-valid access token (offline
+  row a with backend, step0b pass 2) made the CLI post the stored refresh token to the
+  token endpoint and go on with the new access token; the same row without the backend
+  made no post. A 401 from the real server was not tried.
 
 **Which command renews.** `codex exec`, at startup, before the turn. Each renewal
 therefore costs one tool-free model turn (about 6 s in run 2).
@@ -3780,8 +3783,8 @@ therefore costs one tool-free model turn (about 6 s in run 2).
 **How the probe made it due.** The run copy carried an empty access token and a
 30-day-old `last_refresh`, so the CLI's own refresh fired (offline row d1). The
 refresh request carries only `client_id`, `grant_type` and `refresh_token` (offline
-capture, `step0b`). Forging an expired `exp` was rejected, because a tampered token
-could reach a server.
+capture, `step0b`). Decision: the probe does not forge an expired `exp`, because a
+tampered token could reach a server.
 
 **Result (run 2).**
 
@@ -3809,8 +3812,9 @@ anywhere.
 
 **What it means for the renewer** (R1 in #115's C6 row). Read by this record, not as
 new rulings:
-- A blanked copy of the dedicated login begins refreshing itself about 5 minutes
-  before the access token's `exp`, so the renewer must renew well before that.
+- From the source, not run: a blanked copy of the dedicated login attempts a refresh
+  with its empty refresh token about 5 minutes before the access token's `exp`, so the
+  renewer must renew well before that.
 - The measured way is exactly the probe's: one `exec` turn on a run copy whose access
   token is emptied, written back by the one login writer.
 - As with Grok, treat each renewal as replacing the refresh token: one holder owns
@@ -3824,8 +3828,8 @@ new rulings:
 - The server's answer to a refresh with an empty refresh token is unknown, which
   matters for blanked copies near `exp`.
 - On a transient failure the CLI re-sent the same refresh token 2 to 3 times a second
-  until its deadline (offline, token endpoint answering 500: 52 and 68 requests in a
-  25 s run).
+  until the run's 25 s timeout killed it (offline rows f1 and f2, local fake token
+  endpoint answering 500: 68 and 52 requests).
 - The npm binary was assumed, not proven, to match the tag the source was read at.
 - The run was not in the service's real run shape (no `bwrap`), and the write-back was
   done by the harness, not by the service's login writer.
