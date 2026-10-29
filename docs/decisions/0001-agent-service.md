@@ -3834,6 +3834,43 @@ new rulings:
 - The run was not in the service's real run shape (no `bwrap`), and the write-back was
   done by the harness, not by the service's login writer.
 
+#### A1b-MX one real Codex picture through the service's own run
+
+**What ran.** Slice MX-b of #488, measured on 29.10.2026 (#580), at code revision
+`9af1b33`. Pinned `codex-cli 0.163.0`, model `gpt-6-astra`, the dedicated service
+Codex login, which only the service read. One attempt, no retry; one sanitized
+record (`record-20261029T175959421403.json`, with `live-run.log`) in the operator's
+probe directory `488-mx/` outside the repository. The harness served the real
+`create_app` on a loopback socket with a test identity authority, posted one
+`POST /runs` for an agent whose `cli_settings.openai` turns on
+`features.image_generation` and `features.code_mode_host`, and decoded the stream
+with the client's `RunStreamDecoder`. `[cli.openai] binary` was a wrapper that ran
+the hash-checked pinned codex inside B1's outer `/usr/bin/bwrap`, with the run tree
+as the only writable mount. On this host codex's own vendored `bwrap` cannot map its
+user namespace (`apparmor_restrict_unprivileged_userns` is 1), as in B1.
+
+**Result.**
+- The run took 30.01 s and ended `succeeded`.
+- The stream held `run_started` 1, `heartbeat` 1 and `succeeded` 1.
+- `Succeeded.files` held exactly one file: a PNG of 993,283 bytes, 1536x1024.
+- The private root was empty and removed afterwards.
+- No string of the login appeared in any frame, status, log or stderr
+  (`token_seen` false).
+- No token, hash, email or account value is recorded, and no picture bytes or
+  answer text were kept.
+
+**What it means.** A real picture comes back through the service's own `POST /runs`
+as `Succeeded.files`: the gap B1 left, which proved the picture with `CodexRun`
+alone, is closed for one run in the outer-`bwrap` shape.
+
+**What it does not prove.**
+- The container shape in edge: the run was on this host, behind the wrapper.
+- Repeatability: one run, one attempt.
+- Picture formats other than PNG; only PNG dimensions are parsed.
+- That model code was cut off from the network. The outer `bwrap` shares the
+  network, so model code could have reached the harness's loopback port; the login
+  values lived only in the harness's memory. This is B1's posture.
+
 ### A1b measured: claude 2.1.302
 
 Measured on 17.10.2026 on `$HOME/.local/share/claude/versions/2.1.302`
