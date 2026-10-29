@@ -1,8 +1,0 @@
-claim_id = "42fe120eac9840b7a04beb0a52a12287"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "6167118cace960658eb731e8a8a466f6950064bc"
-branch = "claude/issue-604-r1-renewal-attempt"
-scope = ["AGENTS.md", "packages/service/src/agent_runtime_service/renewal.py", "packages/service/tests/test_renewal.py", "packages/service/tests/test_renewal_end.py", "tests/support/codex_support.py", "tests/support/service_renewal_support.py"]
-opened_commit = "ffd09c91b47856ff744c7a214ac9bbbf8bae4224"
-whole_reason = "One renewal attempt is one ordered transaction over the reserved sibling, the source read, the bounded child, the confirmed end, the read-back and the conditional commit. D8's judgement and D9's retention decide its branches, so they can be reviewed for secret and data safety only together. The other files are its tests, one fake runner, one fake renewing CLI and one guidance line."
