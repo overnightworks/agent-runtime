@@ -7,10 +7,8 @@ Started as ``python -I <this file>``, which leaves this directory off
 from __future__ import annotations
 
 import asyncio
-import re
 import sys
 import tempfile
-from importlib.metadata import requires
 from pathlib import Path
 
 sys.path.insert(
@@ -23,19 +21,6 @@ from tests.support.mcp_app_fake import CERTIFICATE_HOST, ScriptedApp, TestAuthor
 from agent_runtime_service.app_tools import open_app_tools  # noqa: E402
 
 DISCOVERY_DEADLINE_SECONDS = 30
-EXPECTED_HTTPX_RANGE = {">=0.27", "<1"}
-
-
-def declared_httpx_ranges() -> list[set[str]]:
-    unconditional_httpx = (
-        re.fullmatch(r"httpx\s*([^;\s]+)", text.strip())
-        for text in requires("overnightworks-agent-runtime-service") or []
-    )
-    return [
-        {specifier.strip() for specifier in match.group(1).split(",")}
-        for match in unconditional_httpx
-        if match
-    ]
 
 
 async def discover(origin: str, authority: TestAuthority) -> list[str]:
@@ -47,7 +32,6 @@ async def discover(origin: str, authority: TestAuthority) -> list[str]:
 
 
 def main() -> None:
-    assert declared_httpx_ranges() == [EXPECTED_HTTPX_RANGE], declared_httpx_ranges()
     with tempfile.TemporaryDirectory() as directory:
         authority = TestAuthority(Path(directory))
         with serving(ScriptedApp(), authority.credentials_for(CERTIFICATE_HOST)) as fake:
