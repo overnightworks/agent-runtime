@@ -451,7 +451,7 @@ class Relay:
 
 def _connection_task() -> asyncio.Task[Any]:
     task = asyncio.current_task()
-    assert task is not None
+    assert task is not None  # noqa: S101 - this runs inside a connection task
     return task
 
 

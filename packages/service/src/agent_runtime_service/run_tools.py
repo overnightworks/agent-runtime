@@ -207,7 +207,7 @@ class RunTools:
 
     @property
     def access(self) -> RelayAccess:
-        assert self._relay is not None
+        assert self._relay is not None  # noqa: S101 - only open() tools are asked for their relay access
         return self._relay.access
 
     @property
@@ -234,7 +234,7 @@ class RunTools:
             await self._close_upstream_calls()
             await _leave_client(self._run_id, self._clock, self._upstream)
             if self._relay is not None:
-                await self._close_relay()
+                await self._close_relay(self._relay)
 
     async def _close_upstream_calls(self) -> None:
         self._barrier.abort_forwards()
@@ -246,8 +246,7 @@ class RunTools:
             f"Closing the upstream calls of run {self._run_id} failed",
         )
 
-    async def _close_relay(self) -> None:
-        assert self._relay is not None
-        failure = await _failure_of(self._relay.close(), f"run-tools:{self._run_id}:relay-close")
+    async def _close_relay(self, relay: Relay) -> None:
+        failure = await _failure_of(relay.close(), f"run-tools:{self._run_id}:relay-close")
         if failure is not None:
             log_failure(log, f"Closing the relay of run {self._run_id} failed", failure)

@@ -62,5 +62,5 @@ class Runners:
             case Cli():
                 return self.cli
             case Api():
-                assert self.api is not None
+                assert self.api is not None  # noqa: S101 - the host routes to Api only when it installed an api runner
                 return self.api

@@ -235,7 +235,7 @@ class _WireRun:
                 self._lease.release()
 
     def terminal_frame(self) -> bytes:
-        assert self._terminal_frame is not None
+        assert self._terminal_frame is not None  # noqa: S101 - callers ask only after commit_terminal decided a terminal
         return self._terminal_frame
 
     def _committed_terminal(self, decided: Succeeded | _DecidedFailure) -> bytes:
@@ -293,7 +293,7 @@ class _WireRun:
         except _Unsendable as refusal:
             self._decided = _failure_of(refusal)
         else:
-            assert isinstance(succeeded, Succeeded)
+            assert isinstance(succeeded, Succeeded)  # noqa: S101 - a final event is wired as Succeeded or refused
             self._decided = succeeded
 
     def _frame_of_event(self, core_event: StreamEvent) -> bytes | None:
@@ -359,7 +359,7 @@ class _WireRun:
             self._recorder_of_started_run().accepted(event)
 
     def _recorder_of_started_run(self) -> RunRecorder:
-        assert self._recorder is not None
+        assert self._recorder is not None  # noqa: S101 - RunStarted begins the recorder before any later event
         return self._recorder
 
     def _charge(self, event: RunEvent, frame_bytes: int) -> None:
