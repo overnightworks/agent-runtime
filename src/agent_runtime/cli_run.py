@@ -161,16 +161,16 @@ class _Runnable(Protocol):
     def history(self) -> Sequence[object]: ...
 
 
-class _Login[Verdict](Protocol):
+class _Login[LoginVerdict](Protocol):
     @property
-    def verdict(self) -> Verdict: ...
+    def verdict(self) -> LoginVerdict: ...
 
 
-def require_runnable[Verdict](
+def require_runnable[LoginVerdict](
     provider: str,
     run: _Runnable,
-    login_type: type[_Login[Verdict]],
-    usable: Verdict,
+    login_type: type[_Login[LoginVerdict]],
+    usable: LoginVerdict,
 ) -> None:
     """Refuse a run that has no absolute binary, no usable login or no history to send."""
     if not run.binary.is_absolute():
