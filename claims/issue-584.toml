@@ -1,8 +1,0 @@
-claim_id = "aeb271207b664351bfadd3d7fd51c604"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "10d261ff0f99eaa3d8aff5c8e1b76ef9147be104"
-branch = "claude/issue-584-g-run-b-grokrun"
-scope = ["docs/host.md", "src/agent_runtime/cli_run.py", "src/agent_runtime/codex/run.py", "src/agent_runtime/grok/run.py", "tests/support/grok_support.py", "tests/test_grok_run.py"]
-opened_commit = "0f752b64df5e4721a267556f661640edeadffd1a"
-whole_reason = "One new adapter module with its decoder, its fake and its tests, plus the one documentation line that names the run adapters."
