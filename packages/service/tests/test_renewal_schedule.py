@@ -567,6 +567,7 @@ def test_any_number_of_cancellations_during_the_handover_neither_overflow_nor_en
         completed.append(True)
 
     monkeypatch.setattr(arrangement.renewer, "hand_over_as_interrupted", blocked_hand_over)
+    a_fake_runner(monkeypatch)
     schedule = a_schedule(arrangement, pause=RecordingPause(2))
 
     async def scenario() -> bool:
