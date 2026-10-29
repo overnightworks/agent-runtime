@@ -7,7 +7,9 @@ start a real ``agent-runtime-service`` process and stop it with SIGTERM.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
+import os
 import shlex
 import signal
 import socket
@@ -189,8 +191,10 @@ def test_the_codex_table_alone_is_renewed_with_its_binary_in_a_home_under_the_wo
 
 
 @contextmanager
-def a_serving_process(files: CodexServiceFiles, port: int) -> Iterator[subprocess.Popen[bytes]]:
-    """A real ``agent-runtime-service`` for ``files``, killed when the scope ends."""
+def a_serving_process(
+    files: CodexServiceFiles, port: int, *, release: Path | None = None
+) -> Iterator[subprocess.Popen[bytes]]:
+    """A real ``agent-runtime-service`` for ``files``; it and every stand-in end with the scope."""
     with (files.configuration.parent / "service.log").open("wb") as output:
         process = subprocess.Popen(  # noqa: S603 - the test's own interpreter and file
             [
@@ -208,8 +212,30 @@ def a_serving_process(files: CodexServiceFiles, port: int) -> Iterator[subproces
             _wait_until_serving(process, port)
             yield process
         finally:
-            process.kill()
-            process.wait(TEST_WAIT_SECONDS)
+            try:
+                process.kill()
+                process.wait(TEST_WAIT_SECONDS)
+            finally:
+                if release is not None:
+                    release.touch()
+                _end_every_stand_in(files)
+
+
+def _end_every_stand_in(files: CodexServiceFiles) -> None:
+    pids = files.started_pids()
+    for pid in pids:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(pid, signal.SIGKILL)
+    for pid in pids:
+        eventually(lambda pid=pid: not _is_alive(pid))
+
+
+def _is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
 
 
 def _a_free_port() -> int:
@@ -247,7 +273,7 @@ def test_sigterm_during_a_renewal_ends_the_process_only_after_the_renewal_commit
     renewed = a_renewed_login_now()
     port = _a_free_port()
     files = codex_service_files(tmp_path, a_due_login_now(), renewed, then=blocked, port=port)
-    with a_serving_process(files, port) as process:
+    with a_serving_process(files, port, release=release) as process:
         try:
             eventually(entered.exists)
             process.send_signal(signal.SIGTERM)
@@ -255,23 +281,6 @@ def test_sigterm_during_a_renewal_ends_the_process_only_after_the_renewal_commit
                 process.wait(A_MOMENT_SECONDS)
         finally:
             release.touch()
-        returncode = process.wait(TEST_WAIT_SECONDS)
-
-    assert returncode == -signal.SIGTERM
-    assert files.login.read_bytes() == renewed
-    assert not swap_sibling(files.login).exists()
-    assert list(files.root.iterdir()) == []
-
-
-def test_sigterm_while_the_schedule_pauses_after_a_renewal_ends_the_process_promptly(
-    tmp_path: Path,
-) -> None:
-    renewed = a_renewed_login_now()
-    port = _a_free_port()
-    files = codex_service_files(tmp_path, a_due_login_now(), renewed, port=port)
-    with a_serving_process(files, port) as process:
-        eventually(lambda: files.login.read_bytes() == renewed)
-        process.send_signal(signal.SIGTERM)
         returncode = process.wait(TEST_WAIT_SECONDS)
 
     assert returncode == -signal.SIGTERM

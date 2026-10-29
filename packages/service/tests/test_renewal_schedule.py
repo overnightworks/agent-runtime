@@ -42,7 +42,7 @@ from tests.support.service_renewal_support import (  # noqa: F401 - the autouse 
     writing,
 )
 
-from agent_runtime_service import renewal_schedule
+from agent_runtime_service import login_file, renewal_schedule
 from agent_runtime_service.config import Provider
 from agent_runtime_service.renewal import RenewalOutcome
 from agent_runtime_service.renewal_schedule import (
@@ -129,6 +129,29 @@ def test_a_round_without_a_failure_waits_the_interval(
 
     assert pause.seconds == [RENEWAL_INTERVAL_SECONDS]
     assert runner.calls == children
+
+
+def test_a_stop_during_the_pause_after_a_renewal_ends_the_schedule_promptly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    arrangement = an_arrangement(tmp_path, DUE_ORIGINAL)
+    a_fake_runner(monkeypatch, on_home=writing(RENEWED_LOGIN))
+    pause_entered = asyncio.Event()
+
+    async def observed_pause(seconds: float, stopping: asyncio.Event) -> None:
+        pause_entered.set()
+        await renewal_schedule.wait_for_stop(seconds, stopping)
+
+    async def scenario() -> bool:
+        leave = asyncio.Event()
+        serving = asyncio.create_task(
+            serving_until(a_schedule(arrangement, pause=observed_pause), leave)
+        )
+        await within_the_bound(pause_entered.wait())
+        leave.set()
+        return await finishes_within_a_moment(serving)
+
+    assert asyncio.run(scenario())
 
 
 @contextmanager
@@ -233,10 +256,7 @@ def test_a_login_file_that_is_a_mount_point_is_refused_at_the_reserve_and_spends
     caplog.set_level(logging.DEBUG)
     arrangement = an_arrangement(tmp_path)
     runner = a_fake_runner(monkeypatch, on_home=writing(RENEWED_LOGIN))
-    real_ismount = os.path.ismount
-    monkeypatch.setattr(
-        os.path, "ismount", lambda path: Path(path) == arrangement.token_file or real_ismount(path)
-    )
+    monkeypatch.setattr(login_file, "is_mount_point", lambda path: path == arrangement.token_file)
     pause = RecordingPause(1)
 
     run_rounds(a_schedule(arrangement, pause=pause), pause)

@@ -20,6 +20,7 @@ from typing import Final
 from agent_runtime.secret_file import UnsoundSecretFile, read_secret_file, shown_text
 
 LOGIN_FILE_MODE: Final = 0o600
+_DESCRIPTOR_INFORMATION: Final = Path("/proc/self/fdinfo")
 
 
 def swap_sibling(path: Path) -> Path:
@@ -216,12 +217,32 @@ class ReservedSwap:
         )
 
 
+def _mount_identity(path: Path) -> str:
+    descriptor = os.open(path, os.O_PATH | os.O_NOFOLLOW | os.O_CLOEXEC)
+    try:
+        lines = (_DESCRIPTOR_INFORMATION / str(descriptor)).read_text().splitlines()
+    finally:
+        os.close(descriptor)
+    return dict(line.split(":\t", 1) for line in lines)["mnt_id"]
+
+
+def is_mount_point(path: Path) -> bool:
+    """Whether ``path`` is a mount point as the kernel sees it, a same-filesystem bind too."""
+    # os.path.ismount compares device numbers, which a bind of the same filesystem shares.
+    if not _DESCRIPTOR_INFORMATION.exists():
+        return os.path.ismount(path)
+    try:
+        return _mount_identity(path) != _mount_identity(path.parent)
+    except FileNotFoundError:
+        return False
+
+
 def reserve_swap(path: Path) -> ReservedSwap | SwapRefused:
     """Create the sibling of ``path`` exclusively and hold it; reads and keeps no content."""
     sibling = swap_sibling_or_refusal(path)
     if isinstance(sibling, SwapRefused):
         return sibling
-    if os.path.ismount(path):
+    if is_mount_point(path):
         return SwapRefused(
             f"{shown_text(str(path))} is a mount point, which a rename cannot replace; bind the"
             " directory that holds the file, read-write",

@@ -382,6 +382,11 @@ class CodexServiceFiles:
     root: Path
     ran: Path
     """Exists once the stand-in has been run past ``--version``."""
+    pids: Path
+    """One line per run of the stand-in: the pid of its shell, the leader of its own group."""
+
+    def started_pids(self) -> list[int]:
+        return [int(line) for line in self.pids.read_text().split()] if self.pids.exists() else []
 
     def traces(self) -> tuple[bool, bytes, bool, bool]:
         """In order: a child ran, the login's bytes, a sibling exists, the root holds anything."""
@@ -409,10 +414,11 @@ def codex_service_files(
     fake_directory = directory / "fake-codex"
     fake_directory.mkdir()
     ran = fake_directory / "ran"
+    pids = fake_directory / "pids"
     binary = a_renewing_fake_codex(
         fake_directory,
         renewed,
-        f": > {shlex.quote(str(ran))}\n{then}",
+        f": > {shlex.quote(str(ran))}\necho $$ >> {shlex.quote(str(pids))}\n{then}",
         version_line=CODEX_TABLE.version_line,
     )
     login = write_login(fake_directory / CODEX_TABLE.login_name, login_document)
@@ -422,5 +428,5 @@ def codex_service_files(
     configuration = directory / "agent-runtime-service.toml"
     configuration.write_text("\n".join(_toml_lines(document)) + "\n", encoding="utf-8")
     return CodexServiceFiles(
-        configuration, login, login_document, Path(document["cli"]["working_root"]), ran
+        configuration, login, login_document, Path(document["cli"]["working_root"]), ran, pids
     )

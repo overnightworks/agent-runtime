@@ -663,8 +663,30 @@ def test_a_reservation_in_a_directory_that_cannot_be_written_is_not_a_held_sibli
 
 
 def a_login_file_that_is_a_mount_point(monkeypatch: pytest.MonkeyPatch, login: Path) -> None:
-    real_ismount = os.path.ismount
-    monkeypatch.setattr(os.path, "ismount", lambda path: Path(path) == login or real_ismount(path))
+    real_detector = login_file.is_mount_point
+    monkeypatch.setattr(
+        login_file, "is_mount_point", lambda path: path == login or real_detector(path)
+    )
+
+
+def test_the_mount_detector_counts_proc_but_not_a_plain_file(tmp_path: Path) -> None:
+    plain_file = tmp_path / "plain"
+    plain_file.write_text("x")
+
+    assert login_file.is_mount_point(Path("/proc")) is True
+    assert login_file.is_mount_point(plain_file) is False
+    assert login_file.is_mount_point(tmp_path / "missing") is False
+
+
+def test_the_mount_detector_falls_back_to_the_device_comparison_without_descriptor_information(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(login_file, "_DESCRIPTOR_INFORMATION", tmp_path / "absent")
+    plain_file = tmp_path / "plain"
+    plain_file.write_text("x")
+
+    assert login_file.is_mount_point(Path("/proc")) is True
+    assert login_file.is_mount_point(plain_file) is False
 
 
 def test_a_login_file_that_is_a_mount_point_is_refused_before_the_sibling_is_created(
