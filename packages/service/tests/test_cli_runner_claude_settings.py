@@ -37,12 +37,6 @@ from tests.support.service_cli_runner_support import (
     status_of,
     trusting,
 )
-from tests.support.service_codex_support import (
-    a_codex_config,
-    a_codex_login_file,
-    a_service_fake,
-    codex_document,
-)
 from tests.support.service_support import (
     COWRITER,
     PINNED_CLAUDE_VERSION,
@@ -52,6 +46,12 @@ from tests.support.service_support import (
     logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
     post_run,
     run_body,
+)
+from tests.support.service_table_support import (
+    a_codex_config,
+    a_codex_login_file,
+    a_service_fake,
+    codex_document,
 )
 
 from agent_runtime.claude.run import TURNS_BEYOND_TOOL_CALLS

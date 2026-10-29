@@ -19,7 +19,6 @@ import anyio
 import httpx
 import pytest
 from fastapi import FastAPI
-from tests.support.service_codex_support import CODEX_NAME, a_config_with_both_providers
 from tests.support.service_support import (
     ADMITTED_AGENTS,
     API_GROUP,
@@ -46,6 +45,7 @@ from tests.support.service_support import (
     shared_mint,
     unused_runners,
 )
+from tests.support.service_table_support import CODEX_NAME, a_config_with_both_providers
 from tests.support.token_rejection_support import (
     FORBIDDEN,
     TOKEN_REJECTIONS,

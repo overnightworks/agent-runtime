@@ -14,9 +14,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from tests.support.service_codex_support import (
-    the_served_runs,  # noqa: F401 - the fixture is named in its decorator
-)
 from tests.support.service_config_support import (
     VALID_CONFIG,
     config_file_naming,
@@ -24,6 +21,9 @@ from tests.support.service_config_support import (
     written,
 )
 from tests.support.service_support import logging_state_snapshot  # noqa: F401 - a fixture, requested by name
+from tests.support.service_table_support import (
+    the_served_runs,  # noqa: F401 - the fixture is named in its decorator
+)
 
 import agent_runtime_service.config as service_config
 import agent_runtime_service.process_hardening as hardening
