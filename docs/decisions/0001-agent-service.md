@@ -3748,6 +3748,92 @@ idle; whether a renewal while a run holds a copy disturbs that run; repeatabilit
 measured in the service's real run shape; the write-back was done by the harness, not
 by the service's one login writer.
 
+#### A1b-C6-0 the Codex login renewed headless by the pinned CLI
+
+**What ran.** Slice C6-0 of #578, measured on 29.10.2026. Pinned `codex-cli 0.163.0`
+(sha256 prefix `399ff69c431c`), with the dedicated service Codex login (signed in
+29.10.2026), kept in its own folder. Two live runs, each one sanitized record
+(`record-20261029T162848047427.json` at 16:28 UTC, inconclusive;
+`record-20261029T172321099068.json` at 17:22 UTC, answered), plus offline rows
+against an invented login, kept with the harness in the operator's probe directory
+`c6-0/` (`step0/`, `step0b/`) outside the repository. The harness runs the service's
+own `CodexRun` argv and closed environment and writes a renewed document back over
+the source only under an unsafe marker, as in A1b-G6-0.
+
+**What makes the login due.** Read from upstream `rust-v0.163.0`
+(`codex-rs/login/src/auth/manager.rs`, `should_refresh_proactively` and its two
+constants) and checked by offline rows against a local fake token endpoint:
+- The CLI refreshes proactively before its turn when the access token's JWT `exp` is
+  within 5 minutes.
+- It falls back to `last_refresh` older than 8 days only when `exp` is unreadable or
+  the access token is empty.
+- Step 0's first reading (an 8-day `last_refresh` rule) was an artifact of invented
+  tokens whose `exp` was a float. Run 1 confirms it on the real login: it aged
+  `last_refresh` by 30 days, the access token was still valid, and nothing was
+  refreshed (`not_attempted`).
+- `login status` showed no refresh attempt offline.
+- A third trigger ran on the fake backend: a 401 on a still-valid access token (offline
+  row a with backend, step0b pass 2) made the CLI post the stored refresh token to the
+  token endpoint and go on with the new access token; the same row without the backend
+  made no post. A 401 from the real server was not tried.
+
+**Which command renews.** `codex exec`, at startup, before the turn. Each renewal
+therefore costs one tool-free model turn (about 6 s in run 2).
+
+**How the probe made it due.** The run copy carried an empty access token and a
+30-day-old `last_refresh`, so the CLI's own refresh fired (offline row d1). The
+refresh request carries only `client_id`, `grant_type` and `refresh_token` (offline
+capture, `step0b`). Decision: the probe does not forge an expired `exp`, because a
+tampered token could reach a server.
+
+**Result (run 2).**
+
+| Measure | R | R2 |
+|---|---|---|
+| Exit, run reason, duration | 0, complete, 6.2 s | 0, complete, 6.4 s |
+| Outcome | renewed, turn completed | renewed, turn completed |
+| Failure phrases in the CLI's output and logs (64 and 60 sources) | none | none |
+| Access, refresh and identity tokens | all changed | all changed |
+| New access token's lifetime | 240 h | 240 h |
+| Renewed document | usable to the core's decider; 8 member names (`OPENAI_API_KEY`, `access_token`, `account_id`, `auth_mode`, `id_token`, `last_refresh`, `refresh_token`, `tokens`), no other | the same 8 |
+
+R and R2 renewed without a browser. R2 renewed the document R wrote back, so the
+refresh token rotated at each of the two renewals.
+
+Two blanked copies (the library's `blanked_copy`, as in a service run) each completed
+one tool-free turn, exit 0, no refusal, the home's `auth.json` unchanged:
+- **O**, a copy of the document from before R, run after R's renewal: a renewal does
+  not break a turn running on an older blanked copy.
+- **N**, a copy of the newest document.
+
+The source holds the newest document, written back durably (record `writeback`); the
+marker was cleared. No token value, hash, email or account value is recorded
+anywhere.
+
+**What it means for the renewer** (R1 in #115's C6 row). Read by this record, not as
+new rulings:
+- From the source, not run: a blanked copy of the dedicated login attempts a refresh
+  with its empty refresh token about 5 minutes before the access token's `exp`, so the
+  renewer must renew well before that.
+- The measured way is exactly the probe's: one `exec` turn on a run copy whose access
+  token is emptied, written back by the one login writer.
+- As with Grok, treat each renewal as replacing the refresh token: one holder owns
+  the full login, and run copies stay blanked.
+
+**What it does not prove.**
+- These are one run's evidence, two renewals.
+- How long an old access token keeps working after rotation is unmeasured beyond O's
+  few seconds.
+- The refresh token's server-side lifetime is unknown.
+- The server's answer to a refresh with an empty refresh token is unknown, which
+  matters for blanked copies near `exp`.
+- On a transient failure the CLI re-sent the same refresh token 2 to 3 times a second
+  until the run's 25 s timeout killed it (offline rows f1 and f2, local fake token
+  endpoint answering 500: 68 and 52 requests).
+- The npm binary was assumed, not proven, to match the tag the source was read at.
+- The run was not in the service's real run shape (no `bwrap`), and the write-back was
+  done by the harness, not by the service's login writer.
+
 ### A1b measured: claude 2.1.302
 
 Measured on 17.10.2026 on `$HOME/.local/share/claude/versions/2.1.302`
