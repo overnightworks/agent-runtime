@@ -99,7 +99,7 @@ OPENAI_NON_CHAT_MARKERS: Final[tuple[str, ...]] = (
 CLAUDE_MODEL_PREFIX = "claude-"
 CLAUDE_CLI_MODEL_LIST_MARKER = "Available: "
 
-CLAUDE_OAUTH_TOKEN_VARIABLE: Final[str] = "CLAUDE_CODE_OAUTH_TOKEN"
+CLAUDE_OAUTH_TOKEN_VARIABLE: Final[str] = "CLAUDE_CODE_OAUTH_TOKEN"  # noqa: S105 - an environment variable name and no secret
 CLAUDE_NO_SESSION_PERSISTENCE_FLAG: Final[str] = "--no-session-persistence"
 CLAUDE_RUN_SWITCHES: Final[Mapping[str, str]] = MappingProxyType(
     {

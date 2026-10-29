@@ -631,7 +631,7 @@ def test_stream_cmd_uses_stream_json_and_verbose() -> None:
     from agent_runtime.config import current_turn_config
 
     cmd = _mcp_cli_arguments(
-        "opus", "/tmp/mcp.json", current_turn_config().mcp_server, stream=True,
+        "opus", "/opt/mcp.json", current_turn_config().mcp_server, stream=True,
     )
     assert "--output-format" in cmd
     idx = cmd.index("--output-format")
@@ -644,7 +644,7 @@ def test_stream_cmd_non_stream_keeps_json() -> None:
     from agent_runtime.config import current_turn_config
 
     cmd = _mcp_cli_arguments(
-        "opus", "/tmp/mcp.json", current_turn_config().mcp_server,
+        "opus", "/opt/mcp.json", current_turn_config().mcp_server,
     )
     idx = cmd.index("--output-format")
     assert cmd[idx + 1] == "json"

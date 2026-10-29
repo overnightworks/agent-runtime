@@ -53,7 +53,6 @@ def main() -> None:
         with serving(ScriptedApp(), authority.credentials_for(CERTIFICATE_HOST)) as fake:
             discovered = asyncio.run(discover(fake.origin, authority))
     assert discovered == ["echo"], discovered
-    print("discovered", discovered)
 
 
 main()

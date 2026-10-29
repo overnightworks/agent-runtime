@@ -362,7 +362,7 @@ def test_containment_lost_names_only_the_group_and_a_retained_group_is_a_value()
     assert vars(error) == {"group": group}
     assert str(error) == "process group 4242: its end after SIGKILL is not confirmed"
     assert "7731" not in str(error)
-    for rebuilt in (pickle.loads(pickle.dumps(error)), copy.copy(error), copy.deepcopy(error)):  # noqa: S301
+    for rebuilt in (pickle.loads(pickle.dumps(error)), copy.copy(error), copy.deepcopy(error)):  # noqa: S301 - a pickle round trip of the test's own error
         assert rebuilt.group == group
     with pytest.raises(dataclasses.FrozenInstanceError):
         group.pgid = 1  # type: ignore[misc]

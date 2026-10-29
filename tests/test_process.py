@@ -2861,7 +2861,7 @@ def test_the_cli_fault_classes_split_login_from_environment() -> None:
     environment = CliEnvironmentUnavailableError(
         "no room", cause=CliEnvironmentCause.CREDENTIAL_COPY_NOT_WRITTEN,
     )
-    restored = pickle.loads(pickle.dumps(environment))
+    restored = pickle.loads(pickle.dumps(environment))  # noqa: S301 - a pickle round trip of the test's own environment
 
     assert issubclass(CliLoginUnusableError, AgentCliUnavailableError)
     assert issubclass(CliEnvironmentUnavailableError, AgentCliUnavailableError)

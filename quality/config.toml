@@ -56,3 +56,15 @@ what = 'import contract "inside the core, only the routers import a provider pac
 item = "#556"
 date = 2026-10-28
 reason = "agent_runtime.cli_settings joins the forbidden contract, which tightens it; the gate counts any field change as a loosening (overnightworks/quality#217)"
+
+[[python.allow]]
+path = "pyproject.toml"
+reason = "songmaker and presentator install these wheels on Python 3.12 (their .python-version files read 3.12 on 29.10.2026); raising requires-python to 3.14 would break them"
+
+[[python.allow]]
+path = "packages/client/pyproject.toml"
+reason = "songmaker and presentator install these wheels on Python 3.12 (their .python-version files read 3.12 on 29.10.2026); raising requires-python to 3.14 would break them"
+
+[[python.allow]]
+path = "packages/service/pyproject.toml"
+reason = "songmaker and presentator install these wheels on Python 3.12 (their .python-version files read 3.12 on 29.10.2026); raising requires-python to 3.14 would break them"

@@ -439,7 +439,7 @@ def test_a_refused_root_wins_over_a_differing_installation(tmp_path: Path) -> No
 
 @pytest.mark.parametrize(
     "duplicate",
-    [lambda error: pickle.loads(pickle.dumps(error)), copy.copy, copy.deepcopy],
+    [lambda error: pickle.loads(pickle.dumps(error)), copy.copy, copy.deepcopy],  # noqa: S301 - a pickle round trip of the test's own error
     ids=["pickle", "copy", "deepcopy"],
 )
 def test_a_refusal_survives_being_copied_with_its_violation(
@@ -634,7 +634,7 @@ _PREFIX_ENTRY_LEVELS = [
     ),
 ]
 
-_PREFIXES_THAT_COULD_LEAVE_THE_ROOT = ["/tmp/x-", "../esc-", "../", "sub/", "a/b-", "/", "a\x00b"]
+_PREFIXES_THAT_COULD_LEAVE_THE_ROOT = ["/opt/x-", "../esc-", "../", "sub/", "a/b-", "/", "a\x00b"]
 _PREFIXES_OUTSIDE_THE_CLOSED_NAME_SET = ["a b-", "x*", "ok\n", "pr\u00e4fix-"]
 _PLAIN_PREFIXES = ["notes-mcp-", ".hid-", "a_b.c-1", "NOTES-CLI-", ".", ".."]
 _BOUNDARY_PREFIXES = [

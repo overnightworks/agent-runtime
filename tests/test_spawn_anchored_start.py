@@ -66,7 +66,7 @@ def outer_measurement() -> str:
 def reported_testcases(report: Path) -> list[tuple[str, bool]]:
     return [
         (case.get("name"), UNPASSED_OUTCOMES.isdisjoint(child.tag for child in case))
-        for case in ElementTree.parse(report).iter("testcase")
+        for case in ElementTree.parse(report).iter("testcase")  # noqa: S314 - the inner pytest run's own JUnit report
     ]
 
 
@@ -99,7 +99,7 @@ def test_a_start_row_passes_in_its_own_interpreter(
     try:
         exit_code = child_cleanup.wait_exited(interpreter, bound=ROW_INTERPRETER_SECONDS)
     finally:
-        print(output.read_text(errors="replace"))
+        print(output.read_text(errors="replace"))  # noqa: T201 - shows the inner run's output when the row fails
 
     assert exit_code == 0
     assert reported_testcases(report) == [(row.split("::")[-1], True)]

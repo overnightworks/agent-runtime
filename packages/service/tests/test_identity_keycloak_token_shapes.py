@@ -125,8 +125,6 @@ def test_user_token_never_carries_the_agent_workload_role(user_claims, user):
 @pytest.mark.parametrize("user", USERS)
 def test_user_token_names_the_login_client_in_azp(user_claims, user):
     claims = user_claims[user]
-    # Recorded, not relied on: whether a user token carries client_id.
-    print(f"{user}: client_id {claims.get('client_id', '<absent>')!r}")
     assert claims.get("azp") == USER_LOGIN_CLIENT, (
         f"azp of {user} is {claims.get('azp')!r}, not {USER_LOGIN_CLIENT!r}"
     )
@@ -181,8 +179,6 @@ def test_service_account_tokens_differ_in_the_client_its_user_and_its_web_origin
         for claim in (songmaker.keys() | presentator.keys()) - PER_TOKEN_CLAIMS
         if songmaker.get(claim) != presentator.get(claim)
     }
-    print(f"service-account claims: {sorted(songmaker.keys() | presentator.keys())}")
-    print(f"differing between the two workload clients: {sorted(differing)}")
     expected = (
         CLIENT_NAMING_CLAIMS
         | SERVICE_ACCOUNT_USER_CLAIMS
@@ -199,7 +195,6 @@ def test_service_account_token_lists_its_groups_as_full_paths_and_may_omit_an_em
 ):
     songmaker = service_account_claims["songmaker-test"]
     presentator = service_account_claims["presentator-test"]
-    print(f"presentator's token carries a groups claim: {'groups' in presentator}")
     assert songmaker.get("groups") == ["/api-members"], (
         f"groups of songmaker's service account are {songmaker.get('groups')!r}"
     )
