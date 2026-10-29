@@ -549,7 +549,8 @@ def test_a_refused_rename_keeps_the_rotated_document_in_the_retained_home(
     report = logged_once(caplog, arrangement.renewer.attempt)
 
     assert (report.outcome, report.cleanup) == (RenewalOutcome.COMMIT_REFUSED, Cleanup.RETAINED)
-    assert report.refusal and "cannot be swapped in" in report.refusal
+    assert report.refusal
+    assert "cannot be swapped in" in report.refusal
     assert arrangement.source_is_intact()
     assert arrangement.retained_login() == RENEWED_LOGIN
 
@@ -760,5 +761,6 @@ def test_a_sibling_that_cannot_be_removed_is_named_in_the_report(
 
     report = logged_once(caplog, arrangement.renewer.attempt)
 
-    assert report.refusal and "is not confirmed gone" in report.refusal
+    assert report.refusal
+    assert "is not confirmed gone" in report.refusal
     assert arrangement.sibling.exists()
