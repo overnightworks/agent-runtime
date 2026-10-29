@@ -1,8 +1,0 @@
-claim_id = "cec29398cbd645d09c6b3bfed96b1996"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "67262d3c2aa16b5ff6324ed72e1711fc389a8131"
-branch = "claude/issue-568-g1-one-grok-login-decider-for-readiness"
-scope = ["docs/MIGRATING.md", "quality/baseline.toml", "src/agent_runtime/grok_login.py", "src/agent_runtime/process.py", "tests/support/suite_fixtures.py", "tests/test_grok_login.py", "tests/test_process.py"]
-opened_commit = "b3c1dc0582619a9bea2a12b83468463d6b7c9e43"
-whole_reason = "One decider and its two callers: the copy and the readiness check must change together, or they disagree again."
