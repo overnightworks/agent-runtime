@@ -4,8 +4,8 @@
 each relative to the one before, so no component the CLI could have replaced is followed.
 Every entry must be a regular file with one name; it is read through its own descriptor, at
 most one byte past the limit in all. An adapter's named sub-folders of the run home are read
-the same way one level deeper, one folder per thread, under that same limit. The read is synchronous and bounded, and it names no
-provider. A refusal carries one closed :class:`RunOutputCause` and no name, path or content.
+the same way one level deeper, one folder per thread, under that same limit. The read is synchronous and bounded, and it names
+no provider. A refusal carries one closed :class:`RunOutputCause` and no name, path or content.
 """
 
 from __future__ import annotations
