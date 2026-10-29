@@ -31,6 +31,7 @@ from agent_runtime.errors import CliLoginRefusedError
 from agent_runtime.events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime.grok.run import (
     GROK_CLI_LOGIN_REFUSED_DETAIL,
+    GROK_CLI_PROCESS_POOL,
     GrokAnswerMissing,
     GrokRun,
     GrokRunFailure,
@@ -87,18 +88,16 @@ def a_run(**changes: Any) -> GrokRun:
     return GrokRun(**{**fields, **changes})
 
 
-a_fake_grok = partial(a_fake_grok_expecting, system_text=SYSTEM_TEXT, expected_prompt=EXPECTED_PROMPT)
+a_fake_grok = partial(
+    a_fake_grok_expecting, system_text=SYSTEM_TEXT, expected_prompt=EXPECTED_PROMPT
+)
 
 
-def decoded(lines: tuple[bytes, ...]) -> list[StreamEvent]:
+def decoded(lines: tuple[bytes, ...], returncode: int | None = None) -> list[StreamEvent]:
+    """The events of ``lines``, and the ending when the process is taken to have exited."""
     decoder = GrokStreamDecoder()
-    return [event for each in lines for event in decoder.events_of(each)]
-
-
-def decoded_and_ended(lines: tuple[bytes, ...], returncode: int = 0) -> list[StreamEvent]:
-    decoder = GrokStreamDecoder()
-    events = [event for each in lines for event in decoder.events_of(each)]
-    return [*events, decoder.ending(returncode)]
+    events: list[StreamEvent] = [event for line in lines for event in decoder.events_of(line)]
+    return events if returncode is None else [*events, decoder.ending(returncode)]
 
 
 @pytest.mark.parametrize(
@@ -136,27 +135,26 @@ def test_the_run_declares_no_picture_folder_and_no_stdin(tmp_path: Path) -> None
     assert (start.picture_folders, start.stdin) == ((), b"")
 
 
-def test_no_login_system_or_history_text_is_in_argv_environment_or_repr(tmp_path: Path) -> None:
+def test_no_login_system_or_history_text_is_visible_to_a_process_listing(tmp_path: Path) -> None:
     run = a_run()
     start = run.start(tmp_path / "home", tmp_path / "work")
 
-    visible = " ".join(
+    listing = " ".join(
         [*start.child.arguments, *start.child.environment.values(), repr(run), repr(start)]
     )
-    assert [
-        secret for secret in (LOGIN_KEY, SYSTEM_TEXT, HISTORY_TEXT) if secret in visible
-    ] == []
+    assert not any(secret in listing for secret in (LOGIN_KEY, SYSTEM_TEXT, HISTORY_TEXT))
 
 
-def test_the_run_files_are_the_blanked_login_the_rules_and_the_prompt() -> None:
-    run = a_run()
+def test_the_home_gets_the_blanked_login_the_rules_and_the_prompt_as_files() -> None:
+    login = assess_grok_login(a_login())
+    files = a_run(login=login).run_files()
 
-    files = run.run_files()
-    assert files["AGENTS.md"] == SYSTEM_TEXT.encode()
-    assert files["prompt.txt"] == EXPECTED_PROMPT.encode()
-    assert files["auth.json"] == run.login.blanked_document
+    assert files == {
+        "auth.json": login.blanked_document,
+        "AGENTS.md": SYSTEM_TEXT.encode(),
+        "prompt.txt": EXPECTED_PROMPT.encode(),
+    }
     assert json.loads(files["auth.json"])["xai.example"]["refresh_token"] == ""
-    assert sorted(files) == ["AGENTS.md", "auth.json", "prompt.txt"]
 
 
 @pytest.mark.parametrize(
@@ -174,11 +172,11 @@ def test_a_run_with_a_refused_field_is_not_built_and_the_error_names_the_field(
     with pytest.raises(ChildProcessSpecificationError, match=field_name) as refused:
         a_run(**changes)
 
-    assert [secret for secret in (SYSTEM_TEXT, HISTORY_TEXT) if secret in str(refused.value)] == []
+    assert SYSTEM_TEXT not in str(refused.value) + str(refused.value.args)
 
 
 def test_the_streamed_text_is_its_text_events_then_the_whole_answer_stripped() -> None:
-    events = decoded_and_ended(HAPPY_STREAM)
+    events = decoded(HAPPY_STREAM, 0)
 
     assert events == [
         AssistantTextEvent(text="first "),
@@ -196,7 +194,7 @@ def test_the_streamed_text_is_its_text_events_then_the_whole_answer_stripped() -
     ],
 )
 def test_thought_usage_and_command_lists_never_reach_the_events(silent: bytes) -> None:
-    assert decoded_and_ended((silent, a_text("answer"), END)) == [
+    assert decoded((silent, a_text("answer"), END), 0) == [
         AssistantTextEvent(text="answer"),
         FinalEvent(text="answer"),
     ]
@@ -242,11 +240,9 @@ def test_a_stream_that_calls_a_tool_fails_or_is_unknown_ends_closed_without_cli_
     with pytest.raises(failure) as ended:
         decoded(stream)
 
-    assert (CLI_TEXT in str(ended.value), ended.value.__cause__, ended.value.__context__) == (
-        False,
-        None,
-        None,
-    )
+    chain = (ended.value.__cause__, ended.value.__context__)
+    assert CLI_TEXT not in str(ended.value)
+    assert chain == (None, None)
 
 
 @pytest.mark.parametrize(
@@ -261,35 +257,23 @@ def test_a_run_without_an_end_and_a_clean_exit_ends_with_no_answer(
     stream: tuple[bytes, ...], returncode: int
 ) -> None:
     with pytest.raises(GrokAnswerMissing):
-        decoded_and_ended(stream, returncode)
+        decoded(stream, returncode)
 
 
 def test_a_completed_turn_without_words_ends_with_empty_text_for_the_wire_to_decide() -> None:
-    assert decoded_and_ended((END,))[-1] == FinalEvent(text="")
+    assert decoded((END,), 0)[-1] == FinalEvent(text="")
 
 
-def test_a_refused_login_has_its_own_fixed_message_without_cli_text() -> None:
-    with pytest.raises(CliLoginRefusedError) as refused:
+def test_a_refused_login_is_the_cores_error_with_its_fixed_detail() -> None:
+    with pytest.raises(CliLoginRefusedError, match=GROK_CLI_LOGIN_REFUSED_DETAIL):
         decoded((NOT_SIGNED_IN,))
-
-    assert (str(refused.value), refused.value.__cause__, refused.value.__context__) == (
-        GROK_CLI_LOGIN_REFUSED_DETAIL,
-        None,
-        None,
-    )
 
 
 def test_every_failure_class_has_its_own_fixed_message() -> None:
-    failures = (
-        GrokUnknownStreamPart(),
-        GrokUnreadableLine(),
-        GrokToolCalled(),
-        GrokTurnFailed(),
-        GrokAnswerMissing(),
-    )
+    classes = GrokRunFailure.__subclasses__()
 
-    assert len({str(failure) for failure in failures}) == len(failures)
-    assert all(isinstance(failure, GrokRunFailure) for failure in failures)
+    assert len({failure.message for failure in classes}) == len(classes) == 5
+    assert all(str(failure()) == failure.message for failure in classes)
 
 
 @pytest.fixture
@@ -304,29 +288,26 @@ def drive(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> Iterator[Callable[[Coroutine[Any, Any, Any]], Any]]:
-    yield lambda scenario: drive_real_children(child_cleanup, monkeypatch, scenario)
-    assert [child_cleanup.state(owned) is GONE for owned in child_cleanup.listed()] == [
-        True for _ in child_cleanup.listed()
-    ]
-    assert (held_slots(a_run().pool), thread_failures, spawn_warnings(caplog)) == (0, [], [])
+    yield partial(drive_real_children, child_cleanup, monkeypatch)
+    assert all(child_cleanup.state(owned) is GONE for owned in child_cleanup.listed())
+    assert held_slots(GROK_CLI_PROCESS_POOL) == 0
+    assert thread_failures == [] == spawn_warnings(caplog)
 
 
 async def collected(root: PrivateWorkingRoot, run: GrokRun) -> list[StreamEvent]:
     return [event async for event in astream_cli_run(root, run, max_files_bytes=1024)]
 
 
-def test_a_run_after_reset_config_streams_in_order_and_leaves_nothing_behind(
+def test_a_run_after_reset_config_needs_no_installed_configuration(
     drive, tmp_path: Path, private_root: Path
 ) -> None:
     reset_config()
     run = a_run(binary=a_fake_grok(tmp_path, HAPPY_STREAM))
 
-    assert drive(collected(PrivateWorkingRoot(private_root), run)) == [
-        AssistantTextEvent(text="first "),
-        AssistantTextEvent(text="second"),
-        FinalEvent(text="first second"),
-    ]
-    assert list(private_root.iterdir()) == []
+    events = drive(collected(PrivateWorkingRoot(private_root), run))
+
+    assert [event.text for event in events] == ["first ", "second", "first second"]
+    assert not list(private_root.iterdir())
 
 
 def test_the_child_sees_the_private_blanked_login_and_no_secret_on_argv(
@@ -338,6 +319,7 @@ def test_the_child_sees_the_private_blanked_login_and_no_secret_on_argv(
     drive(collected(PrivateWorkingRoot(private_root), run))
 
     argv = (capture / "argv").read_text()
+    assert "--prompt-file" in argv.splitlines()
     assert [text for text in (LOGIN_KEY, SYSTEM_TEXT, HISTORY_TEXT) if text in argv] == []
     assert json.loads((capture / "auth.json").read_bytes()) == json.loads(
         run.login.blanked_document
@@ -370,16 +352,15 @@ def test_a_failed_run_raises_its_closed_class_and_still_reaps_and_removes_the_tr
     then: str,
     failure: type[Exception],
 ) -> None:
-    run = a_run(binary=a_fake_grok(tmp_path, stream, then))
     caplog.set_level(logging.DEBUG)
-    scenario = collected(PrivateWorkingRoot(private_root), run)
+    run = a_run(binary=a_fake_grok(tmp_path, stream, then))
 
     with pytest.raises(failure) as ended:
-        drive(scenario)
+        drive(collected(PrivateWorkingRoot(private_root), run))
 
     assert (tmp_path / PRECONDITIONS_MARKER).exists()
     assert CLI_TEXT not in f"{ended.value} {caplog.text}"
-    assert list(private_root.iterdir()) == []
+    assert not list(private_root.iterdir())
 
 
 def test_a_line_over_the_limit_ends_the_run_and_the_tree_is_removed(

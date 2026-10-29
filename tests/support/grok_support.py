@@ -39,35 +39,33 @@ def a_fake_grok(
     ``--prompt-file`` and its empty stdin before it prints ``stream``; with ``capture`` it
     first records its arguments and the login it was given.
     """
-    stream_file = directory / "stream.jsonl"
-    stream_file.write_bytes(b"".join(stream))
-    record = (
-        ""
-        if capture is None
-        else (
-            f"mkdir -p {shlex.quote(str(capture))}\n"
-            f"printf '%s\\n' \"$@\" > {shlex.quote(str(capture / 'argv'))}\n"
-            f'cp "$GROK_HOME/auth.json" {shlex.quote(str(capture / "auth.json"))}\n'
-        )
+    (directory / "stream.jsonl").write_bytes(b"".join(stream))
+    guards = (
+        ('[ "$GROK_HOME" = "$HOME" ]', 10),
+        ('[ "$(stat -c %a "$GROK_HOME/auth.json")" = 600 ]', 11),
+        ('grep -q \'"refresh_token": ""\' "$GROK_HOME/auth.json"', 12),
+        (f'[ "$(cat "$GROK_HOME/AGENTS.md")" = {shlex.quote(system_text)} ]', 13),
+        (f'[ "$(cat "$prompt_file")" = {shlex.quote(expected_prompt)} ]', 14),
+        ('[ -z "$(cat)" ]', 15),
     )
+    lines = [
+        "#!/bin/sh",
+        'for argument in "$@"; do [ "$previous" = --prompt-file ] && prompt_file=$argument;'
+        " previous=$argument; done",
+        *(f"{test} || exit {code}" for test, code in guards),
+    ]
+    if capture is not None:
+        lines += [
+            f"mkdir -p {shlex.quote(str(capture))}",
+            f"printf '%s\\n' \"$@\" > {shlex.quote(str(capture / 'argv'))}",
+            f'cp "$GROK_HOME/auth.json" {shlex.quote(str(capture / "auth.json"))}',
+        ]
+    lines += [
+        f": > {shlex.quote(str(directory / PRECONDITIONS_MARKER))}",
+        f"cat {shlex.quote(str(directory / 'stream.jsonl'))}",
+        then,
+    ]
     binary = directory / "grok"
-    binary.write_text(
-        "#!/bin/sh\n"
-        '[ "$GROK_HOME" = "$HOME" ] || exit 10\n'
-        '[ "$(stat -c %a "$GROK_HOME/auth.json")" = 600 ] || exit 11\n'
-        'grep -q \'"refresh_token": ""\' "$GROK_HOME/auth.json" || exit 12\n'
-        f'[ "$(cat "$GROK_HOME/AGENTS.md")" = {shlex.quote(system_text)} ] || exit 13\n'
-        'prompt_file=""\n'
-        'while [ $# -gt 0 ]; do\n'
-        '  [ "$1" = --prompt-file ] && prompt_file="$2"\n'
-        "  shift\n"
-        "done\n"
-        f'[ "$(cat "$prompt_file")" = {shlex.quote(expected_prompt)} ] || exit 14\n'
-        '[ -z "$(cat)" ] || exit 15\n'
-        f"{record}"
-        f": > {shlex.quote(str(directory / PRECONDITIONS_MARKER))}\n"
-        f"cat {shlex.quote(str(stream_file))}\n"
-        f"{then}\n"
-    )
+    binary.write_text("\n".join(lines) + "\n")
     binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
     return binary

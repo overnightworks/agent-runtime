@@ -162,14 +162,15 @@ class GrokRun:
     model: str | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
-        if not self.binary.is_absolute():
-            raise ChildProcessSpecificationError("A Grok run needs an absolute binary")
-        if not (
-            isinstance(self.login, GrokLogin) and self.login.verdict is GrokLoginVerdict.USABLE
-        ):
-            raise ChildProcessSpecificationError("A Grok run needs a usable login")
-        if not self.history:
-            raise ChildProcessSpecificationError("A Grok run needs a non-empty history")
+        usable = isinstance(self.login, GrokLogin) and self.login.verdict is GrokLoginVerdict.USABLE
+        refusals = (
+            (self.binary.is_absolute(), "an absolute binary"),
+            (usable, "a usable login"),
+            (bool(self.history), "a non-empty history"),
+        )
+        for accepted, needs in refusals:
+            if not accepted:
+                raise ChildProcessSpecificationError(f"A Grok run needs {needs}")
 
     @property
     def pool(self) -> CliProcessPool:
