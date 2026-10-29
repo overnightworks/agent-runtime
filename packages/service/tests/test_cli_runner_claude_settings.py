@@ -57,12 +57,8 @@ from tests.support.service_support import (
 from agent_runtime.claude.run import TURNS_BEYOND_TOOL_CALLS
 from agent_runtime_client.wire import FailureCode, RunEvent
 from agent_runtime_service.cli_runner import CliRunner, mcp_tls_context
-from agent_runtime_service.config import (
-    AgentConfig,
-    ClaudeCliSettingsConfig,
-    CliSettingsConfig,
-    ServiceConfig,
-)
+from agent_runtime_service.cli_settings_config import ClaudeCliSettingsConfig, CliSettingsConfig
+from agent_runtime_service.config import AgentConfig, ServiceConfig
 from agent_runtime_service.run_events import RUNNER_FAILED_MESSAGE
 from agent_runtime_service.run_liveness import LoopClock
 from agent_runtime_service.runners import Runners

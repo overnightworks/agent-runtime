@@ -55,13 +55,11 @@ from pydantic import (
     StrictInt,
     ValidationError,
     ValidationInfo,
-    field_validator,
     model_validator,
 )
 from webauth.https_client import is_https_url
 from webauth.oidc_login import AdmissionConfig
 
-from agent_runtime.claude.run import check_tool_name, settings_document
 from agent_runtime.cli_settings import CliSettings
 from agent_runtime.codex_login import CodexLogin, CodexLoginVerdict, assess_codex_login
 from agent_runtime.config import PrivateWorkingRoot, WorkingRootNotPrivateError
@@ -82,6 +80,7 @@ from agent_runtime_client.wire import (
 )
 from agent_runtime_service.api_credentials import read_api_credentials
 from agent_runtime_service.capability import CapabilityScope
+from agent_runtime_service.cli_settings_config import CliSettingsConfig
 from agent_runtime_service.signing import SigningKey, load_signing_key
 
 NonEmptyText = Annotated[str, Field(min_length=1, strict=True)]
@@ -400,110 +399,6 @@ class RunConfig(_Section):
         return self
 
 
-_CODEX_KEYS_THE_SERVICE_OWNS: Final = {
-    "model": "model",
-    "model_provider": "model",
-    "model_instructions_file": "the run request's system text",
-    "cli_auth_credentials_store": "[cli.openai] token_file",
-}
-
-
-_CLAUDE_SETTINGS_THE_SERVICE_OWNS: Final = {
-    ("model",): "set model instead",
-    ("fallbackModel",): "set model instead",
-    ("agent",): "set the run request's system text and model instead",
-    ("apiKeyHelper",): "set [cli.anthropic] token_file instead",
-    ("env",): "the service builds the run's environment",
-    ("permissions", "allow"): "set cli_settings.anthropic.tools instead",
-}
-_APP_TOOL_PREFIX: Final = "mcp__"
-
-
-def _claude_setting_is_set(settings: object, path: tuple[str, ...]) -> bool:
-    for key in path:
-        if not isinstance(settings, dict) or key not in settings:
-            return False
-        settings = settings[key]
-    return True
-
-
-class ClaudeCliSettingsConfig(_Section):
-    """Claude's ``tools`` and ``settings`` as one level of the operator's table.
-
-    A field a level does not set stays absent from that level, so it never replaces a lower
-    one; ``tools = []`` is set and switches a lower list off.
-    """
-
-    tools: list[str] | None = None
-    settings: dict[str, object] | None = None
-
-    @field_validator("tools")
-    @classmethod
-    def _tool_names_the_cli_can_take_one_by_one(cls, tools: list[str] | None) -> list[str] | None:
-        for index, name in enumerate(tools or []):
-            try:
-                check_tool_name(name)
-            except ValueError as refusal:
-                raise ValueError(f"tools[{index}]: {refusal}") from None
-        return tools
-
-    @field_validator("settings")
-    @classmethod
-    def _values_json_can_hold(cls, settings: dict[str, object] | None) -> dict[str, object] | None:
-        try:
-            settings_document(cast("CliSettings", settings or {}))
-        except TypeError as refusal:
-            raise ValueError(str(refusal)) from None
-        return settings
-
-    @model_validator(mode="after")
-    def _keys_the_service_owns_are_not_set_here(self) -> Self:
-        for index, name in enumerate(self.tools or []):
-            if name.startswith(_APP_TOOL_PREFIX):
-                raise ValueError(
-                    f"tools[{index}] is the service's; set the app's MCP origin instead"
-                )
-        for path, owner in _CLAUDE_SETTINGS_THE_SERVICE_OWNS.items():
-            if _claude_setting_is_set(self.settings or {}, path):
-                raise ValueError(f"settings.{'.'.join(path)} is the service's; {owner}")
-        return self
-
-    def as_level(self) -> CliSettings:
-        """The fields this level sets, as the run adapter's level."""
-        level: CliSettings = {}
-        if self.tools is not None:
-            level["tools"] = list(self.tools)
-        if self.settings is not None:
-            level["settings"] = cast("CliSettings", self.settings)
-        return level
-
-
-class CliSettingsConfig(_Section):
-    """The CLIs' own settings in each CLI's own shape, passed through without a mapping.
-
-    Only a key whose fact another owner already holds is refused, naming that owner.
-    """
-
-    anthropic: ClaudeCliSettingsConfig = ClaudeCliSettingsConfig()
-    openai: dict[str, object] = {}
-
-    @field_validator("openai")
-    @classmethod
-    def _keys_the_service_owns_are_not_set_here(
-        cls, settings: dict[str, object]
-    ) -> dict[str, object]:
-        for key, owner in _CODEX_KEYS_THE_SERVICE_OWNS.items():
-            if key in settings:
-                raise ValueError(f"{key} is the service's; set {owner} instead")
-        return settings
-
-    def of(self, provider: Provider) -> CliSettings:
-        """The table of ``provider``; a provider without one has no settings."""
-        if provider is Provider.ANTHROPIC:
-            return self.anthropic.as_level()
-        return cast("CliSettings", self.openai)
-
-
 class DefaultsConfig(_Section):
     """What a run uses when neither its agent's nor its app's table names it."""
 
@@ -592,6 +487,12 @@ RULES_ON_THE_RAW_DOCUMENT: Final = (
     _refuse_an_origin_without_signing,
     _refuse_an_origin_without_a_ca_bundle,
 )
+
+
+_CLI_SETTINGS_LEVEL: Final[Mapping[Provider, Callable[[CliSettingsConfig], CliSettings]]] = {
+    Provider.ANTHROPIC: lambda table: table.anthropic.as_level(),
+    Provider.OPENAI: lambda table: cast("CliSettings", table.openai),
+}
 
 
 class ServiceConfig(_Section):
@@ -705,10 +606,11 @@ class ServiceConfig(_Section):
         """
         app = self.apps[app_name]
         agent_config = app.agents.get(agent)
+        level_of = _CLI_SETTINGS_LEVEL[provider]
         return (
-            self.defaults.cli_settings.of(provider),
-            app.cli_settings.of(provider),
-            {} if agent_config is None else agent_config.cli_settings.of(provider),
+            level_of(self.defaults.cli_settings),
+            level_of(app.cli_settings),
+            {} if agent_config is None else level_of(agent_config.cli_settings),
         )
 
     def capability_scope(self, app_name: str, tools: Iterable[str]) -> CapabilityScope | None:

@@ -7,7 +7,8 @@ from tests.support.api_support import write_api_credentials
 from tests.support.service_support import LISTED_MODEL, service_config
 
 from agent_runtime_service import api_runner
-from agent_runtime_service.config import CliSettingsConfig, DefaultsConfig, Provider, ServiceConfig
+from agent_runtime_service.cli_settings_config import CliSettingsConfig
+from agent_runtime_service.config import DefaultsConfig, Provider, ServiceConfig
 
 
 def configured(tmp_path, **api):

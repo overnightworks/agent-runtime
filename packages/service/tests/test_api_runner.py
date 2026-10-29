@@ -39,12 +39,8 @@ from agent_runtime_client.wire import AssistantText, Failed, FailureCode, Succee
 from agent_runtime_service import api_runner
 from agent_runtime_service.app import create_app
 from agent_runtime_service.cli import installed_runners
-from agent_runtime_service.config import (
-    AgentConfig,
-    ClaudeCliSettingsConfig,
-    Provider,
-    ServiceConfig,
-)
+from agent_runtime_service.cli_settings_config import ClaudeCliSettingsConfig
+from agent_runtime_service.config import AgentConfig, Provider, ServiceConfig
 from agent_runtime_service.run_liveness import LoopClock
 
 
