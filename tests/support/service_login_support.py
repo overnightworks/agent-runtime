@@ -20,13 +20,13 @@ from typing import Any
 
 import pytest
 from tests.support.provider_test_support import a_codex_login, write_claude_token_file
-from tests.support.service_codex_support import (
+from tests.support.service_support import TEST_ISSUER, _service_config_document, reaches_text
+from tests.support.service_table_support import (
     a_service_fake,
     codex_document,
     write_login,
     written_document,
 )
-from tests.support.service_support import TEST_ISSUER, _service_config_document, reaches_text
 
 import agent_runtime_service.config as service_config
 import agent_runtime_service.login as login
