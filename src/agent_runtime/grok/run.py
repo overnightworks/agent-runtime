@@ -5,17 +5,23 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar, Final, NoReturn
+from typing import Final, NoReturn
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict
 
 from agent_runtime.anchored_turn import CliProcessPool, ReapBounds
-from agent_runtime.cli_run import CliRunStart, StepEvent
+from agent_runtime.cli_run import (
+    CliRunFailure,
+    CliRunStart,
+    StepEvent,
+    parsed_line,
+    require_runnable,
+)
 from agent_runtime.constants import CLI_GROUP_CONFIRMATION_SECONDS, CLI_TERMINATION_GRACE_SECONDS
 from agent_runtime.errors import CliLoginRefusedError, raise_without_chain
 from agent_runtime.events import AssistantTextEvent, FinalEvent
 from agent_runtime.grok_login import GrokLogin, GrokLoginVerdict
-from agent_runtime.spawn import ChildProcess, ChildProcessSpecificationError, closed_environment
+from agent_runtime.spawn import ChildProcess, closed_environment
 from agent_runtime.transcript import flatten_messages
 from agent_runtime_client.wire import TurnMessage
 
@@ -58,13 +64,8 @@ GROK_CLI_LOGIN_REFUSED_DETAIL: Final = "Grok CLI login was refused."
 _LOGIN_REFUSED_TEXT: Final = "Not signed in"
 
 
-class GrokRunFailure(Exception):
-    """A run that ended closed; each class has one fixed message and carries no CLI text."""
-
-    message: ClassVar[str]
-
-    def __init__(self) -> None:
-        super().__init__(self.message)
+class GrokRunFailure(CliRunFailure):
+    """A Grok run that ended closed."""
 
 
 class GrokUnknownStreamPart(GrokRunFailure):
@@ -101,10 +102,6 @@ class _ErrorEvent(_StreamEvent):
     message: str = ""
 
 
-def _fail(failure: GrokRunFailure) -> NoReturn:
-    raise_without_chain(failure)
-
-
 class GrokStreamDecoder:
     """Turns `streaming-json` lines into events and fails closed on anything it does not know."""
 
@@ -113,38 +110,31 @@ class GrokStreamDecoder:
         self._answer = ""
 
     def events_of(self, line: bytes) -> Sequence[StepEvent]:
-        event_type = self._parsed(line, _StreamEvent).type
+        event_type = parsed_line(line, _StreamEvent, GrokUnreadableLine()).type
         if event_type == _TEXT:
-            text = self._parsed(line, _TextEvent).data
+            text = parsed_line(line, _TextEvent, GrokUnreadableLine()).data
             self._answer += text
             return [AssistantTextEvent(text=text)]
         if event_type == _END:
             self._ended = True
         elif event_type == _ERROR:
-            self._fail_turn(self._parsed(line, _ErrorEvent))
+            self._fail_turn(parsed_line(line, _ErrorEvent, GrokUnreadableLine()))
         elif event_type in _TOOL_EVENT_TYPES:
-            _fail(GrokToolCalled())
+            raise_without_chain(GrokToolCalled())
         elif event_type not in _SILENT_EVENT_TYPES:
-            _fail(GrokUnknownStreamPart())
+            raise_without_chain(GrokUnknownStreamPart())
         return []
 
     @staticmethod
     def _fail_turn(event: _ErrorEvent) -> NoReturn:
         if event.message.startswith(_LOGIN_REFUSED_TEXT):
             raise_without_chain(CliLoginRefusedError(GROK_CLI_LOGIN_REFUSED_DETAIL))
-        _fail(GrokTurnFailed())
+        raise_without_chain(GrokTurnFailed())
 
     def ending(self, returncode: int) -> FinalEvent:
         if not self._ended or returncode != 0:
-            _fail(GrokAnswerMissing())
+            raise_without_chain(GrokAnswerMissing())
         return FinalEvent(text=self._answer.strip())
-
-    @staticmethod
-    def _parsed[EventModel: BaseModel](line: bytes, model: type[EventModel]) -> EventModel:
-        try:
-            return model.model_validate_json(line)
-        except ValidationError:
-            _fail(GrokUnreadableLine())
 
 
 @dataclass(frozen=True)
@@ -162,15 +152,7 @@ class GrokRun:
     model: str | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
-        usable = isinstance(self.login, GrokLogin) and self.login.verdict is GrokLoginVerdict.USABLE
-        refusals = (
-            (self.binary.is_absolute(), "an absolute binary"),
-            (usable, "a usable login"),
-            (bool(self.history), "a non-empty history"),
-        )
-        for accepted, needs in refusals:
-            if not accepted:
-                raise ChildProcessSpecificationError(f"A Grok run needs {needs}")
+        require_runnable("Grok", self, GrokLogin, GrokLoginVerdict.USABLE)
 
     @property
     def pool(self) -> CliProcessPool:

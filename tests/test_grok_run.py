@@ -8,23 +8,20 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable, Coroutine, Iterator
 from functools import partial
 from pathlib import Path
 from typing import Any
 
 import pytest
-from tests.support.anchored_leaders import spawn_warnings
-from tests.support.anchored_support import GONE, ChildCleanup
+from tests.support.cli_run_support import (
+    a_drive,  # noqa: F401 - the fixture is named in its decorator
+    a_private_working_root,  # noqa: F401 - the fixture is named in its decorator
+)
 from tests.support.grok_support import COMMANDS, END, PRECONDITIONS_MARKER, USAGE, a_text, grok_line
 from tests.support.grok_support import a_fake_grok as a_fake_grok_expecting
-from tests.support.provider_test_support import (
-    a_grok_login,
-    a_private_root,
-    drive_real_children,
-    held_slots,
-)
+from tests.support.provider_test_support import a_grok_login
 
+from agent_runtime.anchored_turn import CliProcessPool
 from agent_runtime.cli_run import CliStreamLineTooLong, astream_cli_run
 from agent_runtime.config import PrivateWorkingRoot, reset_config
 from agent_runtime.errors import CliLoginRefusedError
@@ -200,66 +197,6 @@ def test_thought_usage_and_command_lists_never_reach_the_events(silent: bytes) -
     ]
 
 
-@pytest.mark.parametrize(
-    ("failure", "stream"),
-    [
-        pytest.param(GrokToolCalled, (grok_line(type="tool_call", rawInput=CLI_TEXT),), id="call"),
-        pytest.param(
-            GrokToolCalled, (grok_line(type="tool_call_update", status=CLI_TEXT),), id="update"
-        ),
-        pytest.param(
-            GrokToolCalled,
-            (a_text("answer"), grok_line(type="tool_call", rawInput=CLI_TEXT), END),
-            id="call-after-the-answer",
-        ),
-        pytest.param(
-            GrokUnknownStreamPart, (grok_line(type="max_turns_reached", x=CLI_TEXT),), id="unknown"
-        ),
-        pytest.param(GrokUnreadableLine, (f"not json {CLI_TEXT}\n".encode(),), id="not-json"),
-        pytest.param(GrokUnreadableLine, (b'["list"]\n',), id="not-an-object"),
-        pytest.param(GrokUnreadableLine, (grok_line(data=CLI_TEXT),), id="no-event-type"),
-        pytest.param(
-            GrokUnreadableLine, (grok_line(type="text", data=[CLI_TEXT]),), id="text-not-a-string"
-        ),
-        pytest.param(GrokUnreadableLine, (grok_line(type="text"),), id="text-without-data"),
-        pytest.param(
-            GrokTurnFailed, (grok_line(type="error", message=f"quota {CLI_TEXT}"),), id="error"
-        ),
-        pytest.param(GrokTurnFailed, (grok_line(type="error"),), id="error-without-message"),
-        pytest.param(
-            GrokUnreadableLine,
-            (grok_line(type="error", message=[CLI_TEXT]),),
-            id="error-message-not-a-string",
-        ),
-        pytest.param(CliLoginRefusedError, (NOT_SIGNED_IN,), id="not-signed-in"),
-    ],
-)
-def test_a_stream_that_calls_a_tool_fails_or_is_unknown_ends_closed_without_cli_text(
-    failure: type[Exception], stream: tuple[bytes, ...]
-) -> None:
-    with pytest.raises(failure) as ended:
-        decoded(stream)
-
-    chain = (ended.value.__cause__, ended.value.__context__)
-    assert CLI_TEXT not in str(ended.value)
-    assert chain == (None, None)
-
-
-@pytest.mark.parametrize(
-    ("stream", "returncode"),
-    [
-        pytest.param((a_text("answer"), END), 1, id="nonzero-exit-after-end"),
-        pytest.param((a_text("answer"),), 0, id="no-end"),
-        pytest.param((), 0, id="empty-stream"),
-    ],
-)
-def test_a_run_without_an_end_and_a_clean_exit_ends_with_no_answer(
-    stream: tuple[bytes, ...], returncode: int
-) -> None:
-    with pytest.raises(GrokAnswerMissing):
-        decoded(stream, returncode)
-
-
 def test_a_completed_turn_without_words_ends_with_empty_text_for_the_wire_to_decide() -> None:
     assert decoded((END,), 0)[-1] == FinalEvent(text="")
 
@@ -272,30 +209,23 @@ def test_a_refused_login_is_the_cores_error_with_its_fixed_detail() -> None:
 def test_every_failure_class_has_its_own_fixed_message() -> None:
     classes = GrokRunFailure.__subclasses__()
 
-    assert len({failure.message for failure in classes}) == len(classes) == 5
+    assert len({failure.message for failure in classes}) == len(classes)
     assert all(str(failure()) == failure.message for failure in classes)
 
 
-@pytest.fixture
-def private_root(tmp_path: Path) -> Path:
-    return a_private_root(tmp_path)
+@pytest.fixture(name="pool")
+def a_grok_pool() -> CliProcessPool:
+    return GROK_CLI_PROCESS_POOL
 
 
-@pytest.fixture
-def drive(
-    child_cleanup: ChildCleanup,
-    thread_failures: list[Any],
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> Iterator[Callable[[Coroutine[Any, Any, Any]], Any]]:
-    yield partial(drive_real_children, child_cleanup, monkeypatch)
-    assert all(child_cleanup.state(owned) is GONE for owned in child_cleanup.listed())
-    assert held_slots(GROK_CLI_PROCESS_POOL) == 0
-    assert thread_failures == [] == spawn_warnings(caplog)
-
-
-async def collected(root: PrivateWorkingRoot, run: GrokRun) -> list[StreamEvent]:
-    return [event async for event in astream_cli_run(root, run, max_files_bytes=1024)]
+async def collected(
+    root: PrivateWorkingRoot, run: GrokRun, sink: list[StreamEvent] | None = None
+) -> list[StreamEvent]:
+    """The run's events, also appended to ``sink`` as they arrive so a failed run keeps them."""
+    events = [] if sink is None else sink
+    async for event in astream_cli_run(root, run, max_files_bytes=1024):
+        events.append(event)
+    return events
 
 
 def test_a_run_after_reset_config_needs_no_installed_configuration(
@@ -326,24 +256,67 @@ def test_the_child_sees_the_private_blanked_login_and_no_secret_on_argv(
     )
 
 
+def a_tool_event(kind: str) -> bytes:
+    return grok_line(type=kind, rawInput=CLI_TEXT)
+
+
 @pytest.mark.parametrize(
     ("stream", "then", "failure"),
     [
         pytest.param((NOT_SIGNED_IN,), "exit 1", CliLoginRefusedError, id="login-refused"),
+        pytest.param((a_tool_event("tool_call"),), "exit 0", GrokToolCalled, id="tool-call"),
         pytest.param(
-            (a_text("answer"), grok_line(type="tool_call"), END),
+            (a_tool_event("tool_call_update"),), "exit 0", GrokToolCalled, id="tool-call-update"
+        ),
+        pytest.param(
+            (a_text("answer"), a_tool_event("tool_call"), END),
             "exit 0",
             GrokToolCalled,
-            id="tool-call",
+            id="tool-call-after-the-answer",
         ),
+        pytest.param(
+            (a_text("answer"), a_tool_event("tool_call_update"), END),
+            "exit 0",
+            GrokToolCalled,
+            id="tool-call-update-after-the-answer",
+        ),
+        pytest.param(
+            (grok_line(type="max_turns_reached", x=CLI_TEXT),),
+            "exit 0",
+            GrokUnknownStreamPart,
+            id="unknown-type",
+        ),
+        pytest.param(
+            (f"not json {CLI_TEXT}\n".encode(),), "exit 0", GrokUnreadableLine, id="not-json"
+        ),
+        pytest.param((b'["list"]\n',), "exit 0", GrokUnreadableLine, id="not-an-object"),
+        pytest.param((grok_line(data=CLI_TEXT),), "exit 0", GrokUnreadableLine, id="no-type"),
+        pytest.param(
+            (grok_line(type="text", data=[CLI_TEXT]),),
+            "exit 0",
+            GrokUnreadableLine,
+            id="text-not-a-string",
+        ),
+        pytest.param((grok_line(type="text"),), "exit 0", GrokUnreadableLine, id="text-no-data"),
+        pytest.param(
+            (grok_line(type="error", message=[CLI_TEXT]),),
+            "exit 0",
+            GrokUnreadableLine,
+            id="error-message-not-a-string",
+        ),
+        pytest.param(
+            (grok_line(type="error", message=f"quota {CLI_TEXT}"),),
+            "exit 1",
+            GrokTurnFailed,
+            id="error",
+        ),
+        pytest.param((grok_line(type="error"),), "exit 1", GrokTurnFailed, id="error-no-message"),
         pytest.param((a_text("answer"), END), "exit 3", GrokAnswerMissing, id="bad-exit"),
         pytest.param((a_text("answer"),), "exit 0", GrokAnswerMissing, id="no-end"),
-        pytest.param(
-            (grok_line(type="error", message=CLI_TEXT),), "exit 1", GrokTurnFailed, id="error"
-        ),
+        pytest.param((), "exit 0", GrokAnswerMissing, id="empty-stream"),
     ],
 )
-def test_a_failed_run_raises_its_closed_class_and_still_reaps_and_removes_the_tree(
+def test_a_failed_run_raises_its_closed_class_without_cli_text_and_removes_the_tree(
     drive,
     tmp_path: Path,
     private_root: Path,
@@ -353,12 +326,16 @@ def test_a_failed_run_raises_its_closed_class_and_still_reaps_and_removes_the_tr
     failure: type[Exception],
 ) -> None:
     caplog.set_level(logging.DEBUG)
+    seen: list[StreamEvent] = []
     run = a_run(binary=a_fake_grok(tmp_path, stream, then))
+    scenario = collected(PrivateWorkingRoot(private_root), run, seen)
 
     with pytest.raises(failure) as ended:
-        drive(collected(PrivateWorkingRoot(private_root), run))
+        drive(scenario)
 
     assert (tmp_path / PRECONDITIONS_MARKER).exists()
+    assert not any(isinstance(event, FinalEvent) for event in seen)
+    assert (ended.value.__cause__, ended.value.__context__) == (None, None)
     assert CLI_TEXT not in f"{ended.value} {caplog.text}"
     assert not list(private_root.iterdir())
 
