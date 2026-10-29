@@ -17,7 +17,6 @@ from agent_runtime_service.api_credentials import InvalidApiCredentials, read_ap
 from agent_runtime_service.api_tools import offered_schemas, require_unprotected, tool_conversation
 from agent_runtime_service.config import ServiceConfig
 from agent_runtime_service.relayed_events import RelayedEvents
-from agent_runtime_service.routing import Api
 from agent_runtime_service.run_liveness import RunClock
 from agent_runtime_service.run_tools import RunTools
 from agent_runtime_service.runners import AdmittedRun, ApiUnavailable
@@ -27,7 +26,7 @@ class ApiRunner:
     def __init__(
         self, config: ServiceConfig, *, tls_context: ssl.SSLContext | None, clock: RunClock,
     ) -> None:
-        assert config.api is not None
+        assert config.api is not None  # noqa: S101 - the host builds this runner only with an api section
         self._tls_context = tls_context
         self._clock = clock
         self._config = config.api
@@ -40,7 +39,6 @@ class ApiRunner:
             self._verify = context
 
     async def run(self, admitted: AdmittedRun) -> AsyncGenerator[StreamEvent, None]:
-        assert isinstance(admitted.route, Api)
         try:
             credentials = read_api_credentials(self._config.credential_file, self._apps)
             key = credentials.for_app(admitted.app)
@@ -74,7 +72,7 @@ class ApiRunner:
                     system=initial.system, messages=initial.messages,
                 )
         except ProviderUnavailableError as error:
-            assert error.reason is not None
+            assert error.reason is not None  # noqa: S101 - ProviderUnavailableError is raised here only with a reason
             failure = error.reason.code
         except Exception:
             failure = SafeRouteReasonCode.API_PROTOCOL_ERROR
@@ -93,8 +91,7 @@ class ApiRunner:
     async def _tool_events(
         self, admitted: AdmittedRun, client: AsyncClient, key: str, initial: InitialTurn,
     ) -> AsyncGenerator[StreamEvent, None]:
-        assert isinstance(admitted.route, Api)
-        assert admitted.capability is not None and self._tls_context is not None
+        assert admitted.capability is not None and self._tls_context is not None  # noqa: S101 - tools are offered only to a capability run with a TLS context
         async with AsyncExitStack() as lifetime:
             tools = await RunTools.open_session(
                 str(admitted.run_id), admitted.capability.claims.aud, admitted.capability,

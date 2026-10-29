@@ -131,14 +131,14 @@ class OpenAIConversation:
     async def stream(
         self, message: InitialTurn | ToolResultBatch,
     ) -> AsyncIterator[TransportResponse]:
-        self._append_message(message)
+        messages = self._append_message(message)
         payload = await _post_chat(
             self._client,
             self._provider,
             self._api_url,
             self._api_key,
             self._model,
-            self._messages,
+            messages,
             self._tool_schemas,
         )
         assistant_message = _assistant_message(payload, self._provider)
@@ -184,11 +184,10 @@ class OpenAIConversation:
                 if (not expected
                     or tuple(result.tool_use_id for result in message.results) != expected):
                     raise ToolLoopProtocolError()
-            self._append_message(message)
-            assert self._messages is not None
+            messages = self._append_message(message)
             response = await _request_chat(
                 self._client, self._provider, self._api_url, self._api_key,
-                self._model, self._messages, self._tool_schemas,
+                self._model, messages, self._tool_schemas,
             )
             if not 200 <= response.status_code < 300:
                 failure = SafeRouteReasonCode.API_HTTP_ERROR
@@ -199,7 +198,7 @@ class OpenAIConversation:
                 if isinstance(payload, dict):
                     return self._completed_round(payload)
         except ProviderUnavailableError as error:
-            assert error.reason is not None
+            assert error.reason is not None  # noqa: S101 - ProviderUnavailableError is raised here only with a reason
             failure = error.reason.code
         except (ValueError, RecursionError, ToolLoopProtocolError):
             pass
@@ -213,7 +212,7 @@ class OpenAIConversation:
         if not calls:
             return BufferedOpenAIRound(_completed_text(payload, self._provider), ())
         choices = payload["choices"]
-        assert isinstance(choices, list)
+        assert isinstance(choices, list)  # noqa: S101 - _assistant_message accepted only a list of choices
         content = message.get("content")
         if (message.get("role") != "assistant" or not isinstance(calls, list)
             or choices[0].get("finish_reason") != "tool_calls"
@@ -232,12 +231,12 @@ class OpenAIConversation:
         }
         return BufferedOpenAIRound(content or "", parsed)
 
-    def _append_message(self, message: InitialTurn | ToolResultBatch) -> None:
+    def _append_message(self, message: InitialTurn | ToolResultBatch) -> list[dict[str, Any]]:
         if isinstance(message, InitialTurn):
             if self._messages is not None:
                 raise ToolLoopProtocolError()
             self._messages = [{"role": "system", "content": message.system}, *message.messages]
-            return
+            return self._messages
         if self._messages is None or self._assistant_message is None:
             raise ToolLoopProtocolError()
         self._messages.append(self._assistant_message)
@@ -247,6 +246,7 @@ class OpenAIConversation:
             "content": result.content,
         } for result in message.results)
         self._assistant_message = None
+        return self._messages
 
 
 async def _post_chat(
@@ -312,7 +312,7 @@ async def complete_openai_compatible_text(
         else:
             return _completed_text(_response_payload(response, provider), provider)
     except ProviderUnavailableError as error:
-        assert error.reason is not None
+        assert error.reason is not None  # noqa: S101 - ProviderUnavailableError is raised here only with a reason
         failure = error.reason.code
     except RecursionError:
         failure = SafeRouteReasonCode.API_PROTOCOL_ERROR
@@ -322,7 +322,7 @@ async def complete_openai_compatible_text(
 def _completed_text(payload: Mapping[str, object], provider: str) -> str:
     message = _assistant_message(payload, provider)
     choices = payload["choices"]
-    assert isinstance(choices, list)
+    assert isinstance(choices, list)  # noqa: S101 - _assistant_message accepted only a list of choices
     content = message.get("content")
     tools = message.get("tool_calls")
     if (

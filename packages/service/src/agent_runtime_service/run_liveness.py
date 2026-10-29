@@ -670,7 +670,7 @@ class SupervisedRun:
 
     async def _handle_outcome(self) -> bool:
         """Queue the frame of the runner's event; False once the run has ended."""
-        assert self._outcome is not None
+        assert self._outcome is not None  # noqa: S101 - the loop handles an outcome only once one is ready
         outcome, self._outcome = self._outcome, None
         self._idle_due = None
         self._outcome_ready.clear()

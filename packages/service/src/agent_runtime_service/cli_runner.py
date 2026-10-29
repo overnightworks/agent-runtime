@@ -143,7 +143,7 @@ class CliRunner:
         self._settings_levels = config.cli_settings_levels
 
     async def run(self, admitted: AdmittedRun) -> AsyncGenerator[StreamEvent, None]:
-        assert isinstance(admitted.route, Cli)
+        assert isinstance(admitted.route, Cli)  # noqa: S101 - Runners.for_route sends only Cli routes here
         tools: RunTools | None = None
         events: RelayedEvents | None = None
         try:
@@ -175,7 +175,7 @@ class CliRunner:
         capability = admitted.capability
         if capability is None or not capability.claims.tools:
             return None
-        assert self._tls_context is not None
+        assert self._tls_context is not None  # noqa: S101 - a capability that claims tools exists only with a TLS context
         return await RunTools.open(
             str(admitted.run_id), capability.claims.aud, capability, self._tls_context, self._clock
         )
