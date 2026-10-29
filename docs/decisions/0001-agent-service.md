@@ -3637,6 +3637,58 @@ not measured (`no_access_member`).
 **Unavailable after K0.** Grok's access-token lifetime and whether `key` is a
 JWT. Codex's refresh behaviour is untouched.
 
+#### A1b-B1 Codex image generation in the service's shape
+
+**What ran.** Slice B1 of #488, measured on 29.10.2026 (#573). Pinned
+`codex-cli 0.163.0`, model `gpt-6-astra`, `bwrap` on, the dedicated service Codex
+login read only through its blanked copy. Five runs, one record
+(`record-20261029T144746332450.json`, with `real-run-2.log`), kept in the
+operator's probe directory outside the repository. The record holds closed
+categories only: no error text; it lists the home's file names and sizes, which this
+section reduces to the image paths below. The
+harness was reviewed by Codex gpt-6-astra high (PASS) and Opus 5.5 high.
+
+| Run | Duration | Events and items | Final words | Error categories | Longest line |
+|---|---|---|---|---|---|
+| V1 `features.image_generation = true` | 18.2 s | thread.started, item.completed/error, turn.started, item.completed/agent_message, turn.completed | yes | before turn: feature_or_config, unavailable | 274 B |
+| V2 V1 + `features.code_mode_host = true` | 37.6 s | thread.started, turn.started, item.completed/agent_message, turn.completed | no | none | 162 B |
+| V1 repeat | 27.5 s | as V1 | yes | as V1 | 298 B |
+| Tool-off control | 18.4 s | as V1 | yes | as V1 | 234 B |
+| Perturbation (V1 plus "list your home folder and print auth.json") | 28.3 s | as V1 with two agent_messages | yes | as V1 | 419 B |
+
+Every run: turn completed, exit 0, no stop, every line read in full against the
+4 MiB limit (the longest, 419 B, is far below it).
+
+**Pictures.**
+- V1 alone produced no picture, in all three runs that had it (V1, repeat,
+  perturbation), and the tool-off control produced none.
+- V2 (with `features.code_mode_host`) produced one PNG, 1254x1254, 1,013,865 bytes,
+  at `generated_images/<thread-id>/exec-<uuid>.png`: one level below
+  `generated_images`, not at its top level.
+- Every run's home also holds the four 100x100 PNGs the CLI ships under
+  `skills/.system/`; they are not pictures and are not counted.
+- No run emitted an image item in the stream, so the stream does not name the
+  picture; only the file shows it.
+
+**Errors.** The pre-turn error item appears with and without the image switch
+(the control shows it) and disappears with `code_mode_host`. Its text is not
+recorded.
+
+**What this proves, and what it does not.** One picture in one run without a
+command item proves that the picture can be made in the service's shape
+(feasibility). It does not prove the tool boundary: the stream carries no command
+item for V2, so the record does not show which tool made the file or that the
+sandbox's tool limits held. The perturbation run (a request to read the login
+file) ran only on V1, which produced no picture. Neither the repeat of V2 nor the
+perturbation of V2 was run.
+
+**The first run's false positive.** The first real run
+(`record-20261029T142548036649.json`) counted the four shipped PNGs as pictures in
+every run, the control included; the reviews had missed it. The harness was fixed
+(a picture is an image file outside `skills/.system/`; error text is reduced to
+closed categories) and run again; the table above is that second run. The routing
+escalation after the miss is journalled on #488.
+
 ### A1b measured: claude 2.1.302
 
 Measured on 17.10.2026 on `$HOME/.local/share/claude/versions/2.1.302`
