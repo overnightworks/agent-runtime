@@ -1,0 +1,8 @@
+claim_id = "14fc43969250498d8ed3c02b61b1c1b6"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "cc186522fb8d500c84360679a514af085417a9e5"
+branch = "claude/issue-600-r1-codex-renewal-run"
+scope = ["src/agent_runtime/codex/renewal.py", "src/agent_runtime/codex/run.py", "src/agent_runtime/codex_login.py", "src/agent_runtime/secret_file.py", "tests/support/codex_support.py", "tests/test_codex_login.py", "tests/test_codex_renewal.py", "tests/test_secret_file.py"]
+opened_commit = "26e13b0fe23217e3dc43ad85ea9ec035070e2b26"
+whole_reason = "The timing reader, the renewable login, the made-due copy, the run description and its read-back form one secret-holding Codex document contract. Slice 3 uses all of it at once, and a review can judge its secret safety only as a whole. The other files are its tests and one builder."
