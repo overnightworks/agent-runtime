@@ -1,8 +1,0 @@
-claim_id = "d69defb5836841c69ad0f70a3bf83d3a"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "92ad43375c64a8053f0eb0e1d34e1b4e9c2f98d4"
-branch = "claude/issue-562-production-asserts"
-scope = ["packages/service/src/agent_runtime_service/api_runner.py", "packages/service/src/agent_runtime_service/cli_runner.py", "packages/service/src/agent_runtime_service/identity.py", "packages/service/src/agent_runtime_service/run_events.py", "packages/service/src/agent_runtime_service/run_liveness.py", "packages/service/src/agent_runtime_service/run_tools.py", "packages/service/src/agent_runtime_service/runners.py", "packages/service/src/agent_runtime_service/tool_relay.py", "src/agent_runtime/openai_adapter.py"]
-opened_commit = "a2e372249e2512394645ed11ece8117934a1dd7c"
-whole_reason = "One finding class across nine files, each a one- or few-line local change; splitting by file would multiply landings for the same rule and the same review."
