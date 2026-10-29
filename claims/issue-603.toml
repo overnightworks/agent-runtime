@@ -1,8 +1,0 @@
-claim_id = "1c674c7b08374aceaf41a0314edc1c6f"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "7e75069ca856d40de5604515d419a4d564a082a2"
-branch = "claude/issue-603-config-copies"
-scope = ["packages/service/tests/e2e/app_tools_discovery.py", "tests/test_dispatch.py", "tests/workflows/test_ci_workflow.py", "tests/workflows/test_release_workflow.py"]
-opened_commit = "a3a8c9b2c1546c630cbcdc7a442d27fce398dae8"
-whole_reason = "One conformance pass over the copies the ruling names; each file loses only its copied assertions, and the four files share no other change."
