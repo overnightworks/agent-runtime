@@ -1,7 +1,0 @@
-claim_id = "385ddaee3c9e46f28e3717dcdffae6c2"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "67262d3c2aa16b5ff6324ed72e1711fc389a8131"
-branch = "claude/issue-573-b1-codex-image-record"
-scope = ["docs/decisions/0001-agent-service.md"]
-opened_commit = "d03d33f20e3fc1305575c7b844721c7afa527b52"
