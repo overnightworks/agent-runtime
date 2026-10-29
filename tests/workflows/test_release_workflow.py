@@ -43,7 +43,7 @@ def _notice_for(tag: str, migrating: str, tmp_path: Path) -> str:
         },
         check=True,
     )
-    return output.read_text(encoding="utf-8").removeprefix("notice=").rstrip("\n")
+    return output.read_text(encoding="utf-8").rstrip("\n").partition("=")[2]
 
 
 def test_the_release_notice_links_the_migration_section_of_a_tag_that_has_one(tmp_path):
