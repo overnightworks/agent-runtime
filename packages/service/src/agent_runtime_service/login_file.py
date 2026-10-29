@@ -13,7 +13,7 @@ import contextlib
 import os
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
@@ -207,8 +207,7 @@ class ReservedSwap:
 
     def _remaining(self, refusal: SwapRefused) -> SwapRefused:
         shown = shown_text(str(self._sibling))
-        return replace(
-            refusal,
+        return type(refusal)(
             reason=(
                 f"{refusal.reason}; {shown} is not confirmed gone and may hold all or part of"
                 " the new login; remove it"
