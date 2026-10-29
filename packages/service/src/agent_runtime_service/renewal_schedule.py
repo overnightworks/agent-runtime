@@ -99,7 +99,9 @@ async def _awaited_despite_cancellation(awaited: asyncio.Future[object]) -> None
     try:
         await asyncio.wait({awaited})
     except asyncio.CancelledError:
-        await _awaited_despite_cancellation(awaited)
+        while not awaited.done():
+            with contextlib.suppress(asyncio.CancelledError):
+                await asyncio.wait({awaited})
         raise
 
 

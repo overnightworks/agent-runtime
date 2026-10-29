@@ -236,27 +236,59 @@ def _stop_the_service(process: subprocess.Popen[bytes]) -> None:
 
 
 def _end_every_stand_in(files: CodexServiceFiles) -> None:
-    """The last resort: every process running this test's stand-in is killed until none is left."""
+    """The last resort: every process of the stand-ins' sessions is killed until none is left.
+
+    Each stand-in leads its own session and its helpers (``sleep``, ``cat``) share it, so a
+    helper outlives its shell only until the sweep finds it by session.
+    """
+    sessions: set[int] = set()
     deadline = time.monotonic() + TEST_WAIT_SECONDS
-    while stand_ins := _processes_running(files.binary):
-        assert time.monotonic() < deadline, f"stand-ins outlived the sweep: {stand_ins}"
-        for pid in stand_ins:
+    while True:
+        sessions |= _sessions_of_processes_running(files.binary)
+        members = _processes_in_sessions(sessions)
+        if not members:
+            return
+        assert time.monotonic() < deadline, f"stand-in processes outlived the sweep: {members}"
+        for pid in members:
             with contextlib.suppress(ProcessLookupError):
                 os.kill(pid, signal.SIGKILL)
         time.sleep(POLL_SECONDS)
 
 
-def _processes_running(program: Path) -> list[int]:
-    """The pids whose command line names ``program``."""
+def _sessions_of_processes_running(program: Path) -> set[int]:
+    """The session ids of the processes whose command line names ``program``."""
     named = str(program).encode()
-    pids = []
+    sessions = set()
     for entry in Path("/proc").iterdir():
         if not entry.name.isdigit():
             continue
         with contextlib.suppress(OSError):
             if named in (entry / "cmdline").read_bytes().split(b"\0"):
-                pids.append(int(entry.name))
-    return pids
+                session = _session_of(entry)
+                if session is not None:
+                    sessions.add(session)
+    return sessions
+
+
+def _processes_in_sessions(sessions: set[int]) -> list[int]:
+    """The pids that belong to one of ``sessions``."""
+    return [
+        int(entry.name)
+        for entry in Path("/proc").iterdir()
+        if entry.name.isdigit() and _session_of(entry) in sessions
+    ]
+
+
+def _session_of(process: Path) -> int | None:
+    """The session id in ``/proc/<pid>/stat`` (field 6, after the last ``)``); None once gone.
+
+    A zombie counts as gone: it runs nothing and only its reaper can end it.
+    """
+    try:
+        fields = (process / "stat").read_text().rpartition(")")[2].split()
+    except OSError:
+        return None
+    return None if fields[0] == "Z" else int(fields[3])
 
 
 def _a_free_port() -> int:

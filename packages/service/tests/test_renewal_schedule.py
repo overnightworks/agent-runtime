@@ -10,6 +10,7 @@ import asyncio
 import itertools
 import logging
 import os
+import sys
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -550,6 +551,41 @@ def test_a_second_cancellation_during_the_handover_still_lets_it_complete(
     assert asyncio.run(scenario()) is False
     assert logged_outcomes(caplog) == [RenewalOutcome.END_UNCONFIRMED, RenewalOutcome.INTERRUPTED]
     assert arrangement.directory_holds() == arrangement.directory_holds_login_and_sibling()
+
+
+def test_any_number_of_cancellations_during_the_handover_neither_overflow_nor_end_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    arrangement = an_arrangement(tmp_path)
+    handing_over = BlockedHook()
+    hand_over = arrangement.renewer.hand_over_as_interrupted
+    completed: list[bool] = []
+
+    def blocked_hand_over() -> None:
+        handing_over(Path())
+        hand_over()
+        completed.append(True)
+
+    monkeypatch.setattr(arrangement.renewer, "hand_over_as_interrupted", blocked_hand_over)
+    schedule = a_schedule(arrangement, pause=RecordingPause(2))
+
+    async def scenario() -> bool:
+        leave = asyncio.Event()
+        serving = asyncio.create_task(serving_until(schedule, leave))
+        await asyncio.sleep(0)
+        leave.set()
+        await handing_over.reached()
+        for _ in range(sys.getrecursionlimit() + 1):
+            serving.cancel()
+            await asyncio.sleep(0)
+        finished_early = serving.done()
+        handing_over.release()
+        with pytest.raises(asyncio.CancelledError):
+            await within_the_bound(serving)
+        return finished_early
+
+    assert asyncio.run(scenario()) is False
+    assert completed == [True]
 
 
 class OverlapProbe:
