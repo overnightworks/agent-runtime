@@ -1,0 +1,7 @@
+claim_id = "d5038bdbba8942fa9b61ffefd59b1d4c"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "67262d3c2aa16b5ff6324ed72e1711fc389a8131"
+branch = "claude/issue-571-architecture-login-picture"
+scope = ["docs/ARCHITECTURE.md"]
+opened_commit = "f7c854d4d680b6ebab6699cfe2272a17578a9ef9"
