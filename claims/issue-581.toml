@@ -1,8 +1,0 @@
-claim_id = "379b15e0b21e48a686c0d2e719499a2b"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "4829e424d2b88306d71d8a7ba163abad5edc812c"
-branch = "claude/issue-581-g-run-a-toml-writer-into-cli-settings"
-scope = ["src/agent_runtime/cli_settings.py", "src/agent_runtime/codex/run.py", "tests/test_cli_settings.py", "tests/test_codex_run_settings.py"]
-opened_commit = "c0bdac2b33bc784ac6047c8223213baddaedf7c7"
-whole_reason = "a pure move of one writer between two modules plus the two test modules that pin it; splitting would leave a copy in both"
