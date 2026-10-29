@@ -81,6 +81,7 @@ class LineScriptAdapter:
     refusal: Exception = field(default_factory=ScriptRefused)
     start_failure: Exception | None = None
     refuses_failed_ending: bool = False
+    picture_folders: tuple[str, ...] = ()
     decoders: list[LineScriptDecoder] = field(default_factory=list)
 
     def run_files(self) -> Mapping[str, bytes]:
@@ -97,7 +98,7 @@ class LineScriptAdapter:
             environment=closed_environment(home),
             working_directory=working_directory,
         )
-        return CliRunStart(child, self.stdin, decoder)
+        return CliRunStart(child, self.stdin, decoder, self.picture_folders)
 
 
 @pytest.fixture(name="private_root")

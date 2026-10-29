@@ -41,6 +41,7 @@ _SYSTEM_PROMPT_FILE_NAME: Final = "system-prompt"
 _HOME_VARIABLE: Final = "CODEX_HOME"
 
 _CONFIG_FILE_NAME: Final = "config.toml"
+_PICTURE_FOLDER_NAME: Final = "generated_images"
 
 _BASE_ARGUMENTS: Final = (
     "exec",
@@ -324,7 +325,9 @@ class CodexRun:
             environment=closed_environment(home, **{_HOME_VARIABLE: str(home)}),
             working_directory=working_directory,
         )
-        return CliRunStart(child, self._transcript().encode(), CodexStreamDecoder())
+        return CliRunStart(
+            child, self._transcript().encode(), CodexStreamDecoder(), (_PICTURE_FOLDER_NAME,)
+        )
 
     def _transcript(self) -> str:
         return flatten_messages(

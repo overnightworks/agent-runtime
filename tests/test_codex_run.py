@@ -170,6 +170,12 @@ def test_a_home_path_with_special_characters_stays_one_toml_string(
     assert tomllib.loads(switch) == {"model_instructions_file": str(home / "system-prompt")}
 
 
+def test_the_run_declares_the_folder_where_codex_writes_its_pictures(tmp_path: Path) -> None:
+    start = a_run().start(tmp_path / "home", tmp_path / "work")
+
+    assert start.picture_folders == ("generated_images",)
+
+
 def test_the_environment_adds_only_the_run_home_as_codex_home(tmp_path: Path) -> None:
     home = tmp_path / "home"
     start = a_run().start(home, tmp_path / "work")

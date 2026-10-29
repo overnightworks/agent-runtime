@@ -61,7 +61,12 @@ def outside(tmp_path: Path) -> Path:
 @pytest.fixture
 def directories(tmp_path: Path) -> Iterator[RunDirectories]:
     with run_directories(PrivateWorkingRoot(a_private_root(tmp_path)), {}) as made:
-        yield made
+        try:
+            yield made
+        finally:
+            for folder in (made.home, made.home / PICTURES[0]):
+                if folder.is_dir() and not folder.is_symlink():
+                    folder.chmod(0o700)
 
 
 def returns_within_the_bound[T](call: Callable[[], T]) -> T:
@@ -399,3 +404,229 @@ def test_a_failing_output_folder_creation_becomes_the_environment_error_and_leav
     assert (refused.value.cause, list(private_root.iterdir())) == (
         CliEnvironmentCause.HOME_NOT_CREATED, [],
     )
+
+
+PICTURES = ("generated_images",)
+PNG = b"\x89PNG-bytes"
+
+
+def a_picture(directories: RunDirectories, thread: str, name: str, content: bytes = PNG) -> Path:
+    folder = directories.home / PICTURES[0] / thread
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / name).write_bytes(content)
+    return folder / name
+
+
+def pictures_of(directories: RunDirectories, limit: int = LIMIT) -> tuple[RunFile, ...]:
+    return returns_within_the_bound(lambda: collect_output(directories, limit, PICTURES))
+
+
+def picture_refusal_of(directories: RunDirectories, limit: int = LIMIT) -> RunOutputRefused:
+    with pytest.raises(RunOutputRefused) as refused:
+        returns_within_the_bound(lambda: collect_output(directories, limit, PICTURES))
+    return refused.value
+
+
+def test_an_absent_picture_folder_adds_nothing_and_refuses_nothing(
+    directories: RunDirectories,
+) -> None:
+    (directories.output / "report").write_bytes(b"r")
+
+    assert pictures_of(directories) == (RunFile(name="report", content=b"r"),)
+
+
+def test_a_picture_in_a_thread_folder_comes_back_among_the_files(
+    directories: RunDirectories,
+) -> None:
+    a_picture(directories, "thread", "exec-1.png")
+
+    assert pictures_of(directories) == (RunFile(name="exec-1.png", content=PNG),)
+
+
+def test_pictures_of_two_threads_and_the_output_files_come_back_in_one_name_order(
+    directories: RunDirectories,
+) -> None:
+    a_picture(directories, "thread-b", "c.png", b"c")
+    a_picture(directories, "thread-a", "a.png", b"a")
+    (directories.output / "b.txt").write_bytes(b"b")
+
+    assert [file.name for file in pictures_of(directories)] == ["a.png", "b.txt", "c.png"]
+
+
+def test_a_collection_without_picture_folders_does_not_read_the_home(
+    directories: RunDirectories,
+) -> None:
+    a_picture(directories, "thread", "exec-1.png")
+
+    assert collect_output(directories, LIMIT) == ()
+
+
+def test_the_rest_of_the_home_is_not_returned(directories: RunDirectories) -> None:
+    shipped = directories.home / "skills" / ".system" / "skill"
+    shipped.mkdir(parents=True)
+    (shipped / "icon.png").write_bytes(PNG)
+
+    assert pictures_of(directories) == ()
+
+
+def a_picture_folder_that_is_a_link(directories: RunDirectories, outside: Path) -> None:
+    (directories.home / PICTURES[0]).symlink_to(outside)
+
+
+def a_picture_folder_that_is_a_file(directories: RunDirectories, outside: Path) -> None:
+    (directories.home / PICTURES[0]).write_bytes(MARKER.encode())
+
+
+def a_home_replaced_by_a_link(directories: RunDirectories, outside: Path) -> None:
+    moved = outside / f"{MARKER}-home"
+    directories.home.rename(moved)
+    directories.home.symlink_to(moved)
+
+
+def a_thread_entry_that_is_a_link_to_a_folder(directories: RunDirectories, outside: Path) -> None:
+    (directories.home / PICTURES[0]).mkdir()
+    (directories.home / PICTURES[0] / MARKER).symlink_to(outside)
+
+
+def a_thread_entry_that_is_a_file(directories: RunDirectories, outside: Path) -> None:
+    (directories.home / PICTURES[0]).mkdir()
+    (directories.home / PICTURES[0] / MARKER).write_bytes(MARKER.encode())
+
+
+def a_picture_that_is_a_link(directories: RunDirectories, outside: Path) -> None:
+    a_picture(directories, "thread", "x").unlink()
+    (directories.home / PICTURES[0] / "thread" / MARKER).symlink_to(outside / "secret")
+
+
+def a_picture_that_is_a_fifo(directories: RunDirectories, outside: Path) -> None:
+    a_picture(directories, "thread", "x").unlink()
+    os.mkfifo(directories.home / PICTURES[0] / "thread" / MARKER)
+
+
+def a_picture_that_is_a_subfolder(directories: RunDirectories, outside: Path) -> None:
+    a_picture(directories, "thread", "x").unlink()
+    (directories.home / PICTURES[0] / "thread" / MARKER).mkdir()
+    (directories.home / PICTURES[0] / "thread" / MARKER / MARKER).write_bytes(b"x")
+
+
+def a_picture_with_a_second_name(directories: RunDirectories, outside: Path) -> None:
+    os.link(a_picture(directories, "thread", MARKER), outside / "second-name")
+
+
+def a_name_in_the_output_and_a_thread(directories: RunDirectories, outside: Path) -> None:
+    (directories.output / MARKER).write_bytes(b"1")
+    a_picture(directories, "thread", MARKER, b"2")
+
+
+def a_name_in_two_threads(directories: RunDirectories, outside: Path) -> None:
+    a_picture(directories, "thread-a", MARKER, b"1")
+    a_picture(directories, "thread-b", MARKER, b"2")
+
+
+def pictures_over_the_limit_with_the_output(directories: RunDirectories, outside: Path) -> None:
+    (directories.output / "a").write_bytes(b"x" * 8)
+    a_picture(directories, "thread", MARKER, b"x" * 9)
+
+
+def a_home_that_is_not_searchable(directories: RunDirectories, outside: Path) -> None:
+    a_picture(directories, "thread", MARKER)
+    directories.home.chmod(0o600)
+
+
+def a_picture_folder_that_is_not_searchable(directories: RunDirectories, outside: Path) -> None:
+    a_picture(directories, "thread", MARKER)
+    (directories.home / PICTURES[0]).chmod(0o600)
+
+
+PICTURE_REFUSALS = [
+    pytest.param(RunOutputCause.FOLDER_REPLACED, a_picture_folder_that_is_a_link, id="folder-link"),
+    pytest.param(RunOutputCause.FOLDER_REPLACED, a_picture_folder_that_is_a_file, id="folder-file"),
+    pytest.param(RunOutputCause.FOLDER_REPLACED, a_home_replaced_by_a_link, id="home-link"),
+    pytest.param(
+        RunOutputCause.FOLDER_REPLACED, a_thread_entry_that_is_a_link_to_a_folder, id="thread-link"
+    ),
+    pytest.param(RunOutputCause.FOLDER_REPLACED, a_thread_entry_that_is_a_file, id="thread-file"),
+    pytest.param(RunOutputCause.LINK, a_picture_that_is_a_link, id="picture-link"),
+    pytest.param(RunOutputCause.NOT_A_REGULAR_FILE, a_picture_that_is_a_fifo, id="picture-fifo"),
+    pytest.param(
+        RunOutputCause.NOT_A_REGULAR_FILE, a_picture_that_is_a_subfolder, id="picture-subfolder"
+    ),
+    pytest.param(RunOutputCause.SECOND_NAME, a_picture_with_a_second_name, id="second-name"),
+    pytest.param(
+        RunOutputCause.NAME_PRESENT_TWICE, a_name_in_the_output_and_a_thread, id="twice-output"
+    ),
+    pytest.param(RunOutputCause.NAME_PRESENT_TWICE, a_name_in_two_threads, id="twice-threads"),
+    pytest.param(
+        RunOutputCause.OVER_LIMIT, pictures_over_the_limit_with_the_output, id="over-the-limit"
+    ),
+    pytest.param(RunOutputCause.UNREADABLE, a_home_that_is_not_searchable, id="home-unsearchable"),
+    pytest.param(
+        RunOutputCause.UNREADABLE, a_picture_folder_that_is_not_searchable, id="folder-unsearchable"
+    ),
+]
+
+
+@pytest.mark.parametrize(("cause", "prepare"), PICTURE_REFUSALS)
+def test_a_picture_that_is_not_a_single_named_regular_file_in_a_thread_folder_is_refused(
+    directories: RunDirectories,
+    outside: Path,
+    caplog: pytest.LogCaptureFixture,
+    cause: RunOutputCause,
+    prepare: Callable[[RunDirectories, Path], None],
+) -> None:
+    prepare(directories, outside)
+
+    with caplog.at_level(logging.DEBUG):
+        refusal = picture_refusal_of(directories)
+
+    assert (
+        refusal.cause,
+        MARKER in str(refusal) or MARKER in repr(refusal) or MARKER in caplog.text,
+        refusal.__cause__,
+        refusal.__context__,
+    ) == (cause, False, None, None)
+
+
+def test_the_output_and_the_pictures_exactly_at_the_limit_are_accepted(
+    directories: RunDirectories,
+) -> None:
+    (directories.output / "a").write_bytes(b"x" * 8)
+    a_picture(directories, "thread", "b", b"x" * 8)
+
+    assert [len(file.content) for file in pictures_of(directories)] == [8, 8]
+
+
+def test_a_picture_folder_is_read_only_when_the_adapter_names_it(
+    drive, root: PrivateWorkingRoot, pool: CliProcessPool,
+) -> None:
+    script = "mkdir -p ../home/generated_images/t; printf p > ../home/generated_images/t/pic\n"
+    named = LineScriptAdapter(pool, script, picture_folders=PICTURES)
+    unnamed = LineScriptAdapter(pool, script)
+
+    async def scenario() -> tuple[list[StreamEvent], list[StreamEvent]]:
+        return await events_of(root, named), await events_of(root, unnamed)
+
+    with_picture, without_picture = drive(scenario())
+
+    assert (with_picture, without_picture) == (
+        [FinalEvent(text="Final rc=0", files=(RunFile(name="pic", content=b"p"),))],
+        [FinalEvent(text="Final rc=0", files=())],
+    )
+
+
+def test_a_run_that_does_not_end_cleanly_reads_no_picture_folder(
+    drive, root: PrivateWorkingRoot, pool: CliProcessPool,
+) -> None:
+    script = (
+        "mkdir -p ../home/generated_images/t; "
+        "ln -s /nonexistent ../home/generated_images/t/bad; exit 3\n"
+    )
+    adapter = LineScriptAdapter(
+        pool, script, picture_folders=PICTURES, refuses_failed_ending=True
+    )
+
+    async def scenario() -> None:
+        with pytest.raises(EndingRefused):
+            await events_of(root, adapter)
+
+    drive(scenario())

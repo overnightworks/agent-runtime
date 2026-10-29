@@ -25,7 +25,7 @@
 "tests/test_catalog.py" = 1045
 "tests/test_claude_provider.py" = 5486
 "tests/test_claude_provider_streaming.py" = 1168
-"tests/test_claude_run.py" = 857
+"tests/test_claude_run.py" = 856
 "tests/test_codex_cli_adapter.py" = 3089
 "tests/test_grok_cli_adapter.py" = 1212
 "tests/test_process.py" = 6198

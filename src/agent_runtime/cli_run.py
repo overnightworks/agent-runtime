@@ -140,6 +140,7 @@ class CliRunStart:
     child: ChildProcess
     stdin: bytes = field(repr=False)
     decoder: CliLineDecoder
+    picture_folders: tuple[str, ...] = ()
 
 
 class CliRunAdapter(Protocol):
@@ -186,10 +187,10 @@ async def astream_cli_run(
     """Stream one run's events; the ending comes last, after the reap and the removal attempt.
 
     The ending is built once the group is confirmed gone and still inside the tree: the
-    decoder judges the exit first, and only a clean ending reads the output folder, at most
-    ``max_files_bytes`` in all, into the ending's files. A refused collection raises
-    ``RunOutputRefused``. A run that is stopped, fails, or loses containment has no ending
-    and reads nothing.
+    decoder judges the exit first, and only a clean ending reads the output folder and the
+    adapter's picture folders, at most ``max_files_bytes`` in all, into the ending's files. A
+    refused collection raises ``RunOutputRefused``. A run that is stopped, fails, or loses
+    containment has no ending and reads nothing.
     """
     if not _is_file_limit(max_files_bytes):
         raise ValueError("max_files_bytes must be a non-negative int")
@@ -216,5 +217,7 @@ async def astream_cli_run(
             finally:
                 await settle_drain(drain)
         final = start.decoder.ending(returncode)
-        ending = final.model_copy(update={"files": collect_output(directories, max_files_bytes)})
+        ending = final.model_copy(
+            update={"files": collect_output(directories, max_files_bytes, start.picture_folders)}
+        )
     yield ending
