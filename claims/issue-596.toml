@@ -1,0 +1,8 @@
+claim_id = "ec718386a5c54db1a5ece44474c28a74"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "cc186522fb8d500c84360679a514af085417a9e5"
+branch = "claude/issue-596-rel-0-11-0"
+scope = ["docs/MIGRATING.md", "packages/client/pyproject.toml", "packages/service/pyproject.toml", "pyproject.toml", "src/agent_runtime/__init__.py", "uv.lock"]
+opened_commit = "067d54b707d565057cd39c51cdaaf7af6611666a"
+whole_reason = "A release moves all seven version literals and the lock together, or the distribution-contract test fails, and its Migrating section is the one place a breaking change of this release is named."
