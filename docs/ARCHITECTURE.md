@@ -138,7 +138,8 @@ flowchart LR
 
 *Question: where does each provider's subscription login live, and what does a run
 hold? Source: [operations.md](operations.md) (the login file and the login
-command), `agent_runtime.codex_login.blanked_copy`, `agent_runtime.claude.run`.*
+command), `agent_runtime.codex_login.blanked_copy`, `agent_runtime.claude.run`, and the decision
+record [0001](decisions/0001-agent-service.md) (A1b-K0, the measured lifetime).*
 
 - **Claude.** `claude setup-token` prints a one-year token that has no refresh
   token; the operator swaps it by hand. The service reads the file at every run
@@ -147,9 +148,9 @@ command), `agent_runtime.codex_login.blanked_copy`, `agent_runtime.claude.run`.*
   login: two logins sharing one refresh token would rotate each other's away. A
   run gets a `0600` copy in its private run home with `refresh_token` blanked, so it
   can use the access token (about 240 hours measured) but cannot renew it.
-- **Grok.** The service refuses a Grok profile today; the route is not built.
-- **Who renews.** Nobody yet. The service does not renew a Codex login, so it lasts
-  its access token's life and the operator then signs in again.
+- **Grok.** The service has no Grok login table today (a `[cli.grok]` table is refused); the route is not built.
+- **Who renews.** Nobody yet. The service does not renew a Codex login, so the operator
+  signs in again when a run reports a refused login; no lifetime is promised.
 
 ## Crosscutting concepts
 
