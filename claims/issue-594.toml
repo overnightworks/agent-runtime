@@ -1,8 +1,0 @@
-claim_id = "e53d026f93574a768bd0caf11d3ac1d6"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "a236e1441f2c3556a5e7d290c71cd1f1c8db5060"
-branch = "claude/issue-594-gserve-a0-table-tests"
-scope = [".github/host-vocabulary-allowed.txt", "packages/service/tests/test_app_entrance.py", "packages/service/tests/test_app_runs.py", "packages/service/tests/test_cli_check.py", "packages/service/tests/test_cli_codex_startup.py", "packages/service/tests/test_cli_runner_claude_settings.py", "packages/service/tests/test_cli_runner_codex_profile.py", "packages/service/tests/test_cli_runner_matrix.py", "packages/service/tests/test_cli_runner_tables.py", "packages/service/tests/test_cli_table_startup.py", "packages/service/tests/test_cli_version.py", "packages/service/tests/test_login.py", "packages/service/tests/test_process_hardening.py", "tests/support/service_codex_support.py", "tests/support/service_login_support.py", "tests/support/service_table_support.py"]
-opened_commit = "52420663f34d80db9e40b1d273ff3687aa540699"
-whole_reason = "One test-support move: the renamed module, its importers, the allowlist line that pins its path, and the twin rows that move onto its table description change together, or an import or the host-vocabulary step breaks."
