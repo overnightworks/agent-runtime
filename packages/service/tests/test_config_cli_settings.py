@@ -34,18 +34,18 @@ VALUE_CANARY = "setting-value-canary-8c14"
 SECOND_APP = '\n[apps.presentator]\nworkload_client = "presentator-test"\n'
 
 
-def with_settings(**tables: str) -> str:
-    """``VALID_CONFIG`` with an ``openai`` settings table body at the named levels."""
+def with_settings(*, provider: str = "openai", **tables: str) -> str:
+    """``VALID_CONFIG`` with a ``provider`` settings table body at the named levels."""
     text = VALID_CONFIG
     if "defaults" in tables:
         text = text.replace(
             DEFAULTS_LINE,
             f'[defaults]\nmodel = "{Provider.ANTHROPIC}/sonnet"\n'
-            f"[defaults.cli_settings.openai]\n{tables['defaults']}\n",
+            f"[defaults.cli_settings.{provider}]\n{tables['defaults']}\n",
         )
     for level in ("app", "agent"):
         if level in tables:
-            text += f"\n[{LEVELS[level]}.cli_settings.openai]\n{tables[level]}\n"
+            text += f"\n[{LEVELS[level]}.cli_settings.{provider}]\n{tables[level]}\n"
     return text
 
 
@@ -53,10 +53,11 @@ def loaded(tmp_path: Path, text: str) -> ServiceConfig:
     return load_config(written(tmp_path, text))
 
 
-def test_a_configuration_without_cli_settings_loads_with_three_empty_levels(tmp_path):
+@pytest.mark.parametrize("provider", list(Provider))
+def test_a_configuration_without_cli_settings_loads_with_three_empty_levels(tmp_path, provider):
     config = loaded(tmp_path, VALID_CONFIG)
 
-    assert config.cli_settings_levels(APP, AGENT, Provider.OPENAI) == ({}, {}, {})
+    assert config.cli_settings_levels(APP, AGENT, provider) == ({}, {}, {})
 
 
 def test_the_levels_come_defaults_first_then_the_app_then_the_agent_unmerged(tmp_path):
@@ -122,7 +123,6 @@ def test_the_check_refuses_a_key_another_owner_holds_as_a_start_does(tmp_path, c
 @pytest.mark.parametrize(
     ("body", "field"),
     [
-        pytest.param("cli_settings.anthropic = {}", "cli_settings.anthropic", id="anthropic"),
         pytest.param("cli_settings.grok = {}", "cli_settings.grok", id="grok"),
         pytest.param('cli_settings.openai = "x"', "cli_settings.openai", id="not-a-table"),
     ],
@@ -157,6 +157,126 @@ def test_a_quoted_dotted_key_stays_one_literal_key(tmp_path):
     assert config.cli_settings_levels(APP, AGENT, Provider.OPENAI)[2] == {
         "features.image_generation": True
     }
+
+
+def claude_levels(tmp_path, text, agent=AGENT, app=APP):
+    return loaded(tmp_path, text).cli_settings_levels(app, agent, Provider.ANTHROPIC)
+
+
+def test_claude_levels_carry_only_the_fields_a_level_sets_lowest_level_first(tmp_path):
+    text = with_settings(
+        provider="anthropic",
+        defaults='tools = ["Bash"]\nsettings = { outputStyle = "a" }',
+        app='tools = ["Bash", "WebSearch"]',
+        agent="tools = []",
+    )
+
+    assert (
+        claude_levels(tmp_path, text),
+        claude_levels(tmp_path, text, agent="another"),
+    ) == (
+        (
+            {"tools": ["Bash"], "settings": {"outputStyle": "a"}},
+            {"tools": ["Bash", "WebSearch"]},
+            {"tools": []},
+        ),
+        (
+            {"tools": ["Bash"], "settings": {"outputStyle": "a"}},
+            {"tools": ["Bash", "WebSearch"]},
+            {},
+        ),
+    )
+
+
+CLAUDE_OWNERS = {
+    'tools = ["mcp__relay__x"]': ("tools[0]", "set the app's MCP origin instead"),
+    f'settings.model = "{VALUE_CANARY}"': ("settings.model", "set model instead"),
+    f'settings.fallbackModel = "{VALUE_CANARY}"': ("settings.fallbackModel", "set model instead"),
+    f'settings.agent = "{VALUE_CANARY}"': (
+        "settings.agent",
+        "set the run request's system text and model instead",
+    ),
+    f'settings.apiKeyHelper = "{VALUE_CANARY}"': (
+        "settings.apiKeyHelper",
+        "set [cli.anthropic] token_file instead",
+    ),
+    f'settings.env = {{ A = "{VALUE_CANARY}" }}': (
+        "settings.env",
+        "the service builds the run's environment",
+    ),
+    f'settings.permissions.allow = ["{VALUE_CANARY}"]': (
+        "settings.permissions.allow",
+        "set cli_settings.anthropic.tools instead",
+    ),
+}
+
+
+@pytest.mark.parametrize("level", LEVELS)
+@pytest.mark.parametrize("body", CLAUDE_OWNERS)
+def test_a_claude_key_another_owner_holds_stops_startup_naming_level_key_and_owner(
+    tmp_path, capsys, level, body
+):
+    key, owner = CLAUDE_OWNERS[body]
+    text = with_settings(provider="anthropic", **{level: body})
+
+    assert main(["--config", str(written(tmp_path, text)), "--check"]) == EXIT_BAD_CONFIG
+
+    refusal = capsys.readouterr().err
+    assert f"{LEVELS[level]}.cli_settings.anthropic: {key} is the service's; {owner}" in refusal
+    assert VALUE_CANARY not in refusal
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        'settings.permissions.deny = ["Read"]',
+        'settings.permissions.defaultMode = "plan"',
+        'settings.permissions.ask = ["Bash"]',
+        'settings.hooks.PreToolUse = []',
+        'settings.outputStyle = "Explanatory"',
+        'settings.forceLoginMethod = "claudeai"',
+        'settings.modelOverrides = { a = "b" }',
+        "settings.sandbox.enabled = false",
+        "settings.inventedK2b = 1",
+        'tools = ["InventedTool"]',
+    ],
+)
+def test_any_other_claude_key_or_tool_loads_because_typos_are_not_caught(tmp_path, body):
+    levels = claude_levels(tmp_path, with_settings(provider="anthropic", agent=body))
+
+    assert levels[2] != {}
+
+
+UNENCODABLE_BODIES = {
+    'tools = [""]': "cli_settings.anthropic.tools",
+    f'tools = ["Bash,{VALUE_CANARY}"]': "cli_settings.anthropic.tools",
+    f'tools = ["Bash {VALUE_CANARY}"]': "cli_settings.anthropic.tools",
+    f'tools = ["-{VALUE_CANARY}"]': "cli_settings.anthropic.tools",
+    'tools = "Bash"': "cli_settings.anthropic.tools",
+    "settings = 1": "cli_settings.anthropic.settings",
+    "extra = 1": "cli_settings.anthropic.extra",
+    "settings.x = 1979-05-27": "settings.x is a date",
+    "settings.x = 1979-05-27T07:32:00Z": "settings.x is a datetime",
+    "settings.x = 07:32:00": "settings.x is a time",
+    "settings.x = inf": "settings.x is a float",
+    "settings.x = -inf": "settings.x is a float",
+    "settings.x = nan": "settings.x is a float",
+    "settings.y.x = [{ z = 1979-05-27 }]": "settings.y.x[0].z is a date",
+}
+
+
+@pytest.mark.parametrize("body", UNENCODABLE_BODIES)
+def test_what_claude_cannot_be_given_faithfully_stops_startup_naming_the_path(
+    tmp_path, capsys, body
+):
+    canary = f'\nsettings.canary = "{VALUE_CANARY}"' if body.startswith("settings.") else ""
+    text = with_settings(provider="anthropic", agent=body + canary)
+
+    assert main(["--config", str(written(tmp_path, text)), "--check"]) == EXIT_BAD_CONFIG
+
+    refusal = capsys.readouterr().err
+    assert UNENCODABLE_BODIES[body] in refusal
+    assert VALUE_CANARY not in refusal
 
 
 OPERATIONS_DOCUMENT = Path(__file__).parents[3] / "docs" / "operations.md"

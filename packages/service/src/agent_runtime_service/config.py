@@ -6,8 +6,10 @@ required, and ``model`` may be set again in ``[apps.<app>]`` and in
 startup refuses one that no ``[cli.<provider>]`` table lists in its ``models``.
 
 ``cli_settings`` may be set at the same three levels. ``cli_settings.openai`` holds Codex's own
-settings in Codex's own shape; the service passes them through without a mapping, lowest level
-first, and refuses only a key whose fact another owner holds. It governs CLI runs only.
+settings in Codex's own shape; ``cli_settings.anthropic`` holds Claude's, a ``tools`` list of
+built-in tool names and a ``settings`` table in Claude's own settings keys. The service passes
+them through without a mapping, lowest level first, and refuses only a key whose fact another
+owner holds, and a value its run files cannot encode faithfully. It governs CLI runs only.
 
 The service runs the subscription programs of Claude (``[cli.anthropic]``) and of Codex
 (``[cli.openai]``). Each such table names the absolute program, the exact version it must
@@ -59,6 +61,7 @@ from pydantic import (
 from webauth.https_client import is_https_url
 from webauth.oidc_login import AdmissionConfig
 
+from agent_runtime.claude.run import check_tool_name, settings_document
 from agent_runtime.cli_settings import CliSettings
 from agent_runtime.codex_login import CodexLogin, CodexLoginVerdict, assess_codex_login
 from agent_runtime.config import PrivateWorkingRoot, WorkingRootNotPrivateError
@@ -405,12 +408,83 @@ _CODEX_KEYS_THE_SERVICE_OWNS: Final = {
 }
 
 
+_CLAUDE_SETTINGS_THE_SERVICE_OWNS: Final = {
+    ("model",): "set model instead",
+    ("fallbackModel",): "set model instead",
+    ("agent",): "set the run request's system text and model instead",
+    ("apiKeyHelper",): "set [cli.anthropic] token_file instead",
+    ("env",): "the service builds the run's environment",
+    ("permissions", "allow"): "set cli_settings.anthropic.tools instead",
+}
+_APP_TOOL_PREFIX: Final = "mcp__"
+
+
+def _claude_setting_is_set(settings: object, path: tuple[str, ...]) -> bool:
+    for key in path:
+        if not isinstance(settings, dict) or key not in settings:
+            return False
+        settings = settings[key]
+    return True
+
+
+class ClaudeCliSettingsConfig(_Section):
+    """Claude's ``tools`` and ``settings`` as one level of the operator's table.
+
+    A field a level does not set stays absent from that level, so it never replaces a lower
+    one; ``tools = []`` is set and switches a lower list off.
+    """
+
+    tools: list[str] | None = None
+    settings: dict[str, object] | None = None
+
+    @field_validator("tools")
+    @classmethod
+    def _tool_names_the_cli_can_take_one_by_one(cls, tools: list[str] | None) -> list[str] | None:
+        for index, name in enumerate(tools or []):
+            try:
+                check_tool_name(name)
+            except ValueError as refusal:
+                raise ValueError(f"tools[{index}]: {refusal}") from None
+        return tools
+
+    @field_validator("settings")
+    @classmethod
+    def _values_json_can_hold(cls, settings: dict[str, object] | None) -> dict[str, object] | None:
+        try:
+            settings_document(cast("CliSettings", settings or {}))
+        except TypeError as refusal:
+            raise ValueError(str(refusal)) from None
+        return settings
+
+    @model_validator(mode="after")
+    def _keys_the_service_owns_are_not_set_here(self) -> Self:
+        for index, name in enumerate(self.tools or []):
+            if name.startswith(_APP_TOOL_PREFIX):
+                raise ValueError(
+                    f"tools[{index}] is the service's; set the app's MCP origin instead"
+                )
+        for path, owner in _CLAUDE_SETTINGS_THE_SERVICE_OWNS.items():
+            if _claude_setting_is_set(self.settings or {}, path):
+                raise ValueError(f"settings.{'.'.join(path)} is the service's; {owner}")
+        return self
+
+    def as_level(self) -> CliSettings:
+        """The fields this level sets, as the run adapter's level."""
+        level: CliSettings = {}
+        if self.tools is not None:
+            level["tools"] = list(self.tools)
+        if self.settings is not None:
+            level["settings"] = cast("CliSettings", self.settings)
+        return level
+
+
 class CliSettingsConfig(_Section):
     """The CLIs' own settings in each CLI's own shape, passed through without a mapping.
 
     Only a key whose fact another owner already holds is refused, naming that owner.
     """
 
+    anthropic: ClaudeCliSettingsConfig = ClaudeCliSettingsConfig()
     openai: dict[str, object] = {}
 
     @field_validator("openai")
@@ -425,7 +499,9 @@ class CliSettingsConfig(_Section):
 
     def of(self, provider: Provider) -> CliSettings:
         """The table of ``provider``; a provider without one has no settings."""
-        return cast("CliSettings", self.openai) if provider is Provider.OPENAI else {}
+        if provider is Provider.ANTHROPIC:
+            return self.anthropic.as_level()
+        return cast("CliSettings", self.openai)
 
 
 class DefaultsConfig(_Section):

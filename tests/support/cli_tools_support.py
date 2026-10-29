@@ -148,7 +148,7 @@ if PLAN["relay_status"] == "connected":
     version = rpc("initialize", {{"protocolVersion": "2025-11-25"}}, 1)["result"]["protocolVersion"]
     rpc("notifications/initialized", version=version)
     listing = (rpc("tools/list", {{}}, 2, version) or {{}}).get("result", {{}}).get("tools")
-tool_names = ["mcp__relay__" + tool["name"] for tool in listing or []]
+tool_names = PLAN["builtin_tools"] + ["mcp__relay__" + tool["name"] for tool in listing or []]
 emit({{
     "type": "system", "subtype": "init", "tools": tool_names, "apiKeySource": "none",
     "mcp_servers": [{{"name": "relay", "status": PLAN["relay_status"]}}],
@@ -197,12 +197,15 @@ def a_relay_calling_claude(
     timeout_seconds: float = 20.0,
     marked_by_system_prompt: bool = False,
     descendant: Handshake | None = None,
+    builtin_tools: Sequence[str] = (),
 ) -> Path:
     """The pinned program's stand-in for a relay run; it captures into ``directory/capture``.
 
     With ``marked_by_system_prompt`` one executable serves parallel runs: the run's system text
     is its marker, naming its capture directory ``capture/<marker>`` and travelling in every
     call's arguments as ``marker``.
+
+    ``builtin_tools`` are the names its init announces beside the relay's tools.
 
     With ``descendant`` the first run's program starts a SIGTERM-ignoring child of its own
     process group that stays in the group (``descendant_support``'s program), and waits for its
@@ -222,6 +225,7 @@ def a_relay_calling_claude(
         "timeout": timeout_seconds,
         "marked_by_system_prompt": marked_by_system_prompt,
         "descendant": None if descendant is None else _paths_of(descendant),
+        "builtin_tools": list(builtin_tools),
     }
     binary = directory / "claude"
     binary.write_text(_CLAUDE_SOURCE.format(python=sys.executable, plan=json.dumps(plan)))

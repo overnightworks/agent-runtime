@@ -129,10 +129,10 @@ and a restart; it revokes nothing already admitted.
 
 A subscription CLI keeps its own settings. `cli_settings` holds them in that CLI's own shape,
 and the service passes them through without a mapping; it governs CLI runs only, and the API
-route ignores it. Only `cli_settings.openai` (Codex) is accepted yet. `anthropic` or any other key
-stops startup as an unknown field, and `openai` must be a table. The tables take the unquoted
-dotted keys of Codex's own `config.toml`; a quoted key such as `"features.image_generation"` stays
-one literal key.
+route ignores it. `cli_settings.openai` (Codex) and `cli_settings.anthropic` (Claude) are
+accepted; any other key stops startup as an unknown field, and `openai` must be a table. The
+Codex table takes the unquoted dotted keys of Codex's own `config.toml`; a quoted key such as
+`"features.image_generation"` stays one literal key. Claude's table is described [below](#claude).
 
 ```toml
 [defaults.cli_settings.openai]
@@ -182,6 +182,66 @@ A typo is not caught at startup. The pinned CLI exits before its first line unde
 A built-in tool's line yields no event of its own, so a long tool call counts against
 `[runs] idle_timeout_s` (default 120 s) beside `max_duration_s`, and repeated progress lines of a
 tool do not refresh it. Raise `idle_timeout_s` for long tools.
+
+### Claude
+
+`cli_settings.anthropic` has two fields, both optional at every level: `tools`, the built-in tool
+names the agent may use, and `settings`, a table in Claude's own settings keys. Any other key stops
+startup, and so does `tools` that is not a list of strings or `settings` that is not a table. The
+levels merge in the order above, but a field a level does not set is absent from it and never
+replaces a lower one; `tools = []` is set and switches a lower list off.
+
+```toml
+[apps.notes.agents.illustrator.cli_settings.anthropic]
+tools = ["Bash", "WebSearch"]
+settings.permissions.deny = ["Read(./secrets)"]
+```
+
+Each name reaches both `--tools` and `--allowedTools`, so a listed tool is available and runs
+without a per-call approval; app tools keep both barriers. The service has no list of Claude's
+tools or keys: an invented name loads, and the start check below ends the run when the CLI does not
+announce it.
+
+When tools are listed, Claude's sandbox is on by default: `sandbox.enabled = true`,
+`sandbox.failIfUnavailable = true` and `sandbox.allowUnsandboxedCommands = false`. The last two
+are what make it hold: without `failIfUnavailable` a sandbox that cannot start leaves a warning and
+runs commands unsandboxed, and with `allowUnsandboxedCommands` at its default the model may leave
+the sandbox for a command. The configuration overrides every key; `settings.sandbox.enabled =
+false` switches it off, and the service neither refuses nor warns about that. The sandbox covers
+`Bash` only. Claude's file and web tools are governed by permission rules, and a listed tool is
+allowed; with a listed shell, file or code tool the exposure of the signing key, the logins and
+a repeated token is accepted.
+
+The sandbox needs bubblewrap and `socat` in the image and a container that lets it create its
+namespaces. The service's reference image has neither, so a run of an agent with tools ends
+`failed: provider_error` until they are installed or the operator switches the sandbox off; the log
+does not say why, because the CLI's stderr is not read.
+
+The start check accepts exactly the listed tools plus the relay's. A tool the CLI announces that
+is neither ends the run, and so does a listed name it does not announce (an invented name, or one
+the operator's own `permissions.deny` removes); the log names the missing tools from the
+configured list, never from the CLI's text.
+
+These stop startup at any level (exit 2, `--check` agrees), naming the key and its owner: a `tools`
+entry starting `mcp__` (the app's tools come through the app's MCP origin), `settings.model` and
+`settings.fallbackModel` (set `model`), `settings.agent` (the run request's system text and
+`model`), `settings.apiKeyHelper` (`[cli.anthropic] token_file`), `settings.env` (the service
+builds the run's environment) and `settings.permissions.allow` (set `tools`). A tool name that is
+empty, holds a comma or whitespace or starts with `-` stops startup too, because the CLI splits
+those options on commas and spaces. So does a settings value JSON cannot hold: a TOML date, time
+or datetime, `inf`, `-inf` or `nan`.
+
+Layers: with tools listed, the run sets `CLAUDE_CONFIG_DIR` to its own home, writes the sandbox
+default as the `settings.json` there and passes `--setting-sources user`, so that file is Claude's
+user layer; the operator's `settings` go to `cli-settings.json` (mode 0600) and `--settings`, the
+layer above it, which wins per key. Project and local settings stay off, and without tools the
+sources stay empty and no file but the operator's is written. The host's managed settings still
+apply; Claude's [settings precedence](https://code.claude.com/docs/en/settings) orders them.
+The run home is private to the run, so nothing of the host user's is read.
+
+One invalid value in `cli-settings.json` (for example `sandbox.enabled = "yes"`) makes Claude drop
+that whole file silently, and typos are not caught at startup. The sandbox default stays in force
+in that case, because it lives in the other layer.
 
 ## The subscription login
 
