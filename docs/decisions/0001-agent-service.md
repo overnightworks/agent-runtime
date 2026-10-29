@@ -3644,7 +3644,8 @@ JWT. Codex's refresh behaviour is untouched.
 login read only through its blanked copy. Five runs, one record
 (`record-20261029T144746332450.json`, with `real-run-2.log`), kept in the
 operator's probe directory outside the repository. The record holds closed
-categories only: no error text, no file names beyond the image paths below. The
+categories only: no error text; it lists the home's file names and sizes, which this
+section reduces to the image paths below. The
 harness was reviewed by Codex gpt-6-astra high (PASS) and Opus 5.5 high.
 
 | Run | Duration | Events and items | Final words | Error categories | Longest line |
