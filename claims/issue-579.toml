@@ -1,8 +1,0 @@
-claim_id = "5bcc36e212b74c598a3e954dd40f5731"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "4829e424d2b88306d71d8a7ba163abad5edc812c"
-branch = "claude/issue-579-mx-a-matrix-through-post-runs"
-scope = ["packages/service/tests/test_cli_runner_claude_settings.py", "packages/service/tests/test_cli_runner_codex_profile.py", "packages/service/tests/test_cli_runner_matrix.py", "tests/support/service_cli_runner_support.py", "tests/support/service_codex_support.py", "tests/support/service_support.py"]
-opened_commit = "1586de59492774b787854a43c4305395bcac07b1"
-whole_reason = "One test matrix: a new module with the missing cells and two extensions of the existing profile tests, sharing the support helpers they need."
