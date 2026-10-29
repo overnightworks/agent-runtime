@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 from tests.support.provider_test_support import fake_cli_executable
@@ -14,6 +15,11 @@ from tests.support.service_config_support import (
     the_working_root,  # noqa: F401 - an autouse fixture
     written,
 )
+from tests.support.service_renewal_support import (
+    a_due_login_now,
+    a_renewed_login_now,
+    codex_service_files,
+)
 from tests.support.service_support import (
     logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
 )
@@ -21,8 +27,10 @@ from tests.support.service_table_support import (
     the_served_runs,  # noqa: F401 - the fixture is named in its decorator
 )
 
+import agent_runtime_service.app as app_module
 import agent_runtime_service.process_hardening as hardening
 from agent_runtime_service.cli import EXIT_BAD_CONFIG, REFUSAL_PREFIX, main
+from agent_runtime_service.renewal_schedule import RenewalSchedule
 
 
 def _one_refusal_line(capsys) -> str:
@@ -82,3 +90,31 @@ def test_a_check_refuses_with_the_starts_one_line_and_serves_nothing(
 
     assert _one_refusal_line(capsys).startswith(REFUSAL_PREFIX)
     assert served_runs == []
+
+
+def test_a_check_with_a_due_codex_login_starts_no_renewal(tmp_path, served_runs):
+    files = codex_service_files(tmp_path, a_due_login_now(), a_renewed_login_now())
+
+    assert main(["--config", str(files.configuration), "--check"]) == 0
+
+    assert files.renewal_never_began()
+
+
+def test_a_start_hands_the_app_a_renewal_schedule_and_runs_none_before_the_app_serves(
+    tmp_path, served_runs, monkeypatch
+):
+    files = codex_service_files(tmp_path, a_due_login_now(), a_renewed_login_now())
+    created: list[dict[str, Any]] = []
+    create_app = app_module.create_app
+
+    def recording(*arguments: Any, **keywords: Any):
+        created.append(keywords)
+        return create_app(*arguments, **keywords)
+
+    monkeypatch.setattr(app_module, "create_app", recording)
+
+    assert main(["--config", str(files.configuration)]) == 0
+
+    (keywords,) = created
+    assert isinstance(keywords["renewals"], RenewalSchedule)
+    assert files.renewal_never_began()

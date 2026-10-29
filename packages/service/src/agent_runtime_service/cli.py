@@ -8,6 +8,9 @@ app with CLI and API runners installed independently from their sections. The CL
 CA bundle ``[mcp] ca_file`` names for the apps' MCP origins, loaded only when an app declares
 one; a bundle that cannot be loaded ends the process the same way.
 
+A configured Codex login is renewed by the service itself while it serves
+(``agent_runtime_service.renewal_schedule``).
+
 ``--check`` takes the same path as a start and returns 0 just before it would serve, so the
 check cannot drift from the start: it runs the same steps, in the same order, with the same
 refusals.
@@ -92,6 +95,7 @@ def prepared_start(config_path: Path) -> PreparedStart | int:
     from agent_runtime_service.cli_runner import mcp_tls_context
     from agent_runtime_service.cli_version import ProgramVersionRefused, require_pinned_versions
     from agent_runtime_service.config import ConfigError, load_config
+    from agent_runtime_service.renewal_schedule import renewals_of
     from agent_runtime_service.run_liveness import LoopClock
 
     try:
@@ -111,10 +115,11 @@ def prepared_start(config_path: Path) -> PreparedStart | int:
         runners = installed_runners(config, tls_context, LoopClock())
     except OSError as error:
         return refuse(f"api.ca_file: cannot be loaded: {shown_text(str(error))}")
+    renewals = renewals_of(config.cli)
 
     def serve() -> None:
         uvicorn.run(
-            create_app(config, runners=runners),
+            create_app(config, runners=runners, renewals=renewals),
             host=config.server.host,
             port=config.server.port,
         )

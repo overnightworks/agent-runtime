@@ -5,8 +5,12 @@ on the renewal home, returns a chosen outcome and fires the end confirmation now
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import shlex
+import threading
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -15,9 +19,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from tests.support.codex_support import a_codex_access_token
+from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.codex_support import a_codex_access_token, a_renewing_fake_codex
 from tests.support.provider_test_support import a_codex_login, a_private_root
-from tests.support.service_table_support import write_login
+from tests.support.service_support import _toml_lines
+from tests.support.service_table_support import CODEX_TABLE, write_login
 
 from agent_runtime.codex.run import AUTH_FILE_NAME, CODEX_CLI_PROCESS_POOL
 from agent_runtime.config import PrivateWorkingRoot
@@ -57,6 +63,15 @@ def a_login_issued_at(
 
 DUE_ORIGINAL = a_login_issued_at(NOW - HALF_LIFE)
 RENEWED_LOGIN = a_login_issued_at(NOW, refresh_token=ROTATED_REFRESH, subject="renewed")
+
+
+def a_due_login_now() -> bytes:
+    """A login that is due for the real clock, as the service's own clock reads it."""
+    return a_login_issued_at(int(time.time()) - HALF_LIFE - 60)
+
+
+def a_renewed_login_now() -> bytes:
+    return a_login_issued_at(int(time.time()), refresh_token=ROTATED_REFRESH, subject="renewed")
 
 
 def a_codex_entry(deadline_seconds: float) -> RenewalEntry:
@@ -291,6 +306,22 @@ def logged_once(
     return report
 
 
+def logged_outcomes(caplog: pytest.LogCaptureFixture) -> list[renewal.RenewalOutcome]:
+    """The outcome of each report the renewer logged, in order; the level must allow DEBUG."""
+    return [
+        next(
+            outcome
+            for outcome in renewal.RenewalOutcome
+            if f"login renewal: {outcome.value} (" in record.getMessage()
+        )
+        for record in _records(caplog)
+    ]
+
+
+def logged_levels(caplog: pytest.LogCaptureFixture) -> list[int]:
+    return [record.levelno for record in _records(caplog)]
+
+
 def _records(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
     return [record for record in caplog.records if record.name == renewal.log.name]
 
@@ -302,4 +333,90 @@ def the_secrets_of(*documents: bytes) -> tuple[str, ...]:
         for document in documents
         for value in json.loads(document)["tokens"].values()
         if isinstance(value, str) and value
+    )
+
+
+class BlockedHook:
+    """An ``on_home`` hook that reports it was entered, then blocks until it is released."""
+
+    def __init__(self, then: Callable[[Path], None] | None = None) -> None:
+        self.entered = threading.Event()
+        self._released = threading.Event()
+        self._then = then
+
+    def __call__(self, home: Path) -> None:
+        self.entered.set()
+        assert self._released.wait(TEST_WAIT_SECONDS), "the blocked renewal was never released"
+        if self._then is not None:
+            self._then(home)
+
+    def release(self) -> None:
+        self._released.set()
+
+    async def reached(self) -> None:
+        assert await asyncio.to_thread(self.entered.wait, TEST_WAIT_SECONDS)
+
+
+class RecordingPause:
+    """The schedule's pause: records the requested seconds and stops the schedule after N waits."""
+
+    def __init__(self, stops_after: int) -> None:
+        self._stops_after = stops_after
+        self.seconds: list[float] = []
+        self.exhausted = asyncio.Event()
+
+    async def __call__(self, seconds: float, stopping: asyncio.Event) -> None:
+        self.seconds.append(seconds)
+        if len(self.seconds) >= self._stops_after:
+            stopping.set()
+            self.exhausted.set()
+
+
+@dataclass(frozen=True)
+class CodexServiceFiles:
+    """A service configuration file on the Codex table, with the login it renews."""
+
+    configuration: Path
+    login: Path
+    login_document: bytes
+    root: Path
+    ran: Path
+    """Exists once the stand-in has been run past ``--version``."""
+
+    def renewal_never_began(self) -> bool:
+        """No child ran, the login is as it was, and nothing sits beside it or under the root."""
+        return (
+            not self.ran.exists()
+            and self.login.read_bytes() == self.login_document
+            and not swap_sibling(self.login).exists()
+            and not any(self.root.iterdir())
+        )
+
+
+def codex_service_files(
+    directory: Path,
+    login_document: bytes,
+    renewed: bytes,
+    *,
+    then: str = "exit 0",
+    port: int | None = None,
+) -> CodexServiceFiles:
+    """The service's TOML for a Codex stand-in that renews the login into ``renewed``."""
+    fake_directory = directory / "fake-codex"
+    fake_directory.mkdir()
+    ran = fake_directory / "ran"
+    binary = a_renewing_fake_codex(
+        fake_directory,
+        renewed,
+        f": > {shlex.quote(str(ran))}\n{then}",
+        version_line=CODEX_TABLE.version_line,
+    )
+    login = write_login(fake_directory / CODEX_TABLE.login_name, login_document)
+    document = CODEX_TABLE.document(directory, binary, login)
+    if port is not None:
+        document["server"] = {"host": "127.0.0.1", "port": port}
+    configuration = directory / "agent-runtime-service.toml"
+    configuration.write_text("\n".join(_toml_lines(document)) + "\n", encoding="utf-8")
+    return CodexServiceFiles(
+        configuration, login, login_document, Path(document["cli"]["working_root"]), ran
     )

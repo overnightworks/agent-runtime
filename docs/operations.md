@@ -255,9 +255,10 @@ of others. The service keeps no user list; Keycloak decides, so the operator kee
 the subscription groups (`subscription_groups`) to the subscriber alone. Everyone
 else reaches the API route only as a member of `api_groups`; a person in neither
 group is refused `not_enabled` ([ARCHITECTURE.md](ARCHITECTURE.md)).
-The file is the operator's to keep
-fresh, named as `cli.<provider>.token_file`; the core library never creates, renews
-or rewrites it, and the service's login command installs a new one. Claude (`[cli.anthropic]`) and Codex
+The file is named as `cli.<provider>.token_file`; the core library never creates, renews
+or rewrites it, and the service's login command installs a new one. The service renews a
+Codex login itself ("Renewal of a Codex login" below); a Claude token has no renewal and is the
+operator's to keep fresh. Claude (`[cli.anthropic]`) and Codex
 (`[cli.openai]`) have a table each, and every table needs its `token_file`; the service refuses a
 table for another provider and a leftover `[profiles]` section.
 
@@ -314,10 +315,36 @@ whoever runs the command. A failure before the swap leaves the old file untouche
 service's reader on the file as it stands and reads no input; exit 0 means the reader accepts
 the file, not that the provider does.
 
-The service does not renew a Codex login yet. When runs fail with `CliLoginRefusedError` in the
-log, install a new sign-in. A copy can fail before its access token's measured 240 hours are up
-(decision record 0001, `#### A1b-C0b`, unavailable facts), so no lifetime is promised. The
-Claude token lasts a year and renewing it is the operator's.
+**Renewal of a Codex login.** The service renews the `[cli.openai]` login itself, from its own
+lifespan: one round at start, then every 15 minutes, and one hour after a round in which an
+attempt failed. An attempt checks the file and does nothing until the access token has less than
+half its lifetime left, which is about every 120 hours. Then it runs one tool-free turn of the
+pinned `codex` on a full copy in a private home under `[cli] working_root`, which costs one turn on
+the subscription, and swaps the result in through the same writer as the login command, only over
+the document it read. Runs keep their blanked copies and never renew.
+
+- **Write access to the directory.** The service needs write access to the directory that holds
+  `token_file`, not to the file alone: the swap renames a sibling `.<file>.new` over it, and a
+  rename onto a single-file bind mount fails. Without it, every attempt logs `sibling not created`
+  at WARNING, once an hour, and nothing renews.
+- **Stopping.** A stop waits for a renewal in flight: the 30 s turn deadline, 11.1 s settling and the
+  read-back and write, about 45 s at most. Give the supervisor's stop at least 60 s. A kill sooner,
+  or a forced second SIGINT, can leave `.<file>.new` beside the login file.
+- **What a log line asks of the operator.** Only WARNING and ERROR lines are printed, because the
+  service configures no logging; `--check` shows the login as it stands.
+  - `sibling not created`: the service cannot write the directory; fix the bind.
+  - `sibling held`: a login command or a renewal holds `.<file>.new`. If none runs, a stop or a
+    crash left it: confirm that no renewal child the service started still runs, then remove the
+    file. If that child had already rotated the tokens, its renewed login lived only in its
+    home, the stored one is dead, and the operator signs in again.
+  - `renewal interrupted with its end unconfirmed` (ERROR): the same recovery.
+  - `refresh failed`, `written, not renewed` and the other failures: the next attempt is an hour
+    later. They repeating for days means signing in again.
+  - A failed attempt costs no turn, but a login that keeps being written and not renewed costs
+    one turn an hour, at most 24 a day.
+- **The login command meanwhile.** The service holds `.<file>.new` for milliseconds every 15
+  minutes and up to about 45 s during a renewal. `agent-runtime-service-login` then exits 2
+  with the held-sibling sentence; run it again after the renewal.
 
 **When it fails.** A missing or refused file stops the service at startup, naming
 `cli.<provider>.token_file` and the kind of fault, never the content, or fails a later run as
