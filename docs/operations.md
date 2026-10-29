@@ -325,9 +325,11 @@ the document it read. Runs keep their blanked copies and never renew.
 
 - **Write access to the directory.** The service needs write access to the directory that holds
   `token_file`, not to the file alone: the swap renames a sibling `.<file>.new` over it, and a
-  rename onto a single-file bind mount fails. With a read-only directory or a single-file bind,
-  every attempt logs `sibling not created` at WARNING, once an hour, spends no turn, and nothing
-  renews.
+  rename cannot replace a file bound on its own. With a read-only directory every attempt logs
+  `sibling not created` at WARNING, once an hour, spends no turn, and nothing renews. Bind the
+  directory, never the file alone: with a single-file bind the sibling is created, so a renewal
+  spends its turn and then fails with `COMMIT_REFUSED`, leaving the stored login unusable until the
+  operator signs in again.
 - **Stopping.** A stop waits for a renewal in flight: the 30 s turn deadline, 11.1 s settling and the
   read-back and write, about 45 s at most. Uvicorn first waits for open requests, with no timeout, so
   this bound comes after they have finished; give the supervisor's stop at least 60 s beyond that. A
@@ -336,8 +338,7 @@ the document it read. Runs keep their blanked copies and never renew.
   service configures no logging. `agent-runtime-service-login --check` shows today only whether the
   reader accepts the file, not whether a renewal is due or failed (the expiry is the proof).
   - `sibling not created`: the service cannot create the sibling, because the directory is
-    read-only or the file is a single-file bind (a mount point). Bind the directory that holds the
-    file, read-write.
+    read-only. Bind the directory that holds the file, read-write.
   - `sibling held`: a login command or a renewal holds `.<file>.new`. If none runs, a stop or a
     crash left it: stop the service and any other login command, confirm that no process the
     service started still runs, then remove the file. If a renewal child had already rotated the

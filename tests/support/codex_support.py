@@ -115,13 +115,14 @@ def a_renewing_fake_codex(
     then: str = "exit 0",
     *,
     version_line: str | None = None,
+    first: str = "",
 ) -> Path:
     """A stand-in for the pinned CLI on a renewal run: it renews the login it was given.
 
     A run checks its home, a full login with an emptied access token and a non-empty refresh
     token, the file credential store, the fixed stdin and the ephemeral flag, with a distinct
     exit code for each wrong one. Then it copies ``renewed`` (if any) over the home's login and
-    runs ``then``. ``version_line`` is what ``--version`` prints.
+    runs ``then``. ``version_line`` is what ``--version`` prints; ``first`` runs before any check.
     """
     version_branch = (
         ""
@@ -136,6 +137,7 @@ def a_renewing_fake_codex(
     binary.write_text(
         "#!/bin/sh\n"
         f"{version_branch}"
+        f"{first}"
         '[ "$CODEX_HOME" = "$HOME" ] || exit 10\n'
         '[ "$(stat -c %a "$CODEX_HOME/auth.json")" = 600 ] || exit 11\n'
         'grep -q \'"access_token": ""\' "$CODEX_HOME/auth.json" || exit 12\n'

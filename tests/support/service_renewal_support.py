@@ -418,8 +418,9 @@ def codex_service_files(
     binary = a_renewing_fake_codex(
         fake_directory,
         renewed,
-        f": > {shlex.quote(str(ran))}\necho $$ >> {shlex.quote(str(pids))}\n{then}",
+        f": > {shlex.quote(str(ran))}\n{then}",
         version_line=CODEX_TABLE.version_line,
+        first=f"echo $$ >> {shlex.quote(str(pids))}\n",
     )
     login = write_login(fake_directory / CODEX_TABLE.login_name, login_document)
     document = CODEX_TABLE.document(directory, binary, login)

@@ -42,7 +42,7 @@ from tests.support.service_renewal_support import (  # noqa: F401 - the autouse 
     writing,
 )
 
-from agent_runtime_service import login_file, renewal_schedule
+from agent_runtime_service import renewal_schedule
 from agent_runtime_service.config import Provider
 from agent_runtime_service.renewal import RenewalOutcome
 from agent_runtime_service.renewal_schedule import (
@@ -247,23 +247,6 @@ def test_a_round_with_a_failed_report_waits_the_backoff(
         run_rounds(a_schedule(arrangement, pause=pause), pause)
 
     assert logged_outcomes(caplog)[0] is outcome
-    assert pause.seconds == [RENEWAL_BACKOFF_SECONDS]
-
-
-def test_a_login_file_that_is_a_mount_point_is_refused_at_the_reserve_and_spends_no_turn(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    caplog.set_level(logging.DEBUG)
-    arrangement = an_arrangement(tmp_path)
-    runner = a_fake_runner(monkeypatch, on_home=writing(RENEWED_LOGIN))
-    monkeypatch.setattr(login_file, "is_mount_point", lambda path: path == arrangement.token_file)
-    pause = RecordingPause(1)
-
-    run_rounds(a_schedule(arrangement, pause=pause), pause)
-
-    assert logged_outcomes(caplog) == [RenewalOutcome.RESERVE_REFUSED]
-    assert runner.calls == 0
-    assert arrangement.directory_holds() == [LOGIN_NAME]
     assert pause.seconds == [RENEWAL_BACKOFF_SECONDS]
 
 

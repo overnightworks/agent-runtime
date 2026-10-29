@@ -3873,8 +3873,7 @@ Built in #599, #600, #604 and #606 under #593.
   is read and held until commit or abandon. `flock` was rejected: it vanishes with the
   descriptor, while the renewal child runs in its own session and outlives a crashed service. A
   crash leaves a sibling that the operator removes after stopping the service and any other login
-  command and confirming that no process the service started still runs. A login file that is a
-  mount point is refused when the swap is reserved, because a rename cannot replace it.
+  command and confirming that no process the service started still runs.
 - **D4.** The due moment is `now >= iat + (exp - iat) // 2`, from a timing reader that never
   raises and has a closed cause for each unreadable case. An unreadable source still renews, at
   most once per 24 h.

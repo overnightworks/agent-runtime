@@ -1,6 +1,6 @@
 """The service renews its dedicated Codex login from its own lifespan.
 
-Rows build ``renewals_of`` from real configurations and drive the app's lifespan; the last three
+Rows build ``renewals_of`` from real configurations and drive the app's lifespan; the last two
 start a real ``agent-runtime-service`` process and stop it with SIGTERM.
 """
 
