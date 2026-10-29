@@ -35,7 +35,11 @@ class SecretFileFault(StrEnum):
     UNREADABLE = "cannot be read"
 
 
-_OPEN_FAULTS: Final = {errno.ENOENT: SecretFileFault.MISSING, errno.ELOOP: SecretFileFault.LINK}
+_OPEN_FAULTS: Final = {
+    errno.ENOENT: SecretFileFault.MISSING,
+    errno.ELOOP: SecretFileFault.LINK,
+    errno.ENXIO: SecretFileFault.NOT_REGULAR,
+}
 
 
 class UnsoundSecretFile(ValueError):
@@ -186,16 +190,21 @@ def read_secret_file_without_following_links(path: Path) -> bytes | SecretFileFa
         descriptor = os.open(path, _open_flags() | os.O_NOFOLLOW)
     except OSError as error:
         return _OPEN_FAULTS.get(error.errno, SecretFileFault.UNREADABLE)
+    except ValueError:
+        return SecretFileFault.UNREADABLE
+    judged = _judged_descriptor(descriptor)
     try:
-        status = os.fstat(descriptor)
-        if not stat.S_ISREG(status.st_mode):
+        os.close(descriptor)
+    except OSError:
+        return SecretFileFault.UNREADABLE
+    return judged
+
+
+def _judged_descriptor(descriptor: int) -> bytes | SecretFileFault:
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
             return SecretFileFault.NOT_REGULAR
-        if status.st_size > MAX_SECRET_FILE_BYTES:
-            return SecretFileFault.TOO_LARGE
         read = _read_within_limit(descriptor)
     except OSError:
         return SecretFileFault.UNREADABLE
-    finally:
-        os.close(descriptor)
     return read.fault if isinstance(read, _ReadRefusal) else read
-

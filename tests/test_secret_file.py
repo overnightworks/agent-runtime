@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import socket
 from pathlib import Path
 
 import pytest
@@ -37,8 +38,18 @@ def test_a_symbolic_link_is_refused_and_its_target_is_not_read(tmp_path: Path) -
     assert read_secret_file_without_following_links(link) is SecretFileFault.LINK
 
 
-@pytest.mark.parametrize("make", [os.mkfifo, os.mkdir], ids=["fifo", "directory"])
-def test_a_file_that_is_not_regular_is_refused_without_blocking(tmp_path: Path, make) -> None:
+def _make_socket(path: Path) -> None:
+    with socket.socket(socket.AF_UNIX) as listener:
+        listener.bind(path.name)
+
+
+@pytest.mark.parametrize(
+    "make", [os.mkfifo, os.mkdir, _make_socket], ids=["fifo", "directory", "socket"]
+)
+def test_a_file_that_is_not_regular_is_refused_without_blocking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make
+) -> None:
+    monkeypatch.chdir(tmp_path)
     path = tmp_path / "auth.json"
     make(path)
 
@@ -66,3 +77,32 @@ def test_a_file_that_cannot_be_opened_is_unreadable(tmp_path: Path) -> None:
     path.chmod(0)
 
     assert read_secret_file_without_following_links(path) is SecretFileFault.UNREADABLE
+
+
+def test_a_path_with_a_null_byte_is_unreadable_not_raised(tmp_path: Path) -> None:
+    assert (
+        read_secret_file_without_following_links(tmp_path / "auth\0.json")
+        is SecretFileFault.UNREADABLE
+    )
+
+
+@pytest.mark.parametrize("failing_call", ["fstat", "read", "close"])
+def test_a_failure_of_any_descriptor_call_is_unreadable_not_raised(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failing_call: str
+) -> None:
+    path = tmp_path / "auth.json"
+    path.write_bytes(CONTENT)
+    real_call = getattr(os, failing_call)
+    attempts: list[int] = []
+
+    def failing(descriptor: int, *arguments: int) -> object:
+        attempts.append(descriptor)
+        if failing_call == "close":
+            real_call(descriptor)
+        raise OSError(5, "injected")
+
+    monkeypatch.setattr(os, failing_call, failing)
+
+    assert read_secret_file_without_following_links(path) is SecretFileFault.UNREADABLE
+    if failing_call == "close":
+        assert len(attempts) == 1

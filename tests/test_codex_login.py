@@ -5,7 +5,6 @@ from __future__ import annotations
 import copy
 import json
 import pickle
-from datetime import UTC, datetime, timedelta
 
 import pytest
 from tests.support.codex_support import a_codex_access_token
@@ -33,7 +32,9 @@ A_DEEPLY_NESTED_DOCUMENT = b"[" * 100_000
 A_DOCUMENT_WITH_A_HUGE_INTEGER = b'{"tokens": {"account_id": ' + b"9" * 5_000 + b"}}"
 
 USABLE, INCOMPLETE, MALFORMED = (
-    CodexLoginVerdict.USABLE, CodexLoginVerdict.INCOMPLETE, CodexLoginVerdict.MALFORMED,
+    CodexLoginVerdict.USABLE,
+    CodexLoginVerdict.INCOMPLETE,
+    CodexLoginVerdict.MALFORMED,
 )
 
 
@@ -47,7 +48,8 @@ USABLE, INCOMPLETE, MALFORMED = (
         pytest.param(b"not json", MALFORMED, id="bad-syntax"),
         pytest.param(b"[]", MALFORMED, id="top-level-not-an-object"),
         pytest.param(
-            b'{"auth_mode":"apikey","OPENAI_API_KEY":"sk-synthetic"}', INCOMPLETE,
+            b'{"auth_mode":"apikey","OPENAI_API_KEY":"sk-synthetic"}',
+            INCOMPLETE,
             id="api-key-only",
         ),
         pytest.param(b'{"tokens":null}', MALFORMED, id="tokens-null"),
@@ -61,7 +63,8 @@ USABLE, INCOMPLETE, MALFORMED = (
     ],
 )
 def test_assess_codex_login_names_each_document_shape(
-    document: bytes, verdict: CodexLoginVerdict,
+    document: bytes,
+    verdict: CodexLoginVerdict,
 ) -> None:
     assert assess_codex_login(document).verdict is verdict
 
@@ -69,17 +72,22 @@ def test_assess_codex_login_names_each_document_shape(
 def test_a_usable_login_hands_a_child_the_login_without_its_refresh_token() -> None:
     blanked = assess_codex_login(a_codex_login()).blanked_document
 
-    assert blanked == json.dumps({
-        "auth_mode": "chatgpt",
-        "OPENAI_API_KEY": None,
-        "last_refresh": "2026-09-04T19:20:00Z",
-        "tokens": {
-            "id_token": CANARY_ID_TOKEN,
-            "access_token": CANARY_ACCESS_TOKEN,
-            "account_id": "account",
-            "refresh_token": "",
-        },
-    }).encode()
+    assert (
+        blanked
+        == json.dumps(
+            {
+                "auth_mode": "chatgpt",
+                "OPENAI_API_KEY": None,
+                "last_refresh": "2026-09-04T19:20:00Z",
+                "tokens": {
+                    "id_token": CANARY_ID_TOKEN,
+                    "access_token": CANARY_ACCESS_TOKEN,
+                    "account_id": "account",
+                    "refresh_token": "",
+                },
+            }
+        ).encode()
+    )
 
 
 @pytest.mark.parametrize("document", [b"not json", b'{"tokens":{}}', a_codex_login(last_refresh=3)])
@@ -111,8 +119,6 @@ def test_a_usable_codex_login_never_shows_its_tokens(disclose) -> None:
 
 
 NOW = 1_800_000_000
-LAST_REFRESH_FORMAT = "%Y-%m-%dT%H:%M:%S.%fZ"
-THIRTY_DAYS = 30 * 24 * 3600
 MAX_CLAIM = 2**53 - 1
 READABLE_LIFETIME = {"iat": NOW - 100, "exp": NOW + 100}
 
@@ -148,17 +154,18 @@ def test_a_missing_claim_is_named(claims: dict[str, object]) -> None:
 @pytest.mark.parametrize(
     "bad",
     [
-        pytest.param(True, id="true"),
-        pytest.param(False, id="false"),
-        pytest.param(1800000000.0, id="float"),
-        pytest.param(1e9, id="exponent-float"),
-        pytest.param("1800000000", id="string"),
-        pytest.param(None, id="null"),
+        pytest.param("true", id="true"),
+        pytest.param("false", id="false"),
+        pytest.param("1800000000.0", id="float"),
+        pytest.param("1e9", id="exponent-float"),
+        pytest.param('"1800000000"', id="string"),
+        pytest.param("null", id="null"),
     ],
 )
 @pytest.mark.parametrize("which", ["iat", "exp"])
-def test_a_claim_that_is_not_a_json_integer_is_wrong_type(which: str, bad: object) -> None:
-    claims = {"iat": NOW - 100, "exp": NOW + 100, which: bad}
+def test_a_claim_that_is_not_a_json_integer_is_wrong_type(which: str, bad: str) -> None:
+    values = {"iat": str(NOW - 100), "exp": str(NOW + 100), which: bad}
+    claims = ("{" + ", ".join(f'"{name}": {text}' for name, text in values.items()) + "}").encode()
 
     assert timing_of(claims) is UnreadableTiming.WRONG_TYPE
 
@@ -170,10 +177,14 @@ def test_a_claim_that_is_not_a_json_integer_is_wrong_type(which: str, bad: objec
         pytest.param({"iat": 0, "exp": 5}, UnreadableTiming.OUT_OF_RANGE, id="iat-zero"),
         pytest.param({"iat": -1, "exp": 5}, UnreadableTiming.OUT_OF_RANGE, id="iat-negative"),
         pytest.param(
-            {"iat": NOW, "exp": MAX_CLAIM}, CodexTiming(NOW, MAX_CLAIM), id="exp-at-the-top",
+            {"iat": NOW, "exp": MAX_CLAIM},
+            CodexTiming(NOW, MAX_CLAIM),
+            id="exp-at-the-top",
         ),
         pytest.param(
-            {"iat": NOW, "exp": MAX_CLAIM + 1}, UnreadableTiming.OUT_OF_RANGE, id="exp-over-top",
+            {"iat": NOW, "exp": MAX_CLAIM + 1},
+            UnreadableTiming.OUT_OF_RANGE,
+            id="exp-over-top",
         ),
     ],
 )
@@ -213,9 +224,11 @@ def test_issue_up_to_300_seconds_ahead_of_now_is_readable_and_beyond_is_future()
 @pytest.mark.parametrize(
     ("claims", "expected"),
     [
-        pytest.param({"exp": 1e9}, UnreadableTiming.CLAIM_MISSING, id="missing-before-type"),
+        pytest.param(b'{"exp": 1e9}', UnreadableTiming.CLAIM_MISSING, id="missing-before-type"),
         pytest.param(
-            {"iat": True, "exp": 2**53}, UnreadableTiming.WRONG_TYPE, id="type-before-range",
+            {"iat": True, "exp": 2**53},
+            UnreadableTiming.WRONG_TYPE,
+            id="type-before-range",
         ),
         pytest.param(
             {"iat": NOW + 1000, "exp": NOW + 10},
@@ -302,16 +315,24 @@ def test_an_opaque_access_token_still_gives_a_usable_login_but_no_timing() -> No
     [
         pytest.param(
             a_codex_login(tokens={"refresh_token": ""}),
-            CodexRenewalRefusal.NO_REFRESH_TOKEN, id="empty",
+            CodexRenewalRefusal.NO_REFRESH_TOKEN,
+            id="empty",
         ),
         pytest.param(
             a_codex_login(tokens={"refresh_token": 7}),
-            CodexRenewalRefusal.NO_REFRESH_TOKEN, id="numeric",
+            CodexRenewalRefusal.NO_REFRESH_TOKEN,
+            id="numeric",
         ),
         pytest.param(
-            json.dumps({"auth_mode": "chatgpt", "last_refresh": "x", "tokens": {
-                "access_token": "a", "id_token": "i", "account_id": "c"}}).encode(),
-            CodexRenewalRefusal.NO_REFRESH_TOKEN, id="missing",
+            json.dumps(
+                {
+                    "auth_mode": "chatgpt",
+                    "last_refresh": "x",
+                    "tokens": {"access_token": "a", "id_token": "i", "account_id": "c"},
+                }
+            ).encode(),
+            CodexRenewalRefusal.NO_REFRESH_TOKEN,
+            id="missing",
         ),
         pytest.param(b"not json", CodexRenewalRefusal.NOT_USABLE, id="malformed"),
         pytest.param(b'{"tokens":{}}', CodexRenewalRefusal.NOT_USABLE, id="incomplete"),
@@ -354,10 +375,8 @@ def a_renewable_login(**tokens: object) -> RenewableCodexLogin:
 def test_the_made_due_copy_empties_the_access_token_and_ages_last_refresh_by_30_days() -> None:
     copy_document = json.loads(made_due_copy(a_renewable_login(), NOW))
 
-    aged = datetime.fromtimestamp(NOW, UTC) - timedelta(days=30)
     assert copy_document["tokens"]["access_token"] == ""
-    assert copy_document["last_refresh"] == aged.strftime(LAST_REFRESH_FORMAT)
-    assert NOW - THIRTY_DAYS == int(aged.timestamp())
+    assert copy_document["last_refresh"] == "2026-12-16T08:00:00.000000Z"
 
 
 def test_the_made_due_copy_changes_nothing_else_and_keeps_member_order() -> None:

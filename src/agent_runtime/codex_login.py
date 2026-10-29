@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import base64
-import binascii
 import json
 import re
 from dataclasses import dataclass, field
@@ -152,7 +151,7 @@ def _claims(access_token: str) -> dict[str, object] | None:
     try:
         padded = segments[1] + "=" * (-len(segments[1]) % 4)
         claims = json.loads(base64.urlsafe_b64decode(padded).decode())
-    except (ValueError, RecursionError, binascii.Error):
+    except (ValueError, RecursionError):
         return None
     return claims if isinstance(claims, dict) else None
 

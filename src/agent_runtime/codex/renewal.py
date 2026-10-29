@@ -60,7 +60,7 @@ class CodexRenewal:
         return self._run.start(home, working_directory)
 
     def renewed_document(self, home: Path) -> bytes | SecretFileFault | CopyUnchanged:
-        """What the CLI left as the home's login; its structure is the caller's to judge."""
+        """What the CLI left as the home's login; the caller checks its structure."""
         read = read_secret_file_without_following_links(home / AUTH_FILE_NAME)
         if isinstance(read, bytes) and read == self._made_due_copy():
             return CopyUnchanged.UNCHANGED
