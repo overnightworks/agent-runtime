@@ -18,7 +18,7 @@
 "packages/service/tests/test_tool_relay.py" = 1309
 "packages/service/tests/test_tool_relay_barrier.py" = 2010
 "src/agent_runtime/claude/provider.py" = 1965
-"src/agent_runtime/process.py" = 2414
+"src/agent_runtime/process.py" = 2404
 "src/agent_runtime/spawn.py" = 1137
 "tests/support/provider_test_support.py" = 2189
 "tests/support/service_support.py" = 1543

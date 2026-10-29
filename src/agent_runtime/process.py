@@ -2248,26 +2248,16 @@ def _probe_grok_status() -> GrokCliStatus:
 def grok_cli_token_is_present() -> bool:
     """Whether the Grok CLI credential mirror contains a non-empty access token."""
     try:
-        document = json.loads(current_grok_runtime().token_file.read_text(encoding="utf-8"))
+        verdict = grok_login.assess_grok_login(
+            current_grok_runtime().token_file.read_bytes()
+        ).verdict
     except FileNotFoundError:
         return False
     except OSError as exc:
         raise CliLoginUnusableError("could not read Grok CLI credentials") from exc
-    except (json.JSONDecodeError, UnicodeDecodeError):
+    if verdict is grok_login.GrokLoginVerdict.MALFORMED:
         raise_without_chain(CliLoginUnusableError(GROK_CLI_CREDENTIALS_INVALID_DETAIL))
-    if not isinstance(document, dict):
-        raise CliLoginUnusableError(GROK_CLI_CREDENTIALS_INVALID_DETAIL)
-    for realm in document.values():
-        if not isinstance(realm, dict):
-            raise CliLoginUnusableError(GROK_CLI_CREDENTIALS_INVALID_DETAIL)
-        key = realm.get("key")
-        if key is None:
-            continue
-        if not isinstance(key, str):
-            raise CliLoginUnusableError(GROK_CLI_CREDENTIALS_INVALID_DETAIL)
-        if key:
-            return True
-    return False
+    return verdict is grok_login.GrokLoginVerdict.USABLE
 
 
 def codex_cli_login_is_usable() -> bool:
