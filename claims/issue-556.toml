@@ -1,8 +1,0 @@
-claim_id = "2ef168c825dc4857b2c682865b9a9266"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "0dace422b70bc9270826a3cfb49f687f22c562d5"
-branch = "claude/issue-556-codex-cli-settings"
-scope = [".importlinter", "docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "packages/service/src/agent_runtime_service/cli_runner.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/tests/test_api_runner.py", "packages/service/tests/test_cli_runner.py", "packages/service/tests/test_cli_runner_codex_profile.py", "packages/service/tests/test_config_cli_settings.py", "quality/config.toml", "src/agent_runtime/cli_settings.py", "src/agent_runtime/codex/run.py", "tests/support/api_runner_support.py", "tests/support/codex_support.py", "tests/support/service_config_support.py", "tests/test_cli_settings.py", "tests/test_codex_run.py", "tests/test_codex_run_settings.py"]
-opened_commit = "84ad026b0baa1e25426d8d0def1f536c3e563ecf"
-whole_reason = "One vertical contract: the operator's Codex settings from the TOML as ordered levels through the one merge to the run's config file, the adapter defaults leaving argv for that file, and the docs, import contract, gate entry and test modules pinning the old argv belong together, or main carries a key that does nothing or an argument nobody passes."
