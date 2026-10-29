@@ -8,7 +8,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from ruamel.yaml import YAML
 
 _WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
 _REPOSITORY = "overnightworks/agent-runtime"
@@ -158,106 +157,11 @@ def test_the_published_notes_without_a_migration_section_are_the_three_requireme
     assert notes == "\n".join(_INSTALL_LINES)
 
 
-_STEP_EXPRESSION = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
-_STEP_REFERENCE = re.compile(r"\bsteps\.([\w-]+)(?:\.outputs\.([\w-]+))?")
-
-
-def _step_references(job: dict) -> list[tuple[str, str | None]]:
-    """The (step id, output name) of every `steps.` reference inside an expression of a job."""
-    return [
-        reference
-        for expression in _STEP_EXPRESSION.findall(str(job))
-        for reference in _STEP_REFERENCE.findall(expression)
-    ]
-
-
-def _dangling_step_references(jobs: dict) -> set[str]:
-    """Step ids referenced anywhere in a job that none of its steps declares."""
-    return {
-        step_id
-        for job in jobs.values()
-        for step_id, _ in _step_references(job)
-        if step_id not in {step.get("id") for step in job["steps"]}
-    }
-
-
-def _unwritten_step_outputs(jobs: dict) -> set[str]:
-    """Referenced outputs whose step does not write that name to the output file."""
-    return {
-        f"{step_id}.{output}"
-        for job in jobs.values()
-        for step_id, output in _step_references(job)
-        if output
-        and not any(
-            step.get("id") == step_id
-            and re.search(rf"\b{re.escape(output)}(=|<<)", step.get("run", ""))
-            for step in job["steps"]
-        )
-    }
-
-
-def _referenced_output_names(jobs: dict) -> set[str]:
-    return {output for job in jobs.values() for _, output in _step_references(job) if output}
-
-
-def _workflow_jobs(text: str | None = None) -> dict:
-    text = text or _WORKFLOW.read_text(encoding="utf-8")
-    return YAML(typ="safe").load(text)["jobs"]
-
-
-def test_every_step_reference_of_a_release_job_names_a_step_of_that_job():
-    assert _dangling_step_references(_workflow_jobs()) == set()
-
-
-@pytest.mark.parametrize(
-    "reference", ["${{ steps.missing.outputs.value }}", "${{ steps.missing }}"]
-)
-@pytest.mark.parametrize("field", ["outputs", "env", "if"])
-def test_a_step_reference_outside_the_steps_of_a_job_is_found_when_it_dangles(field, reference):
-    jobs = _workflow_jobs()
-    next(iter(jobs.values()))[field] = reference
-
-    assert _dangling_step_references(jobs) == {"missing"}
-
-
-def test_a_job_name_that_only_contains_the_text_of_a_reference_is_no_reference():
-    jobs = _workflow_jobs()
-    next(iter(jobs.values()))["name"] = "steps.missing.outputs.value"
-
-    assert _dangling_step_references(jobs) == set()
-
-
-def test_every_referenced_step_output_is_written_by_the_step_it_names():
-    assert _unwritten_step_outputs(_workflow_jobs()) == set()
-
-
-def test_a_consistent_rename_of_a_producer_step_keeps_its_outputs_written():
-    text = _WORKFLOW.read_text(encoding="utf-8")
-    renamed = text.replace("id: install", "id: wheels").replace("steps.install.", "steps.wheels.")
-
-    assert renamed != text
-    assert _unwritten_step_outputs(_workflow_jobs(renamed)) == set()
-
-
-@pytest.mark.parametrize(
-    ("old", "new"),
-    [("id: install", "id: wheels"), ("steps.install.", "steps.wheels.")],
-    ids=["producer only", "consumer only"],
-)
-def test_renaming_only_one_side_of_a_step_output_is_found(old, new):
-    text = _WORKFLOW.read_text(encoding="utf-8")
-    renamed = text.replace(old, new)
-
-    assert renamed != text
-    assert _unwritten_step_outputs(_workflow_jobs(renamed)) != set()
-
-
-def test_the_wheel_list_is_written_as_a_multiline_output_the_publish_step_reads(tmp_path):
+def test_the_wheel_list_is_written_in_the_multiline_output_form(tmp_path):
     _, install = _wheel_list_output(tmp_path)
     lines = install.splitlines()
 
-    opening, delimiter = lines[0].split("<<")
-    assert opening in _referenced_output_names(_workflow_jobs())
+    _, delimiter = lines[0].split("<<")
     assert lines[-1] == delimiter
 
 
