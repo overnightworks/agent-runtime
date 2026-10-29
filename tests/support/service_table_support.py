@@ -210,10 +210,6 @@ def the_table(request: pytest.FixtureRequest) -> ProviderTable:
 
 CODEX_MODEL = CODEX_TABLE.model
 
-CODEX_PIN = CODEX_TABLE.pin
-
-CODEX_LOGIN_NAME = CODEX_TABLE.login_name
-
 CODEX_NAME = CODEX_TABLE.listed
 
 a_codex_login_file = CODEX_TABLE.login_file

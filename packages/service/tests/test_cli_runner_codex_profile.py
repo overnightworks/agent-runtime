@@ -42,7 +42,7 @@ from tests.support.service_support import (
     failure_lines,
     fake_app_authority,  # noqa: F401 - a fixture, requested by name
     logging_state_snapshot,  # noqa: F401 - a fixture, requested by name
-    )
+)
 from tests.support.service_table_support import (
     CANARY,
     CODEX_MODEL,
@@ -76,20 +76,6 @@ from agent_runtime_service.runners import AdmittedRun
 
 def a_codex_service(tmp_path: Path, **options: Any) -> tuple[ServiceConfig, Path]:
     return a_table_service(CODEX_TABLE, tmp_path, **options)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def test_a_codex_run_without_words_or_a_file_ends_as_an_invalid_event_not_a_runner_failure(
@@ -180,9 +166,7 @@ def test_codex_tool_items_reach_no_frame_status_or_log_and_the_answer_succeeds(
     caplog.set_level("DEBUG")
     stream = (
         an_item("item.started", "command_execution", command=CANARY),
-        an_item(
-            "item.completed", "command_execution", command=CANARY, aggregated_output=CANARY
-        ),
+        an_item("item.completed", "command_execution", command=CANARY, aggregated_output=CANARY),
         an_item("item.completed", "web_search", query=CANARY),
         a_message("done"),
         DONE,
@@ -200,17 +184,7 @@ def test_codex_tool_items_reach_no_frame_status_or_log_and_the_answer_succeeds(
     assert CANARY not in seen
 
 
-
-
-
-
 # Tools are refused at admission until the relay serves Codex.
-
-
-
-
-
-
 
 
 def test_no_run_adapter_factory_sees_the_admitted_run_or_its_capability() -> None:
@@ -221,8 +195,6 @@ def test_no_run_adapter_factory_sees_the_admitted_run_or_its_capability() -> Non
     ]
 
     assert [t for t in annotations if t in (AdmittedRun, Capability)] == []
-
-
 
 
 # The operator's ``cli_settings`` reach the run as its settings file.
@@ -334,9 +306,7 @@ def test_a_run_the_program_refuses_ends_closed_and_no_setting_or_program_text_re
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     login = a_codex_login_file(tmp_path)
-    binary = a_service_fake(
-        tmp_path, stream=(), then=f"echo {CANARY} >&2; exit 1"
-    )
+    binary = a_service_fake(tmp_path, stream=(), then=f"echo {CANARY} >&2; exit 1")
     document = codex_document(tmp_path, binary, login)
     document["defaults"]["cli_settings"] = {"openai": {"invented_key": SETTING_CANARY}}
 
