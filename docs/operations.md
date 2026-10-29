@@ -125,6 +125,64 @@ agent never runs as the app, and a table name that is no valid agent name, a non
 unknown key stops startup (exit 2, naming the field). Changing the list is a configuration change
 and a restart; it revokes nothing already admitted.
 
+## CLI settings
+
+A subscription CLI keeps its own settings. `cli_settings` holds them in that CLI's own shape,
+and the service passes them through without a mapping; it governs CLI runs only, and the API
+route ignores it. Only `cli_settings.openai` (Codex) is accepted yet. `anthropic` or any other key
+stops startup as an unknown field, and `openai` must be a table. The tables take the unquoted
+dotted keys of Codex's own `config.toml`; a quoted key such as `"features.image_generation"` stays
+one literal key.
+
+```toml
+[defaults.cli_settings.openai]
+web_search = "live"
+
+[apps.notes.agents.illustrator.cli_settings.openai]
+features.image_generation = true
+```
+
+The levels apply in this order, each over the one before: the adapter's defaults, `[defaults]`,
+`[apps.<app>]`, then `[apps.<app>.agents.<agent>]`. Tables merge per key, recursively; any other
+value replaces, so a scalar at a higher level replaces a whole table below it and an array is
+not appended to.
+
+The service writes the result as the run's `config.toml` (mode 0600, in the run's own fresh home)
+and no setting value appears in the program's arguments. Its Codex defaults are `sandbox_mode =
+"read-only"`, `approval_policy = "never"`, `mcp_servers = {}`, `web_search = "disabled"` and
+`features` with `shell_tool`, `unified_exec`, `browser_use`, `computer_use`, `multi_agent`,
+`image_generation`, `plugins`, `hooks`, `code_mode_host`, `code_mode` and `code_mode_only` all
+`false`; every other feature follows the pinned CLI. The configuration overrides each of them,
+`sandbox_mode` included, and the service neither refuses nor warns about what it sets.
+
+Codex also reads further layers, and the service owns three. The file above is the user layer.
+A project's `.codex/config.toml` loads only when the effective `projects` table marks that
+directory `trust_level = "trusted"`; the run's working directory is fresh and empty, so only the
+operator's own `projects` setting can trust one, and a trusted layer ranks above the file. The
+session flags the service keeps rank above both: the system text (`model_instructions_file`), the
+model, `--ephemeral` and `--json`. The host's own Codex inputs (its system file, managed and
+requirements files) are the host's; see [Codex's loader](https://github.com/openai/codex/tree/rust-v0.163.0/codex-rs/config/src/loader).
+
+Approval, measured on `codex-cli 0.163.0`: a headless `exec` run sets `approval_policy = never`
+itself, so `approval_policy` alone changes nothing in a run (its `turn_context` says `never`).
+With `approvals_reviewer = "auto_review"` the configured `approval_policy` applies (measured:
+`on-request` when the file sets it) and Codex's own reviewer decides each request. The service passes both keys through. A built-in tool the
+configuration switches on runs inside the CLI without a per-call approval from the service.
+
+Four top-level keys of `cli_settings.openai` stop startup at any level (exit 2, `--check` agrees),
+because another setting already owns their fact: `model` and `model_provider` (set `model`),
+`model_instructions_file` (the run request's system text) and `cli_auth_credentials_store`
+(`[cli.openai] token_file`). A nested key such as `features.model` loads.
+
+A typo is not caught at startup. The pinned CLI exits before its first line under
+`--strict-config`, so every run of that agent ends `failed: provider_error`, and the log names
+`CodexAnswerMissing`, not the key. `profile = "<name>"` ends the same way on this pin, while
+`[profiles.<name>]` loads and is never selected.
+
+A built-in tool's line yields no event of its own, so a long tool call counts against
+`[runs] idle_timeout_s` (default 120 s) beside `max_duration_s`, and repeated progress lines of a
+tool do not refresh it. Raise `idle_timeout_s` for long tools.
+
 ## The subscription login
 
 The agent service holds the one login per provider for all apps. Only the
@@ -164,9 +222,10 @@ host's setup makes it.
 
 **What a CLI run does with tools.** A Codex tool item in the stream does not fail the run; the
 service drops it and no frame shows it. An item or event type the adapter does not know still ends
-the run `failed: provider_error`. The service switches off the features its Codex adapter names,
-and every other feature follows the pinned CLI. At every pin bump the operator compares that list
-with `codex features list`, run with `HOME` and `CODEX_HOME` set to one empty directory. A name
+the run `failed: provider_error`. The service switches off by default the features its Codex adapter
+names ("CLI settings"), and every other feature follows the pinned CLI. At every pin bump the
+operator compares that list with `codex features list`, run with `HOME` and `CODEX_HOME` set to one
+empty directory that holds the defaults file, so the comparison also shows the file is read. A name
 that vanished or was renamed already stops runs (`--strict-config`); a new stable feature that is
 on by default does not. A CLI output line over 4 MiB ends the run `failed: provider_error`, and a
 tool's output travels in one line. Claude's `--max-turns` is `[runs] max_tool_calls` plus one and

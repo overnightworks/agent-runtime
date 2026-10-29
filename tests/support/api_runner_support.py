@@ -7,7 +7,7 @@ from tests.support.api_support import write_api_credentials
 from tests.support.service_support import LISTED_MODEL, service_config
 
 from agent_runtime_service import api_runner
-from agent_runtime_service.config import DefaultsConfig, Provider, ServiceConfig
+from agent_runtime_service.config import CliSettingsConfig, DefaultsConfig, Provider, ServiceConfig
 
 
 def configured(tmp_path, **api):
@@ -25,6 +25,20 @@ CONFIGURED_MODEL = f"{Provider.ANTHROPIC}/{LISTED_MODEL}"
 
 def with_default_model(config, model):
     return config.model_copy(update={"defaults": DefaultsConfig(model=model)})
+
+
+def with_cli_settings(config, settings):
+    """``config`` with the same ``cli_settings.openai`` table at ``[defaults]`` and every app."""
+    table = CliSettingsConfig(openai=settings)
+    return config.model_copy(
+        update={
+            "defaults": config.defaults.model_copy(update={"cli_settings": table}),
+            "apps": {
+                name: app.model_copy(update={"cli_settings": table})
+                for name, app in config.apps.items()
+            },
+        }
+    )
 
 
 def answer(text="answer"):

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import math
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import ClassVar, Final, NoReturn
 
@@ -12,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from agent_runtime.anchored_turn import CliProcessPool, ReapBounds
 from agent_runtime.cli_run import CliRunStart, StepEvent
+from agent_runtime.cli_settings import CliSettings, TomlValue, merged
 from agent_runtime.codex_login import CodexLogin, CodexLoginVerdict
 from agent_runtime.constants import CLI_GROUP_CONFIRMATION_SECONDS, CLI_TERMINATION_GRACE_SECONDS
 from agent_runtime.errors import CliLoginRefusedError, raise_without_chain
@@ -36,18 +40,17 @@ _AUTH_FILE_NAME: Final = "auth.json"
 _SYSTEM_PROMPT_FILE_NAME: Final = "system-prompt"
 _HOME_VARIABLE: Final = "CODEX_HOME"
 
+_CONFIG_FILE_NAME: Final = "config.toml"
+
 _BASE_ARGUMENTS: Final = (
     "exec",
     "--json",
-    "--sandbox",
-    "read-only",
     "--skip-git-repo-check",
-    "--ignore-user-config",
     "--ignore-rules",
     "--ephemeral",
     "--strict-config",
 )
-_TOOL_FEATURES_OFF: Final = (
+_FEATURES_OFF: Final = (
     "shell_tool",
     "unified_exec",
     "browser_use",
@@ -56,15 +59,17 @@ _TOOL_FEATURES_OFF: Final = (
     "image_generation",
     "plugins",
     "hooks",
+    "code_mode_host",
+    "code_mode",
+    "code_mode_only",
 )
-_CODE_MODE_FEATURES_OFF: Final = ("code_mode_host", "code_mode", "code_mode_only")
-_TOOL_ISOLATION_SWITCHES: Final = (
-    'approval_policy="never"',
-    "mcp_servers={}",
-    *(f"features.{name}=false" for name in _TOOL_FEATURES_OFF),
-    'web_search="disabled"',
-    *(f"features.{name}=false" for name in _CODE_MODE_FEATURES_OFF),
-)
+_DEFAULT_SETTINGS: Final[CliSettings] = {
+    "sandbox_mode": "read-only",
+    "approval_policy": "never",
+    "mcp_servers": {},
+    "web_search": "disabled",
+    "features": dict.fromkeys(_FEATURES_OFF, False),
+}
 _READ_PROMPT_FROM_STDIN: Final = "-"
 
 _TOOL_ITEM_TYPES: Final = frozenset(
@@ -220,12 +225,64 @@ def _toml_basic_string(value: str) -> str:
     return json.dumps(value, ensure_ascii=False).replace("\x7f", "\\u007f")
 
 
+_BARE_KEY: Final = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def _toml_key(key: str) -> str:
+    return key if _BARE_KEY.fullmatch(key) else _toml_basic_string(key)
+
+
+def _toml_float(value: float) -> str:
+    if math.isnan(value):
+        return "nan"
+    if math.isinf(value):
+        return "inf" if value > 0 else "-inf"
+    return repr(value)
+
+
+def _toml_value(path: str, value: TomlValue) -> str:
+    # `bool` is checked before its base class `int`.
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float):
+        return _toml_float(value)
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return _toml_basic_string(value)
+    if isinstance(value, datetime | date | time):
+        return value.isoformat()
+    if isinstance(value, list):
+        items = (_toml_value(f"{path}[{index}]", item) for index, item in enumerate(value))
+        return f"[{', '.join(items)}]"
+    if isinstance(value, dict):
+        return _toml_inline_table(path, value)
+    raise TypeError(f"Setting {path} is a {type(value).__name__}, which TOML cannot hold")
+
+
+def _toml_inline_table(path: str, table: CliSettings) -> str:
+    entries = (
+        f"{_toml_key(key)} = {_toml_value(f'{path}.{key}' if path else key, value)}"
+        for key, value in table.items()
+    )
+    return f"{{ {', '.join(entries)} }}" if table else "{}"
+
+
+def _toml_document(settings: CliSettings) -> bytes:
+    lines = (
+        f"{_toml_key(key)} = {_toml_value(key, value)}\n" for key, value in settings.items()
+    )
+    return "".join(lines).encode()
+
+
 @dataclass(frozen=True)
 class CodexRun:
-    """One fresh, tool-free subscription run of the pinned CLI.
+    """One fresh subscription run of the pinned CLI.
 
-    It describes the run and starts nothing; the entry makes the directories and
-    the spawn owner starts the child.
+    Its defaults switch off the features this adapter names and set the read-only sandbox; every
+    other feature follows the pinned CLI, and the run's ``settings`` (the operator's levels,
+    lowest first) may change any of them. It describes the run and starts nothing; the entry
+    makes the directories and the spawn owner starts the child.
     """
 
     binary: Path
@@ -233,6 +290,7 @@ class CodexRun:
     system: str = field(repr=False)
     history: tuple[TurnMessage, ...] = field(repr=False)
     model: str | None = field(kw_only=True)
+    settings: tuple[CliSettings, ...] = field(kw_only=True, repr=False)
 
     def __post_init__(self) -> None:
         if not self.binary.is_absolute():
@@ -256,6 +314,7 @@ class CodexRun:
         return {
             _AUTH_FILE_NAME: self.login.blanked_document,
             _SYSTEM_PROMPT_FILE_NAME: self.system.encode(),
+            _CONFIG_FILE_NAME: _toml_document(merged(_DEFAULT_SETTINGS, *self.settings)),
         }
 
     def start(self, home: Path, working_directory: Path) -> CliRunStart:
@@ -279,10 +338,10 @@ class CodexRun:
 
     def _arguments(self, home: Path) -> tuple[str, ...]:
         system_file = _toml_basic_string(str(home / _SYSTEM_PROMPT_FILE_NAME))
-        switches = (*_TOOL_ISOLATION_SWITCHES, f"model_instructions_file={system_file}")
         return (
             *_BASE_ARGUMENTS,
-            *(part for switch in switches for part in ("-c", switch)),
+            "-c",
+            f"model_instructions_file={system_file}",
             *self._model_option(),
             _READ_PROMPT_FROM_STDIN,
         )

@@ -5,6 +5,10 @@ required, and ``model`` may be set again in ``[apps.<app>]`` and in
 ``[apps.<app>.agents.<agent>]``. Each name is ``<provider>/<model>`` in the wire's grammar, and
 startup refuses one that no ``[cli.<provider>]`` table lists in its ``models``.
 
+``cli_settings`` may be set at the same three levels. ``cli_settings.openai`` holds Codex's own
+settings in Codex's own shape; the service passes them through without a mapping, lowest level
+first, and refuses only a key whose fact another owner holds. It governs CLI runs only.
+
 The service runs the subscription programs of Claude (``[cli.anthropic]``) and of Codex
 (``[cli.openai]``). Each such table names the absolute program, the exact version it must
 report, the models it serves and its token file (a Claude setup token, or a Codex sign-in
@@ -34,7 +38,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from functools import cached_property
 from pathlib import Path
-from typing import Annotated, Final, Self
+from typing import Annotated, Final, Self, cast
 
 from pydantic import (
     AfterValidator,
@@ -49,11 +53,13 @@ from pydantic import (
     StrictInt,
     ValidationError,
     ValidationInfo,
+    field_validator,
     model_validator,
 )
 from webauth.https_client import is_https_url
 from webauth.oidc_login import AdmissionConfig
 
+from agent_runtime.cli_settings import CliSettings
 from agent_runtime.codex_login import CodexLogin, CodexLoginVerdict, assess_codex_login
 from agent_runtime.config import PrivateWorkingRoot, WorkingRootNotPrivateError
 from agent_runtime.secret_file import (
@@ -391,10 +397,42 @@ class RunConfig(_Section):
         return self
 
 
+_CODEX_KEYS_THE_SERVICE_OWNS: Final = {
+    "model": "model",
+    "model_provider": "model",
+    "model_instructions_file": "the run request's system text",
+    "cli_auth_credentials_store": "[cli.openai] token_file",
+}
+
+
+class CliSettingsConfig(_Section):
+    """The CLIs' own settings in each CLI's own shape, passed through without a mapping.
+
+    Only a key whose fact another owner already holds is refused, naming that owner.
+    """
+
+    openai: dict[str, object] = {}
+
+    @field_validator("openai")
+    @classmethod
+    def _keys_the_service_owns_are_not_set_here(
+        cls, settings: dict[str, object]
+    ) -> dict[str, object]:
+        for key, owner in _CODEX_KEYS_THE_SERVICE_OWNS.items():
+            if key in settings:
+                raise ValueError(f"{key} is the service's; set {owner} instead")
+        return settings
+
+    def of(self, provider: Provider) -> CliSettings:
+        """The table of ``provider``; a provider without one has no settings."""
+        return cast("CliSettings", self.openai) if provider is Provider.OPENAI else {}
+
+
 class DefaultsConfig(_Section):
     """What a run uses when neither its agent's nor its app's table names it."""
 
     model: ModelName
+    cli_settings: CliSettingsConfig = CliSettingsConfig()
 
 
 class AgentConfig(_Section):
@@ -402,6 +440,7 @@ class AgentConfig(_Section):
 
     runs_as_app: StrictBool = False
     model: ModelName | None = None
+    cli_settings: CliSettingsConfig = CliSettingsConfig()
 
 
 class AppConfig(_Section):
@@ -415,6 +454,7 @@ class AppConfig(_Section):
     model: ModelName | None = None
     mcp_origin: McpOrigin | None = None
     agents: Mapping[AgentName, AgentConfig] = {}
+    cli_settings: CliSettingsConfig = CliSettingsConfig()
 
     def runs_as_itself(self, agent: str) -> bool:
         agent_config = self.agents.get(agent)
@@ -579,6 +619,21 @@ class ServiceConfig(_Section):
         if agent_config is not None and agent_config.model is not None:
             return agent_config.model
         return app.model if app.model is not None else self.defaults.model
+
+    def cli_settings_levels(
+        self, app_name: str, agent: str, provider: Provider
+    ) -> tuple[CliSettings, ...]:
+        """The settings of the app's run of ``agent`` on ``provider``, lowest level first.
+
+        The levels stay unmerged: the adapter merges them once over its own defaults.
+        """
+        app = self.apps[app_name]
+        agent_config = app.agents.get(agent)
+        return (
+            self.defaults.cli_settings.of(provider),
+            app.cli_settings.of(provider),
+            {} if agent_config is None else agent_config.cli_settings.of(provider),
+        )
 
     def capability_scope(self, app_name: str, tools: Iterable[str]) -> CapabilityScope | None:
         """What the app's capability is bound to, granting exactly ``tools`` sorted."""
