@@ -327,9 +327,10 @@ the document it read. Runs keep their blanked copies and never renew.
   `token_file`, not to the file alone: the swap renames a sibling `.<file>.new` over it, and a
   rename cannot replace a file bound on its own. With a read-only directory every attempt logs
   `sibling not created` at WARNING, once an hour, spends no turn, and nothing renews. Bind the
-  directory, never the file alone: with a single-file bind the sibling is created, so a renewal
-  spends its turn and then fails with `COMMIT_REFUSED`, leaving the stored login unusable until the
-  operator signs in again.
+  directory, never the file alone: with a single-file bind in a writable directory the sibling is
+  created, so a renewal spends its turn and then ends as `commit refused`. The renewed login cannot
+  be installed, and the stored login can no longer be renewed and may stop working, because the
+  child has already used its refresh token. The operator signs in again.
 - **Stopping.** A stop waits for a renewal in flight: the 30 s turn deadline, 11.1 s settling and the
   read-back and write, about 45 s at most. Uvicorn first waits for open requests, with no timeout, so
   this bound comes after they have finished; give the supervisor's stop at least 60 s beyond that. A
@@ -346,6 +347,8 @@ the document it read. Runs keep their blanked copies and never renew.
     still holds a secret; the stored login is dead and the operator signs in again, then removes
     that home.
   - `renewal interrupted with its end unconfirmed` (ERROR): the same recovery.
+  - `commit refused` and `renewed login unreadable`: the renewal home stays under `[cli]
+    working_root` and still holds a secret; the operator signs in again, then removes that home.
   - `refresh failed`, `written, not renewed` and the other failures: the next attempt is an hour
     later. If they repeat for days, sign in again.
   - Cost. A failure before the turn costs none (sibling held, sibling not created, pool full, a

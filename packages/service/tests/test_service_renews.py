@@ -214,16 +214,27 @@ def a_serving_process(
             _wait_until_serving(process, port, log)
             yield process
         finally:
+            if release is not None:
+                release.touch()
             try:
-                process.kill()
-                process.wait(TEST_WAIT_SECONDS)
+                _stop_the_service(process)
             finally:
-                if release is not None:
-                    release.touch()
                 _end_every_stand_in(files)
 
 
+def _stop_the_service(process: subprocess.Popen[bytes]) -> None:
+    """SIGTERM lets the service end the renewal and its child itself; SIGKILL is the fallback."""
+    if process.poll() is None:
+        process.send_signal(signal.SIGTERM)
+    try:
+        process.wait(TEST_WAIT_SECONDS)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(TEST_WAIT_SECONDS)
+
+
 def _end_every_stand_in(files: CodexServiceFiles) -> None:
+    """The last resort: whatever the service left behind, ended by its recorded process group."""
     pids = files.started_pids()
     for pid in pids:
         with contextlib.suppress(ProcessLookupError):
