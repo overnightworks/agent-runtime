@@ -97,7 +97,7 @@ def test_a_check_with_a_due_codex_login_starts_no_renewal(tmp_path, served_runs)
 
     assert main(["--config", str(files.configuration), "--check"]) == 0
 
-    assert files.renewal_never_began()
+    assert files.traces() == files.traces_without_a_renewal()
 
 
 def test_a_start_hands_the_app_a_renewal_schedule_and_runs_none_before_the_app_serves(
@@ -117,4 +117,4 @@ def test_a_start_hands_the_app_a_renewal_schedule_and_runs_none_before_the_app_s
 
     (keywords,) = created
     assert isinstance(keywords["renewals"], RenewalSchedule)
-    assert files.renewal_never_began()
+    assert files.traces() == files.traces_without_a_renewal()

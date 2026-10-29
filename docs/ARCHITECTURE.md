@@ -111,7 +111,8 @@ either alone stops startup. Credential selection and rotation are described in
 The operator signs in once per provider; the service keeps that login in one file
 and gives every run only a copy that can use it, never renew it. Exactly one
 holder keeps a refresh token, and it is never a run. For a Codex login the service
-renews that file itself, on a full copy it holds only for the renewal's turn.
+renews that file itself, on a full copy that lives for the turn, and longer when the end is
+unconfirmed or the result could not be swapped in.
 
 ```mermaid
 flowchart LR
@@ -122,7 +123,7 @@ flowchart LR
         claudefile["Claude login file<br/>one-year token, no refresh token"]
         codexfile["Codex login file<br/>access token and refresh token"]
         renewer["renewer<br/>(every 15 min, hourly after a failure)"]
-        renewalhome["renewal home under [cli] working_root<br/>full copy, for one turn"]
+        renewalhome["renewal home under [cli] working_root<br/>full copy, for the turn and longer if kept"]
     end
 
     subgraph runs ["one run"]
@@ -137,6 +138,7 @@ flowchart LR
     codexfile -->|"full copy once past half its lifetime"| renewalhome
     renewer -->|"one tool-free turn of the pinned codex"| renewalhome
     renewalhome -->|"swapped in through the one writer,<br/>only over the document it read"| codexfile
+    renewalhome -.->|"the renewing turn refreshes the tokens"| provider
     codexcopy -.->|"may use the access token,<br/>cannot renew it"| provider(["provider"])
     claudeenv -.->|"may use the token"| provider
     operator -.- terminal

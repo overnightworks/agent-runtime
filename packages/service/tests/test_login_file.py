@@ -662,6 +662,40 @@ def test_a_reservation_in_a_directory_that_cannot_be_written_is_not_a_held_sibli
     assert f"{installation.sibling} cannot be created: Permission denied" in result.reason
 
 
+def a_login_file_that_is_a_mount_point(monkeypatch: pytest.MonkeyPatch, login: Path) -> None:
+    real_ismount = os.path.ismount
+    monkeypatch.setattr(os.path, "ismount", lambda path: Path(path) == login or real_ismount(path))
+
+
+def test_a_login_file_that_is_a_mount_point_is_refused_before_the_sibling_is_created(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    installation = a_held_installation(tmp_path)
+    a_login_file_that_is_a_mount_point(monkeypatch, installation.login)
+
+    result = reserve_swap(installation.login)
+
+    assert type(result) is SwapRefused
+    assert "bind the directory that holds the file, read-write" in result.reason
+    assert result.sibling_remains is False
+    assert installation.directory_holds() == [LOGIN_NAME]
+
+
+def test_the_install_command_refuses_a_login_file_that_is_a_mount_point(
+    installation: Installation,
+    said: Said,
+    refusals: list[SwapResult],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    a_login_file_that_is_a_mount_point(monkeypatch, installation.login)
+
+    status, heard = run(installation, Stream(GOOD_DOCUMENTS[installation.provider]), said)
+
+    assert_not_written(
+        installation, status, heard, refusals, (CANARY_REFRESH,), "bind the directory"
+    )
+
+
 def reserved_in_another_thread(login_path: Path) -> ReservedSwap:
     holder: list[ReservedSwap] = []
     thread = threading.Thread(target=lambda: holder.append(held_swap(login_path)))

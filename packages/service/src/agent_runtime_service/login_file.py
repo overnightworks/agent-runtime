@@ -221,6 +221,12 @@ def reserve_swap(path: Path) -> ReservedSwap | SwapRefused:
     sibling = swap_sibling_or_refusal(path)
     if isinstance(sibling, SwapRefused):
         return sibling
+    if os.path.ismount(path):
+        return SwapRefused(
+            f"{shown_text(str(path))} is a mount point, which a rename cannot replace; bind the"
+            " directory that holds the file, read-write",
+            False,
+        )
     try:
         descriptor = os.open(
             sibling, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, LOGIN_FILE_MODE

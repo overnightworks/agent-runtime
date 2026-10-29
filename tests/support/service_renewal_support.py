@@ -186,30 +186,30 @@ class FakeRunner:
     spawn_failed: bool = False
     calls: int = 0
     children: list[Any] = field(default_factory=list)
-    _held: Callable[[], None] | None = None
+    _held: list[Callable[[], None]] = field(default_factory=list)
 
     def __call__(self, child: Any, **options: Any) -> CliRunOutcome:
         self.calls += 1
         self.children.append(child)
-        if self.on_home is not None:
-            self.on_home(Path(child.environment["CODEX_HOME"]))
         if self.spawn_failed:
             confirm: Callable[[], None] = options["on_spawn_failed"]
         else:
             confirm = _reaping(options["on_reaped"])
+        self._held.append(confirm)
+        if self.on_home is not None:
+            self.on_home(Path(child.environment["CODEX_HOME"]))
         if self.confirmation is Confirmation.NOW:
+            self._held.pop()
             confirm()
-        else:
-            self._held = confirm
         return self.outcome
 
     def confirm_late(self) -> None:
-        assert self._held is not None
-        self._held()
+        assert self._held
+        self._held.pop()()
 
     def confirm_whatever_is_held(self) -> None:
-        if self._held is not None:
-            self._held()
+        while self._held:
+            self._held.pop()()
 
 
 def _reaping(on_reaped: Callable[[int, bool], None]) -> Callable[[], None]:
@@ -383,14 +383,18 @@ class CodexServiceFiles:
     ran: Path
     """Exists once the stand-in has been run past ``--version``."""
 
-    def renewal_never_began(self) -> bool:
-        """No child ran, the login is as it was, and nothing sits beside it or under the root."""
+    def traces(self) -> tuple[bool, bytes, bool, bool]:
+        """In order: a child ran, the login's bytes, a sibling exists, the root holds anything."""
         return (
-            not self.ran.exists()
-            and self.login.read_bytes() == self.login_document
-            and not swap_sibling(self.login).exists()
-            and not any(self.root.iterdir())
+            self.ran.exists(),
+            self.login.read_bytes(),
+            swap_sibling(self.login).exists(),
+            any(self.root.iterdir()),
         )
+
+    def traces_without_a_renewal(self) -> tuple[bool, bytes, bool, bool]:
+        """No child ran, the login is as it was, and nothing sits beside it or under the root."""
+        return (False, self.login_document, False, False)
 
 
 def codex_service_files(

@@ -325,23 +325,31 @@ the document it read. Runs keep their blanked copies and never renew.
 
 - **Write access to the directory.** The service needs write access to the directory that holds
   `token_file`, not to the file alone: the swap renames a sibling `.<file>.new` over it, and a
-  rename onto a single-file bind mount fails. Without it, every attempt logs `sibling not created`
-  at WARNING, once an hour, and nothing renews.
+  rename onto a single-file bind mount fails. With a read-only directory or a single-file bind,
+  every attempt logs `sibling not created` at WARNING, once an hour, spends no turn, and nothing
+  renews.
 - **Stopping.** A stop waits for a renewal in flight: the 30 s turn deadline, 11.1 s settling and the
-  read-back and write, about 45 s at most. Give the supervisor's stop at least 60 s. A kill sooner,
-  or a forced second SIGINT, can leave `.<file>.new` beside the login file.
+  read-back and write, about 45 s at most. Uvicorn first waits for open requests, with no timeout, so
+  this bound comes after they have finished; give the supervisor's stop at least 60 s beyond that. A
+  kill sooner, or a forced second SIGINT, can leave `.<file>.new` beside the login file.
 - **What a log line asks of the operator.** Only WARNING and ERROR lines are printed, because the
-  service configures no logging; `--check` shows the login as it stands.
-  - `sibling not created`: the service cannot write the directory; fix the bind.
+  service configures no logging. `agent-runtime-service-login --check` shows today only whether the
+  reader accepts the file, not whether a renewal is due or failed (the expiry is the proof).
+  - `sibling not created`: the service cannot create the sibling, because the directory is
+    read-only or the file is a single-file bind (a mount point). Bind the directory that holds the
+    file, read-write.
   - `sibling held`: a login command or a renewal holds `.<file>.new`. If none runs, a stop or a
-    crash left it: confirm that no renewal child the service started still runs, then remove the
-    file. If that child had already rotated the tokens, its renewed login lived only in its
-    home, the stored one is dead, and the operator signs in again.
+    crash left it: stop the service and any other login command, confirm that no process the
+    service started still runs, then remove the file. If a renewal child had already rotated the
+    tokens, its renewed login lived only in its home, which stays under `[cli] working_root` and
+    still holds a secret; the stored login is dead and the operator signs in again, then removes
+    that home.
   - `renewal interrupted with its end unconfirmed` (ERROR): the same recovery.
   - `refresh failed`, `written, not renewed` and the other failures: the next attempt is an hour
-    later. They repeating for days means signing in again.
-  - A failed attempt costs no turn, but a login that keeps being written and not renewed costs
-    one turn an hour, at most 24 a day.
+    later. If they repeat for days, sign in again.
+  - Cost. A failure before the turn costs none (sibling held, sibling not created, pool full, a
+    refused file), and a failed refresh costs none. A failure after a completed turn costs that
+    turn; the hourly backoff caps it at 24 a day.
 - **The login command meanwhile.** The service holds `.<file>.new` for milliseconds every 15
   minutes and up to about 45 s during a renewal. `agent-runtime-service-login` then exits 2
   with the held-sibling sentence; run it again after the renewal.

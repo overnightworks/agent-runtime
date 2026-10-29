@@ -3872,7 +3872,9 @@ Built in #599, #600, #604 and #606 under #593.
 - **D3.** Exclusion across processes is the held `O_EXCL` sibling, reserved before the source
   is read and held until commit or abandon. `flock` was rejected: it vanishes with the
   descriptor, while the renewal child runs in its own session and outlives a crashed service. A
-  crash leaves a sibling that the operator removes after confirming no renewal child runs.
+  crash leaves a sibling that the operator removes after stopping the service and any other login
+  command and confirming that no process the service started still runs. A login file that is a
+  mount point is refused when the swap is reserved, because a rename cannot replace it.
 - **D4.** The due moment is `now >= iat + (exp - iat) // 2`, from a timing reader that never
   raises and has a closed cause for each unreadable case. An unreadable source still renews, at
   most once per 24 h.
@@ -3887,7 +3889,8 @@ Built in #599, #600, #604 and #606 under #593.
   unconfirmed, the attempt is handed over as interrupted: the sibling and the home stay and
   the closed cause is logged at ERROR. The bound of a stop is the 30 s deadline, the runner's
   11.1 s settling and the read-back and filesystem work, about 45 s; the operator allows at
-  least 60 s. A SIGKILL or a forced second SIGINT leaves the sibling, which fails safe.
+  least 60 s. A SIGKILL or a forced second SIGINT can leave the sibling, which fails safe. A cancellation of the
+  stop waits for the attempt and runs the hand-over before it is raised.
 - **D8.** A result is preservable when the reader accepts it, both tokens are non-empty and its
   bytes differ from the source, and a preservable result is always committed so a rotated
   refresh token is never discarded. It is reported renewed only when its refresh token differs,
@@ -3901,7 +3904,7 @@ Built in #599, #600, #604 and #606 under #593.
 server's answer to an empty refresh token; whether the CLI stops re-sending on a permanent
 4xx; whether a turn already running stays valid across a rotation; the container shape with a
 read-write bind of the login directory. These are R-live's questions, with the real `codex`
-and the real bind; R2 reports a login that is due or expired. The service configures no
+and the real bind; reporting a login that is due or expired is R2's (#607). The service configures no
 logging, so `RENEWED` (INFO) is not printed; failures are.
 
 #### A1b-MX one real Codex picture through the service's own run

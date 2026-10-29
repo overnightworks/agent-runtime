@@ -54,7 +54,8 @@ class RenewalSchedule:
         """Start the rounds on entry and return at once; on exit, stop and hand over.
 
         Leaving sets the stop, waits for the rounds (and so for the attempt in flight), then
-        hands each renewer over on the same worker, containing an exception.
+        hands each renewer over on the same worker, containing an exception. A cancellation
+        arriving meanwhile interrupts neither wait; it is raised once the hand-over is done.
         """
         if not self._renewers:
             yield
@@ -66,8 +67,11 @@ class RenewalSchedule:
                 yield
             finally:
                 stopping.set()
-                await asyncio.wait({rounds})
-                await asyncio.get_running_loop().run_in_executor(worker, self._hand_over_all)
+                cancelled = await _awaited_despite_cancellation(rounds)
+                hand_over = asyncio.get_running_loop().run_in_executor(worker, self._hand_over_all)
+                cancelled = await _awaited_despite_cancellation(hand_over) or cancelled
+                if cancelled is not None:
+                    raise cancelled
 
     async def _rounds(self, worker: ThreadPoolExecutor, stopping: asyncio.Event) -> None:
         loop = asyncio.get_running_loop()
@@ -87,6 +91,22 @@ class RenewalSchedule:
                 renewer.hand_over_as_interrupted()
             except Exception as error:  # noqa: BLE001 - one renewer's fault must not skip the rest
                 _log_raised("hand-over", provider, error)
+
+
+async def _awaited_despite_cancellation(
+    awaited: asyncio.Future[object],
+) -> asyncio.CancelledError | None:
+    """Waits until ``awaited`` is done, however often this task is cancelled meanwhile.
+
+    Returns the last cancellation caught, for the caller to raise once its cleanup is done.
+    """
+    cancellation = None
+    while not awaited.done():
+        try:
+            await asyncio.wait({awaited})
+        except asyncio.CancelledError as error:
+            cancellation = error
+    return cancellation
 
 
 def _attempted(provider: Provider, renewer: ProviderRenewer) -> RenewalReport | None:

@@ -1,6 +1,6 @@
 """The service renews its dedicated Codex login from its own lifespan.
 
-Rows build ``renewals_of`` from real configurations and drive the app's lifespan; the last two
+Rows build ``renewals_of`` from real configurations and drive the app's lifespan; the last three
 start a real ``agent-runtime-service`` process and stop it with SIGTERM.
 """
 
@@ -60,7 +60,6 @@ from tests.support.service_table_support import (
     write_login,
 )
 
-from agent_runtime.config import reset_config
 from agent_runtime_service.app import create_app
 from agent_runtime_service.cli import installed_runners
 from agent_runtime_service.config import ServiceConfig
@@ -100,6 +99,7 @@ def post_run_through(client: TestClient) -> list[Any]:
 def test_serving_starts_at_once_while_the_first_renewal_is_still_running(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """It renews after ``reset_config()``, which the autouse fixture runs before every test."""
     config, _, login = a_due_codex_service(tmp_path)
     renewed = a_renewed_login_now()
     hook = BlockedHook(writing(renewed))
@@ -111,22 +111,6 @@ def test_serving_starts_at_once_while_the_first_renewal_is_still_running(
         hook.release()
 
     assert unknown.status_code == HTTPStatus.NOT_FOUND
-    assert login.read_bytes() == renewed
-
-
-def test_the_renewal_needs_no_installed_core_configuration(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    reset_config()
-    config, _, login = a_due_codex_service(tmp_path)
-    renewed = a_renewed_login_now()
-    hook = BlockedHook(writing(renewed))
-    a_fake_runner(monkeypatch, on_home=hook)
-
-    with TestClient(a_renewing_app(config)):
-        assert hook.entered.wait(TEST_WAIT_SECONDS)
-        hook.release()
-
     assert login.read_bytes() == renewed
 
 
@@ -171,17 +155,17 @@ def _access_token_of(document: bytes) -> str:
 
 def test_a_configuration_without_a_codex_table_starts_no_task_and_no_thread() -> None:
     schedule = renewals_of(service_config().cli)
-    threads_before = threading.active_count()
+    threads_before = set(threading.enumerate())
 
-    async def scenario() -> int:
+    async def scenario() -> tuple[int, set[threading.Thread]]:
         tasks_before = len(asyncio.all_tasks())
         async with schedule.running():
-            return len(asyncio.all_tasks()) - tasks_before
+            return len(asyncio.all_tasks()) - tasks_before, set(threading.enumerate())
 
-    started_tasks = asyncio.run(scenario())
+    started_tasks, threads_during = asyncio.run(scenario())
 
     assert started_tasks == 0
-    assert threading.active_count() == threads_before
+    assert threads_during == threads_before
 
 
 def test_the_codex_table_alone_is_renewed_with_its_binary_in_a_home_under_the_working_root(
@@ -242,6 +226,7 @@ def _wait_until_serving(process: subprocess.Popen[bytes], port: int) -> None:
         try:
             socket.create_connection(("127.0.0.1", port), timeout=POLL_SECONDS).close()
         except OSError:
+            time.sleep(POLL_SECONDS)
             continue
         return
 
@@ -251,19 +236,42 @@ def test_sigterm_during_a_renewal_ends_the_process_only_after_the_renewal_commit
 ) -> None:
     entered = tmp_path / "entered"
     release = tmp_path / "release"
+    give_up_after = int(TEST_WAIT_SECONDS / POLL_SECONDS)
     blocked = (
         f": > {shlex.quote(str(entered))}\n"
-        f"while [ ! -e {shlex.quote(str(release))} ]; do sleep {POLL_SECONDS}; done"
+        f"waited=0\n"
+        f"while [ ! -e {shlex.quote(str(release))} ] && [ $waited -lt {give_up_after} ]; do\n"
+        f"  sleep {POLL_SECONDS}; waited=$((waited + 1))\n"
+        "done"
     )
     renewed = a_renewed_login_now()
     port = _a_free_port()
     files = codex_service_files(tmp_path, a_due_login_now(), renewed, then=blocked, port=port)
     with a_serving_process(files, port) as process:
-        eventually(entered.exists)
+        try:
+            eventually(entered.exists)
+            process.send_signal(signal.SIGTERM)
+            with pytest.raises(subprocess.TimeoutExpired):
+                process.wait(A_MOMENT_SECONDS)
+        finally:
+            release.touch()
+        returncode = process.wait(TEST_WAIT_SECONDS)
+
+    assert returncode == -signal.SIGTERM
+    assert files.login.read_bytes() == renewed
+    assert not swap_sibling(files.login).exists()
+    assert list(files.root.iterdir()) == []
+
+
+def test_sigterm_while_the_schedule_pauses_after_a_renewal_ends_the_process_promptly(
+    tmp_path: Path,
+) -> None:
+    renewed = a_renewed_login_now()
+    port = _a_free_port()
+    files = codex_service_files(tmp_path, a_due_login_now(), renewed, port=port)
+    with a_serving_process(files, port) as process:
+        eventually(lambda: files.login.read_bytes() == renewed)
         process.send_signal(signal.SIGTERM)
-        with pytest.raises(subprocess.TimeoutExpired):
-            process.wait(A_MOMENT_SECONDS)
-        release.touch()
         returncode = process.wait(TEST_WAIT_SECONDS)
 
     assert returncode == -signal.SIGTERM
@@ -284,4 +292,4 @@ def test_sigterm_while_nothing_is_due_ends_the_process_with_its_login_untouched(
         returncode = process.wait(TEST_WAIT_SECONDS)
 
     assert returncode == -signal.SIGTERM
-    assert files.renewal_never_began()
+    assert files.traces() == files.traces_without_a_renewal()

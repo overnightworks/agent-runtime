@@ -199,8 +199,18 @@ FAILING_ROUNDS = {
 }
 
 
-@pytest.mark.skipif(os.geteuid() == 0, reason="root writes into any directory")
-@pytest.mark.parametrize("outcome", FAILING_ROUNDS, ids=lambda outcome: outcome.name)
+ROUNDS_THAT_FAIL = [
+    pytest.param(
+        outcome,
+        marks=pytest.mark.skipif(os.geteuid() == 0, reason="root writes into any directory"),
+    )
+    if outcome is RenewalOutcome.RESERVE_REFUSED
+    else outcome
+    for outcome in FAILING_ROUNDS
+]
+
+
+@pytest.mark.parametrize("outcome", ROUNDS_THAT_FAIL, ids=lambda outcome: outcome.name)
 def test_a_round_with_a_failed_report_waits_the_backoff(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -214,6 +224,26 @@ def test_a_round_with_a_failed_report_waits_the_backoff(
         run_rounds(a_schedule(arrangement, pause=pause), pause)
 
     assert logged_outcomes(caplog)[0] is outcome
+    assert pause.seconds == [RENEWAL_BACKOFF_SECONDS]
+
+
+def test_a_login_file_that_is_a_mount_point_is_refused_at_the_reserve_and_spends_no_turn(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    arrangement = an_arrangement(tmp_path)
+    runner = a_fake_runner(monkeypatch, on_home=writing(RENEWED_LOGIN))
+    real_ismount = os.path.ismount
+    monkeypatch.setattr(
+        os.path, "ismount", lambda path: Path(path) == arrangement.token_file or real_ismount(path)
+    )
+    pause = RecordingPause(1)
+
+    run_rounds(a_schedule(arrangement, pause=pause), pause)
+
+    assert logged_outcomes(caplog) == [RenewalOutcome.RESERVE_REFUSED]
+    assert runner.calls == 0
+    assert arrangement.directory_holds() == [LOGIN_NAME]
     assert pause.seconds == [RENEWAL_BACKOFF_SECONDS]
 
 
@@ -440,6 +470,85 @@ def test_a_cancelled_task_still_waits_for_the_attempt_in_flight_and_starts_no_ot
     assert runner.calls == 1
 
 
+def an_attempt_nobody_confirms(hook: BlockedHook, monkeypatch: pytest.MonkeyPatch) -> None:
+    a_fake_runner(
+        monkeypatch,
+        on_home=hook,
+        outcome=a_run_outcome(became_zombie=True),
+        confirmation=Confirmation.NEVER,
+    )
+
+
+async def cancelled_while_it_waits(task: asyncio.Task[None]) -> bool:
+    """Cancels the task and tells whether it finished within a moment anyway."""
+    task.cancel()
+    return await finishes_within_a_moment(task)
+
+
+def test_a_cancellation_during_the_wait_for_an_attempt_still_hands_it_over_then_propagates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    hook = BlockedHook()
+    an_attempt_nobody_confirms(hook, monkeypatch)
+    arrangement = an_arrangement(tmp_path)
+    schedule = a_schedule(arrangement, pause=RecordingPause(2))
+
+    async def scenario() -> bool:
+        leave = asyncio.Event()
+        serving = asyncio.create_task(serving_until(schedule, leave))
+        await hook.reached()
+        leave.set()
+        await finishes_within_a_moment(serving)
+        finished_early = await cancelled_while_it_waits(serving)
+        hook.release()
+        with pytest.raises(asyncio.CancelledError):
+            await within_the_bound(serving)
+        return finished_early
+
+    assert asyncio.run(scenario()) is False
+    assert logged_outcomes(caplog) == [RenewalOutcome.END_UNCONFIRMED, RenewalOutcome.INTERRUPTED]
+    assert logged_levels(caplog)[-1] == logging.ERROR
+    assert arrangement.directory_holds() == arrangement.directory_holds_login_and_sibling()
+    assert len(arrangement.trees()) == 1
+
+
+def test_a_second_cancellation_during_the_handover_still_lets_it_complete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    hook = BlockedHook()
+    an_attempt_nobody_confirms(hook, monkeypatch)
+    arrangement = an_arrangement(tmp_path)
+    handing_over = BlockedHook()
+    hand_over = arrangement.renewer.hand_over_as_interrupted
+
+    def blocked_hand_over() -> None:
+        handing_over(Path())
+        hand_over()
+
+    monkeypatch.setattr(arrangement.renewer, "hand_over_as_interrupted", blocked_hand_over)
+    schedule = a_schedule(arrangement, pause=RecordingPause(2))
+
+    async def scenario() -> bool:
+        leave = asyncio.Event()
+        serving = asyncio.create_task(serving_until(schedule, leave))
+        await hook.reached()
+        leave.set()
+        await cancelled_while_it_waits(serving)
+        hook.release()
+        await handing_over.reached()
+        finished_early = await cancelled_while_it_waits(serving)
+        handing_over.release()
+        with pytest.raises(asyncio.CancelledError):
+            await within_the_bound(serving)
+        return finished_early
+
+    assert asyncio.run(scenario()) is False
+    assert logged_outcomes(caplog) == [RenewalOutcome.END_UNCONFIRMED, RenewalOutcome.INTERRUPTED]
+    assert arrangement.directory_holds() == arrangement.directory_holds_login_and_sibling()
+
+
 class OverlapProbe:
     """An ``on_home`` hook that records how many attempts ran at once and on which threads."""
 
@@ -507,19 +616,3 @@ def test_a_login_that_keeps_being_written_but_not_renewed_is_attempted_once_per_
     assert logged_outcomes(caplog) == [RenewalOutcome.WRITTEN_NOT_RENEWED] * 3
     assert pause.seconds == [RENEWAL_BACKOFF_SECONDS] * 3
     assert runner.calls == 3
-
-
-def test_a_schedule_without_renewers_starts_no_task_and_no_thread() -> None:
-    schedule = RenewalSchedule({})
-    threads_before = threading.active_count()
-
-    async def scenario() -> tuple[int, int]:
-        tasks_before = len(asyncio.all_tasks())
-        async with schedule.running():
-            return len(asyncio.all_tasks()) - tasks_before, threading.active_count()
-
-    started_tasks, threads_during = asyncio.run(scenario())
-
-    assert started_tasks == 0
-    assert threads_during == threads_before
-
