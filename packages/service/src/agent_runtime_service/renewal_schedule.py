@@ -67,11 +67,12 @@ class RenewalSchedule:
                 yield
             finally:
                 stopping.set()
-                cancelled = await _awaited_despite_cancellation(rounds)
-                hand_over = asyncio.get_running_loop().run_in_executor(worker, self._hand_over_all)
-                cancelled = await _awaited_despite_cancellation(hand_over) or cancelled
-                if cancelled is not None:
-                    raise cancelled
+                try:
+                    await _awaited_despite_cancellation(rounds)
+                finally:
+                    await _awaited_despite_cancellation(
+                        asyncio.get_running_loop().run_in_executor(worker, self._hand_over_all)
+                    )
 
     async def _rounds(self, worker: ThreadPoolExecutor, stopping: asyncio.Event) -> None:
         loop = asyncio.get_running_loop()
@@ -93,27 +94,20 @@ class RenewalSchedule:
                 _log_raised("hand-over", provider, error)
 
 
-async def _awaited_despite_cancellation(
-    awaited: asyncio.Future[object],
-) -> asyncio.CancelledError | None:
-    """Waits until ``awaited`` is done, however often this task is cancelled meanwhile.
-
-    Returns the last cancellation caught, for the caller to raise once its cleanup is done.
-    """
-    cancellation = None
-    while not awaited.done():
-        try:
-            await asyncio.wait({awaited})
-        except asyncio.CancelledError as error:
-            cancellation = error
-    return cancellation
+async def _awaited_despite_cancellation(awaited: asyncio.Future[object]) -> None:
+    """Waits until ``awaited`` is done; a cancellation meanwhile is raised once it is."""
+    try:
+        await asyncio.wait({awaited})
+    except asyncio.CancelledError:
+        await _awaited_despite_cancellation(awaited)
+        raise
 
 
 def _attempted(provider: Provider, renewer: ProviderRenewer) -> RenewalReport | None:
     """One attempt, or None when it raised: the exception is logged by its type name only."""
     try:
         return renewer.attempt()
-    except Exception as error:  # noqa: BLE001 - an unexpected fault is a failed round, not a crash
+    except Exception as error:  # noqa: BLE001 - an unexpected fault is a failed round and no crash
         _log_raised("renewal", provider, error)
         return None
 

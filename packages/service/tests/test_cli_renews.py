@@ -71,6 +71,8 @@ from agent_runtime_service.run_liveness import LoopClock
 
 A_MOMENT_SECONDS = 0.5
 POLL_SECONDS = 0.05
+SERVICE_STOP_GRACE_SECONDS = 60
+"""The stop grace ``docs/operations.md`` asks of a supervisor: the service's own stop bound."""
 
 
 def a_renewing_app(config: ServiceConfig):
@@ -227,28 +229,34 @@ def _stop_the_service(process: subprocess.Popen[bytes]) -> None:
     if process.poll() is None:
         process.send_signal(signal.SIGTERM)
     try:
-        process.wait(TEST_WAIT_SECONDS)
+        process.wait(SERVICE_STOP_GRACE_SECONDS)
     except subprocess.TimeoutExpired:
         process.kill()
         process.wait(TEST_WAIT_SECONDS)
 
 
 def _end_every_stand_in(files: CodexServiceFiles) -> None:
-    """The last resort: whatever the service left behind, ended by its recorded process group."""
-    pids = files.started_pids()
-    for pid in pids:
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(pid, signal.SIGKILL)
-    for pid in pids:
-        eventually(lambda pid=pid: not _is_alive(pid))
+    """The last resort: every process running this test's stand-in is killed until none is left."""
+    deadline = time.monotonic() + TEST_WAIT_SECONDS
+    while stand_ins := _processes_running(files.binary):
+        assert time.monotonic() < deadline, f"stand-ins outlived the sweep: {stand_ins}"
+        for pid in stand_ins:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGKILL)
+        time.sleep(POLL_SECONDS)
 
 
-def _is_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    return True
+def _processes_running(program: Path) -> list[int]:
+    """The pids whose command line names ``program``."""
+    named = str(program).encode()
+    pids = []
+    for entry in Path("/proc").iterdir():
+        if not entry.name.isdigit():
+            continue
+        with contextlib.suppress(OSError):
+            if named in (entry / "cmdline").read_bytes().split(b"\0"):
+                pids.append(int(entry.name))
+    return pids
 
 
 def _a_free_port() -> int:
