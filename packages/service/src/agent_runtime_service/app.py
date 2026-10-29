@@ -40,11 +40,11 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
-from contextlib import aclosing
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Mapping
+from contextlib import aclosing, asynccontextmanager
 from datetime import datetime
 from http import HTTPStatus
-from typing import Final
+from typing import TYPE_CHECKING, Final
 from uuid import UUID
 
 from fastapi import FastAPI, Request
@@ -85,6 +85,11 @@ from agent_runtime_service.run_liveness import LoopClock
 from agent_runtime_service.run_records import RunRecords, utc_now
 from agent_runtime_service.run_request import MAX_REQUEST_BYTES, parse_run_request
 from agent_runtime_service.runners import AdmittedRun, Runners
+
+if TYPE_CHECKING:
+    from starlette.types import Lifespan
+
+    from agent_runtime_service.renewal_schedule import RenewalSchedule
 
 WORKLOAD_TOKEN_HEADER: Final = "Agent-Workload-Token"  # noqa: S105 - a header name and no secret
 JOB_TICKET_HEADER: Final = "Agent-Job-Ticket"
@@ -132,6 +137,7 @@ def create_app(
     monotonic_clock: MonotonicClock = time.monotonic,
     wall_clock: Callable[[], datetime] = utc_now,
     confirm_group_gone: GroupConfirmation = lost_groups.confirm_group_gone,
+    renewals: RenewalSchedule | None = None,
 ) -> FastAPI:
     """The service's ASGI app.
 
@@ -140,12 +146,15 @@ def create_app(
     ``records`` keeps its own clock, so the two can differ; ``wall_clock`` never reaches the
     token verifier, which reads webauth's own.
     ``confirm_group_gone`` is how the one quarantine asks whether a lost process group is gone.
+    ``renewals`` runs while the app's lifespan does; without it the app renews nothing.
     """
     callers = CallerCheck(build_verifier(config.identity, fetch_key_set, monotonic_clock), config)
     installed_records = records or RunRecords(wall_clock)
     subscription_slot = AdmissionSlot(config.runs.max_parallel_cli_runs)
     quarantine = Quarantine(LoopClock(), confirm_group_gone)
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(
+        docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan_of(renewals)
+    )
 
     @app.post("/runs")
     async def start_run(request: Request) -> Response:
@@ -170,6 +179,18 @@ def create_app(
     app.get("/runs/{run_id}")(_run_status_route(callers, installed_records))
 
     return app
+
+
+def _lifespan_of(renewals: RenewalSchedule | None) -> Lifespan[FastAPI] | None:
+    if renewals is None:
+        return None
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        async with renewals.running():
+            yield
+
+    return lifespan
 
 
 class _RunResponse(StreamingResponse):

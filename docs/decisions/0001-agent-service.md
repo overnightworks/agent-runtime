@@ -3834,6 +3834,78 @@ new rulings:
 - The run was not in the service's real run shape (no `bwrap`), and the write-back was
   done by the harness, not by the service's login writer.
 
+#### A1b-R1 the service renews the Codex login
+
+**Decision.** From its lifespan, at start and then about every 15 minutes (hourly after a
+failed attempt), the service renews the dedicated Codex login once the access token has
+less than half its lifetime left. One tool-free turn of the pinned `codex` runs on a full
+copy in a private renewal home under `[cli] working_root`, and the result is swapped in
+through the one login writer only over the document it renewed. The basis is the
+measurement A1b-C6-0: the pinned CLI renews headless, a made-due full copy is the measured way
+to trigger it, and a run's blanked copy cannot. Runs keep their blanked copies. Operator
+rulings HQ2 (a) "the service alone renews it, in one place" and Q-A (a), 26. and 29.10.2026.
+Built in #599, #600, #604 and #606 under #593.
+
+**Alternatives weighed.**
+- Calling the token endpoint directly: the service would own an OAuth protocol that the pinned
+  CLI owns and may change at any pin bump (client id, endpoint, answer shape, `id_token` and
+  `account_id` derivation, `last_refresh` format), with more egress and more Python holding
+  secrets. Ruled out by Q-A (a).
+- A refresh-only subcommand: none exists on 0.163.0; a later pin that offers one switches at
+  the Codex entry alone.
+- Renewal before a run: it conflicts with the ruled timer, adds latency to a user's run, and an
+  idle service would let the login age out.
+- A host timer: it splits ownership across repositories and puts a second process in
+  possession of the full login.
+- The CLI's own threshold (`exp` within 5 minutes): that is the moment the blanked copies also
+  attempt a refresh with an empty refresh token, whose answer is unmeasured.
+
+**Rulings.**
+- **D1.** The renewer (scheduling, due policy, exclusion, the source write) is in the service,
+  `agent_runtime_service.renewal`; the Codex description of a renewal run is in core beside
+  `CodexRun`. Core imports nothing of the service, and nothing reads installed configuration.
+- **D2.** The lifespan owns the renewer; `cli.py` passes it to `create_app`. Attempts run on one
+  worker thread off the event loop; shutdown stops scheduling and waits for the owned attempt,
+  and a cancelled await never abandons its worker. `--check` starts nothing. Reason: the pinned
+  uvicorn re-raises a captured SIGTERM after application shutdown, so a join after
+  `uvicorn.run` returns would not run on an ordinary stop, while the lifespan's shutdown does.
+- **D3.** Exclusion across processes is the held `O_EXCL` sibling, reserved before the source
+  is read and held until commit or abandon. `flock` was rejected: it vanishes with the
+  descriptor, while the renewal child runs in its own session and outlives a crashed service. A
+  crash leaves a sibling that the operator removes after stopping the service and any other login
+  command and confirming that no process the service started still runs.
+- **D4.** The due moment is `now >= iat + (exp - iat) // 2`, from a timing reader that never
+  raises and has a closed cause for each unreadable case. An unreadable source still renews, at
+  most once per 24 h.
+- **D5.** A 30 s deadline; one hour after a failed attempt instead of 15 minutes; nothing starts
+  while an earlier child's end is unconfirmed. The numbers are the head's, unmeasured. A failed
+  refresh costs no turn, but the CLI re-sends the refresh token 2 to 3 times a second until
+  stopped, so the deadline bounds the burst. A login that keeps being written and not renewed
+  costs at most 24 turns a day.
+- **D6.** A renewal uses the adapter defaults plus the file credential store, no `cli_settings`
+  level and the CLI's default model.
+- **D7.** Stopping waits for the owned attempt. If the runner has returned and the end is still
+  unconfirmed, the attempt is handed over as interrupted: the sibling and the home stay and
+  the closed cause is logged at ERROR. The bound of a stop is the 30 s deadline, the runner's
+  11.1 s settling and the read-back and filesystem work, about 45 s; the operator allows at
+  least 60 s. A SIGKILL or a forced second SIGINT can leave the sibling, which fails safe. A cancellation of the
+  stop waits for the attempt and runs the hand-over before it is raised.
+- **D8.** A result is preservable when the reader accepts it, both tokens are non-empty and its
+  bytes differ from the source, and a preservable result is always committed so a rotated
+  refresh token is never discarded. It is reported renewed only when its refresh token differs,
+  its timing is readable and not due, and its expiry is later than the original's.
+- **D9.** Until the child's end is confirmed, the renewer keeps the sibling, the pool slot, the
+  home and a state that blocks every later attempt; the handoff is terminal.
+- **D10.** A failed directory sync after the rename is reported as committed with durability
+  not confirmed; the old document is never restored.
+
+**What it does not prove.** How long an unused refresh token stays valid at the server; the
+server's answer to an empty refresh token; whether the CLI stops re-sending on a permanent
+4xx; whether a turn already running stays valid across a rotation; the container shape with a
+read-write bind of the login directory. These are R-live's questions, with the real `codex`
+and the real bind; reporting a login that is due or expired is R2's (#607). The service configures no
+logging, so `RENEWED` (INFO) is not printed; failures are.
+
 #### A1b-MX one real Codex picture through the service's own run
 
 **What ran.** Slice MX-b of #488, measured on 29.10.2026 (#580), at code revision
