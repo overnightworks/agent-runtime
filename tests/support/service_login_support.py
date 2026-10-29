@@ -225,6 +225,16 @@ def reader_hook(
     monkeypatch.setitem(service_config.LOGIN_READERS, provider, reading)
 
 
+def descriptors_closed(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """Every ``os.close`` from now on is recorded in the returned list."""
+    closed: list[int] = []
+    real_close = os.close
+    monkeypatch.setattr(
+        os, "close", lambda descriptor: (closed.append(descriptor), real_close(descriptor))
+    )
+    return closed
+
+
 def an_old_file_fails(monkeypatch: pytest.MonkeyPatch, name: str, sibling: Path) -> None:
     """``os.<name>`` raises ``PermissionError`` for the sibling and works for every other path."""
     real = getattr(os, name)

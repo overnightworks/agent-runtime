@@ -37,6 +37,7 @@ from tests.support.service_login_support import (  # noqa: F401 - the fixtures a
     an_installation,
     an_old_file_fails,
     assert_not_written,
+    descriptors_closed,
     held_swap,
     line_of,
     reader_hook,
@@ -746,11 +747,7 @@ def test_a_finished_reservation_refuses_any_second_use_without_closing_anything_
 
     finish(first)
     after_first = installation.snapshot()
-    closed: list[int] = []
-    real_close = os.close
-    monkeypatch.setattr(
-        os, "close", lambda descriptor: (closed.append(descriptor), real_close(descriptor))
-    )
+    closed = descriptors_closed(monkeypatch)
 
     with pytest.raises(RuntimeError):
         finish(second)

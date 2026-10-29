@@ -15,22 +15,13 @@ from tests.support.service_login_support import (
     a_held_installation,
     accepts_anything,
     an_old_file_fails,
+    descriptors_closed,
     held_swap,
 )
 
 import agent_runtime_service.login_file as login_file
 from agent_runtime.secret_file import UnsoundSecretFile
 from agent_runtime_service.login_file import SwappedDurably, SwapRefused, SwapResult, reserve_swap
-
-
-def descriptors_closed(monkeypatch: pytest.MonkeyPatch) -> list[int]:
-    """Every ``os.close`` from now on is recorded in the returned list."""
-    closed: list[int] = []
-    real_close = os.close
-    monkeypatch.setattr(
-        os, "close", lambda descriptor: (closed.append(descriptor), real_close(descriptor))
-    )
-    return closed
 
 
 def test_a_sibling_swapped_for_a_foreign_file_during_the_read_leaves_the_foreign_file_alone(
@@ -124,6 +115,7 @@ def test_a_reservation_whose_descriptor_cannot_be_inspected_is_refused_and_keeps
     assert isinstance(result, SwapRefused)
     assert result.sibling_remains is True
     assert f"{installation.sibling} was created but cannot be inspected" in result.reason
+    assert "confirm that no process the service started still runs" in result.reason
     assert closed == created
     assert installation.sibling.exists()
 

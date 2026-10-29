@@ -26,12 +26,17 @@ def swap_sibling(path: Path) -> Path:
     return path.with_name(f".{path.name}.new")
 
 
+_RECOVERY = (
+    "stop the service and any other login command, confirm that no process the service started"
+    " still runs, then remove it and run the command again"
+)
+
+
 def held_sibling_sentence(sibling: Path) -> str:
     """What the operator is told about a sibling that exists: it may belong to a running writer."""
     return (
         f"{shown_text(str(sibling))} may hold a login and may belong to a writer that still runs"
-        " or was interrupted; stop the service and any other login command, confirm that no"
-        " process the service started still runs, then remove it and run the command again"
+        f" or was interrupted; {_RECOVERY}"
     )
 
 
@@ -125,7 +130,7 @@ class ReservedSwap:
         return _directory_synced(self._destination.parent)
 
     def abandon(self) -> SwapRefused:
-        """Release the reservation without writing: close the descriptor, remove the sibling."""
+        """Release the reservation without writing: remove the sibling, then close the file."""
         self._finish()
         try:
             return self._with_sibling_removed(SwapRefused("abandoned", False))
@@ -233,7 +238,7 @@ def reserve_swap(path: Path) -> ReservedSwap | SwapRefused:
         _close_quietly(descriptor)
         return SwapRefused(
             f"{shown_text(str(sibling))} was created but cannot be inspected: {error.strerror};"
-            " it is not confirmed to be this writer's and is left in place; remove it",
+            f" it is not confirmed to be this writer's and is left in place; {_RECOVERY}",
             True,
         )
     return ReservedSwap(path, sibling, descriptor, identity)
@@ -250,7 +255,7 @@ def swap_in_login_file(
 
 
 def _close_quietly(descriptor: int) -> None:
-    """Closes ``descriptor``; the unlink and inspection that follow decide what is reported."""
+    """Closes ``descriptor``; a failed close changes no outcome."""
     with contextlib.suppress(OSError):
         os.close(descriptor)
 
