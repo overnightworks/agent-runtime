@@ -269,3 +269,14 @@ def held_swap(login_path: Path) -> ReservedSwap:
     reservation = reserve_swap(login_path)
     assert not isinstance(reservation, SwapRefused), reservation.reason
     return reservation
+
+
+A_NEW_DOCUMENT = f"new-document {CANARY_REFRESH}\n".encode()
+
+
+def accepts_anything(path: Path) -> None:
+    """A reader that accepts the document it is given."""
+
+
+def a_held_installation(tmp_path: Path) -> Installation:
+    return an_installation(tmp_path, Provider.ANTHROPIC)

@@ -1,5 +1,5 @@
 """The login writer through the command: ``swap_in_login_file`` swaps a checked document in beside
-the old file and removes its own sibling, or says why not (matrix cells 1 to 11).
+the old file and removes its own sibling, or says why not.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from tests.support.provider_test_support import (
     SAMPLE_CLAUDE_SETUP_TOKEN,
 )
 from tests.support.service_login_support import (  # noqa: F401 - the fixtures are named in their decorators
+    A_NEW_DOCUMENT,
     CANARY_FOREIGN,
     CANARY_REFRESH,
     CODEX_FILE_REFUSAL,
@@ -30,7 +31,9 @@ from tests.support.service_login_support import (  # noqa: F401 - the fixtures a
     Installation,
     Said,
     Stream,
+    a_held_installation,
     a_login_installation,
+    accepts_anything,
     an_installation,
     an_old_file_fails,
     assert_not_written,
@@ -63,7 +66,7 @@ from agent_runtime_service.login_file import (
     swap_in_login_file,
 )
 
-# Install, the good path: matrix cells 1 and 2.
+# The good path.
 
 
 def test_a_login_is_written_exactly_and_reported_on_descriptor_two_only(
@@ -93,7 +96,7 @@ def test_a_usable_file_is_replaced_by_one_rename_and_the_reader_reads_the_new_do
     assert installation.login.read_bytes() != installation.old_bytes
 
 
-# Not written: matrix cells 3 to 8. The group invariant is `assert_not_written`.
+# Not written. The group invariant is `assert_not_written`.
 
 
 REFUSED_DOCUMENTS = [
@@ -189,8 +192,8 @@ def test_a_full_disk_while_writing_removes_the_sibling_and_names_the_cause(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FullDisk:
-        def __init__(self, descriptor: int, mode: str) -> None:
-            self.file = open(descriptor, mode)  # noqa: SIM115 - closed by __exit__
+        def __init__(self, descriptor: int, mode: str, *, closefd: bool) -> None:
+            self.file = open(descriptor, mode, closefd=closefd)  # noqa: SIM115 - closed by __exit__
 
         def __enter__(self) -> FullDisk:
             return self
@@ -334,7 +337,7 @@ def test_a_sibling_that_cannot_be_confirmed_gone_ends_with_exit_three_naming_it(
     assert "not written" in heard
 
 
-# Atomic replacement: matrix cell 2.
+# Atomic replacement.
 
 
 def test_the_old_file_is_whole_until_the_rename_replaces_it(
@@ -386,7 +389,7 @@ def test_the_writer_refuses_a_path_without_a_file_name_as_a_closed_result() -> N
     assert not reaches_text(refused, (CANARY_REFRESH,))
 
 
-# Durability: matrix cells 1 and 3 to 5.
+# Durability.
 
 
 def the_syncs_recorded(monkeypatch: pytest.MonkeyPatch, events: list[str]) -> None:
@@ -496,17 +499,7 @@ def test_a_file_that_cannot_be_synced_is_not_swapped_in_and_the_old_file_stays(
     )
 
 
-# A holder of the reservation: matrix cells 15 to 31 and 36.
-
-A_NEW_DOCUMENT = f"new-document {CANARY_REFRESH}\n".encode()
-
-
-def accepts_anything(path: Path) -> None:
-    """A reader that accepts the document it is given."""
-
-
-def a_held_installation(tmp_path: Path) -> Installation:
-    return an_installation(tmp_path, Provider.ANTHROPIC)
+# A holder of the reservation.
 
 
 def test_a_commit_that_replaces_the_document_it_renewed_swaps_it_in_durably(
@@ -559,6 +552,7 @@ def test_a_commit_for_a_source_that_is_gone_or_cannot_be_read_refuses_and_leaves
     assert isinstance(result, SourceChanged)
     assert installation.directory_holds() == ([] if unreadable == "gone" else [LOGIN_NAME])
     assert (None if unreadable == "gone" else os.lstat(installation.login)) == status
+    assert not reaches_text(result, (CANARY_REFRESH,))
 
 
 def test_an_unconditional_commit_replaces_a_source_that_changed(tmp_path: Path) -> None:
@@ -579,12 +573,14 @@ def test_a_commit_whose_reader_refuses_leaves_the_source_and_removes_the_sibling
     reservation = held_swap(installation.login)
 
     def refusing(path: Path) -> object:
-        raise UnsoundSecretFile(f"{path} holds {CANARY_FOREIGN}")
+        raise UnsoundSecretFile(f"{path} is not a usable login file")
 
     result = reservation.commit(A_NEW_DOCUMENT, refusing, replaces=None)
 
     assert type(result) is SwapRefused
     assert result.sibling_remains is False
+    assert str(installation.login) in result.reason
+    assert not reaches_text(result, (CANARY_FOREIGN, CANARY_REFRESH))
     assert installation.unchanged()
     assert installation.directory_holds() == [LOGIN_NAME]
 
@@ -613,6 +609,7 @@ def test_an_abandoned_reservation_removes_its_sibling_and_leaves_the_source(
     result = reservation.abandon()
 
     assert result == SwapRefused("abandoned", False)
+    assert not reaches_text(result, (CANARY_REFRESH,))
     assert installation.unchanged()
     assert installation.directory_holds() == [LOGIN_NAME]
 
@@ -628,6 +625,7 @@ def test_an_abandon_whose_unlink_fails_reports_the_sibling_remaining(
 
     assert result.sibling_remains is True
     assert f"{installation.sibling} is not confirmed gone" in result.reason
+    assert not reaches_text(result, (CANARY_REFRESH,))
     assert installation.unchanged()
 
 
@@ -644,6 +642,7 @@ def test_a_second_reservation_meets_the_holders_sibling_and_leaves_it_untouched(
     assert second.sibling_remains is False
     assert second.reason == login_file.held_sibling_sentence(installation.sibling)
     assert "earlier install" not in second.reason
+    assert not reaches_text(second, (CANARY_REFRESH,))
     assert os.lstat(installation.sibling) == held
     assert holder.commit(A_NEW_DOCUMENT, accepts_anything, replaces=None) == SwappedDurably()
 

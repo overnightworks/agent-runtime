@@ -128,14 +128,16 @@ def test_a_reservation_made_while_the_command_reads_refuses_it_and_the_holder_st
     installation: Installation, said: Said
 ) -> None:
     holders = []
-    stream = Stream(
-        GOOD_DOCUMENTS[installation.provider],
-        lambda: holders.append(held_swap(installation.login)),
-    )
+    held: list[os.stat_result] = []
+
+    def reserve_and_inspect() -> None:
+        holders.append(held_swap(installation.login))
+        held.append(os.lstat(installation.sibling))
+
+    stream = Stream(GOOD_DOCUMENTS[installation.provider], reserve_and_inspect)
 
     status, heard = run(installation, stream, said)
 
-    held = os.lstat(installation.sibling)
     assert status == 1
     assert (
         heard
@@ -143,7 +145,7 @@ def test_a_reservation_made_while_the_command_reads_refuses_it_and_the_holder_st
         + "\n"
     )
     assert installation.unchanged()
-    assert os.lstat(installation.sibling) == held
+    assert os.lstat(installation.sibling) == held[0]
     assert holders[0].commit(b"holder\n", lambda path: None, replaces=None) == SwappedDurably()
     assert installation.login.read_bytes() == b"holder\n"
 

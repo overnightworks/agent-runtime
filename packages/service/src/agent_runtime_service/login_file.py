@@ -9,7 +9,9 @@ that is never finished keeps its sibling on disk, which keeps every other writer
 
 from __future__ import annotations
 
+import contextlib
 import os
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -80,9 +82,11 @@ Identity = tuple[int, int]
 class ReservedSwap:
     """The sibling of a destination, held open until ``commit`` or ``abandon`` finishes it.
 
-    Built only by ``reserve_swap``. It holds no content and no lock, and any one thread may
-    finish it, exactly once; a second use raises ``RuntimeError``. It has no finaliser on purpose:
-    an unfinished reservation leaves its sibling on disk, and process exit closes the descriptor.
+    Built only by ``reserve_swap``. It holds no content, and any one thread may finish it,
+    exactly once; a second use raises ``RuntimeError``. It owns its descriptor until it finishes,
+    so the inode stays allocated and the identity guard can tell its own sibling from a foreign
+    file created later. It has no finaliser on purpose: an unfinished reservation leaves its
+    sibling on disk, and process exit closes the descriptor.
     """
 
     def __init__(self, destination: Path, sibling: Path, descriptor: int, identity: Identity):
@@ -90,7 +94,7 @@ class ReservedSwap:
         self._sibling = sibling
         self._descriptor = descriptor
         self._identity = identity
-        self._finished = False
+        self._finishing = threading.Lock()
 
     @property
     def destination(self) -> Path:
@@ -106,35 +110,37 @@ class ReservedSwap:
         """Write, sync, read back, rename over the destination, sync the directory.
 
         With ``replaces`` the rename happens only while the destination still holds those bytes.
-        Never raises an ``Exception``: every refusal is a closed reason that holds no part of
-        ``content``. The caller must have no asynchronous exception arising in this thread: the
-        login command disregards interrupts, and a worker thread never receives a signal.
+        A second use raises ``RuntimeError``; otherwise it never raises an ``Exception``: every
+        refusal is a closed reason that holds no part of ``content``. The caller must have no
+        asynchronous exception arising in this thread: the login command disregards interrupts,
+        and a worker thread never receives a signal.
         """
         self._finish()
-        refusal = self._refusal_before_rename(content, reader, replaces)
-        if refusal is not None:
-            return self._with_sibling_removed(refusal)
+        try:
+            refusal = self._refusal_before_rename(content, reader, replaces)
+            if refusal is not None:
+                return self._with_sibling_removed(refusal)
+        finally:
+            _close_quietly(self._descriptor)
         return _directory_synced(self._destination.parent)
 
     def abandon(self) -> SwapRefused:
         """Release the reservation without writing: close the descriptor, remove the sibling."""
         self._finish()
         try:
-            os.close(self._descriptor)
-        except OSError:
-            pass  # the unlink and lstat below decide whether the sibling is gone
-        return self._with_sibling_removed(SwapRefused("abandoned", False))
+            return self._with_sibling_removed(SwapRefused("abandoned", False))
+        finally:
+            _close_quietly(self._descriptor)
 
     def _finish(self) -> None:
-        if self._finished:
+        if not self._finishing.acquire(blocking=False):
             raise RuntimeError("the reservation is finished")
-        self._finished = True
 
     def _refusal_before_rename(
         self, content: bytes, reader: Callable[[Path], object], replaces: bytes | None
     ) -> SwapRefused | None:
         try:
-            with open(self._descriptor, "wb") as new_file:
+            with open(self._descriptor, "wb", closefd=False) as new_file:
                 new_file.write(content)
                 new_file.flush()
                 os.fsync(new_file.fileno())
@@ -172,9 +178,7 @@ class ReservedSwap:
         left alone.
         """
         try:
-            ours = _identity(os.lstat(self._sibling)) == self._identity
-        except FileNotFoundError:
-            return refusal
+            ours = self._is_ours()
         except OSError:
             return self._remaining(refusal)  # an inspection that fails confirms nothing
         if not ours:
@@ -182,14 +186,19 @@ class ReservedSwap:
         try:
             os.unlink(self._sibling)
         except OSError:
-            pass  # the lstat below decides whether the sibling is gone
+            pass  # the inspection below decides whether the sibling is gone
         try:
-            os.lstat(self._sibling)
-        except FileNotFoundError:
-            return refusal
+            still_ours = self._is_ours()
         except OSError:
-            pass  # an inspection that fails confirms nothing
-        return self._remaining(refusal)
+            return self._remaining(refusal)  # an inspection that fails confirms nothing
+        return self._remaining(refusal) if still_ours else refusal
+
+    def _is_ours(self) -> bool:
+        """Whether the sibling path holds the file this writer created; absent counts as not."""
+        try:
+            return _identity(os.lstat(self._sibling)) == self._identity
+        except FileNotFoundError:
+            return False
 
     def _remaining(self, refusal: SwapRefused) -> SwapRefused:
         shown = shown_text(str(self._sibling))
@@ -218,7 +227,16 @@ def reserve_swap(path: Path) -> ReservedSwap | SwapRefused:
         return SwapRefused(f"{shown_text(str(sibling))} cannot be created: {error.strerror}", False)
     except Exception as error:
         return SwapRefused(f"failed: {type(error).__name__}", False)
-    return ReservedSwap(path, sibling, descriptor, _identity(os.fstat(descriptor)))
+    try:
+        identity = _identity(os.fstat(descriptor))
+    except OSError as error:
+        _close_quietly(descriptor)
+        return SwapRefused(
+            f"{shown_text(str(sibling))} was created but cannot be inspected: {error.strerror};"
+            " it is not confirmed to be this writer's and is left in place; remove it",
+            True,
+        )
+    return ReservedSwap(path, sibling, descriptor, identity)
 
 
 def swap_in_login_file(
@@ -229,6 +247,12 @@ def swap_in_login_file(
     if isinstance(reservation, SwapRefused):
         return reservation
     return reservation.commit(content, read_back, replaces=None)
+
+
+def _close_quietly(descriptor: int) -> None:
+    """Closes ``descriptor``; the unlink and inspection that follow decide what is reported."""
+    with contextlib.suppress(OSError):
+        os.close(descriptor)
 
 
 def _identity(status: os.stat_result) -> Identity:
