@@ -79,12 +79,13 @@ def configured_for(
     *,
     tools: list[str] | None = None,
     settings: dict[str, object] | None = None,
+    app_name: str = "songmaker",
 ) -> ServiceConfig:
-    """``config`` with the Claude table at the level of the app's agent ``cowriter``."""
+    """``config`` with the Claude table at the level of the named app's agent ``cowriter``."""
     level = CliSettingsConfig(anthropic=ClaudeCliSettingsConfig(tools=tools, settings=settings))
-    app = config.apps["songmaker"]
+    app = config.apps[app_name]
     agents = {**app.agents, COWRITER: AgentConfig(cli_settings=level)}
-    apps = {**config.apps, "songmaker": app.model_copy(update={"agents": agents})}
+    apps = {**config.apps, app_name: app.model_copy(update={"agents": agents})}
     return config.model_copy(update={"apps": apps})
 
 
@@ -146,19 +147,29 @@ def test_the_operators_settings_reach_the_run_as_the_settings_option_above_the_d
     assert SETTING_CANARY not in " ".join(argv)
 
 
+@pytest.mark.parametrize(
+    ("app_with_the_table", "agent"),
+    [
+        pytest.param("songmaker", ANOTHER_AGENT, id="another-agent"),
+        pytest.param("presentator", COWRITER, id="another-app"),
+    ],
+)
 def test_an_agent_without_the_table_runs_exactly_as_a_run_without_cli_settings(
-    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    app_with_the_table: str,
+    agent: str,
 ) -> None:
     capture = tmp_path / "capture"
     config = configured_for(
         a_config(tmp_path, a_fake_claude(tmp_path, capture=capture)),
         tools=["Bash"],
         settings={"outputStyle": "x"},
+        app_name=app_with_the_table,
     )
 
-    events = drive_over_http(
-        child_cleanup, monkeypatch, config, lambda url: run_as(url, ANOTHER_AGENT)
-    )
+    events = drive_over_http(child_cleanup, monkeypatch, config, lambda url: run_as(url, agent))
 
     argv = argv_of(capture)
     assert shown(events)[-1] == ("succeeded", "done")

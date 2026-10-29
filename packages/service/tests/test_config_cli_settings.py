@@ -249,9 +249,9 @@ def test_any_other_claude_key_or_tool_loads_because_typos_are_not_caught(tmp_pat
 
 UNENCODABLE_BODIES = {
     'tools = [""]': "cli_settings.anthropic.tools",
-    'tools = ["Bash,Read"]': "cli_settings.anthropic.tools",
-    'tools = ["Bash Read"]': "cli_settings.anthropic.tools",
-    'tools = ["-x"]': "cli_settings.anthropic.tools",
+    f'tools = ["Bash,{VALUE_CANARY}"]': "cli_settings.anthropic.tools",
+    f'tools = ["Bash {VALUE_CANARY}"]': "cli_settings.anthropic.tools",
+    f'tools = ["-{VALUE_CANARY}"]': "cli_settings.anthropic.tools",
     'tools = "Bash"': "cli_settings.anthropic.tools",
     "settings = 1": "cli_settings.anthropic.settings",
     "extra = 1": "cli_settings.anthropic.extra",

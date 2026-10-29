@@ -98,7 +98,7 @@ def settings_document(settings: CliSettings) -> bytes:
 
 
 def _checked_level(level: object) -> None:
-    if not isinstance(level, dict) or not _LEVEL_KEYS >= level.keys():
+    if not isinstance(level, dict) or level.keys() - _LEVEL_KEYS:
         raise ChildProcessSpecificationError(
             "A Claude run's settings level holds only tools and settings"
         )
@@ -305,15 +305,15 @@ class ClaudeRun:
             "--disable-slash-commands",
         )
 
-    def _settings_option(self, home: Path) -> tuple[str, ...]:
+    def _settings_option(self, home: Path) -> list[str]:
         if not self._operator_settings():
-            return ()
-        return ("--settings", str(home / _OPERATOR_SETTINGS_FILE_NAME))
+            return []
+        return ["--settings", str(home / _OPERATOR_SETTINGS_FILE_NAME)]
 
-    def _relay_option(self, home: Path) -> tuple[str, ...]:
+    def _relay_option(self, home: Path) -> list[str]:
         if self.relay is None:
-            return ()
-        return ("--mcp-config", str(home / _RELAY_CONFIG_FILE_NAME))
+            return []
+        return ["--mcp-config", str(home / _RELAY_CONFIG_FILE_NAME)]
 
     def _allowed_tools_option(self) -> tuple[str, ...]:
         relay_tools = () if self.relay is None else (f"{_mcp_tool_prefix(RELAY_SERVER_NAME)}*",)
