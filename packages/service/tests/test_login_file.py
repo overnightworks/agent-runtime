@@ -427,7 +427,7 @@ def a_directory_that_cannot_be_opened(monkeypatch: pytest.MonkeyPatch, directory
     real_open = os.open
 
     def opening(path: Any, flags: int, *rest: Any) -> int:
-        if Path(path) == directory and flags & os.O_DIRECTORY:
+        if Path(path) == directory and flags & os.O_DIRECTORY and not flags & os.O_PATH:
             raise PermissionError(errno.EACCES, os.strerror(errno.EACCES))
         return real_open(path, flags, *rest)
 

@@ -10,6 +10,7 @@ that is never finished keeps its sibling on disk, which keeps every other writer
 from __future__ import annotations
 
 import contextlib
+import errno
 import os
 import threading
 from collections.abc import Callable
@@ -20,6 +21,7 @@ from typing import Final
 from agent_runtime.secret_file import UnsoundSecretFile, read_secret_file, shown_text
 
 LOGIN_FILE_MODE: Final = 0o600
+_DESCRIPTOR_INFORMATION: Final = Path("/proc/self/fdinfo")
 
 
 def swap_sibling(path: Path) -> Path:
@@ -216,11 +218,60 @@ class ReservedSwap:
         )
 
 
+def _mount_identity(path: Path, flags: int) -> str:
+    descriptor = os.open(path, os.O_PATH | os.O_CLOEXEC | flags)
+    try:
+        lines = (_DESCRIPTOR_INFORMATION / str(descriptor)).read_text().splitlines()
+    finally:
+        os.close(descriptor)
+    for line in lines:
+        name, _, value = line.partition(":")
+        if name == "mnt_id":
+            return value.strip()
+    raise OSError(errno.ENODATA, os.strerror(errno.ENODATA))
+
+
+def is_mount_point(path: Path) -> bool:
+    """Whether ``path`` is a mount point as the kernel sees it, a same-filesystem bind too.
+
+    The file is measured itself, its directory with links followed, so a login reached through a
+    symlinked directory is not taken for a mount point of its own.
+    """
+    # os.path.ismount compares device numbers, which a bind of the same filesystem shares.
+    if not _DESCRIPTOR_INFORMATION.exists():
+        return os.path.ismount(path)
+    try:
+        return _mount_identity(path, os.O_NOFOLLOW) != _mount_identity(path.parent, os.O_DIRECTORY)
+    except FileNotFoundError:
+        return False
+
+
+def _mount_point_refusal(path: Path) -> SwapRefused | None:
+    try:
+        mounted = is_mount_point(path)
+    except OSError as error:
+        return SwapRefused(
+            f"{shown_text(str(path))} cannot be checked for a mount point: {error.strerror}", False
+        )
+    except Exception as error:
+        return SwapRefused(f"failed: {type(error).__name__}", False)
+    if mounted:
+        return SwapRefused(
+            f"{shown_text(str(path))} is a mount point, which a rename cannot replace; bind the"
+            " directory that holds the file, read-write",
+            False,
+        )
+    return None
+
+
 def reserve_swap(path: Path) -> ReservedSwap | SwapRefused:
     """Create the sibling of ``path`` exclusively and hold it; reads and keeps no content."""
     sibling = swap_sibling_or_refusal(path)
     if isinstance(sibling, SwapRefused):
         return sibling
+    refusal = _mount_point_refusal(path)
+    if refusal is not None:
+        return refusal
     try:
         descriptor = os.open(
             sibling, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, LOGIN_FILE_MODE

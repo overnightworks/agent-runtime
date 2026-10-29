@@ -326,11 +326,11 @@ the document it read. Runs keep their blanked copies and never renew.
 - **Write access to the directory.** The service needs write access to the directory that holds
   `token_file`, not to the file alone: the swap renames a sibling `.<file>.new` over it, and a
   rename cannot replace a file bound on its own. With a read-only directory every attempt logs
-  `sibling not created` at WARNING, once an hour, spends no turn, and nothing renews. Bind the
-  directory, never the file alone: with a single-file bind in a writable directory the sibling is
-  created, so a renewal spends its turn and then ends as `commit refused`. The renewed login cannot
-  be installed, and the stored login can no longer be renewed and may stop working, because the
-  child has already used its refresh token. The operator signs in again.
+  `sibling not created` at WARNING, once an hour, spends no turn, and nothing renews. A file bound
+  on its own is refused the same way before the sibling is created, a bind from the same filesystem
+  included, and the logged refusal says to bind the directory that holds the file, read-write; the
+  login command refuses it too. Bind the directory, never the file alone. A directory reached
+  through a symlink does not count as a bind of the file.
 - **Stopping.** A stop waits for a renewal in flight: the 30 s turn deadline, 11.1 s settling and the
   read-back and write, about 45 s at most. Uvicorn first waits for open requests, with no timeout, so
   this bound comes after they have finished; give the supervisor's stop at least 60 s beyond that. A
