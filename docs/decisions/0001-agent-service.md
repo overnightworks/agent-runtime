@@ -3689,6 +3689,58 @@ every run, the control included; the reviews had missed it. The harness was fixe
 closed categories) and run again; the table above is that second run. The routing
 escalation after the miss is journalled on #488.
 
+#### A1b-G6-0 the Grok login renewed headless by the pinned CLI
+
+**What ran.** Slice G6-0 of #570, measured on 29.10.2026 under the operator's
+ruling Q-A (a) of the same day. Pinned `grok 1.0.60 (01a8e1c591c0)` (sha256 prefix
+`10e6af64b247`), with the dedicated service Grok login (HQ2 (a)), which the
+operator signed in with `grok login --device-code` into its own folder, separate
+from his terminal login. One run, one sanitized record
+(`record-20261029T153352194136.json`), kept with the harness in the operator's
+probe directory `g6-0/` outside the repository. The harness (self-test 64 PASS) was
+reviewed by Codex gpt-6-astra high and Opus 5.5 high.
+
+**How.** The harness read the login once and put a full, unblanked copy into a
+fresh private run home (`GROK_HOME` and `HOME` both that home, a closed
+environment). It set `GROK_AUTH_EARLY_INVALIDATION_SECS` above the access token's
+remaining lifetime, so the CLI counted the key as due, and ran `grok models` once.
+It compared old and new documents in memory and wrote the renewed document back
+over the source (atomic replace, mode 0600) under an `O_EXCL` "unsafe" marker. The
+marker is cleared only after a renewed, complete, confirmed, durably written-back
+run.
+
+**Result.**
+
+| Measure | Value |
+|---|---|
+| Exit, run reason, duration | 0, complete, 1.14 s |
+| Outcome | renewed |
+| CLI logs (39 files scanned) | 6 silent refreshes, 0 failed refreshes |
+| Access token | changed; new one lives 6.0 hours |
+| Refresh token | changed (rotation) |
+| Expiry | moved later |
+| Renewed document | usable to the core's decider (`grok_login.assess_grok_login`); top level one realm object with members `auth_mode`, `email`, `expires_at`, `key`, `refresh_token` and 11 others |
+| Write-back, marker, run tree | written; cleared; removed |
+
+No token value, hash, email or account value is recorded anywhere. The record's
+`login_refused: true` is a loose substring scan of the command's output (words such
+as "log in", "sign in") on a run that exited 0 and renewed; it is no evidence of a
+refusal.
+
+**What it means for the build.** Read by this record, not as new rulings:
+- The pinned CLI renews headless given the full login, so Q-A (a)'s renewer is
+  buildable as ruled.
+- The refresh token rotates on every renewal, so exactly one holder may own and
+  write the full login (the service's one login writer); any other copy of the full
+  login is dead after the next renewal. Run copies stay blanked (HQ3 (a)).
+- With a 6 h access token the renewer must run well inside each 6 h window.
+- This corrects nothing in A1b-G0b's Fact 10 but completes it: that "refresh
+  failed" came from a child holding the blanked copy.
+
+**What it does not prove.** The refresh token's own lifetime; behaviour after a long
+idle; whether a renewal while a run holds a copy disturbs that run; repeatability
+(one run).
+
 ### A1b measured: claude 2.1.302
 
 Measured on 17.10.2026 on `$HOME/.local/share/claude/versions/2.1.302`
