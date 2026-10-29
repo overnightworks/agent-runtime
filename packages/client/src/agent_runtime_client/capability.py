@@ -22,7 +22,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validat
 from agent_runtime_client.wire import NonEmptyUnicodeText
 
 CAPABILITY_ISSUER: Final = "agent-service"
-CAPABILITY_TOKEN_TYPE: Final = "agent-capability-2+jwt"
+CAPABILITY_TOKEN_TYPE: Final = "agent-capability-2+jwt"  # noqa: S105 - a token type name and no secret
 MAX_CAPABILITY_CHARACTERS: Final = 8192
 SIGNING_KEY_BITS: Final = 3072
 SIGNING_KEY_EXPONENT: Final = 65537

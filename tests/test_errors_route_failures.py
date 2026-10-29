@@ -238,7 +238,7 @@ def test_the_excerpt_cannot_be_serialized_by_plain_json(parser_error):
 
 
 _ROUND_TRIPS: dict[str, Callable] = {
-    "pickle": lambda error: pickle.loads(pickle.dumps(error)),  # noqa: S301
+    "pickle": lambda error: pickle.loads(pickle.dumps(error)),  # noqa: S301 - a pickle round trip of the test's own error
     "copy": copy.copy,
     "deepcopy": copy.deepcopy,
 }

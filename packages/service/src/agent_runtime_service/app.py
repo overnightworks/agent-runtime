@@ -86,7 +86,7 @@ from agent_runtime_service.run_records import RunRecords, utc_now
 from agent_runtime_service.run_request import MAX_REQUEST_BYTES, parse_run_request
 from agent_runtime_service.runners import AdmittedRun, Runners
 
-WORKLOAD_TOKEN_HEADER: Final = "Agent-Workload-Token"
+WORKLOAD_TOKEN_HEADER: Final = "Agent-Workload-Token"  # noqa: S105 - a header name and no secret
 JOB_TICKET_HEADER: Final = "Agent-Job-Ticket"
 RETRY_UNAVAILABLE_AFTER_SECONDS: Final = 30
 RETRY_BUSY_AFTER_SECONDS: Final = 10

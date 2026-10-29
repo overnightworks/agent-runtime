@@ -1911,7 +1911,7 @@ def _flag_value(cmd: list[str], flag: str) -> str:
 
 
 def test_mcp_turn_command_offers_no_builtin_tool() -> None:
-    cmd = _mcp_cli_arguments("opus", "/tmp/mcp.json", _configured_mcp_server())
+    cmd = _mcp_cli_arguments("opus", "/opt/mcp.json", _configured_mcp_server())
 
     assert _flag_value(cmd, "--tools") == ""
     assert _flag_value(cmd, "--allowedTools") == SAMPLE_ALLOWED_TOOLS
@@ -1920,14 +1920,14 @@ def test_mcp_turn_command_offers_no_builtin_tool() -> None:
 
 
 def test_mcp_turn_command_ignores_the_mounted_settings_file() -> None:
-    cmd = _mcp_cli_arguments("opus", "/tmp/mcp.json", _configured_mcp_server())
+    cmd = _mcp_cli_arguments("opus", "/opt/mcp.json", _configured_mcp_server())
 
     assert _flag_value(cmd, "--setting-sources") == ""
     assert "--strict-mcp-config" in cmd
 
 
 def test_mcp_turn_command_disables_slash_commands() -> None:
-    cmd = _mcp_cli_arguments("opus", "/tmp/mcp.json", _configured_mcp_server())
+    cmd = _mcp_cli_arguments("opus", "/opt/mcp.json", _configured_mcp_server())
 
     assert "--disable-slash-commands" in cmd
 
@@ -1937,9 +1937,9 @@ def test_mcp_turn_command_disables_slash_commands() -> None:
     [
         lambda: _cli_arguments("opus"),
         lambda: _cli_arguments("opus", stream=True),
-        lambda: _mcp_cli_arguments("opus", "/tmp/mcp.json", _configured_mcp_server()),
+        lambda: _mcp_cli_arguments("opus", "/opt/mcp.json", _configured_mcp_server()),
         lambda: _mcp_cli_arguments(
-            "opus", "/tmp/mcp.json", _configured_mcp_server(), stream=True,
+            "opus", "/opt/mcp.json", _configured_mcp_server(), stream=True,
         ),
         lambda: _tool_surface_probe_arguments(mcp=None),
     ],
@@ -2729,7 +2729,7 @@ def test_a_probe_reads_a_malformed_server_entry_as_not_connected() -> None:
         }
     ).encode()
 
-    surface = _parse_announced_surface(init, mcp=_AttachedMcpServer(spec, "/tmp/unused.json"))
+    surface = _parse_announced_surface(init, mcp=_AttachedMcpServer(spec, "/opt/unused.json"))
 
     assert surface.mcp_connected is False
 

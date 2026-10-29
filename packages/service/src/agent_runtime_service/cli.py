@@ -73,7 +73,7 @@ class PreparedStart:
 
 
 def refuse(reason: str) -> int:
-    print(f"{REFUSAL_PREFIX}{reason}", file=sys.stderr)
+    print(f"{REFUSAL_PREFIX}{reason}", file=sys.stderr)  # noqa: T201 - the refusal on stderr is the CLI contract
     return EXIT_BAD_CONFIG
 
 

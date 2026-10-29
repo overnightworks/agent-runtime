@@ -89,7 +89,7 @@ _ERROR_ITEM_KIND: Final = "error"
 _ERROR_EVENT: Final = "error"
 _TURN_COMPLETED_EVENT: Final = "turn.completed"
 _TURN_FAILED_EVENT: Final = "turn.failed"
-_OTHER_TOKEN: Final = "other"
+_OTHER_TOKEN: Final = "other"  # noqa: S105 - a label for the other image kind and no secret
 _OBSERVED_WINDOW_SIZE: Final = 32
 _EVENT_TYPE_VOCABULARY: Final = (
     INFORMATIONAL_EVENT_TYPES

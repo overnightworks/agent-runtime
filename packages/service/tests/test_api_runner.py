@@ -417,7 +417,7 @@ def test_config_accepts_the_explicit_local_gateway_hosts(tmp_path, url):
 
 
 @pytest.mark.parametrize("api", [
-    {"ca_file": "/tmp/unused.pem"}, {"credential_file": "relative.json"},
+    {"ca_file": "/opt/unused.pem"}, {"credential_file": "relative.json"},
     {"completion_url": "http://[::1]suffix/v1/chat/completions"},
     {"completion_url": "http://bad..host/v1/chat/completions"},
     {"completion_url": "http://gateway:/v1/chat/completions"},

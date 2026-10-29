@@ -172,7 +172,7 @@ def run_capturing(
     that child's own children instead of leaving them reachable by a
     group-directed signal to this process.
     """
-    return subprocess.run(
+    return subprocess.run(  # noqa: S603 - the one spawn owner whose argv is a ChildProcess with an absolute binary
         child.command,
         input=stdin_text,
         capture_output=True,
@@ -652,7 +652,7 @@ def start_anchored_leader(
     """
     if signal.getsignal(signal.SIGCHLD) is signal.SIG_IGN:
         raise AnchorStateError("SIGCHLD is ignored; the kernel would reap the leader at its exit")
-    popen = subprocess.Popen(
+    popen = subprocess.Popen(  # noqa: S603 - the one spawn owner whose argv is a ChildProcess with an absolute binary
         child.command,
         stdin=stdin,
         stdout=stdout,
