@@ -39,7 +39,12 @@ from agent_runtime_client.wire import AssistantText, Failed, FailureCode, Succee
 from agent_runtime_service import api_runner
 from agent_runtime_service.app import create_app
 from agent_runtime_service.cli import installed_runners
-from agent_runtime_service.config import AgentConfig, Provider, ServiceConfig
+from agent_runtime_service.config import (
+    AgentConfig,
+    ClaudeCliSettingsConfig,
+    Provider,
+    ServiceConfig,
+)
 from agent_runtime_service.run_liveness import LoopClock
 
 
@@ -48,6 +53,16 @@ def without_the_api(config):
     fields["api"] = None
     fields["identity"] = config.identity.model_copy(update={"api_groups": frozenset()})
     return ServiceConfig.model_validate(fields)
+
+
+def with_a_claude_table(config):
+    """``config`` whose defaults also carry a non-empty ``cli_settings.anthropic`` table."""
+    table = config.defaults.cli_settings.model_copy(
+        update={"anthropic": ClaudeCliSettingsConfig(tools=["Bash"], settings={"outputStyle": "x"})}
+    )
+    return config.model_copy(
+        update={"defaults": config.defaults.model_copy(update={"cli_settings": table})}
+    )
 
 
 PAID_AGENT = "paid-agent"
@@ -71,6 +86,7 @@ def test_api_only_service_passes_exact_model_and_no_identity(
     tmp_path, monkeypatch, model, cli_settings
 ):
     config = with_cli_settings(with_default_model(configured(tmp_path), model), cli_settings)
+    config = with_a_claude_table(config) if cli_settings else config
     requests = []
 
     def upstream(request):

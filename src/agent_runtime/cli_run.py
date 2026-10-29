@@ -77,7 +77,8 @@ class RunSurface:
     """What a run's CLI announced at its start, classified; it holds no CLI string."""
 
     foreign_credential: bool
-    tool_beside_relay: bool
+    unlisted_tool: bool
+    listed_tool_missing: bool
     server_beside_relay: bool
     relay: RelayState
 
@@ -85,7 +86,8 @@ class RunSurface:
 class SurfaceVerdict(StrEnum):
     ACCEPTED = "accepted"
     FOREIGN_CREDENTIAL = "a credential source beside the profile's login"
-    TOOL_BESIDE_RELAY = "a tool the run's relay does not serve"
+    UNLISTED_TOOL = "a tool neither listed nor served by the run's relay"
+    LISTED_TOOL_NOT_ANNOUNCED = "a listed tool the start announcement lacks"
     SERVER_BESIDE_RELAY = "an MCP server other than the run's relay"
     RELAY_NOT_CONNECTED = "a run's relay that is not connected"
     UNREADABLE = "an unreadable start announcement"
@@ -103,8 +105,10 @@ class RunSurfaceRefused(Exception):
 def verdict_of(surface: RunSurface, *, relay_attached: bool) -> SurfaceVerdict:
     if surface.foreign_credential:
         return SurfaceVerdict.FOREIGN_CREDENTIAL
-    if surface.tool_beside_relay:
-        return SurfaceVerdict.TOOL_BESIDE_RELAY
+    if surface.unlisted_tool:
+        return SurfaceVerdict.UNLISTED_TOOL
+    if surface.listed_tool_missing:
+        return SurfaceVerdict.LISTED_TOOL_NOT_ANNOUNCED
     if surface.server_beside_relay or (
         not relay_attached and surface.relay is not RelayState.ABSENT
     ):

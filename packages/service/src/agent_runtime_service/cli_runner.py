@@ -77,6 +77,7 @@ def _claude_run(launch: ProviderLaunch, token: SecretStr, inputs: RunInputs) -> 
         relay=inputs.relay,
         tool_timeout_seconds=launch.tool_timeout_seconds,
         model=inputs.model,
+        settings=inputs.settings,
     )
 
 

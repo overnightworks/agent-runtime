@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import gc
 import hashlib
+import itertools
 import logging
 import os
 from collections.abc import AsyncIterator, Callable, Coroutine
@@ -547,7 +548,8 @@ def test_a_stdin_write_failure_propagates_after_the_reap(
 def a_surface(relay: RelayState = RelayState.ABSENT, **causes: bool) -> RunSurface:
     flags = {
         "foreign_credential": False,
-        "tool_beside_relay": False,
+        "unlisted_tool": False,
+        "listed_tool_missing": False,
         "server_beside_relay": False,
         **causes,
     }
@@ -571,31 +573,33 @@ def test_the_relay_verdict_follows_whether_a_relay_is_attached(
     assert verdict_of(a_surface(relay), relay_attached=relay_attached) == verdict
 
 
-@pytest.mark.parametrize(
-    ("causes", "relay", "verdict"),
-    [
-        (
-            {"foreign_credential": True, "tool_beside_relay": True},
-            RelayState.CONNECTED,
-            SurfaceVerdict.FOREIGN_CREDENTIAL,
-        ),
-        (
-            {"tool_beside_relay": True, "server_beside_relay": True},
-            RelayState.CONNECTED,
-            SurfaceVerdict.TOOL_BESIDE_RELAY,
-        ),
-        (
-            {"server_beside_relay": True},
-            RelayState.NOT_CONNECTED,
-            SurfaceVerdict.SERVER_BESIDE_RELAY,
-        ),
-    ],
-    ids=["credential-over-tool", "tool-over-server", "server-over-relay"],
+CAUSES_BY_PRECEDENCE = (
+    ({"foreign_credential": True}, RelayState.ABSENT, SurfaceVerdict.FOREIGN_CREDENTIAL),
+    ({"unlisted_tool": True}, RelayState.ABSENT, SurfaceVerdict.UNLISTED_TOOL),
+    (
+        {"listed_tool_missing": True},
+        RelayState.ABSENT,
+        SurfaceVerdict.LISTED_TOOL_NOT_ANNOUNCED,
+    ),
+    ({"server_beside_relay": True}, RelayState.ABSENT, SurfaceVerdict.SERVER_BESIDE_RELAY),
+    ({}, RelayState.NOT_CONNECTED, SurfaceVerdict.RELAY_NOT_CONNECTED),
 )
-def test_each_verdict_outranks_the_next_in_precedence(
-    causes: dict[str, bool], relay: RelayState, verdict: SurfaceVerdict
+
+
+@pytest.mark.parametrize(
+    ("higher", "lower"),
+    list(itertools.combinations(CAUSES_BY_PRECEDENCE, 2)),
+    ids=lambda cause: cause[2].name,
+)
+def test_each_verdict_outranks_every_later_one_in_precedence(
+    higher: tuple[dict[str, bool], RelayState, SurfaceVerdict],
+    lower: tuple[dict[str, bool], RelayState, SurfaceVerdict],
 ) -> None:
-    assert verdict_of(a_surface(relay, **causes), relay_attached=True) == verdict
+    causes = {**higher[0], **lower[0]}
+    relay = lower[1] if lower[1] is not RelayState.ABSENT else higher[1]
+    surface = a_surface(relay, **causes)
+
+    assert verdict_of(surface, relay_attached=True) == higher[2]
 
 
 def test_a_refused_announcement_raises_its_verdict_alone_and_logs_its_name(
@@ -609,7 +613,7 @@ def test_a_refused_announcement_raises_its_verdict_alone_and_logs_its_name(
     except UnicodeDecodeError:
         try:
             examine_announcement(
-                a_surface(RelayState.CONNECTED, tool_beside_relay=True), relay_attached=True
+                a_surface(RelayState.CONNECTED, unlisted_tool=True), relay_attached=True
             )
         except RunSurfaceRefused as refused:
             refusal = refused
@@ -623,12 +627,13 @@ def test_a_refused_announcement_raises_its_verdict_alone_and_logs_its_name(
         MARKER in caplog.text,
         [record.getMessage() for record in caplog.records if record.levelno >= logging.WARNING],
     ) == (
-        SurfaceVerdict.TOOL_BESIDE_RELAY,
-        "The CLI's start announcement was refused: a tool the run's relay does not serve.",
+        SurfaceVerdict.UNLISTED_TOOL,
+        "The CLI's start announcement was refused: "
+        "a tool neither listed nor served by the run's relay.",
         None,
         None,
         False,
-        ["A CLI run's start announcement was refused (TOOL_BESIDE_RELAY)"],
+        ["A CLI run's start announcement was refused (UNLISTED_TOOL)"],
     )
 
 
