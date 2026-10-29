@@ -1,0 +1,8 @@
+claim_id = "7a79a6ca9ab94fe083e81afe70177ca8"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "a6b9127c9d50f82f390e20985a7fc8a4b0c64613"
+branch = "claude/issue-589-gserve-0-cli-settings-config"
+scope = ["packages/service/src/agent_runtime_service/cli_settings_config.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/tests/test_api_runner.py", "packages/service/tests/test_cli_runner_claude_settings.py", "tests/support/api_runner_support.py"]
+opened_commit = "8b8f754d0343434960379f852842746f266c36b2"
+whole_reason = "One move: the moved models, their one composition registry and the three files that import them change together, or an import breaks."
