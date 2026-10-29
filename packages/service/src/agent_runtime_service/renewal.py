@@ -369,7 +369,7 @@ class ProviderRenewer:
         """The home and the child ready to run, or None when no home can be made.
 
         Until the runner is entered the slot and the home are this method's: whatever fails
-        releases both and propagates. A source of unreadable timing counts as renewed (24 h hold) from here.
+        releases both and propagates. From here a source of unreadable timing is held for 24 h.
         """
         holder: HolderReservation | None = None
         try:
