@@ -675,7 +675,7 @@ class TokenMint:
 
 
 # The verifier's bound on a token's header segment: webauth.jwt_verification
-# _MAX_HEADER_SEGMENT_CHARACTERS (v0.20.1).
+# _MAX_HEADER_SEGMENT_CHARACTERS (v0.25.0).
 MAX_HEADER_SEGMENT: Final = 512
 
 
