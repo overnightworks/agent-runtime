@@ -37,15 +37,16 @@ from tests.support.service_renewal_support import (  # noqa: F401 - the autouse 
     RENEWED_LOGIN,
     ROTATED_REFRESH,
     Arrangement,
+    Confirmation,
     a_codex_entry,
     a_fake_runner,
     a_login_issued_at,
     an_arrangement,
+    held_pool_slots,
     linking_the_login,
     logged_once,
     oversizing_the_login,
     pool_filled,
-    pool_is_free,
     removing_the_login,
     the_held_ends_confirmed,
     the_secrets_of,
@@ -53,7 +54,9 @@ from tests.support.service_renewal_support import (  # noqa: F401 - the autouse 
 )
 from tests.support.service_table_support import write_login
 
-from agent_runtime.codex_login import UnreadableTiming, blanked_copy
+from agent_runtime.codex.renewal import CodexRenewal
+from agent_runtime.codex.run import AUTH_FILE_NAME
+from agent_runtime.codex_login import CodexRenewalRefusal, UnreadableTiming, blanked_copy
 from agent_runtime.config import reset_config
 from agent_runtime.process import CliRunReason
 from agent_runtime.secret_file import SecretFileFault
@@ -79,11 +82,12 @@ def test_a_login_not_yet_due_starts_nothing_and_leaves_no_tree(
 ) -> None:
     arrangement = an_arrangement(tmp_path, a_login_issued_at(NOW - HALF_LIFE + 1))
     runner = a_fake_runner(monkeypatch)
+    held_before = held_pool_slots()
 
     report = logged_once(caplog, arrangement.renewer.attempt)
 
     assert report.outcome is RenewalOutcome.NOT_DUE
-    assert (runner.calls, arrangement.trees(), pool_is_free()) == (0, [], True)
+    assert (runner.calls, arrangement.trees(), held_pool_slots()) == (0, [], held_before)
     assert arrangement.source_is_intact()
 
 
@@ -143,6 +147,106 @@ def test_an_unreadable_source_timing_renews_at_most_once_in_24_hours(
     )
     assert (again.outcome, runner.calls) == (RenewalOutcome.REFRESH_FAILED, 2)
     assert UnreadableTiming.NOT_A_TOKEN.value in caplog.text
+
+
+def test_a_timing_that_becomes_readable_clears_the_24_hour_hold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    arrangement = an_arrangement(tmp_path, a_codex_login())
+    runner = a_fake_runner(monkeypatch)
+    logged_once(caplog, arrangement.renewer.attempt)
+    write_login(arrangement.token_file, a_login_issued_at(NOW))
+    logged_once(caplog, arrangement.renewer.attempt)
+    write_login(arrangement.token_file, a_codex_login())
+    arrangement.clocks.monotonic = 60.0
+
+    again = logged_once(caplog, arrangement.renewer.attempt)
+
+    assert (again.outcome, runner.calls) == (RenewalOutcome.REFRESH_FAILED, 2)
+
+
+@pytest.mark.parametrize("confirmation", [Confirmation.NOW, Confirmation.LATER])
+def test_a_confirmed_spawn_failure_does_not_use_up_the_24_hour_allowance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    confirmation: Confirmation,
+) -> None:
+    arrangement = an_arrangement(tmp_path, a_codex_login())
+    runner = a_fake_runner(monkeypatch, spawn_failed=True, confirmation=confirmation)
+    logged_once(caplog, arrangement.renewer.attempt)
+    if confirmation is Confirmation.LATER:
+        runner.confirm_late()
+        settled = logged_once(caplog, arrangement.renewer.attempt)
+        assert settled.outcome is RenewalOutcome.NOT_STARTED
+    arrangement.clocks.monotonic = 3600.0
+
+    retried = logged_once(caplog, arrangement.renewer.attempt)
+
+    assert retried.outcome is not RenewalOutcome.NOT_DUE
+    assert runner.calls == 2
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root writes into any directory")
+def test_a_root_that_cannot_hold_a_home_does_not_use_up_the_24_hour_allowance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    arrangement = an_arrangement(tmp_path, a_codex_login())
+    runner = a_fake_runner(monkeypatch)
+    arrangement.root.chmod(0o500)
+    try:
+        failed = logged_once(caplog, arrangement.renewer.attempt)
+    finally:
+        arrangement.root.chmod(0o700)
+    arrangement.clocks.monotonic = 3600.0
+
+    retried = logged_once(caplog, arrangement.renewer.attempt)
+
+    assert (failed.outcome, retried.outcome, runner.calls) == (
+        RenewalOutcome.HOME_NOT_CREATED,
+        RenewalOutcome.REFRESH_FAILED,
+        1,
+    )
+
+
+def test_a_binary_that_cannot_start_does_not_use_up_the_24_hour_allowance(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    binary = tmp_path / "codex"
+    binary.write_text("#!/bin/sh\n")
+    binary.chmod(0o644)
+    arrangement = an_arrangement(tmp_path, a_codex_login(), binary=binary)
+    failed = logged_once(caplog, arrangement.renewer.attempt)
+    binary.chmod(0o755)
+    arrangement.clocks.monotonic = 3600.0
+
+    retried = logged_once(caplog, arrangement.renewer.attempt)
+
+    assert failed.outcome is RenewalOutcome.NOT_STARTED
+    assert retried.outcome is not RenewalOutcome.NOT_DUE
+
+
+def _failing(_self: CodexRenewal, *_arguments: Any) -> Any:
+    raise RuntimeError("injected")
+
+
+@pytest.mark.parametrize("failing_step", ["run_files", "start"])
+def test_a_failure_before_the_runner_frees_the_slot_and_the_home_and_keeps_the_sibling(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    failing_step: str,
+) -> None:
+    arrangement = an_arrangement(tmp_path)
+    runner = a_fake_runner(monkeypatch)
+    monkeypatch.setattr(CodexRenewal, failing_step, _failing)
+    held_before = held_pool_slots()
+
+    with pytest.raises(RuntimeError, match="injected"):
+        logged_once(caplog, arrangement.renewer.attempt)
+
+    assert (held_pool_slots(), arrangement.trees(), runner.calls) == (held_before, [], 0)
+    assert arrangement.sibling.exists()
 
 
 # D8: a preservable result is always committed; "renewed" needs the predicate on top.
@@ -238,9 +342,9 @@ def test_a_result_equal_to_the_original_commits_nothing(
 
 
 def _the_made_due_copy_with_only_the_last_refresh_changed(home: Path) -> None:
-    document = json.loads((home / LOGIN_NAME).read_bytes())
+    document = json.loads((home / AUTH_FILE_NAME).read_bytes())
     document["last_refresh"] = "2026-10-29T00:00:00Z"
-    (home / LOGIN_NAME).write_text(json.dumps(document))
+    (home / AUTH_FILE_NAME).write_text(json.dumps(document))
 
 
 def _the_login_without_a_refresh_token(home: Path) -> None:
@@ -326,7 +430,11 @@ def test_a_source_the_reader_refuses_starts_nothing_and_names_a_closed_reason(
     report = logged_once(caplog, arrangement.renewer.attempt)
 
     assert (report.outcome, runner.calls) == (RenewalOutcome.SOURCE_REFUSED, 0)
-    assert report.refusal
+    assert report.refusal is not None
+    assert str(arrangement.token_file) in report.refusal
+    assert "{not json" not in report.refusal
+    if spoil is _malformed:
+        assert CodexRenewalRefusal.NOT_USABLE.value in report.refusal
     assert arrangement.directory_holds() == ([] if spoil is _missing else [LOGIN_NAME])
 
 
@@ -345,7 +453,7 @@ def test_a_child_that_writes_and_is_cut_by_the_deadline_is_still_read_back_and_c
     assert arrangement.token_file.read_bytes() == RENEWED_LOGIN
 
 
-def test_a_child_that_writes_and_then_fails_its_turn_is_committed_with_the_turn_reported(
+def test_a_child_that_writes_and_then_fails_is_committed_and_the_turn_reports_the_runners_reason(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     binary = a_renewing_fake_codex(tmp_path, RENEWED_LOGIN, then="exit 1")
@@ -553,7 +661,7 @@ def test_an_ordinary_run_reads_the_whole_old_login_during_the_hold_and_the_whole
 
     logged_once(caplog, arrangement.renewer.attempt)
 
-    assert during == [(blanked_copy(DUE_ORIGINAL), [f".{LOGIN_NAME}.new", LOGIN_NAME])]
+    assert during == [(blanked_copy(DUE_ORIGINAL), arrangement.directory_holds_login_and_sibling())]
     assert read_codex_login(arrangement.token_file).blanked_document == blanked_copy(RENEWED_LOGIN)
 
 
@@ -564,11 +672,12 @@ def test_a_binary_that_cannot_start_is_not_started_and_everything_is_released(
     binary.write_text("#!/bin/sh\n")
     binary.chmod(0o644)
     arrangement = an_arrangement(tmp_path, binary=binary)
+    held_before = held_pool_slots()
 
     report = logged_once(caplog, arrangement.renewer.attempt)
 
     assert (report.outcome, report.cleanup) == (RenewalOutcome.NOT_STARTED, Cleanup.REMOVED)
-    assert (pool_is_free(), arrangement.trees()) == (True, [])
+    assert (held_pool_slots(), arrangement.trees()) == (held_before, [])
     assert arrangement.source_is_intact()
 
 
@@ -613,6 +722,7 @@ def test_a_root_that_cannot_hold_a_home_fails_the_attempt_and_frees_the_slot(
 ) -> None:
     arrangement = an_arrangement(tmp_path)
     runner = a_fake_runner(monkeypatch)
+    held_before = held_pool_slots()
     arrangement.root.chmod(0o500)
     try:
         report = logged_once(caplog, arrangement.renewer.attempt)
@@ -624,7 +734,7 @@ def test_a_root_that_cannot_hold_a_home_fails_the_attempt_and_frees_the_slot(
         None,
         0,
     )
-    assert (pool_is_free(), arrangement.source_is_intact()) == (True, True)
+    assert (held_pool_slots(), arrangement.source_is_intact()) == (held_before, True)
 
 
 @pytest.mark.parametrize("settled_after_the_child", [False, True])

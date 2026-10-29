@@ -19,12 +19,13 @@ from tests.support.codex_support import a_codex_access_token
 from tests.support.provider_test_support import a_codex_login, a_private_root
 from tests.support.service_table_support import write_login
 
-from agent_runtime.codex.run import CODEX_CLI_PROCESS_POOL
+from agent_runtime.codex.run import AUTH_FILE_NAME, CODEX_CLI_PROCESS_POOL
 from agent_runtime.config import PrivateWorkingRoot
-from agent_runtime.process import CliRunOutcome, CliRunReason
+from agent_runtime.process import RUN_HOME_DIRECTORY_NAME, CliRunOutcome, CliRunReason
 from agent_runtime.secret_file import MAX_SECRET_FILE_BYTES
 from agent_runtime_service import renewal
 from agent_runtime_service.config import Provider
+from agent_runtime_service.login_file import swap_sibling
 from agent_runtime_service.renewal import (
     CODEX_RENEWAL,
     ProviderRenewer,
@@ -37,7 +38,7 @@ LIFETIME = 864_000
 HALF_LIFE = LIFETIME // 2
 ORIGINAL_REFRESH = "original-refresh-token"
 ROTATED_REFRESH = "rotated-refresh-token"
-LOGIN_NAME = "auth.json"
+LOGIN_NAME = "codex-login.json"
 UNUSED_BINARY = Path("/opt/codex/bin/codex")
 
 
@@ -85,7 +86,7 @@ class Arrangement:
 
     @property
     def sibling(self) -> Path:
-        return self.token_file.with_name(f".{self.token_file.name}.new")
+        return swap_sibling(self.token_file)
 
     def source_is_intact(self) -> bool:
         """The same bytes, the same inode, and no sibling left beside the login."""
@@ -99,12 +100,15 @@ class Arrangement:
     def directory_holds(self) -> list[str]:
         return sorted(entry.name for entry in self.token_file.parent.iterdir())
 
+    def directory_holds_login_and_sibling(self) -> list[str]:
+        return sorted([self.token_file.name, self.sibling.name])
+
     def trees(self) -> list[Path]:
         return sorted(self.root.iterdir())
 
     def retained_login(self) -> bytes:
         (tree,) = self.trees()
-        return (tree / "home" / LOGIN_NAME).read_bytes()
+        return (tree / RUN_HOME_DIRECTORY_NAME / AUTH_FILE_NAME).read_bytes()
 
 
 def an_arrangement(
@@ -220,44 +224,49 @@ def writing(document: bytes) -> Callable[[Path], None]:
     """What a renewing CLI did: it left ``document`` as the home's login."""
 
     def write(home: Path) -> None:
-        (home / LOGIN_NAME).write_bytes(document)
+        (home / AUTH_FILE_NAME).write_bytes(document)
 
     return write
 
 
 def removing_the_login(home: Path) -> None:
-    (home / LOGIN_NAME).unlink()
+    (home / AUTH_FILE_NAME).unlink()
 
 
 def linking_the_login(home: Path) -> None:
-    (home / LOGIN_NAME).unlink()
-    (home / LOGIN_NAME).symlink_to(home / "config.toml")
+    (home / AUTH_FILE_NAME).unlink()
+    (home / AUTH_FILE_NAME).symlink_to(home / "config.toml")
 
 
 def oversizing_the_login(home: Path) -> None:
-    (home / LOGIN_NAME).write_bytes(b"x" * (MAX_SECRET_FILE_BYTES + 1))
+    (home / AUTH_FILE_NAME).write_bytes(b"x" * (MAX_SECRET_FILE_BYTES + 1))
+
+
+def _taken_pool_slots() -> list[Any]:
+    """Take every free Codex pool slot."""
+    slots = []
+    while (slot := CODEX_CLI_PROCESS_POOL.reserve()) is not None:
+        slots.append(slot)
+    return slots
 
 
 @contextmanager
 def pool_filled() -> Iterator[None]:
-    """Every Codex pool slot is held."""
-    slots = [CODEX_CLI_PROCESS_POOL.reserve() for _ in range(CODEX_CLI_PROCESS_POOL.limit)]
+    """Every Codex pool slot is held, those already held elsewhere included."""
+    slots = _taken_pool_slots()
     try:
-        assert all(slots)
         yield
     finally:
         for slot in slots:
-            if slot is not None:
-                slot.release()
-
-
-def pool_is_free() -> bool:
-    """Every Codex pool slot can be taken, so none is held."""
-    slots = [CODEX_CLI_PROCESS_POOL.reserve() for _ in range(CODEX_CLI_PROCESS_POOL.limit)]
-    for slot in slots:
-        if slot is not None:
             slot.release()
-    return all(slots)
+
+
+def held_pool_slots() -> int:
+    """How many Codex pool slots are held now; compare it with the count before an attempt."""
+    slots = _taken_pool_slots()
+    for slot in slots:
+        slot.release()
+    return CODEX_CLI_PROCESS_POOL.limit - len(slots)
 
 
 def logged_once(

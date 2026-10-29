@@ -12,14 +12,13 @@ from pathlib import Path
 
 import pytest
 from tests.support.service_renewal_support import (  # noqa: F401 - the autouse fixture
-    LOGIN_NAME,
     RENEWED_LOGIN,
     Confirmation,
     a_fake_runner,
     a_run_outcome,
     an_arrangement,
+    held_pool_slots,
     logged_once,
-    pool_is_free,
     the_held_ends_confirmed,
     writing,
 )
@@ -42,6 +41,7 @@ def test_an_unconfirmed_end_keeps_everything_and_blocks_every_later_attempt(
     runner = a_fake_runner(
         monkeypatch, outcome=UNCONFIRMED_ENDS[end], confirmation=Confirmation.NEVER
     )
+    held_before = held_pool_slots()
 
     first = logged_once(caplog, arrangement.renewer.attempt)
     second = logged_once(caplog, arrangement.renewer.attempt)
@@ -53,9 +53,9 @@ def test_an_unconfirmed_end_keeps_everything_and_blocks_every_later_attempt(
     )
     assert second.outcome is RenewalOutcome.END_UNCONFIRMED
     assert runner.calls == 1
-    assert arrangement.directory_holds() == [f".{LOGIN_NAME}.new", LOGIN_NAME]
+    assert arrangement.directory_holds() == arrangement.directory_holds_login_and_sibling()
     assert len(arrangement.trees()) == 1
-    assert pool_is_free() is False
+    assert held_pool_slots() == held_before + 1
 
 
 def test_a_late_confirmation_frees_the_slot_and_the_next_attempt_settles_the_result(
@@ -68,12 +68,14 @@ def test_a_late_confirmation_frees_the_slot_and_the_next_attempt_settles_the_res
         on_home=writing(RENEWED_LOGIN),
         confirmation=Confirmation.LATER,
     )
+    held_before = held_pool_slots()
     logged_once(caplog, arrangement.renewer.attempt)
+    assert held_pool_slots() == held_before + 1
 
     runner.confirm_late()
 
-    assert pool_is_free()
-    assert arrangement.directory_holds() == [f".{LOGIN_NAME}.new", LOGIN_NAME]
+    assert held_pool_slots() == held_before
+    assert arrangement.directory_holds() == arrangement.directory_holds_login_and_sibling()
     assert len(arrangement.trees()) == 1
     settled = logged_once(caplog, arrangement.renewer.attempt)
     assert (settled.outcome, settled.cleanup) == (RenewalOutcome.RENEWED, Cleanup.REMOVED)
@@ -127,7 +129,7 @@ def test_a_confirmation_after_the_handoff_writes_and_removes_nothing(
         logging.ERROR,
     ]
     assert after.outcome is RenewalOutcome.INTERRUPTED
-    assert arrangement.directory_holds() == [f".{LOGIN_NAME}.new", LOGIN_NAME]
+    assert arrangement.directory_holds() == arrangement.directory_holds_login_and_sibling()
     assert arrangement.token_file.read_bytes() == arrangement.source_bytes
     assert (len(arrangement.trees()), runner.calls) == (1, 1)
 

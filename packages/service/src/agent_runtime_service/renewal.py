@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Final
 
 from agent_runtime.anchored_turn import CliProcessReservation
+from agent_runtime.cli_run import CliRunStart
 from agent_runtime.codex.renewal import CodexRenewal, CopyUnchanged
 from agent_runtime.codex_login import (
     CodexRenewalRefusal,
@@ -39,7 +40,12 @@ from agent_runtime.process import (
     run_cli_bounded,
     run_directories,
 )
-from agent_runtime.secret_file import SecretFileFault, UnsoundSecretFile, read_secret_file
+from agent_runtime.secret_file import (
+    SecretFileFault,
+    UnsoundSecretFile,
+    read_secret_file,
+    shown_path,
+)
 from agent_runtime.spawn import ChildProcess
 from agent_runtime_service.config import LOGIN_READERS, Provider
 from agent_runtime_service.login_file import (
@@ -192,6 +198,15 @@ class _Pending:
 
 
 @dataclass(frozen=True)
+class _Prepared:
+    """A home and a started child, both still owned by the attempt."""
+
+    home: Path
+    holder: HolderReservation
+    start: CliRunStart
+
+
+@dataclass(frozen=True)
 class _Settlement:
     outcome: RenewalOutcome
     cause: NotRenewedCause | SecretFileFault | None = None
@@ -202,6 +217,9 @@ class _Settlement:
 
 class ProviderRenewer:
     """The one renewer of one provider's login; one owner calls it, one call at a time.
+
+    ``attempt`` and ``hand_over_as_interrupted`` may both commit to the login file, so they are
+    called from a worker thread, never the main thread or an event loop.
 
     Every fact arrives as an argument: no installed configuration is read.
     """
@@ -280,7 +298,11 @@ class ProviderRenewer:
         if login is CodexRenewalRefusal.NO_REFRESH_TOKEN:
             return self._abandoned(reserved, RenewalOutcome.NO_REFRESH_TOKEN)
         if isinstance(login, CodexRenewalRefusal):
-            return self._abandoned(reserved, RenewalOutcome.SOURCE_REFUSED, refusal=login.value)
+            return self._abandoned(
+                reserved,
+                RenewalOutcome.SOURCE_REFUSED,
+                refusal=f"{shown_path(self._token_file)} {login.value}",
+            )
         return login
 
     def _due_then_run(self, reserved: ReservedSwap, login: RenewableCodexLogin) -> RenewalReport:
@@ -293,12 +315,11 @@ class ProviderRenewer:
         slot = run.pool.reserve()
         if slot is None:
             return self._abandoned(reserved, RenewalOutcome.POOL_FULL, source_timing=unreadable)
-        if unreadable is not None:
-            self._unreadable_renewal_started = self._monotonic_clock()
         return self._spawned(reserved, login, run, slot, unreadable)
 
     def _is_due(self, timing: CodexTiming | UnreadableTiming, now: int) -> bool:
         if isinstance(timing, CodexTiming):
+            self._unreadable_renewal_started = None
             return timing.is_due(now)
         started = self._unreadable_renewal_started
         recent = (
@@ -317,25 +338,18 @@ class ProviderRenewer:
     ) -> RenewalReport:
         confirmation = _EndConfirmation(slot)
         with ExitStack() as tree:
-            try:
-                directories = tree.enter_context(
-                    run_directories(self._working_root, run.run_files())
-                )
-            except CliEnvironmentUnavailableError:
-                slot.release()
+            prepared = self._prepared(tree, run, slot, source_timing)
+            if prepared is None:
                 return self._abandoned(
                     reserved, RenewalOutcome.HOME_NOT_CREATED, source_timing=source_timing
                 )
-            # Released only once the end is confirmed and the home is read: nothing else removes it.
-            holder = directories.reserve()
-            start = run.start(directories.home, directories.working_directory)
-            outcome = self._bounded(start.child, start.stdin, confirmation)
+            outcome = self._bounded(prepared.start.child, prepared.start.stdin, confirmation)
             pending = _Pending(
                 reserved,
                 login,
                 run,
-                directories.home,
-                holder,
+                prepared.home,
+                prepared.holder,
                 confirmation,
                 source_timing,
                 outcome.reason,
@@ -344,6 +358,39 @@ class ProviderRenewer:
             self._pending = pending
             return self._unconfirmed(pending)
         return self._settled(pending)
+
+    def _prepared(
+        self,
+        tree: ExitStack,
+        run: CodexRenewal,
+        slot: CliProcessReservation,
+        source_timing: UnreadableTiming | None,
+    ) -> _Prepared | None:
+        """The home and the child ready to run, or None when no home can be made.
+
+        Until the runner is entered the slot and the home are this method's: whatever fails
+        releases both and propagates. A source of unreadable timing counts as renewed (24 h hold) from here.
+        """
+        holder: HolderReservation | None = None
+        try:
+            try:
+                directories = tree.enter_context(
+                    run_directories(self._working_root, run.run_files())
+                )
+            except CliEnvironmentUnavailableError:
+                slot.release()
+                return None
+            # Released only once the end is confirmed and the home is read: nothing else removes it.
+            holder = directories.reserve()
+            start = run.start(directories.home, directories.working_directory)
+            if source_timing is not None:
+                self._unreadable_renewal_started = self._monotonic_clock()
+        except BaseException:
+            slot.release()
+            if holder is not None:
+                holder.release()
+            raise
+        return _Prepared(directories.home, holder, start)
 
     def _bounded(
         self, child: ChildProcess, stdin: bytes, confirmation: _EndConfirmation
@@ -410,6 +457,7 @@ class ProviderRenewer:
 
     def _settlement(self, pending: _Pending) -> _Settlement:
         if pending.confirmation.spawn_failed:
+            self._unreadable_renewal_started = None
             return self._abandoning(pending, RenewalOutcome.NOT_STARTED)
         document = pending.run.renewed_document(pending.home)
         if isinstance(document, SecretFileFault):
