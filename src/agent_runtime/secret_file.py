@@ -16,6 +16,7 @@ import operator
 import os
 import stat
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Final
 
@@ -24,6 +25,17 @@ API_KEY_PREFIX: Final = "sk-ant-api"
 _OPEN_FLAG_NAMES: Final = ("O_NONBLOCK", "O_CLOEXEC")
 UNSHOWABLE_PATH: Final = "contains a control or non-printing character; a path must not"
 _JSON_WHITESPACE: Final = " \t\r\n"
+
+
+class SecretFileFault(StrEnum):
+    MISSING = "is missing"
+    LINK = "is a symbolic link"
+    NOT_REGULAR = "is not a regular file"
+    TOO_LARGE = "is larger than the secret-file bound"
+    UNREADABLE = "cannot be read"
+
+
+_OPEN_FAULTS: Final = {errno.ENOENT: SecretFileFault.MISSING, errno.ELOOP: SecretFileFault.LINK}
 
 
 class UnsoundSecretFile(ValueError):
@@ -119,6 +131,7 @@ class _ReadRefusal:
     """Returned, never raised: the reading frame holds file content and must not sit in a chain."""
 
     reason: str
+    fault: SecretFileFault
 
 
 def _open_flags() -> int:
@@ -155,7 +168,34 @@ def _read_within_limit(descriptor: int) -> bytes | _ReadRefusal:
             chunks.append(chunk)
             remaining -= len(chunk)
     except OSError as error:
-        return _ReadRefusal(f"cannot be read: {error.strerror}")
+        return _ReadRefusal(f"cannot be read: {error.strerror}", SecretFileFault.UNREADABLE)
     if remaining == 0:
-        return _ReadRefusal(f"is larger than {MAX_SECRET_FILE_BYTES} bytes")
+        return _ReadRefusal(
+            f"is larger than {MAX_SECRET_FILE_BYTES} bytes", SecretFileFault.TOO_LARGE
+        )
     return b"".join(chunks)
+
+
+def read_secret_file_without_following_links(path: Path) -> bytes | SecretFileFault:
+    """The file's bytes, or the one fault that stopped the read; nothing is raised.
+
+    A file a CLI wrote is judged by its type and size only: its mode is the CLI's own, and a
+    refusal on it would discard a document that exists nowhere else.
+    """
+    try:
+        descriptor = os.open(path, _open_flags() | os.O_NOFOLLOW)
+    except OSError as error:
+        return _OPEN_FAULTS.get(error.errno, SecretFileFault.UNREADABLE)
+    try:
+        status = os.fstat(descriptor)
+        if not stat.S_ISREG(status.st_mode):
+            return SecretFileFault.NOT_REGULAR
+        if status.st_size > MAX_SECRET_FILE_BYTES:
+            return SecretFileFault.TOO_LARGE
+        read = _read_within_limit(descriptor)
+    except OSError:
+        return SecretFileFault.UNREADABLE
+    finally:
+        os.close(descriptor)
+    return read.fault if isinstance(read, _ReadRefusal) else read
+
