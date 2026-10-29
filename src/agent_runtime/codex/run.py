@@ -169,13 +169,13 @@ class CodexStreamDecoder:
         self._answer = ""
 
     def events_of(self, line: bytes) -> Sequence[StepEvent]:
-        event = parsed_line(line, _StreamEvent, CodexUnreadableLine())
+        event = parsed_line(line, _StreamEvent, CodexUnreadableLine)
         if event.type in _ITEM_EVENT_TYPES:
-            return self._item_events(line, parsed_line(line, _ItemEvent, CodexUnreadableLine()))
+            return self._item_events(line, parsed_line(line, _ItemEvent, CodexUnreadableLine))
         if event.type == "turn.completed":
             self._completed = True
         elif event.type == "turn.failed":
-            self._fail_turn(parsed_line(line, _TurnFailedEvent, CodexUnreadableLine()))
+            self._fail_turn(parsed_line(line, _TurnFailedEvent, CodexUnreadableLine))
         elif event.type not in _SILENT_EVENT_TYPES:
             raise_without_chain(CodexUnknownStreamPart())
         return []
@@ -194,7 +194,7 @@ class CodexStreamDecoder:
     def _item_events(self, line: bytes, event: _ItemEvent) -> list[StepEvent]:
         item = event.item
         if item.type == _AGENT_MESSAGE:
-            message = parsed_line(line, _MessageEvent, CodexUnreadableLine())
+            message = parsed_line(line, _MessageEvent, CodexUnreadableLine)
             return self._message_events(event.type, message.item)
         if item.type not in _DROPPED_ITEM_TYPES:
             raise_without_chain(CodexUnknownStreamPart())

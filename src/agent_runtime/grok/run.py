@@ -110,15 +110,15 @@ class GrokStreamDecoder:
         self._answer = ""
 
     def events_of(self, line: bytes) -> Sequence[StepEvent]:
-        event_type = parsed_line(line, _StreamEvent, GrokUnreadableLine()).type
+        event_type = parsed_line(line, _StreamEvent, GrokUnreadableLine).type
         if event_type == _TEXT:
-            text = parsed_line(line, _TextEvent, GrokUnreadableLine()).data
+            text = parsed_line(line, _TextEvent, GrokUnreadableLine).data
             self._answer += text
             return [AssistantTextEvent(text=text)]
         if event_type == _END:
             self._ended = True
         elif event_type == _ERROR:
-            self._fail_turn(parsed_line(line, _ErrorEvent, GrokUnreadableLine()))
+            self._fail_turn(parsed_line(line, _ErrorEvent, GrokUnreadableLine))
         elif event_type in _TOOL_EVENT_TYPES:
             raise_without_chain(GrokToolCalled())
         elif event_type not in _SILENT_EVENT_TYPES:

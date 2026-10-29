@@ -169,7 +169,11 @@ def test_a_run_with_a_refused_field_is_not_built_and_the_error_names_the_field(
     with pytest.raises(ChildProcessSpecificationError, match=field_name) as refused:
         a_run(**changes)
 
-    assert SYSTEM_TEXT not in str(refused.value) + str(refused.value.args)
+    assert [
+        secret
+        for secret in (SYSTEM_TEXT, HISTORY_TEXT)
+        if secret in str(refused.value) or secret in str(refused.value.args)
+    ] == []
 
 
 def test_the_streamed_text_is_its_text_events_then_the_whole_answer_stripped() -> None:

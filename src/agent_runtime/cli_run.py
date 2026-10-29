@@ -141,23 +141,29 @@ class CliRunFailure(Exception):
 
 
 def parsed_line[EventModel: BaseModel](
-    line: bytes, model: type[EventModel], unreadable: CliRunFailure
+    line: bytes, model: type[EventModel], unreadable: type[CliRunFailure]
 ) -> EventModel:
-    """Validate one stdout line into its model, or end the run with ``unreadable``, unchained."""
+    """Validate one stdout line into its model, or end the run with ``unreadable()``, unchained."""
     try:
         return model.model_validate_json(line)
     except ValidationError:
-        raise_without_chain(unreadable)
+        raise_without_chain(unreadable())
 
 
 class _Runnable(Protocol):
-    binary: Path
-    login: object
-    history: Sequence[object]
+    @property
+    def binary(self) -> Path: ...
+
+    @property
+    def login(self) -> object: ...
+
+    @property
+    def history(self) -> Sequence[object]: ...
 
 
 class _Login[Verdict](Protocol):
-    verdict: Verdict
+    @property
+    def verdict(self) -> Verdict: ...
 
 
 def require_runnable[Verdict](
