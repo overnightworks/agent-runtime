@@ -1,8 +1,0 @@
-claim_id = "c55f54ed414746108554b99ea838c9c0"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "2d3c303cf3799b7f19e4113908b577463c8ff410"
-branch = "claude/issue-560-claude-tools-settings"
-scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "packages/service/src/agent_runtime_service/cli_runner.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/tests/test_api_runner.py", "packages/service/tests/test_cli_runner_claude_settings.py", "packages/service/tests/test_cli_runner_tools.py", "packages/service/tests/test_config_cli_settings.py", "packages/service/tests/test_tool_relay.py", "src/agent_runtime/claude/run.py", "src/agent_runtime/cli_run.py", "tests/support/cli_tools_support.py", "tests/test_claude_run.py", "tests/test_claude_run_settings.py", "tests/test_cli_run.py"]
-opened_commit = "c7b13393ba9a67b2e15434777979b32142a83748"
-whole_reason = "One vertical contract: the operator's Claude tools and settings from the TOML as ordered levels through the one merge to the run's argv and settings file, the sandbox default that keeps tools-on-means-sandbox-on true, the start check that must accept what can now be listed, and the docs and reworded ruled lines belong together, or main carries a key that lies or a listed shell without its sandbox."
