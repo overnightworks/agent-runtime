@@ -1,8 +1,0 @@
-claim_id = "8ef167a910c943bdbf49cc8411d5c0ca"
-agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
-role = "builder"
-base = "05040fd4cac13c3a22595080bf0eb4af496f53c6"
-branch = "claude/issue-575-p-codex-picture-as-run-file"
-scope = ["docs/host.md", "docs/operations.md", "quality/baseline.toml", "src/agent_runtime/cli_run.py", "src/agent_runtime/codex/run.py", "src/agent_runtime/run_output.py", "tests/support/cli_run_support.py", "tests/test_claude_run.py", "tests/test_cli_run.py", "tests/test_codex_run.py", "tests/test_run_output.py"]
-opened_commit = "b1ab959af00e697e7fc4ecd2b57f444bf9b8f822"
-whole_reason = "One collection contract: the adapter's declared picture folder, its pass-through in the run's containment order and its read under C's rules move together, with the tests that pin each and the two documents that describe them."
