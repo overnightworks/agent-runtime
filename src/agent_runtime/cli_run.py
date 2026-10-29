@@ -22,7 +22,9 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
 from pathlib import Path
-from typing import NoReturn, Protocol
+from typing import ClassVar, NoReturn, Protocol
+
+from pydantic import BaseModel, ValidationError
 
 from agent_runtime.anchored_turn import CliProcessPool, anchored_turn_child
 from agent_runtime.config import PrivateWorkingRoot
@@ -36,7 +38,7 @@ from agent_runtime.events import (
 )
 from agent_runtime.process import run_directories
 from agent_runtime.run_output import collect_output
-from agent_runtime.spawn import ChildProcess
+from agent_runtime.spawn import ChildProcess, ChildProcessSpecificationError
 
 log = logging.getLogger(__name__)
 
@@ -127,6 +129,56 @@ def examine_announcement(surface: RunSurface, *, relay_attached: bool) -> None:
     verdict = verdict_of(surface, relay_attached=relay_attached)
     if verdict is not SurfaceVerdict.ACCEPTED:
         refuse_announcement(verdict)
+
+
+class CliRunFailure(Exception):
+    """A run that ended closed; each subclass has one fixed message and carries no CLI text."""
+
+    message: ClassVar[str]
+
+    def __init__(self) -> None:
+        super().__init__(self.message)
+
+
+def parsed_line[EventModel: BaseModel](
+    line: bytes, model: type[EventModel], unreadable: type[CliRunFailure]
+) -> EventModel:
+    """Validate one stdout line into its model, or end the run with ``unreadable()``, unchained."""
+    try:
+        return model.model_validate_json(line)
+    except ValidationError:
+        raise_without_chain(unreadable())
+
+
+class _Runnable(Protocol):
+    @property
+    def binary(self) -> Path: ...
+
+    @property
+    def login(self) -> object: ...
+
+    @property
+    def history(self) -> Sequence[object]: ...
+
+
+class _Login[LoginVerdict](Protocol):
+    @property
+    def verdict(self) -> LoginVerdict: ...
+
+
+def require_runnable[LoginVerdict](
+    provider: str,
+    run: _Runnable,
+    login_type: type[_Login[LoginVerdict]],
+    usable: LoginVerdict,
+) -> None:
+    """Refuse a run that has no absolute binary, no usable login or no history to send."""
+    if not run.binary.is_absolute():
+        raise ChildProcessSpecificationError(f"A {provider} run needs an absolute binary")
+    if not (isinstance(run.login, login_type) and run.login.verdict is usable):
+        raise ChildProcessSpecificationError(f"A {provider} run needs a usable login")
+    if not run.history:
+        raise ChildProcessSpecificationError(f"A {provider} run needs a non-empty history")
 
 
 class CliLineDecoder(Protocol):

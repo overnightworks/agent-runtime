@@ -81,13 +81,15 @@ with `include_input=False`, which matters to a host that logs configuration erro
 the reference.
 
 The subscription run the agent service drives (`cli_run.astream_cli_run(root,
-adapter, max_files_bytes=...)`, with `claude.run.ClaudeRun` as Claude's adapter and `codex.run.CodexRun` as Codex's, in directories
+adapter, max_files_bytes=...)`, with `claude.run.ClaudeRun` as Claude's adapter and
+`codex.run.CodexRun` as Codex's, in directories
 from `process.run_directories`) takes every fact as an explicit argument and reads
 no installed configuration. The ending, a `FinalEvent`, carries `files`: the regular files
 the run left in its output folder, as the wire's `RunFile` values in name order. A login the
 provider's CLI refuses ends the run with
 `errors.CliLoginRefusedError`, for every provider; Claude's
-`claude.provider.CliLoginRefusedError` is a subclass of it.
+`claude.provider.CliLoginRefusedError` is a subclass of it. `grok.run.GrokRun` is Grok's
+adapter for the same entry; no service profile serves it yet.
 
 **The working root.** `configure()` refuses a `cli_working_directory_root` that is
 not private: an absolute path written without `..`, to an existing directory, not

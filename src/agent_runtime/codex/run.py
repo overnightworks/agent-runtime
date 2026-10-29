@@ -5,18 +5,24 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar, Final, NoReturn
+from typing import Final, NoReturn
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict
 
 from agent_runtime.anchored_turn import CliProcessPool, ReapBounds
-from agent_runtime.cli_run import CliRunStart, StepEvent
+from agent_runtime.cli_run import (
+    CliRunFailure,
+    CliRunStart,
+    StepEvent,
+    parsed_line,
+    require_runnable,
+)
 from agent_runtime.cli_settings import CliSettings, merged, toml_basic_string, toml_document
 from agent_runtime.codex_login import CodexLogin, CodexLoginVerdict
 from agent_runtime.constants import CLI_GROUP_CONFIRMATION_SECONDS, CLI_TERMINATION_GRACE_SECONDS
 from agent_runtime.errors import CliLoginRefusedError, raise_without_chain
 from agent_runtime.events import AssistantTextEvent, FinalEvent
-from agent_runtime.spawn import ChildProcess, ChildProcessSpecificationError, closed_environment
+from agent_runtime.spawn import ChildProcess, closed_environment
 from agent_runtime.transcript import flatten_messages
 from agent_runtime_client.wire import TurnMessage
 
@@ -91,13 +97,8 @@ CODEX_CLI_LOGIN_REFUSED_DETAIL: Final = "Codex CLI login was refused."
 _LOGIN_REFUSED_STATUS: Final = "401 Unauthorized"
 
 
-class CodexRunFailure(Exception):
-    """A run that ended closed; each class has one fixed message and carries no CLI text."""
-
-    message: ClassVar[str]
-
-    def __init__(self) -> None:
-        super().__init__(self.message)
+class CodexRunFailure(CliRunFailure):
+    """A Codex run that ended closed."""
 
 
 class CodexUnknownStreamPart(CodexRunFailure):
@@ -160,10 +161,6 @@ class _TurnFailedEvent(BaseModel):
     error: _TurnError | None = None
 
 
-def _fail(failure: CodexRunFailure) -> NoReturn:
-    raise_without_chain(failure)
-
-
 class CodexStreamDecoder:
     """Turns `exec --json` lines into events and fails closed on anything it does not know."""
 
@@ -172,41 +169,35 @@ class CodexStreamDecoder:
         self._answer = ""
 
     def events_of(self, line: bytes) -> Sequence[StepEvent]:
-        event = self._parsed(line, _StreamEvent)
+        event = parsed_line(line, _StreamEvent, CodexUnreadableLine)
         if event.type in _ITEM_EVENT_TYPES:
-            return self._item_events(line, self._parsed(line, _ItemEvent))
+            return self._item_events(line, parsed_line(line, _ItemEvent, CodexUnreadableLine))
         if event.type == "turn.completed":
             self._completed = True
         elif event.type == "turn.failed":
-            self._fail_turn(self._parsed(line, _TurnFailedEvent))
+            self._fail_turn(parsed_line(line, _TurnFailedEvent, CodexUnreadableLine))
         elif event.type not in _SILENT_EVENT_TYPES:
-            _fail(CodexUnknownStreamPart())
+            raise_without_chain(CodexUnknownStreamPart())
         return []
 
     @staticmethod
     def _fail_turn(event: _TurnFailedEvent) -> NoReturn:
         if event.error is not None and _LOGIN_REFUSED_STATUS in event.error.message:
             raise_without_chain(CliLoginRefusedError(CODEX_CLI_LOGIN_REFUSED_DETAIL))
-        _fail(CodexTurnFailed())
+        raise_without_chain(CodexTurnFailed())
 
     def ending(self, returncode: int) -> FinalEvent:
         if not self._completed or returncode != 0:
-            _fail(CodexAnswerMissing())
+            raise_without_chain(CodexAnswerMissing())
         return FinalEvent(text=self._answer)
-
-    @staticmethod
-    def _parsed[EventModel: BaseModel](line: bytes, model: type[EventModel]) -> EventModel:
-        try:
-            return model.model_validate_json(line)
-        except ValidationError:
-            _fail(CodexUnreadableLine())
 
     def _item_events(self, line: bytes, event: _ItemEvent) -> list[StepEvent]:
         item = event.item
         if item.type == _AGENT_MESSAGE:
-            return self._message_events(event.type, self._parsed(line, _MessageEvent).item)
+            message = parsed_line(line, _MessageEvent, CodexUnreadableLine)
+            return self._message_events(event.type, message.item)
         if item.type not in _DROPPED_ITEM_TYPES:
-            _fail(CodexUnknownStreamPart())
+            raise_without_chain(CodexUnknownStreamPart())
         return []
 
     def _message_events(self, event_type: str, item: _MessageItem) -> list[StepEvent]:
@@ -234,14 +225,7 @@ class CodexRun:
     settings: tuple[CliSettings, ...] = field(kw_only=True, repr=False)
 
     def __post_init__(self) -> None:
-        if not self.binary.is_absolute():
-            raise ChildProcessSpecificationError("A Codex run needs an absolute binary")
-        if not (
-            isinstance(self.login, CodexLogin) and self.login.verdict is CodexLoginVerdict.USABLE
-        ):
-            raise ChildProcessSpecificationError("A Codex run needs a usable login")
-        if not self.history:
-            raise ChildProcessSpecificationError("A Codex run needs a non-empty history")
+        require_runnable("Codex", self, CodexLogin, CodexLoginVerdict.USABLE)
 
     @property
     def pool(self) -> CliProcessPool:
