@@ -339,7 +339,8 @@ the document it read. Runs keep their blanked copies and never renew.
   service configures no logging. `agent-runtime-service-login --check` shows today only whether the
   reader accepts the file, not whether a renewal is due or failed (the expiry is the proof).
   - `sibling not created`: the service cannot create the sibling, because the directory is
-    read-only. Bind the directory that holds the file, read-write.
+    read-only or the login file is bound on its own (or cannot be checked for that). Bind the
+    directory that holds the file, read-write.
   - `sibling held`: a login command or a renewal holds `.<file>.new`. If none runs, a stop or a
     crash left it: stop the service and any other login command, confirm that no process the
     service started still runs, then remove the file. If a renewal child had already rotated the

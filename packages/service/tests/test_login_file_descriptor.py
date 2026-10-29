@@ -257,7 +257,6 @@ def test_a_login_file_that_is_a_mount_point_is_refused_before_its_sibling_exists
             "cannot be checked for a mount point: Permission denied",
             id="os-error",
         ),
-        pytest.param(OSError(errno.ENODATA, os.strerror(errno.ENODATA)), "No data", id="no-id"),
         pytest.param(ValueError(CANARY_REFRESH), "failed: ValueError", id="value-error"),
     ],
 )
@@ -303,3 +302,51 @@ def test_without_descriptor_information_the_device_comparison_decides(
         True,
         False,
     ]
+
+
+def test_a_missing_descriptor_entry_is_a_closed_refusal_without_a_sibling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    installation = a_held_installation(tmp_path)
+    (tmp_path / "empty").mkdir()
+    monkeypatch.setattr(login_file, "_DESCRIPTOR_INFORMATION", tmp_path / "empty")
+
+    result = reserve_swap(installation.login)
+
+    assert type(result) is SwapRefused
+    assert "cannot be checked for a mount point" in result.reason
+    assert result.sibling_remains is False
+    assert installation.directory_holds() == [LOGIN_NAME]
+
+
+def test_descriptor_information_that_cannot_be_looked_up_is_a_refusal_not_the_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    installation = a_held_installation(tmp_path)
+    (tmp_path / "plain").write_bytes(b"")
+    monkeypatch.setattr(login_file, "_DESCRIPTOR_INFORMATION", tmp_path / "plain" / "fdinfo")
+
+    result = reserve_swap(installation.login)
+
+    assert type(result) is SwapRefused
+    assert "cannot be checked for a mount point: Not a directory" in result.reason
+    assert installation.directory_holds() == [LOGIN_NAME]
+
+
+def test_the_device_comparison_takes_a_missing_login_for_no_mount_point(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(login_file, "_DESCRIPTOR_INFORMATION", tmp_path / "absent")
+
+    assert login_file.is_mount_point(tmp_path / "missing") is False
+
+
+def test_the_mount_id_is_read_from_descriptor_information_that_holds_it() -> None:
+    text = "pos:\t0\nflags:\t010000000\nmnt_id:\t42\nino:\t1234\n"
+
+    assert login_file.mount_identifier(text) == "42"
+
+
+def test_descriptor_information_without_a_mount_id_cannot_tell() -> None:
+    with pytest.raises(OSError, match="no mount id"):
+        login_file.mount_identifier("pos:\t0\nflags:\t010000000\nino:\t1234\n")
