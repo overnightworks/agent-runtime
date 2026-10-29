@@ -240,8 +240,15 @@ pipe, and reads at most `max_files_bytes` plus one byte in all, synchronously. `
 is a required non-negative `int` argument, never a default. Anything else ends the run with
 `run_output.RunOutputRefused`, whose `cause` is a closed `RunOutputCause` (a replaced
 folder, a link, an entry that is not a regular file, a second name, a name the wire
-refuses, the limit, an unreadable entry) and whose message, log line and chain carry no
-name, path or content.
+refuses, a name present twice, the limit, an unreadable entry) and whose message, log line
+and chain carry no name, path or content.
+
+An adapter may also name sub-folders of the run home (`CliRunStart.picture_folders`; Codex
+names `generated_images`, where its image tool writes a picture and announces none). Each holds
+one folder per thread, and every file in them is read under the same rules and the same
+`max_files_bytes` budget, then merged with `output/` in one name order. A sub-folder that is
+absent holds nothing and refuses nothing; a link, a non-directory or a second name at either
+level refuses. Any other part of the home is not read, and the files carry no media type.
 
 ## Sandbox
 

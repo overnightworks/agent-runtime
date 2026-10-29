@@ -13,7 +13,9 @@ import errno
 import logging
 import os
 import stat
+from collections.abc import Sequence
 from contextlib import ExitStack
+from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Final, NoReturn
@@ -40,6 +42,7 @@ class RunOutputCause(StrEnum):
     NAME_REFUSED = "an output file name the wire refuses"
     OVER_LIMIT = "output files over the limit"
     UNREADABLE = "an output entry that could not be read"
+    NAME_PRESENT_TWICE = "an output file name that is present twice"
 
 
 class RunOutputRefused(Exception):
@@ -55,25 +58,71 @@ def _refuse(cause: RunOutputCause) -> NoReturn:
     raise_without_chain(RunOutputRefused(cause))
 
 
-def collect_output(directories: RunDirectories, max_files_bytes: int) -> tuple[RunFile, ...]:
-    """Every file of the run's output folder in name order; at most ``max_files_bytes`` in all."""
+def collect_output(
+    directories: RunDirectories, max_files_bytes: int, picture_folders: Sequence[str] = (),
+) -> tuple[RunFile, ...]:
+    """The run's output files and its pictures in name order; at most ``max_files_bytes`` in all.
+
+    A picture folder is a sub-folder of the run home holding one folder per thread; an absent one
+    holds nothing. A name present twice refuses the run.
+    """
     with ExitStack() as descriptors:
         tree = _open_folder(directories.working_directory.parent, None, descriptors)
         work = _open_folder(directories.working_directory.name, tree, descriptors)
         output = _open_folder(directories.output.name, work, descriptors)
-        try:
-            names = sorted(os.listdir(output))
-        except OSError:
-            _refuse(RunOutputCause.UNREADABLE)
-        files = []
-        remaining = max_files_bytes
-        for name in names:
-            content = _read_file(name, output, remaining + 1)
-            if len(content) > remaining:
-                _refuse(RunOutputCause.OVER_LIMIT)
-            remaining -= len(content)
-            files.append(_file_of(name, content))
-        return tuple(files)
+        budget = _Budget(max_files_bytes)
+        files = _read_folder(output, budget)
+        if picture_folders:
+            home = _open_folder(directories.home.name, tree, descriptors)
+            for picture_folder in picture_folders:
+                files += _read_pictures(picture_folder, home, budget)
+    files.sort(key=lambda file: file.name)
+    if len({file.name for file in files}) != len(files):
+        _refuse(RunOutputCause.NAME_PRESENT_TWICE)
+    return tuple(files)
+
+
+@dataclass
+class _Budget:
+    remaining: int
+
+
+def _read_pictures(picture_folder: str, home: int, budget: _Budget) -> list[RunFile]:
+    if not _exists(picture_folder, home):
+        return []
+    pictures = []
+    with ExitStack() as descriptors:
+        folder = _open_folder(picture_folder, home, descriptors)
+        for thread in _names_in(folder):
+            with ExitStack() as thread_descriptors:
+                pictures += _read_folder(_open_folder(thread, folder, thread_descriptors), budget)
+    return pictures
+
+
+def _exists(name: str, folder: int) -> bool:
+    try:
+        os.stat(name, dir_fd=folder, follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def _names_in(folder: int) -> list[str]:
+    try:
+        return sorted(os.listdir(folder))
+    except OSError:
+        _refuse(RunOutputCause.UNREADABLE)
+
+
+def _read_folder(folder: int, budget: _Budget) -> list[RunFile]:
+    files = []
+    for name in _names_in(folder):
+        content = _read_file(name, folder, budget.remaining + 1)
+        if len(content) > budget.remaining:
+            _refuse(RunOutputCause.OVER_LIMIT)
+        budget.remaining -= len(content)
+        files.append(_file_of(name, content))
+    return files
 
 
 def _open_folder(path: str | Path, parent: int | None, descriptors: ExitStack) -> int:

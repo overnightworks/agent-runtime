@@ -142,6 +142,10 @@ web_search = "live"
 features.image_generation = true
 ```
 
+A Codex picture reaches the run's files only when the agent's `cli_settings.openai` turns on both
+`features.image_generation` and `features.code_mode_host`. `code_mode_host` lets the model run
+code inside the run's sandbox; that exposure is accepted for the picture.
+
 The levels apply in this order, each over the one before: the adapter's defaults, `[defaults]`,
 `[apps.<app>]`, then `[apps.<app>.agents.<agent>]`. Tables merge per key, recursively; any other
 value replaces, so a scalar at a higher level replaces a whole table below it and an array is

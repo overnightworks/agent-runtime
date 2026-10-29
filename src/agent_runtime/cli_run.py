@@ -140,6 +140,7 @@ class CliRunStart:
     child: ChildProcess
     stdin: bytes = field(repr=False)
     decoder: CliLineDecoder
+    picture_folders: tuple[str, ...] = ()
 
 
 class CliRunAdapter(Protocol):
@@ -216,5 +217,7 @@ async def astream_cli_run(
             finally:
                 await settle_drain(drain)
         final = start.decoder.ending(returncode)
-        ending = final.model_copy(update={"files": collect_output(directories, max_files_bytes)})
+        ending = final.model_copy(
+            update={"files": collect_output(directories, max_files_bytes, start.picture_folders)}
+        )
     yield ending
