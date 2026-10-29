@@ -16,8 +16,9 @@ import struct
 import threading
 import time
 import uuid
-from collections.abc import AsyncGenerator, Callable, Iterator, Mapping
+from collections.abc import AsyncGenerator, Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from itertools import cycle
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -58,6 +59,8 @@ import agent_runtime_service.app as app_module
 import agent_runtime_service.config as config_module
 from agent_runtime import lost_groups, spawn
 from agent_runtime.config import PrivateWorkingRoot
+from agent_runtime_client.run_stream import StreamViolation
+from agent_runtime_client.sse import RunStreamDecoder
 from agent_runtime_client.wire import (
     RunEvent,
     RunStatus,
@@ -161,6 +164,25 @@ def headers() -> dict[str, str]:
 def post_a_run(base_url: str, tools: Mapping[str, str] | None = None) -> list[RunEvent]:
     body = run_body(turn=THREE_MESSAGE_TURN, tools=dict(tools or {}))
     return decoded_events(post_run(base_url, headers(), body).content)
+
+
+def decoded_in_chunks(
+    raw: bytes, chunk_sizes: Sequence[int]
+) -> list[RunEvent | StreamViolation]:
+    """What the client's decoder yields for ``raw`` fed in pieces of the given sizes, in turn.
+
+    A stream violation stays in the list, so it never equals ``decoded_events`` of the whole.
+    """
+    decoder = RunStreamDecoder()
+    decoded: list[RunEvent | StreamViolation] = []
+    sizes = cycle(chunk_sizes)
+    position = 0
+    while position < len(raw):
+        size = next(sizes)
+        decoded += decoder.feed(raw[position : position + size])
+        position += size
+    decoded += decoder.close()
+    return decoded
 
 
 def shown(events: list[RunEvent]) -> list[tuple[str, str | None]]:

@@ -608,6 +608,35 @@ def test_the_three_levels_reach_the_run_as_one_merged_file_only_the_service_wrot
     }
 
 
+def test_an_operators_sandbox_mode_at_every_level_reaches_the_run_beside_the_services_arguments(
+    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    login = a_codex_login_file(tmp_path)
+    capture = tmp_path / "capture"
+    binary = a_service_fake(tmp_path, capture=capture)
+    levels = (
+        {"sandbox_mode": "danger-full-access"},
+        {"sandbox_mode": "workspace-write"},
+        {"sandbox_mode": "workspace-write", "approval_policy": "on-request"},
+    )
+    document = with_levels(codex_document(tmp_path, binary, login), COWRITER, *levels)
+
+    events = drive_over_http(child_cleanup, monkeypatch, a_codex_config(document), post_a_run)
+
+    argv = argv_of(capture)
+    assert shown(events)[-1] == ("succeeded", "done")
+    assert captured_settings(capture) == {
+        **DEFAULT_SETTINGS,
+        "sandbox_mode": "workspace-write",
+        "approval_policy": "on-request",
+    }
+    assert [a for a in argv if a.startswith("--model")] == [f"--model={CODEX_MODEL}"]
+    assert ("--ephemeral" in argv, any(a.startswith("model_instructions_file=") for a in argv)) == (
+        True,
+        True,
+    )
+
+
 def test_a_run_without_cli_settings_gets_the_defaults_and_answers_as_before(
     tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
 ) -> None:
