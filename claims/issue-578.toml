@@ -1,0 +1,7 @@
+claim_id = "1be4ced0456b4883a92ad6476f63bd86"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "a6b9127c9d50f82f390e20985a7fc8a4b0c64613"
+branch = "claude/issue-578-c6-0-codex-renewal-adr"
+scope = ["docs/decisions/0001-agent-service.md"]
+opened_commit = "e0d51dc9a34077ca0141e1695799970662ce4b08"
