@@ -208,6 +208,7 @@ def a_serving_process(
             stdout=output,
             stderr=subprocess.STDOUT,
             cwd=files.configuration.parent,
+            env={**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, sys.path))},
         )
         try:
             _wait_until_serving(process, port, log)
