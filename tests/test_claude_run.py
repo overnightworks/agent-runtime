@@ -256,13 +256,12 @@ def test_the_environment_is_the_closed_one_plus_the_token_and_the_switches(
     assert child.binary == Path("/opt/claude/claude")
 
 
-def test_a_run_builds_with_no_runtime_configuration_installed(tmp_path: Path) -> None:
+def test_a_run_builds_with_no_runtime_configuration_or_picture_folders(tmp_path: Path) -> None:
     reset_config()
     start = started(tmp_path)
 
-    assert (start.child.arguments, start.stdin) == (
-        expected_arguments(tmp_path),
-        HISTORY_STDIN_LINE,
+    assert (start.child.arguments, start.stdin, start.picture_folders) == (
+        expected_arguments(tmp_path), HISTORY_STDIN_LINE, (),
     )
 
 

@@ -90,23 +90,15 @@ class _Budget:
 
 
 def _read_pictures(picture_folder: str, home: int, budget: _Budget) -> list[RunFile]:
-    if not _exists(picture_folder, home):
-        return []
     pictures = []
     with ExitStack() as descriptors:
-        folder = _open_folder(picture_folder, home, descriptors)
+        folder = _open_folder_unless_absent(picture_folder, home, descriptors)
+        if folder is None:
+            return pictures
         for thread in _names_in(folder):
             with ExitStack() as thread_descriptors:
                 pictures += _read_folder(_open_folder(thread, folder, thread_descriptors), budget)
     return pictures
-
-
-def _exists(name: str, folder: int) -> bool:
-    try:
-        os.stat(name, dir_fd=folder, follow_symlinks=False)
-    except FileNotFoundError:
-        return False
-    return True
 
 
 def _names_in(folder: int) -> list[str]:
@@ -131,11 +123,26 @@ def _open_folder(path: str | Path, parent: int | None, descriptors: ExitStack) -
     try:
         descriptor = os.open(path, _FOLDER_FLAGS, dir_fd=parent)
     except OSError as error:
-        if error.errno in _FOLDER_REPLACED_ERRORS:
-            _refuse(RunOutputCause.FOLDER_REPLACED)
-        _refuse(RunOutputCause.UNREADABLE)
+        _refuse_unopenable_folder(error)
     descriptors.callback(os.close, descriptor)
     return descriptor
+
+
+def _open_folder_unless_absent(path: str, parent: int, descriptors: ExitStack) -> int | None:
+    try:
+        descriptor = os.open(path, _FOLDER_FLAGS, dir_fd=parent)
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        _refuse_unopenable_folder(error)
+    descriptors.callback(os.close, descriptor)
+    return descriptor
+
+
+def _refuse_unopenable_folder(error: OSError) -> NoReturn:
+    if error.errno in _FOLDER_REPLACED_ERRORS:
+        _refuse(RunOutputCause.FOLDER_REPLACED)
+    _refuse(RunOutputCause.UNREADABLE)
 
 
 def _read_file(name: str, folder: int, limit_bytes: int) -> bytes:

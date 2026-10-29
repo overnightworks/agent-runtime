@@ -247,8 +247,9 @@ An adapter may also name sub-folders of the run home (`CliRunStart.picture_folde
 names `generated_images`, where its image tool writes a picture and announces none). Each holds
 one folder per thread, and every file in them is read under the same rules and the same
 `max_files_bytes` budget, then merged with `output/` in one name order. A sub-folder that is
-absent holds nothing and refuses nothing; a link, a non-directory or a second name at either
-level refuses. Any other part of the home is not read, and the files carry no media type.
+absent holds nothing and refuses nothing; a link or a non-directory at either level, a second
+name on a file, or a folder that cannot be read refuses. Any other part of the home is not read, and the files
+carry no media type.
 
 ## Sandbox
 

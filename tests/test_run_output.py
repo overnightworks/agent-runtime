@@ -61,7 +61,12 @@ def outside(tmp_path: Path) -> Path:
 @pytest.fixture
 def directories(tmp_path: Path) -> Iterator[RunDirectories]:
     with run_directories(PrivateWorkingRoot(a_private_root(tmp_path)), {}) as made:
-        yield made
+        try:
+            yield made
+        finally:
+            for folder in (made.home, made.home / PICTURES[0]):
+                if folder.is_dir() and not folder.is_symlink():
+                    folder.chmod(0o700)
 
 
 def returns_within_the_bound[T](call: Callable[[], T]) -> T:
@@ -473,7 +478,7 @@ def a_picture_folder_that_is_a_file(directories: RunDirectories, outside: Path) 
 
 
 def a_home_replaced_by_a_link(directories: RunDirectories, outside: Path) -> None:
-    moved = outside / "moved-home"
+    moved = outside / f"{MARKER}-home"
     directories.home.rename(moved)
     directories.home.symlink_to(moved)
 
@@ -501,6 +506,7 @@ def a_picture_that_is_a_fifo(directories: RunDirectories, outside: Path) -> None
 def a_picture_that_is_a_subfolder(directories: RunDirectories, outside: Path) -> None:
     a_picture(directories, "thread", "x").unlink()
     (directories.home / PICTURES[0] / "thread" / MARKER).mkdir()
+    (directories.home / PICTURES[0] / "thread" / MARKER / MARKER).write_bytes(b"x")
 
 
 def a_picture_with_a_second_name(directories: RunDirectories, outside: Path) -> None:
@@ -519,7 +525,17 @@ def a_name_in_two_threads(directories: RunDirectories, outside: Path) -> None:
 
 def pictures_over_the_limit_with_the_output(directories: RunDirectories, outside: Path) -> None:
     (directories.output / "a").write_bytes(b"x" * 8)
-    a_picture(directories, "thread", "b", b"x" * 9)
+    a_picture(directories, "thread", MARKER, b"x" * 9)
+
+
+def a_home_that_is_not_searchable(directories: RunDirectories, outside: Path) -> None:
+    a_picture(directories, "thread", MARKER)
+    directories.home.chmod(0o600)
+
+
+def a_picture_folder_that_is_not_searchable(directories: RunDirectories, outside: Path) -> None:
+    a_picture(directories, "thread", MARKER)
+    (directories.home / PICTURES[0]).chmod(0o600)
 
 
 PICTURE_REFUSALS = [
@@ -542,6 +558,10 @@ PICTURE_REFUSALS = [
     pytest.param(RunOutputCause.NAME_PRESENT_TWICE, a_name_in_two_threads, id="twice-threads"),
     pytest.param(
         RunOutputCause.OVER_LIMIT, pictures_over_the_limit_with_the_output, id="over-the-limit"
+    ),
+    pytest.param(RunOutputCause.UNREADABLE, a_home_that_is_not_searchable, id="home-unsearchable"),
+    pytest.param(
+        RunOutputCause.UNREADABLE, a_picture_folder_that_is_not_searchable, id="folder-unsearchable"
     ),
 ]
 
