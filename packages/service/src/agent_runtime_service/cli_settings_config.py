@@ -8,8 +8,8 @@ from typing import Final, Self, cast
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator, model_validator
 
 from agent_runtime.claude.run import check_tool_name, settings_document
+from agent_runtime.cli_run import RELAY_SERVER_NAME
 from agent_runtime.cli_settings import CliSettings, toml_key
-from agent_runtime.codex.run import RELAY_SERVER_NAME as CODEX_RELAY_SERVER_NAME
 
 
 class _CliSettingsSection(BaseModel):
@@ -25,7 +25,7 @@ _CODEX_SETTINGS_THE_SERVICE_OWNS: Final[_OwnedPaths] = {
     ("model_provider",): _SET_MODEL_INSTEAD,
     ("model_instructions_file",): "set the run request's system text instead",
     ("cli_auth_credentials_store",): "set [cli.openai] token_file instead",
-    ("mcp_servers", CODEX_RELAY_SERVER_NAME): "the service attaches the run's tool relay",
+    ("mcp_servers", RELAY_SERVER_NAME): "the service attaches the run's tool relay",
 }
 
 

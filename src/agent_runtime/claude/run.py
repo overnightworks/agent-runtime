@@ -24,6 +24,7 @@ from agent_runtime.claude.provider import (
     _mcp_tool_prefix,
 )
 from agent_runtime.cli_run import (
+    RELAY_SERVER_NAME,
     CliRunStart,
     RelayAccess,
     RelayState,
@@ -46,7 +47,6 @@ from agent_runtime_client.wire import TurnMessage
 
 log = logging.getLogger(__name__)
 
-RELAY_SERVER_NAME: Final = "relay"
 _TOOL_TIMEOUT_VARIABLE: Final = "MCP_TOOL_TIMEOUT"
 _MILLISECONDS_PER_SECOND: Final = 1000
 # The CLI counts one turn per tool-using response and checks its limit after

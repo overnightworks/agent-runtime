@@ -38,11 +38,15 @@ from tests.support.provider_test_support import (
     held_slots,
 )
 
-from agent_runtime.cli_run import CliStreamLineTooLong, RelayAccess, astream_cli_run
+from agent_runtime.cli_run import (
+    RELAY_TOKEN_VARIABLE,
+    CliStreamLineTooLong,
+    RelayAccess,
+    astream_cli_run,
+)
 from agent_runtime.cli_settings import CliSettings
 from agent_runtime.codex.run import (
     CODEX_CLI_LOGIN_REFUSED_DETAIL,
-    RELAY_TOKEN_VARIABLE,
     CodexAnswerMissing,
     CodexRun,
     CodexRunFailure,
