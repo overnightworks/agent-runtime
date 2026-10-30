@@ -1,8 +1,0 @@
-claim_id = "9d0fcbdfea974d0dae134fce69066823"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "71d697749628253db5a4896133245a2ab693c3f6"
-branch = "claude/issue-629-b0-the-access-token-timing-moves-into-on"
-scope = ["packages/service/src/agent_runtime_service/login_standing.py", "packages/service/src/agent_runtime_service/renewal.py", "packages/service/tests/test_login_standing.py", "packages/service/tests/test_renewal.py", "src/agent_runtime/codex_login.py", "src/agent_runtime/login_timing.py", "tests/test_codex_login.py", "tests/test_login_timing.py"]
-opened_commit = "1c51805ac865efbd8673d29b35bb45ee817c32e4"
-whole_reason = "One move: the reader changes owner and every caller and its tests move with it in the same change, so no shim or second copy exists in between."
