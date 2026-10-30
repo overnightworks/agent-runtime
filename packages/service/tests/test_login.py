@@ -291,6 +291,7 @@ def a_current_codex_login(last_refresh: str | None = None) -> bytes:
         (Provider.ANTHROPIC, None),
         (Provider.XAI, None),
     ],
+    ids=["codex", "codex-long-since-refreshed", "claude", "grok"],
 )
 def test_check_accepts_a_file_the_reader_accepts_without_reading_input_or_writing(
     tmp_path: Path, said: Said, provider: Provider, last_refresh: str | None
