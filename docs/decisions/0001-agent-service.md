@@ -3907,8 +3907,20 @@ Built in #599, #600, #604 and #606 under #593.
 server's answer to an empty refresh token; whether the CLI stops re-sending on a permanent
 4xx; whether a turn already running stays valid across a rotation; the container shape with a
 read-write bind of the login directory. These are R-live's questions, with the real `codex`
-and the real bind; reporting a login that is due or expired is R2's (#607). The service configures no
-logging, so `RENEWED` (INFO) is not printed; failures are.
+and the real bind. The service configures no logging, so `RENEWED` (INFO) is not printed;
+failures are.
+
+**Reporting it (#607).** `agent-runtime-service-login --check` judges a renewable login from the
+file alone, at the wall time it reads once, with no status store and no log scraping: not due,
+due, expiry unknown (with the closed cause), no refresh token, not usable, expired, or not
+renewed in time. A login that has been due for 90 minutes or more, twice the 15-minute interval
+plus the one-hour backoff, counts as not renewed: one failed attempt and its retry never ask for
+a sign-in. The command has one exit table for install and check: 0 no action or written, 1 not
+written, 2 configuration, 3 a `.<file>.new` sibling is present, 4 sign in again, 5 the expiry
+cannot be read (a format this release does not know, which a sign-in does not fix). Alternatives
+weighed: a status file the service writes (a second store that goes stale with the service),
+scraping its log (it logs failures only and configures no logging), and a distinct exit per state
+(a host's setup would read a table it must keep in step).
 
 #### A1b-MX one real Codex picture through the service's own run
 
