@@ -3,6 +3,6 @@ agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
 role = "builder"
 base = "4569b874cdd19ced52624cfbbcd56d2b321286a0"
 branch = "claude/issue-642-a3-grokrun-attaches-the-relay"
-scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "packages/service/src/agent_runtime_service/cli_settings_config.py", "src/agent_runtime/claude/run.py", "src/agent_runtime/cli_run.py", "src/agent_runtime/codex/run.py", "src/agent_runtime/grok/run.py", "tests/support/grok_support.py", "tests/test_grok_run.py"]
+scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "packages/service/src/agent_runtime_service/cli_settings_config.py", "src/agent_runtime/claude/run.py", "src/agent_runtime/cli_run.py", "src/agent_runtime/codex/run.py", "src/agent_runtime/grok/run.py", "tests/support/grok_support.py", "tests/test_codex_run.py", "tests/test_grok_run.py"]
 opened_commit = "78d9da6aaed09f6fb632c11e574d1c6bbefeafe5"
 whole_reason = "Five production files, about 95 added and 15 deleted lines, three of them import-only edits for the one owner of the relay's name and variable: the attachment, the permission shape and the decoder's relay rule together make one ruled line true for Grok (a relay run reaches the app only through the relay and ends on any other tool), and any one alone leaves a GrokRun that either cannot reach the relay or does not end on a native tool."
