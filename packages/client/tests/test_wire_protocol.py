@@ -778,12 +778,9 @@ def test_any_other_agent_roles_are_refused(roles: object) -> None:
 def test_a_run_request_may_name_a_model_or_none() -> None:
     named = RunRequest.model_validate({**REQUEST, "model": "anthropic/sonnet"})
     null = RunRequest.model_validate({**REQUEST, "model": None})
+    absent = RunRequest.model_validate(REQUEST)
 
-    assert (named.model, null.model, RunRequest.model_validate(REQUEST).model) == (
-        "anthropic/sonnet",
-        None,
-        None,
-    )
+    assert (named.model, null.model, absent.model) == ("anthropic/sonnet", None, None)
 
 
 @pytest.mark.parametrize(
