@@ -22,14 +22,10 @@ from typing import Final
 
 from agent_runtime.anchored_turn import CliProcessReservation
 from agent_runtime.cli_run import CliRunStart
-from agent_runtime.codex.renewal import CodexRenewal, CopyUnchanged
-from agent_runtime.codex_login import (
-    CodexRenewalRefusal,
-    RenewableCodexLogin,
-    read_codex_timing,
-    renewable_codex_login,
-)
+from agent_runtime.codex.renewal import CodexRenewal
+from agent_runtime.codex_login import read_codex_timing, renewable_codex_login
 from agent_runtime.config import PrivateWorkingRoot
+from agent_runtime.login_renewal import CopyUnchanged, RenewableLogin, RenewalRefusal, RenewalRun
 from agent_runtime.login_timing import AccessTokenTiming, UnreadableTiming
 from agent_runtime.process import (
     CliEnvironmentUnavailableError,
@@ -120,9 +116,9 @@ class RenewalEntry:
     """What one provider's renewal is: its deadline, its reader and timing, and its CLI run."""
 
     deadline_seconds: float
-    renewable: Callable[[bytes], RenewableCodexLogin | CodexRenewalRefusal]
+    renewable: Callable[[bytes], RenewableLogin | RenewalRefusal]
     timing: Callable[[bytes, int], AccessTokenTiming | UnreadableTiming]
-    run: Callable[[Path, RenewableCodexLogin, int], CodexRenewal]
+    run: Callable[[Path, RenewableLogin, int], RenewalRun]
 
 
 CODEX_RENEWAL: Final = RenewalEntry(
@@ -135,8 +131,8 @@ RENEWALS: Final[Mapping[Provider, RenewalEntry]] = {Provider.OPENAI: CODEX_RENEW
 
 
 def _judged(
-    original: RenewableCodexLogin,
-    result: RenewableCodexLogin,
+    original: RenewableLogin,
+    result: RenewableLogin,
     now: int,
     entry: RenewalEntry,
 ) -> NotRenewedCause | None:
@@ -190,8 +186,8 @@ class _Pending:
     """An attempt whose end is not settled: everything it still holds."""
 
     reserved: ReservedSwap
-    login: RenewableCodexLogin
-    run: CodexRenewal
+    login: RenewableLogin
+    run: RenewalRun
     home: Path
     holder: HolderReservation
     confirmation: _EndConfirmation
@@ -291,15 +287,15 @@ class ProviderRenewer:
             return login
         return self._due_then_run(reserved, login)
 
-    def _source(self, reserved: ReservedSwap) -> RenewableCodexLogin | RenewalReport:
+    def _source(self, reserved: ReservedSwap) -> RenewableLogin | RenewalReport:
         try:
             document = read_secret_file(self._token_file, "login file")
         except UnsoundSecretFile as refusal:
             return self._abandoned(reserved, RenewalOutcome.SOURCE_REFUSED, refusal=str(refusal))
         login = self._entry.renewable(document)
-        if login is CodexRenewalRefusal.NO_REFRESH_TOKEN:
+        if login is RenewalRefusal.NO_REFRESH_TOKEN:
             return self._abandoned(reserved, RenewalOutcome.NO_REFRESH_TOKEN)
-        if isinstance(login, CodexRenewalRefusal):
+        if isinstance(login, RenewalRefusal):
             return self._abandoned(
                 reserved,
                 RenewalOutcome.SOURCE_REFUSED,
@@ -307,7 +303,7 @@ class ProviderRenewer:
             )
         return login
 
-    def _due_then_run(self, reserved: ReservedSwap, login: RenewableCodexLogin) -> RenewalReport:
+    def _due_then_run(self, reserved: ReservedSwap, login: RenewableLogin) -> RenewalReport:
         now = self._wall_clock()
         timing = self._entry.timing(login.document, now)
         unreadable = timing if isinstance(timing, UnreadableTiming) else None
@@ -334,7 +330,7 @@ class ProviderRenewer:
     def _spawned(
         self,
         reserved: ReservedSwap,
-        login: RenewableCodexLogin,
+        login: RenewableLogin,
         run: CodexRenewal,
         slot: CliProcessReservation,
         source_timing: UnreadableTiming | None,
@@ -475,7 +471,7 @@ class ProviderRenewer:
         if document == pending.login.document:
             return self._abandoning(pending, RenewalOutcome.NOT_RENEWED)
         result = self._entry.renewable(document)
-        if isinstance(result, CodexRenewalRefusal):
+        if isinstance(result, RenewalRefusal):
             return self._abandoning(pending, RenewalOutcome.MALFORMED_RESULT)
         cause = _judged(pending.login, result, self._wall_clock(), self._entry)
         written = pending.reserved.commit(

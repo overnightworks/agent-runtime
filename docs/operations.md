@@ -388,7 +388,7 @@ service's reader on the file as it stands and reads no input; it writes nothing 
 token. Its first line, kept verbatim, says the reader accepts the file, not that the provider does.
 For `openai` it then prints one standing line from the file alone: not due for renewal, due for
 renewal (exit 0, a running service renews it), or its expiry cannot be read with the cause (exit 5);
-the line gives the expiry in UTC. A login that holds no refresh token, is not a usable Codex login,
+the line gives the expiry in UTC. A login that holds no refresh token, is not a usable login,
 has expired, or has been due for 90 minutes or more (twice the 15-minute interval plus the one-hour
 backoff) without being renewed exits 4: sign in again. A sign-in verdict while a `.<file>.new` is
 present exits 3 instead, with the held-sibling sentence. A sibling beside a login

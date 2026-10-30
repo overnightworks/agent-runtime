@@ -139,7 +139,7 @@ def _sign_in_exit(sibling: Path) -> int:
 
 def _standing_exit(subject: str, token_file: Path, sibling: Path, entry: RenewalEntry) -> int:
     """Reads the login once more and says where it stands; the exit follows the standing."""
-    from agent_runtime.codex_login import CodexRenewalRefusal
+    from agent_runtime.login_renewal import RenewalRefusal
     from agent_runtime_service.login_standing import (
         RENEWAL_WINDOW_SECONDS,
         LoginStanding,
@@ -164,7 +164,7 @@ def _standing_exit(subject: str, token_file: Path, sibling: Path, entry: Renewal
             f"{standing.state}: {standing.cause}; the service still tries to renew it once a day,"
             " and an update of agent-runtime is needed to read it"
         ),
-        LoginStanding.NOT_USABLE: f"{CodexRenewalRefusal.NOT_USABLE}; sign in again",
+        LoginStanding.NOT_USABLE: f"{RenewalRefusal.NOT_USABLE}; sign in again",
         LoginStanding.NOT_RENEWABLE: (
             f"{standing.state}, so the service cannot renew it; sign in again"
         ),

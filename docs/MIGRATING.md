@@ -2,6 +2,14 @@
 
 Read by a host bumping its pin; each release that breaks a host has one section, newest first.
 
+## Migrating to 0.14.0
+
+| Before (0.13.0) | Now |
+| --- | --- |
+| `agent_runtime.codex_login.CodexRenewalRefusal` (its `NOT_USABLE` read "the document is not a usable Codex login") | `agent_runtime.login_renewal.RenewalRefusal`, with no alias; `NOT_USABLE` reads "the document is not a usable login". |
+| `agent_runtime.codex.renewal.CopyUnchanged` | `agent_runtime.login_renewal.CopyUnchanged`, with no alias. |
+| `agent_runtime.codex_login.UnreadableTiming` and `agent_runtime.codex_login.CodexTiming` | `agent_runtime.login_timing.UnreadableTiming` and `agent_runtime.login_timing.AccessTokenTiming`, with no alias. |
+
 ## Migrating to 0.13.0
 
 | Before (0.12.0) | Now |

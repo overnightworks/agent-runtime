@@ -70,6 +70,7 @@ source_modules =
     agent_runtime.secret_file
     agent_runtime.codex_login
     agent_runtime.grok_login
+    agent_runtime.login_renewal
     agent_runtime.openai_adapter
     agent_runtime.sandbox
 forbidden_modules =
