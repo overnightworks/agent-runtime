@@ -4,13 +4,16 @@ Reads a provider's new login document on standard input, checks it with the serv
 that provider and swaps it in over the ``token_file`` of its ``[cli.<provider>]`` table through
 the one login writer.
 ``--check`` runs that reader on the file as it stands and reads no input; it does not prove the
-provider still accepts the login.
+provider still accepts the login. For a provider the service renews, it then reports the login's
+standing from the file alone and writes nothing.
 
-Exit 0: written (or accepted); when the directory could not be synced after the rename the line
-says "written; durability not confirmed" and a crash before it is written could bring back the
-old login, never a mix. 1: not written, the old file stays (or the file is refused).
-2: refused before standard input was read. 3: not written, and the command's own sibling file is
-not confirmed gone.
+One exit table for both modes. 0: written (install), or nothing is asked of the operator
+(``--check``); when the directory could not be synced after the rename the line says "written;
+durability not confirmed" and a crash before it is written could bring back the old login, never
+a mix. 1: not written, the old file stays. 2: bad configuration, platform, a missing table or
+usage, refused before standard input was read. 3: a ``.<file>.new`` sibling is present or not
+confirmed gone; nothing is written (``--check``: with a sign-in verdict). 4: sign in again
+(``--check`` only). 5: the login's expiry cannot be read (``--check`` only).
 
 SIGINT, SIGTERM and SIGHUP are disregarded from hardening on until the process exits, except
 while standard input is read, so no interrupt can reach a frame that holds the document or change
@@ -24,14 +27,17 @@ import argparse
 import os
 import signal
 import sys
+import time
 from collections.abc import Callable, Iterable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from types import FrameType
-from typing import BinaryIO, Final
+from typing import TYPE_CHECKING, BinaryIO, Final
 
-from agent_runtime.secret_file import MAX_SECRET_FILE_BYTES, UnsoundSecretFile
+from agent_runtime.secret_file import MAX_SECRET_FILE_BYTES, UnsoundSecretFile, read_secret_file
 from agent_runtime_service.cli import EXIT_BAD_CONFIG
 from agent_runtime_service.login_file import (
+    SiblingHeld,
     SwappedDurabilityUnconfirmed,
     SwapRefused,
     SwapResult,
@@ -41,8 +47,13 @@ from agent_runtime_service.login_file import (
 )
 from agent_runtime_service.process_hardening import StartupHardeningRefused, harden_process
 
+if TYPE_CHECKING:
+    from agent_runtime_service.renewal import RenewalEntry
+
 EXIT_NOT_WRITTEN: Final = 1
 EXIT_REMAINS: Final = 3
+EXIT_SIGN_IN_AGAIN: Final = 4
+EXIT_EXPIRY_UNKNOWN: Final = 5
 PROGRAM_NAME: Final = "agent-runtime-service-login"
 INTERRUPT_SIGNAL_NAMES: Final = ("SIGINT", "SIGTERM", "SIGHUP")
 
@@ -110,17 +121,83 @@ def _read_and_swapped(
     return swap_in_login_file(token_file, document, read_login)
 
 
-def _checked(subject: str, token_file: Path, read_login: Callable[[Path], object]) -> int:
+def _expiry_text(expires_at: int | None) -> str:
+    """The expiry in UTC; one beyond ``datetime``'s range is shown as epoch seconds."""
+    try:
+        return datetime.fromtimestamp(expires_at or 0, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except (OverflowError, ValueError, OSError):
+        return str(expires_at)
+
+
+def _sign_in_exit(sibling: Path) -> int:
+    """4, or 3 with the held-sibling sentence when a sibling may exist beside the login."""
+    if _sibling_left_over(sibling):
+        _say(held_sibling_sentence(sibling))
+        return EXIT_REMAINS
+    return EXIT_SIGN_IN_AGAIN
+
+
+def _standing_exit(subject: str, token_file: Path, sibling: Path, entry: RenewalEntry) -> int:
+    """Reads the login once more and says where it stands; the exit follows the standing."""
+    from agent_runtime.codex_login import CodexRenewalRefusal
+    from agent_runtime_service.login_standing import (
+        RENEWAL_WINDOW_SECONDS,
+        LoginStanding,
+        login_standing,
+    )
+
+    try:
+        document = read_secret_file(token_file, "login file")
+    except UnsoundSecretFile as refusal:
+        _say(f"{subject}: {refusal}")
+        return _sign_in_exit(sibling)
+    standing = login_standing(document, int(time.time()), entry)
+    expiry = _expiry_text(standing.expires_at)
+    window_minutes = RENEWAL_WINDOW_SECONDS // 60
+    sentences = {
+        LoginStanding.USABLE: f"{standing.state}; it expires at {expiry}",
+        LoginStanding.DUE: (
+            f"{standing.state}, which a running service makes within {window_minutes} minutes;"
+            f" it expires at {expiry}"
+        ),
+        LoginStanding.EXPIRY_UNKNOWN: (
+            f"{standing.state}: {standing.cause}; the service still tries to renew it once a day,"
+            " and an update of agent-runtime is needed to read it"
+        ),
+        LoginStanding.NOT_USABLE: f"{CodexRenewalRefusal.NOT_USABLE}; sign in again",
+        LoginStanding.NOT_RENEWABLE: (
+            f"{standing.state}, so the service cannot renew it; sign in again"
+        ),
+        LoginStanding.EXPIRED: f"{standing.state} at {expiry}; sign in again",
+        LoginStanding.NOT_RENEWED_IN_TIME: (
+            f"due for renewal for {window_minutes} minutes or more and not renewed: the service"
+            " is not running or its renewal fails, and its log names the cause; sign in again;"
+            f" it expires at {expiry}"
+        ),
+    }
+    _say(f"{subject}: {sentences[standing.state]}")
+    if standing.state is LoginStanding.EXPIRY_UNKNOWN:
+        return EXIT_EXPIRY_UNKNOWN
+    return _sign_in_exit(sibling) if standing.state.asks_for_sign_in else 0
+
+
+def _checked(
+    subject: str,
+    token_file: Path,
+    sibling: Path,
+    read_login: Callable[[Path], object],
+    entry: RenewalEntry | None,
+) -> int:
     try:
         read_login(token_file)
     except UnsoundSecretFile as refusal:
         _say(f"{subject}: {refusal}")
-        return EXIT_NOT_WRITTEN
+        return _sign_in_exit(sibling)
     _say(
         f"{subject}: accepted by the service's reader;"
         " whether the provider still accepts it shows only in a run"
     )
-    return 0
+    return 0 if entry is None else _standing_exit(subject, token_file, sibling, entry)
 
 
 def _sibling_left_over(sibling: Path) -> bool:
@@ -137,20 +214,18 @@ def _sibling_left_over(sibling: Path) -> bool:
 def _installed(
     subject: str,
     token_file: Path,
+    sibling: Path,
     read_login: Callable[[Path], object],
     standard_input: BinaryIO | None,
 ) -> int:
-    sibling = swap_sibling_or_refusal(token_file)
-    if isinstance(sibling, SwapRefused):
-        _say(f"{subject}: not written: {sibling.reason}")
-        return EXIT_BAD_CONFIG
     if _sibling_left_over(sibling):
         _say(held_sibling_sentence(sibling))
-        return EXIT_BAD_CONFIG
+        return EXIT_REMAINS
     result = _read_and_swapped(standard_input, token_file, read_login)
     if isinstance(result, SwapRefused):
         _say(f"{subject}: not written: {result.reason}")
-        return EXIT_REMAINS if result.sibling_remains else EXIT_NOT_WRITTEN
+        held = result.sibling_remains or isinstance(result, SiblingHeld)
+        return EXIT_REMAINS if held else EXIT_NOT_WRITTEN
     if isinstance(result, SwappedDurabilityUnconfirmed):
         _say(f"{subject}: written; durability not confirmed: {result.reason}")
     else:
@@ -180,6 +255,7 @@ def main(argv: Sequence[str] | None = None, standard_input: BinaryIO | None = No
     disregard_interrupts()
     # Imported only now, as the service's start does: its modules need Unix-only constants.
     from agent_runtime_service.config import LOGIN_READERS, ConfigError, Provider, load_config
+    from agent_runtime_service.renewal import RENEWALS
 
     arguments = _arguments(argv, LOGIN_READERS)
     try:
@@ -193,12 +269,17 @@ def main(argv: Sequence[str] | None = None, standard_input: BinaryIO | None = No
         _say(f"cli.{arguments.provider}: no such table")
         return EXIT_BAD_CONFIG
     subject = f"cli.{arguments.provider}.token_file"
+    sibling = swap_sibling_or_refusal(table.token_file)
+    if isinstance(sibling, SwapRefused):
+        _say(f"{subject}: {sibling.reason}")
+        return EXIT_BAD_CONFIG
     read_login = LOGIN_READERS[provider]
     if arguments.check:
-        return _checked(subject, table.token_file, read_login)
+        return _checked(subject, table.token_file, sibling, read_login, RENEWALS.get(provider))
     return _installed(
         subject,
         table.token_file,
+        sibling,
         read_login,
         sys.stdin.buffer if standard_input is None and sys.stdin is not None else standard_input,
     )
