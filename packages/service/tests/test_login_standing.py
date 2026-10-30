@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import time
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -192,13 +193,14 @@ def checked(
     installation: Installation,
     said: Said,
     *,
-    leaves: tuple[bytes | None, list[str]] | None = None,
+    leaves: Snapshots | None = None,
     also_secret: tuple[bytes, ...] = (),
 ) -> tuple[int, str]:
     """``--check`` reads no input and changes nothing: the file, its inode, the directory.
 
-    ``leaves`` names the login's bytes and the directory listing a hook deliberately leaves
-    instead; ``also_secret`` adds the documents a hook swaps in to those that stay unprinted.
+    ``leaves`` holds the snapshot a hook took right after its deliberate change; the final
+    state must equal it, so a further change with the same bytes fails; ``also_secret``
+    adds the documents a hook swaps in to those that stay unprinted.
     """
     stream = Stream(b"never read")
     before = installation.snapshot()
@@ -211,17 +213,29 @@ def checked(
     if leaves is None:
         assert after == before
     else:
-        assert (after[0], after[2]) == leaves
+        assert after == leaves[-1]
     assert not any(secret in heard for document in documents for secret in secrets_in(document))
     return status, heard
 
 
 def secrets_in(document: bytes) -> tuple[str, ...]:
-    """The tokens of a Codex login, else the whole document: neither may be printed."""
+    """Every string value of the document, else its whole text: none may be printed."""
     try:
-        return the_secrets_of(document)
-    except (KeyError, ValueError):
+        return tuple(string_values(json.loads(document)))
+    except ValueError:
         return (document.decode(errors="replace").strip(),)
+
+
+def string_values(node: object) -> Iterator[str]:
+    if isinstance(node, str):
+        if node:
+            yield node
+    elif isinstance(node, dict):
+        for value in node.values():
+            yield from string_values(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from string_values(value)
 
 
 def issued_ago(seconds: int, **keywords: Any) -> bytes:
@@ -426,9 +440,14 @@ def test_a_provider_without_a_renewal_gets_only_the_readers_verdict(
 # Two reads, never a mix.
 
 
+type Snapshots = list[tuple[bytes | None, int | None, list[str]]]
+
+
 def swapped_right_after_accepting(
     monkeypatch: pytest.MonkeyPatch, installation: Installation, replacement: bytes | None
-) -> None:
+) -> Snapshots:
+    """Swap the file once the reader accepted it; the list holds the state that swap leaves."""
+    left: Snapshots = []
     real = service_config.LOGIN_READERS[installation.provider]
 
     def reading(path: Path) -> object:
@@ -437,9 +456,11 @@ def swapped_right_after_accepting(
             path.unlink()
         else:
             write_login(path, replacement)
+        left.append(installation.snapshot())
         return accepted
 
     monkeypatch.setitem(service_config.LOGIN_READERS, installation.provider, reading)
+    return left
 
 
 @pytest.mark.parametrize(
@@ -462,13 +483,13 @@ def test_the_standing_describes_the_document_of_the_second_read(
     installation = an_openai_login(tmp_path, older)
     newer_issued = int(time.time()) - newer_age
     newer = a_login_at(newer_issued)
-    swapped_right_after_accepting(monkeypatch, installation, newer)
+    left = swapped_right_after_accepting(monkeypatch, installation, newer)
 
     with said.watching():
         status, heard = checked(
             installation,
             said,
-            leaves=(newer, installation.directory_holds()),
+            leaves=left,
             also_secret=(newer,),
         )
 
@@ -482,12 +503,9 @@ def test_a_file_removed_after_the_reader_accepted_it_asks_for_a_sign_in(
     tmp_path: Path, said: Said, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     installation = an_openai_login(tmp_path, issued_ago(MARGIN_SECONDS))
-    swapped_right_after_accepting(monkeypatch, installation, None)
-    listing_without_login = [
-        name for name in installation.directory_holds() if name != installation.login.name
-    ]
+    left = swapped_right_after_accepting(monkeypatch, installation, None)
 
-    status, heard = checked(installation, said, leaves=(None, listing_without_login))
+    status, heard = checked(installation, said, leaves=left)
 
     assert status == EXIT_SIGN_IN_AGAIN
     assert "cannot be read: No such file or directory" in heard
