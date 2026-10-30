@@ -2,6 +2,15 @@
 
 Read by a host bumping its pin; each release that breaks a host has one section, newest first.
 
+## Migrating to 0.15.0
+
+| Before (0.14.0) | Now |
+| --- | --- |
+| `GrokRun(binary, login, system, history, *, model, settings)` was always tool-free. | Three more keywords, `relay` (`RelayAccess` or `None`), `tool_timeout_seconds` (`float` or `None`) and `max_tool_calls` (`int` or `None`), all `None` by default and given all three or none. A subset, a timeout that is not finite and positive, or a `max_tool_calls` that is not an integer from 1 to 4294967294 raises `ChildProcessSpecificationError`, and so does a relay run whose settings name any `mcp_servers` entry other than `relay` (the error names the path). With a relay the run writes `mcp_servers.relay` into its `config.toml`, gives the child the relay's secret in its environment and opens only the relay's tools. A host that builds a tool-free `GrokRun` needs nothing. |
+| `GrokStreamDecoder()` | `GrokStreamDecoder(*, relay_attached)`, a required keyword. With `relay_attached=False` it ends on every tool event as before. |
+| `GrokToolCalled` ended a run that called any tool. | It ends a run that called a tool outside the run's relay: every tool event in a tool-free run, and in a relay run every tool event except a relay call and its running or completed updates. A relay call with any other status ends the run with the new `GrokRelayCallRefused`. |
+| `max_turns_reached` ended a Grok run with `GrokUnknownStreamPart`. | It ends the run with the new `GrokTurnLimitReached`. |
+
 ## Migrating to 0.14.0
 
 | Before (0.13.0) | Now |
