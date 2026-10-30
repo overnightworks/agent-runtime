@@ -10,7 +10,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
-from agent_runtime.codex_login import CodexRenewalRefusal, UnreadableTiming
+from agent_runtime.codex_login import CodexRenewalRefusal
+from agent_runtime.login_timing import UnreadableTiming
 from agent_runtime_service.renewal import RenewalEntry
 from agent_runtime_service.renewal_schedule import (
     RENEWAL_BACKOFF_SECONDS,

@@ -56,8 +56,9 @@ from tests.support.service_table_support import write_login
 
 from agent_runtime.codex.renewal import CodexRenewal
 from agent_runtime.codex.run import AUTH_FILE_NAME
-from agent_runtime.codex_login import CodexRenewalRefusal, UnreadableTiming, blanked_copy
+from agent_runtime.codex_login import CodexRenewalRefusal, blanked_copy
 from agent_runtime.config import reset_config
+from agent_runtime.login_timing import UnreadableTiming
 from agent_runtime.process import CliRunReason
 from agent_runtime.secret_file import SecretFileFault
 from agent_runtime_service import login_file
