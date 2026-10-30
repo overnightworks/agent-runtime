@@ -34,6 +34,7 @@ from agent_runtime.claude.run import ClaudeRun
 from agent_runtime.cli_run import CliRunAdapter, RelayAccess, astream_cli_run
 from agent_runtime.cli_settings import CliSettings
 from agent_runtime.codex.run import CodexRun
+from agent_runtime.codex_login import CodexLogin
 from agent_runtime.config import PrivateWorkingRoot
 from agent_runtime.errors import raise_without_chain
 from agent_runtime.events import FinalEvent, StreamEvent
@@ -129,8 +130,21 @@ def _tool_free_run[Login](
     )
 
 
+def _codex_run(launch: ProviderLaunch, login: CodexLogin, inputs: RunInputs) -> CliRunAdapter:
+    return CodexRun(
+        launch.binary,
+        login,
+        inputs.turn.system,
+        tuple(inputs.turn.messages),
+        model=inputs.model,
+        settings=inputs.settings,
+        relay=inputs.relay,
+        tool_timeout_seconds=None if inputs.relay is None else launch.tool_timeout_seconds,
+    )
+
+
 def codex_run(launch: ProviderLaunch) -> LoggedInRun:
-    return partial(_tool_free_run, CodexRun, launch, read_codex_login(launch.token_file))
+    return partial(_codex_run, launch, read_codex_login(launch.token_file))
 
 
 def grok_run(launch: ProviderLaunch) -> LoggedInRun:

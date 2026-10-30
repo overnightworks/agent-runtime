@@ -491,7 +491,7 @@ def _value(table: object, key: str) -> object:
     return getattr(table, key)
 
 
-RELAY_ATTACHED_PROVIDERS: Final = frozenset({Provider.ANTHROPIC})
+RELAY_ATTACHED_PROVIDERS: Final = frozenset({Provider.ANTHROPIC, Provider.OPENAI})
 
 
 def _refuse_an_origin_without_signing(document: object) -> None:

@@ -20,7 +20,7 @@ before any token is verified or the body is read; the header's value is never re
    (``ServiceConfig.offered_models``) answers ``model_not_offered``;
 6. the route (``agent_runtime_service.routing``), which reads that model and the
    installation's listed models; a run that names tools and whose route is a provider without
-   the tool relay (Codex, Grok) answers ``not_enabled`` here, before a place, a capability or
+   the tool relay (Grok) answers ``not_enabled`` here, before a place, a capability or
    a child;
 7. for the CLI route, the service's admission limit (``agent_runtime_service.admission``): a
    subscription run beyond it answers ``busy`` with ``Retry-After`` before anything is

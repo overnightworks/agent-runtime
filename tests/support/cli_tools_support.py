@@ -1,4 +1,4 @@
-"""A fake Claude that talks to the run's relay, and a TLS fake app, for the CLI runner's tool path.
+"""Fake CLIs that talk to the run's relay, and a TLS fake app, for the CLI runner's tool path.
 
 ``a_relay_calling_claude`` writes an executable Python stand-in: it reads ``$HOME/relay-mcp.json``,
 speaks ``initialize``, ``tools/list`` and ``tools/call`` to the relay with the bearer header
@@ -7,6 +7,10 @@ the file names, announces the relay as connected, optionally prints the CLI's ow
 ``capture``, and ends with a ``result`` line. A refused
 ``tools/list`` leaves it with no tools, and ``give_up_when_present`` makes it give each call up
 (``notifications/cancelled``, then a closed connection) once that file exists, instead of waiting.
+
+``a_relay_calling_codex`` is Codex's stand-in: it reads the relay entry from
+``$CODEX_HOME/config.toml`` and the secret from the variable that entry names, records what it
+was given the same way, and prints ``exec --json`` lines around its calls.
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ from __future__ import annotations
 import json
 import stat
 import sys
+import tomllib
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -233,6 +238,122 @@ def a_relay_calling_claude(
     return binary
 
 
+_CODEX_SOURCE = """\
+#!{python}
+import json, os, sys, tomllib, urllib.error, urllib.request
+
+PLAN = json.loads({plan!r})
+if sys.argv[1:] == ["--version"]:
+    print(PLAN["version_line"])
+    sys.exit(0)
+stdin = sys.stdin.read()
+home = os.environ["CODEX_HOME"]
+capture = PLAN["capture"]
+os.makedirs(capture + "/files", exist_ok=True)
+with open(capture + "/stdin", "w") as handle:
+    handle.write(stdin)
+with open(capture + "/argv", "w") as handle:
+    handle.write("\\n".join(sys.argv[1:]))
+with open(capture + "/environment", "w") as handle:
+    handle.write("\\n".join(f"{{k}}={{v}}" for k, v in os.environ.items()))
+for name in os.listdir(home):
+    with open(home + "/" + name, "rb") as source, open(capture + "/files/" + name, "wb") as copy:
+        copy.write(source.read())
+relay = tomllib.load(open(home + "/config.toml", "rb"))["mcp_servers"].get("relay")
+bearer = PLAN["wrong_bearer"] or (relay and os.environ[relay["bearer_token_env_var"]])
+
+
+def rpc(method, params=None, request_id=None, version=None):
+    body = {{"jsonrpc": "2.0", "method": method}}
+    if request_id is not None:
+        body["id"] = request_id
+    if params is not None:
+        body["params"] = params
+    headers = {{"Authorization": "Bearer " + bearer, "Content-Type": "application/json"}}
+    if version:
+        headers["MCP-Protocol-Version"] = version
+    request = urllib.request.Request(
+        relay["url"], data=json.dumps(body).encode(), headers=headers, method="POST"
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=PLAN["timeout"]) as response:
+            status, raw = response.status, response.read()
+    except urllib.error.HTTPError as error:
+        status, raw = error.code, error.read()
+    reply = {{"method": method, "status": status, "body": raw.decode()}}
+    with open(capture + "/replies", "a") as handle:
+        handle.write(json.dumps(reply) + "\\n")
+    return status, (json.loads(raw) if raw else None)
+
+
+def connect():
+    status, answer = rpc("initialize", {{"protocolVersion": "2025-11-25"}}, 1)
+    if status != 200:
+        # codex 0.163.0 ends so when its required server refuses (ADR A1b-X0c-0).
+        sys.exit(1)
+    version = answer["result"]["protocolVersion"]
+    rpc("notifications/initialized", version=version)
+    rpc("tools/list", {{}}, 2, version)
+    return version
+
+
+def emit(payload):
+    print(json.dumps(payload), flush=True)
+
+
+def item(event_type, item_type, **fields):
+    emit({{"type": event_type, "item": {{"id": "item_" + item_type, "type": item_type, **fields}}}})
+
+
+version = connect() if PLAN["lists"] == "first" else None
+emit({{"type": "thread.started", "thread_id": "thread"}})
+emit({{"type": "turn.started"}})
+if PLAN["lists"] == "after-text":
+    item("item.completed", "agent_message", text="first")
+    version = connect()
+for number, call in enumerate(PLAN["calls"], start=1):
+    stray = {{"server": "relay", "tool": call["name"], "arguments": PLAN["stray_text"]}}
+    item("item.started", "mcp_tool_call", **stray)
+    _status, answer = rpc("tools/call", call, 10 + number, version)
+    item("item.completed", "mcp_tool_call", **stray, result=PLAN["stray_text"])
+item("item.completed", "agent_message", text="done")
+emit({{"type": "turn.completed", "usage": {{}}}})
+"""
+
+
+def a_relay_calling_codex(
+    directory: Path,
+    *,
+    version_line: str,
+    calls: Sequence[ClaudeCall] = (),
+    lists: str = "first",
+    wrong_bearer: str = "",
+    stray_text: str = "",
+    timeout_seconds: float = 20.0,
+) -> Path:
+    """The pinned Codex's stand-in for a relay run; it captures into ``directory/capture``.
+
+    ``lists`` is when it lists the relay's tools: ``first`` (before its first line, as the
+    pinned CLI does), ``after-text`` (after a first message) or ``never`` (it answers without
+    the relay, as a tool-free run must). With ``wrong_bearer`` it sends that instead of the
+    secret and, refused, exits 1 with an empty stdout. Each call comes with Codex's own
+    ``mcp_tool_call`` lines carrying ``stray_text``.
+    """
+    plan = {
+        "version_line": version_line,
+        "capture": str(directory / "capture"),
+        "calls": [{"name": call.name, "arguments": dict(call.arguments)} for call in calls],
+        "lists": lists,
+        "wrong_bearer": wrong_bearer,
+        "stray_text": stray_text,
+        "timeout": timeout_seconds,
+    }
+    binary = directory / "codex"
+    binary.write_text(_CODEX_SOURCE.format(python=sys.executable, plan=json.dumps(plan)))
+    binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
+    return binary
+
+
 @dataclass(frozen=True)
 class ChildCapture:
     """What the fake Claude recorded about its start and every reply the relay gave it."""
@@ -288,6 +409,21 @@ class ChildCapture:
     def _replies_to(self, method: str) -> list[dict[str, Any]]:
         lines = self.text_of("replies").splitlines()
         return [reply for reply in map(json.loads, lines) if reply["method"] == method]
+
+
+@dataclass(frozen=True)
+class CodexChildCapture(ChildCapture):
+    """What the fake Codex recorded; its relay entry is in its settings file."""
+
+    @property
+    def relay(self) -> dict[str, Any]:
+        return tomllib.loads(self.run_files["config.toml"])["mcp_servers"]["relay"]
+
+    @property
+    def relay_secret(self) -> str:
+        variable = f"{self.relay['bearer_token_env_var']}="
+        lines = self.text_of("environment").splitlines()
+        return next(line.removeprefix(variable) for line in lines if line.startswith(variable))
 
 
 @dataclass(frozen=True)

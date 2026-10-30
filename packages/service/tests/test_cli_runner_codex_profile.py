@@ -2,18 +2,30 @@
 
 Rows serve the real app on a loopback socket and run a stand-in for the pinned CLI as a real
 child, with no installed core configuration; the rows every table has are those of
-``test_cli_runner_tables``. Test values: the Codex table with its login, the listed model
+``test_cli_runner_tables``. The tool rows run a stand-in that talks to the run's relay and a TLS
+fake app signed by a test CA. Test values: the Codex table with its login, the listed model
 ``gpt-5.5`` and the pinned version 0.163.0.
 """
 
 from __future__ import annotations
 
+import json
+import math
 import typing
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
 from tests.support.anchored_support import ChildCleanup
+from tests.support.cli_tools_support import (
+    ClaudeCall,
+    CodexChildCapture,
+    ToolApp,
+    a_relay_calling_codex,
+    a_tool_app,
+)
 from tests.support.codex_support import (
     DEFAULT_SETTINGS,
     DONE,
@@ -24,12 +36,14 @@ from tests.support.codex_support import (
 from tests.support.core_runtime_support import (
     no_installed_core_runtime,  # noqa: F401 - an autouse fixture
 )
+from tests.support.mcp_app_fake import TestAuthority
 from tests.support.provider_test_support import (
     a_fake_claude,
 )
 from tests.support.service_cli_runner_support import (
     a_held_reap,  # noqa: F401 - the fixture is named in its decorator
     drive_over_http,
+    eventually,
     post_a_run,
     private_root_of,
     shown,
@@ -58,18 +72,27 @@ from tests.support.service_table_support import (
 )
 
 import agent_runtime_service.cli_runner as cli_runner
+from agent_runtime.codex.run import RELAY_TOKEN_VARIABLE
 from agent_runtime_client.wire import (
     FailureCode,
+    RunEvent,
     RunFile,
+    RunState,
+    RunStatus,
     Succeeded,
+    ToolCall,
+    ToolResult,
 )
 from agent_runtime_service.capability import Capability
+from agent_runtime_service.cli_runner import CliRunner, mcp_tls_context
 from agent_runtime_service.config import Provider, ServiceConfig
 from agent_runtime_service.run_events import (
     INVALID_EVENT_MESSAGE,
     TOO_MUCH_DATA_MESSAGE,
 )
-from agent_runtime_service.runners import AdmittedRun
+from agent_runtime_service.run_liveness import LoopClock
+from agent_runtime_service.run_tools import RunTools
+from agent_runtime_service.runners import AdmittedRun, Runners
 
 # Runs through ``POST /runs`` with the stand-in CLI.
 
@@ -184,7 +207,238 @@ def test_codex_tool_items_reach_no_frame_status_or_log_and_the_answer_succeeds(
     assert CANARY not in seen
 
 
-# Tools are refused at admission until the relay serves Codex.
+# A Codex tool run takes the app's tools through the run's relay.
+
+SAVE_NOTE = ClaudeCall("save_note", {"text": "la la"})
+TOOLS = {"save_note": "side_effecting", "read_note": "read_only"}
+PROVIDER_ERROR = (RunState.FAILED, FailureCode.PROVIDER_ERROR)
+SUCCEEDED = (RunState.SUCCEEDED, None)
+
+
+@dataclass(frozen=True)
+class CodexToolRun:
+    events: list[RunEvent]
+    status: RunStatus
+    app: ToolApp
+    capture: CodexChildCapture
+    config: ServiceConfig
+
+    @property
+    def ending(self) -> tuple[RunState, FailureCode | None]:
+        return self.status.state, self.status.failure_code
+
+    @property
+    def shape(self) -> list[tuple[str, str | None]]:
+        return [
+            (event.type, event.name if isinstance(event, ToolCall) else text)
+            for event, (_type, text) in zip(self.events[1:], shown(self.events), strict=True)
+        ]
+
+    @property
+    def everything_the_service_showed(self) -> str:
+        frames = json.dumps([event.model_dump(mode="json") for event in self.events])
+        return frames + self.status.model_dump_json()
+
+
+def a_codex_tool_run(
+    directory: Path,
+    authority: TestAuthority,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    tools: Mapping[str, str] = TOOLS,
+    runs: dict[str, object] | None = None,
+    **codex_options: Any,
+) -> CodexToolRun:
+    """One run of the real runner for an app with an MCP origin, over HTTP, naming ``tools``."""
+    directory.mkdir(exist_ok=True)
+    binary = a_relay_calling_codex(
+        directory, version_line=CODEX_TABLE.version_line, **codex_options
+    )
+    with a_tool_app(authority, list(TOOLS)) as app:
+        document = codex_document(
+            directory,
+            binary,
+            a_codex_login_file(directory),
+            runs=runs,
+            songmaker={"mcp_origin": app.origin},
+        )
+        config = a_codex_config(document)
+        runners = Runners(
+            cli=CliRunner(config, tls_context=mcp_tls_context(authority.ca_file), clock=LoopClock())
+        )
+
+        def scenario(base_url: str) -> tuple[list[RunEvent], RunStatus]:
+            events = post_a_run(base_url, tools)
+            eventually(lambda: status_of(base_url, events).state is not RunState.RUNNING)
+            return events, status_of(base_url, events)
+
+        events, status = drive_over_http(child_cleanup, monkeypatch, config, scenario, runners)
+    return CodexToolRun(events, status, app, CodexChildCapture(directory / "capture"), config)
+
+
+def test_a_codex_relay_call_reaches_the_wire_under_the_apps_name_and_codexs_own_lines_do_not(
+    tmp_path: Path,
+    authority: TestAuthority,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level("DEBUG")
+
+    run = a_codex_tool_run(
+        tmp_path, authority, child_cleanup, monkeypatch, calls=[SAVE_NOTE], stray_text=CANARY
+    )
+
+    assert run.shape == [
+        ("tool_call", "save_note"),
+        ("tool_result", None),
+        ("assistant_text", "done"),
+        ("succeeded", "done"),
+    ]
+    [result] = [event for event in run.events if isinstance(event, ToolResult)]
+    assert (result.content, result.is_error) == ("save_note", False)
+    assert [call.message["params"]["arguments"] for call in run.app.calls] == [{"text": "la la"}]
+    assert CANARY not in run.everything_the_service_showed + caplog.text
+
+
+def test_a_codex_tool_runs_settings_file_holds_the_relay_it_was_given_over_the_defaults(
+    tmp_path: Path,
+    authority: TestAuthority,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run = a_codex_tool_run(tmp_path, authority, child_cleanup, monkeypatch, calls=[SAVE_NOTE])
+
+    settings = captured_settings(run.capture.directory / "files")
+    entry = settings["mcp_servers"].pop("relay")
+    assert settings == DEFAULT_SETTINGS
+    assert (entry["tool_timeout_sec"], entry["bearer_token_env_var"]) == (
+        math.ceil(run.config.runs.max_duration_s),
+        RELAY_TOKEN_VARIABLE,
+    )
+    assert [reply["status"] for reply in run.capture.listing_replies] == [200]
+
+
+def test_the_relay_secret_reaches_codex_only_in_its_environment_and_the_capability_never(
+    tmp_path: Path,
+    authority: TestAuthority,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level("DEBUG")
+
+    run = a_codex_tool_run(tmp_path, authority, child_cleanup, monkeypatch, calls=[SAVE_NOTE])
+
+    secret, capability = run.capture.relay_secret, run.app.capability
+    environment = run.capture.text_of("environment").splitlines()
+    assert (len(secret) > 16, capability.count(".")) == (True, 2)
+    assert [line for line in environment if secret in line] == [
+        f"{RELAY_TOKEN_VARIABLE}={secret}"
+    ]
+    given = [run.capture.text_of("argv"), run.capture.stdin, *run.capture.run_files.values()]
+    assert [part for part in given if secret in part] == []
+    assert capability not in run.capture.everything_it_was_given
+    shown_by_the_service = run.everything_the_service_showed + caplog.text
+    assert (secret in shown_by_the_service, capability in shown_by_the_service) == (False, False)
+
+
+def test_a_codex_call_past_the_tool_budget_never_reaches_the_app(
+    tmp_path: Path,
+    authority: TestAuthority,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    run = a_codex_tool_run(
+        tmp_path,
+        authority,
+        child_cleanup,
+        monkeypatch,
+        calls=[SAVE_NOTE, SAVE_NOTE],
+        runs={"max_tool_calls": 1},
+    )
+
+    assert (run.ending, len(run.app.calls), len(run.capture.replies)) == (
+        (RunState.FAILED, FailureCode.LIMIT_EXCEEDED),
+        1,
+        1,
+    )
+
+
+@pytest.mark.parametrize(
+    ("options", "ending", "app_calls"),
+    [
+        pytest.param(
+            {"calls": [SAVE_NOTE], "wrong_bearer": "not-the-relays-secret"},
+            PROVIDER_ERROR,
+            0,
+            id="relay-refuses-the-bearer",
+        ),
+        pytest.param({"lists": "never"}, PROVIDER_ERROR, 0, id="answers-without-the-relay"),
+        pytest.param(
+            {"lists": "after-text", "calls": [SAVE_NOTE]},
+            SUCCEEDED,
+            1,
+            id="lists-after-its-first-text",
+        ),
+    ],
+)
+def test_a_codex_tool_run_ends_provider_error_unless_its_relay_listed_and_one_child_ran(
+    tmp_path: Path,
+    authority: TestAuthority,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    options: dict[str, Any],
+    ending: tuple[RunState, FailureCode | None],
+    app_calls: int,
+) -> None:
+    closes: list[None] = []
+    close = RunTools.close
+
+    async def counted(tools: RunTools, reap: Callable[[], Any]) -> None:
+        closes.append(None)
+        await close(tools, reap)
+
+    monkeypatch.setattr(RunTools, "close", counted)
+
+    run = a_codex_tool_run(tmp_path, authority, child_cleanup, monkeypatch, **options)
+
+    assert (run.ending, len(run.app.calls), len(child_cleanup.listed()), len(closes)) == (
+        ending,
+        app_calls,
+        1,
+        1,
+    )
+    assert ("succeeded" in [kind for kind, _ in run.shape]) is (ending == SUCCEEDED)
+
+
+def test_a_tool_free_codex_run_on_an_app_with_an_origin_gets_no_relay_and_the_same_argv(
+    tmp_path: Path,
+    authority: TestAuthority,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def homeless_argv(run: CodexToolRun) -> list[str]:
+        home = next(
+            line.removeprefix("CODEX_HOME=")
+            for line in run.capture.text_of("environment").splitlines()
+            if line.startswith("CODEX_HOME=")
+        )
+        return [line.replace(home, "<home>") for line in run.capture.text_of("argv").split("\n")]
+
+    with_tools = a_codex_tool_run(tmp_path / "tools", authority, child_cleanup, monkeypatch)
+    tool_free = a_codex_tool_run(
+        tmp_path / "free", authority, child_cleanup, monkeypatch, tools={}, lists="never"
+    )
+
+    assert (tool_free.ending, tool_free.app.fake.accepted_connections) == (SUCCEEDED, 0)
+    assert captured_settings(tool_free.capture.directory / "files") == DEFAULT_SETTINGS
+    assert RELAY_TOKEN_VARIABLE not in tool_free.capture.text_of("environment")
+    assert homeless_argv(tool_free) == homeless_argv(with_tools)
+
+
+# No run adapter factory sees the admitted run.
 
 
 def test_no_run_adapter_factory_sees_the_admitted_run_or_its_capability() -> None:
