@@ -166,6 +166,7 @@ REFUSED_RUN_SETTINGS = (
     "max_tool_calls = 0",
     "max_tool_calls = true",
     "max_tool_calls = 30.0",
+    "max_tool_calls = 4294967295",
     "max_bytes = 0",
     "max_bytes = -1",
     "max_bytes = 4194304.0",
@@ -338,11 +339,10 @@ def test_a_stall_timeout_between_heartbeat_and_idle_loads(tmp_path, stall_timeou
 
 
 def test_run_budgets_given_in_the_file_load(tmp_path):
-    text = _with_runs("max_tool_calls = 5\nmax_bytes = 2097152")
-
+    text = _with_runs("max_tool_calls = 4294967294\nmax_bytes = 2097152")
     runs = load_config(written(tmp_path, text)).runs
 
-    assert (runs.max_tool_calls, runs.max_bytes) == (5, 2097152)
+    assert (runs.max_tool_calls, runs.max_bytes) == (4294967294, 2097152)
 
 
 def test_an_explicit_parallel_run_limit_loads_and_gives_that_many_places(tmp_path):

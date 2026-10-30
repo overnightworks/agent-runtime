@@ -77,6 +77,7 @@ _RELAY_PERMISSION_ARGUMENTS: Final = (
 # parses `--max-turns` only in 1..4294967295 (ADR A1b-G0a L1).
 _TURNS_BEYOND_TOOL_CALLS: Final = 1
 _LARGEST_TURN_LIMIT: Final = 4_294_967_295
+GROK_MAX_TOOL_CALLS: Final = _LARGEST_TURN_LIMIT - _TURNS_BEYOND_TOOL_CALLS
 
 _TEXT: Final = "text"
 _END: Final = "end"
@@ -281,7 +282,7 @@ class GrokRun:
         if not (
             isinstance(calls, int)
             and not isinstance(calls, bool)
-            and 1 <= calls <= _LARGEST_TURN_LIMIT - _TURNS_BEYOND_TOOL_CALLS
+            and 1 <= calls <= GROK_MAX_TOOL_CALLS
         ):
             raise ChildProcessSpecificationError(
                 "A Grok run needs max_tool_calls as an integer within the CLI's turn limit"

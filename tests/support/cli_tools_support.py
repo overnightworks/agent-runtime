@@ -11,6 +11,10 @@ the file names, announces the relay as connected, optionally prints the CLI's ow
 ``a_relay_calling_codex`` is Codex's stand-in: it reads the relay entry from
 ``$CODEX_HOME/config.toml`` and the secret from the variable that entry names, records what it
 was given the same way, and prints ``exec --json`` lines around its calls.
+
+``a_relay_calling_grok`` is Grok's stand-in: it reads the relay entry from
+``$GROK_HOME/config.toml`` and the secret the same way, asks ``server/discover`` first and goes
+on after the relay's refusal, and prints ``streaming-json`` lines around its calls.
 """
 
 from __future__ import annotations
@@ -251,6 +255,8 @@ stdin = sys.stdin.read()
 home = os.environ["CODEX_HOME"]
 capture = PLAN["capture"]
 os.makedirs(capture + "/files", exist_ok=True)
+with open(capture + "/home", "w") as handle:
+    handle.write(home)
 with open(capture + "/stdin", "w") as handle:
     handle.write(stdin)
 with open(capture + "/argv", "w") as handle:
@@ -355,6 +361,132 @@ def a_relay_calling_codex(
     return binary
 
 
+_GROK_SOURCE = """\
+#!{python}
+import json, os, sys, tomllib, urllib.error, urllib.request
+
+PLAN = json.loads({plan!r})
+if sys.argv[1:] == ["--version"]:
+    print(PLAN["version_line"])
+    sys.exit(0)
+stdin = sys.stdin.read()
+home = os.environ["GROK_HOME"]
+capture = PLAN["capture"]
+os.makedirs(capture + "/files", exist_ok=True)
+with open(capture + "/home", "w") as handle:
+    handle.write(home)
+with open(capture + "/stdin", "w") as handle:
+    handle.write(stdin)
+with open(capture + "/argv", "w") as handle:
+    handle.write("\\n".join(sys.argv[1:]))
+with open(capture + "/environment", "w") as handle:
+    handle.write("\\n".join(f"{{k}}={{v}}" for k, v in os.environ.items()))
+for name in os.listdir(home):
+    with open(home + "/" + name, "rb") as source, open(capture + "/files/" + name, "wb") as copy:
+        copy.write(source.read())
+settings = tomllib.load(open(home + "/config.toml", "rb"))
+relay = settings.get("mcp_servers", {{}}).get("relay")
+bearer = PLAN["wrong_bearer"] or (relay and os.environ[relay["bearer_token_env_var"]])
+
+
+def rpc(method, params=None, request_id=None, version=None):
+    body = {{"jsonrpc": "2.0", "method": method}}
+    if request_id is not None:
+        body["id"] = request_id
+    if params is not None:
+        body["params"] = params
+    headers = {{"Authorization": "Bearer " + bearer, "Content-Type": "application/json"}}
+    if version:
+        headers["Mcp-Protocol-Version"] = version
+    request = urllib.request.Request(
+        relay["url"], data=json.dumps(body).encode(), headers=headers, method="POST"
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=PLAN["timeout"]) as response:
+            status, raw = response.status, response.read()
+    except urllib.error.HTTPError as error:
+        status, raw = error.code, error.read()
+    reply = {{"method": method, "status": status, "body": raw.decode()}}
+    with open(capture + "/replies", "a") as handle:
+        handle.write(json.dumps(reply) + "\\n")
+    return status, (json.loads(raw) if raw else None)
+
+
+def connect():
+    # grok 1.0.60 asks the newest revision first and goes on after a refusal (ADR A1b-X0c-0).
+    rpc("server/discover", {{}}, 0, "2026-07-28")
+    status, answer = rpc("initialize", {{"protocolVersion": "2025-11-25"}}, 1)
+    if status != 200:
+        return None
+    version = answer["result"]["protocolVersion"]
+    rpc("notifications/initialized", version=version)
+    rpc("tools/list", {{}}, 2, version)
+    return version
+
+
+def emit(payload):
+    print(json.dumps(payload), flush=True)
+
+
+version = connect() if PLAN["lists"] == "first" else None
+if PLAN["lists"] == "after-text":
+    emit({{"type": "text", "data": "first "}})
+    version = connect()
+for number, call in enumerate(PLAN["calls"] if version else [], start=1):
+    call_id = f"call-{{number}}"
+    emit({{
+        "type": "tool_call", "toolCallId": call_id, "toolName": "use_tool", "status": "pending",
+        "rawInput": {{"tool_name": "relay__" + call["name"], "arguments": PLAN["stray_text"]}},
+    }})
+    rpc("tools/call", call, 10 + number, version)
+    emit({{
+        "type": "tool_call_update", "toolCallId": call_id, "status": "completed",
+        "rawOutput": PLAN["stray_text"],
+    }})
+for line in PLAN["lines_after_calls"]:
+    emit(line)
+emit({{"type": "text", "data": "done"}})
+emit({{"type": "end", "stopReason": "end_turn"}})
+sys.exit(PLAN["exit_code"])
+"""
+
+
+def a_relay_calling_grok(
+    directory: Path,
+    *,
+    version_line: str,
+    calls: Sequence[ClaudeCall] = (),
+    lists: str = "first",
+    wrong_bearer: str = "",
+    stray_text: str = "",
+    lines_after_calls: Sequence[Mapping[str, Any]] = (),
+    exit_code: int = 0,
+    timeout_seconds: float = 20.0,
+) -> Path:
+    """The pinned Grok's stand-in for a relay run; it captures into ``directory/capture``.
+
+    ``lists`` and ``wrong_bearer`` are Codex's, except that a refused Grok goes on without the
+    relay, calling nothing. Each call is Grok's ``use_tool`` line naming the relay's tool, with
+    ``stray_text`` as its input, then a ``completed`` update carrying it as output; it prints
+    ``lines_after_calls`` before its answer and exits ``exit_code``.
+    """
+    plan = {
+        "version_line": version_line,
+        "capture": str(directory / "capture"),
+        "calls": [{"name": call.name, "arguments": dict(call.arguments)} for call in calls],
+        "lists": lists,
+        "wrong_bearer": wrong_bearer,
+        "stray_text": stray_text,
+        "lines_after_calls": [dict(line) for line in lines_after_calls],
+        "exit_code": exit_code,
+        "timeout": timeout_seconds,
+    }
+    binary = directory / "grok"
+    binary.write_text(_GROK_SOURCE.format(python=sys.executable, plan=json.dumps(plan)))
+    binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
+    return binary
+
+
 @dataclass(frozen=True)
 class ChildCapture:
     """What the fake Claude recorded about its start and every reply the relay gave it."""
@@ -401,28 +533,29 @@ class ChildCapture:
 
     @property
     def replies(self) -> list[dict[str, Any]]:
-        return self._replies_to("tools/call")
+        return self.replies_to("tools/call")
 
     @property
     def listing_replies(self) -> list[dict[str, Any]]:
-        return self._replies_to("tools/list")
+        return self.replies_to("tools/list")
 
-    def _replies_to(self, method: str) -> list[dict[str, Any]]:
+    def replies_to(self, method: str) -> list[dict[str, Any]]:
         lines = self.text_of("replies").splitlines()
         return [reply for reply in map(json.loads, lines) if reply["method"] == method]
 
 
 @dataclass(frozen=True)
 class CodexChildCapture(ChildCapture):
-    """What the fake Codex recorded; its relay entry is in its settings file."""
+    """What the fake Codex or Grok recorded; its relay entry is in its settings file."""
 
     @property
     def relay(self) -> dict[str, Any]:
         return tomllib.loads(self.run_files["config.toml"])["mcp_servers"]["relay"]
 
     @property
-    def relay_port(self) -> int:
-        return urlsplit(self.relay["url"]).port or 0
+    def homeless_argv(self) -> list[str]:
+        """Its arguments with the run's own home, which differs per run, as ``<home>``."""
+        return self.text_of("argv").replace(self.text_of("home"), "<home>").split("\n")
 
     @property
     def relay_secret(self) -> str:

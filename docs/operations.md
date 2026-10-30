@@ -61,9 +61,7 @@ in this order for a person's run:
    run's model from the configuration, the agent's `model` in
    `[apps.<app>.agents.<agent>]`, else the app's, else `[defaults] model`. A subscription-group member's
    run goes to the CLI route of the model's provider; every other caller with API rights goes to the paid
-   API, under the model's full name. A run that names
-   tools and whose provider has no tool relay yet (Grok) gets 403 `not_enabled`
-   before any place, capability or program, never a silent drop and never another route.
+   API, under the model's full name.
 
 An app's own run skips steps 1 and 2: its agent's table `[apps.<app>.agents.<agent>]` must say
 `runs_as_app = true`, else 403 `forbidden`; its route comes from the groups of the app's Keycloak
@@ -271,9 +269,18 @@ in that case, because it lives in the other layer.
 `cli_settings.xai` takes the keys of Grok's own `config.toml`, unquoted and dotted like Codex's. The
 levels merge in the order above, with no adapter default: the service writes the result as the
 run's `config.toml` (mode 0600, in the run's fresh `$GROK_HOME`, even when empty), which is the
-program's user layer, and no setting value appears in its arguments or environment. The three
-tool-free switches (`--deny "*"`, `--no-subagents`, `--disable-web-search`) stay on the command
-line. Grok's first-run write appends a `[marketplace]` table to that file in the run's own home.
+program's user layer, and no setting value appears in its arguments or environment. The
+permission switches stay on the command line, in one of two shapes: a run without tools gets
+`--deny "*"` and `--max-turns 1`; a run that names tools gets `--tools ""`, `--permission-mode
+dontAsk`, `--allow "MCPTool(relay__*)"`, one `--deny` per built-in family (`Bash`, `Read`, `Edit`,
+`Write`, `Grep`, `Glob`, `WebFetch`, `WebSearch`) and `--max-turns` of `[runs] max_tool_calls` plus
+one. Both get `--no-subagents` and `--disable-web-search`. A run that names tools also gets the
+run's relay as `mcp_servers.relay` in its `config.toml`, written over the levels: `url` (the relay
+on loopback), `bearer_token_env_var = "AGENT_RUNTIME_RELAY_TOKEN"` and `tool_timeout_sec`, the whole
+seconds of `[runs] max_duration_s` rounded up. The relay's per-run secret reaches the program only
+in that environment variable, never in its arguments or a file, and the app's capability never
+reaches it. Grok's first-run write appends a `[marketplace]` table to that file in the run's own
+home.
 
 ```toml
 [apps.notes.cli_settings.xai]
@@ -286,14 +293,17 @@ wrote and its owner, never the value:
 | Path | Owner |
 |---|---|
 | `models.default`, `model.<id>.model_provider` | set `model` |
-| `permission.deny`, `subagents.enabled`, `disable_web_search` | the run is tool-free |
+| `mcp_servers.relay` | the service attaches the run's tool relay |
+| `mcp_servers.<id>` | a Grok run takes no MCP server beside the run's tool relay |
+| `permission.deny`, `subagents.enabled`, `disable_web_search` | the service sets `--deny`, `--no-subagents`, `--disable-web-search` |
 | `auth.*` and `grok_com_config.*` for `auth_provider_command`, `preferred_method`, `oidc`, `oauth2`, `token_header`; `model.<id>.{api_key, env_key, auth_provider}`; `model_providers`; `auth_provider` | `[cli.xai] token_file` |
 | `models.extra_headers`, `model.<id>.{extra_headers, query_params, mtls_cert_dir}` (even as `{}`): a header, query or mTLS identity can carry the inference credential | `[cli.xai] token_file` |
 | `agent`, `models.agent_type`, `model.<id>.{agent_type, system_prompt_label}` | the run request's system text |
 | `experiments`, `version_overrides`, `campaigns`, `features.managed_config`, `features.campaigns`, `endpoints.managed_config_url` | they can patch keys the service owns |
 
-`<id>` matches any model name, quoted names with dots included. Whole tables and the three
-self-patching arrays are owned even when empty. Paths are checked on the parsed tables, so
+`<id>` matches any model or server name, quoted names with dots included. Whole tables, the
+servers and the three self-patching arrays are owned even when empty; `mcp_servers.relay` is named
+first when both are set, and an empty `mcp_servers = {}` loads. Paths are checked on the parsed tables, so
 `[auth]`, `auth.x = …` and `auth = { x = … }` are one path, while a quoted `"auth.preferred_method"`
 is one literal top-level key that Grok ignores like any unknown key, and loads.
 
@@ -303,10 +313,10 @@ the other `endpoints.*` keys and `model.<id>.{base_url, api_base_url, model, env
 and the other tuning keys); keys that label, time or narrow the login and replace none
 (`auth.auth_token_ttl`, `auth.force_login_team_uuid`, `grok_com_config.*` twins); rule directories
 (`paths.extra_rule_dirs`, `compat.*.rules`); `hooks.*` and `ui.*`; and the tool surface
-(`permission.allow`, `ask`, `rules`, the other `subagents.*`, `mcp_servers.*`, `tools.*`,
-`sandbox.*`, `skills.*`, `plugins.*` and the like). The run is tool-free by command line and a tool
-event ends it, but that is not effect-free: configured hooks run commands and MCP configuration
-can start processes, which are the operator's trusted choices. The service sets no telemetry or
+(`permission.allow`, `ask`, `rules`, the other `subagents.*`, `tools.*`, `sandbox.*`, `skills.*`,
+`plugins.*` and the like). The command line opens no tool but the relay's and any other tool event
+ends the run, but that is not effect-free: configured hooks run commands, which are the operator's
+trusted choice. The service sets no telemetry or
 auto-update default.
 
 The service cannot see undocumented keys and aliases, the host's `/etc/grok/{managed_config,
@@ -369,15 +379,20 @@ and a Claude setup token are refused, never showing content. The service hands t
 whose renewal tokens are emptied, as a 0600 file in the run's home; the installed file keeps the
 full document. The document comes from `grok login --device-code`, made in a home of its own and
 never the operator's terminal home, which the host's setup (hal's guided login) does; the
-service installs it with `agent-runtime-service-login --provider xai`. A run serves text only:
-the route's model reaches the program as one `--model=<name>` argument, and a request that names
-tools is refused at admission. The operator's settings for Grok are `cli_settings.xai` ("CLI
-settings").
+service installs it with `agent-runtime-service-login --provider xai`. The route's model
+reaches the program as one `--model=<name>` argument. A run that names tools takes the app's tools
+through the run's relay, so the tool definitions, the calls and their results reach xAI. The
+operator's settings for Grok are `cli_settings.xai` ("CLI settings").
 
 **What a CLI run does with tools.** A Codex tool item in the stream does not fail the run; the
-service drops it and no frame shows it. A Grok tool event ends the run `failed: provider_error`,
-because the program starts with `--deny "*"`, `--no-subagents`, `--disable-web-search` and
-`--max-turns 1`; the config keys of the first three are the service's too ("CLI settings"). An item or event type the adapter does not know still ends
+service drops it and no frame shows it. A Grok run without tools starts with `--deny "*"` and
+`--max-turns 1`, so any tool event ends it `failed: provider_error`. A Grok tool run reaches the
+app only through the run's relay: a relay call reaches the wire under the app's tool name, and
+Grok's own tool lines reach no frame, status or log. A native tool event, a relay call Grok shows
+as failed (even when the app answered it with an error), `max_turns_reached`, a non-zero exit or an
+answer before the relay listed its tools ends it `failed: provider_error`, with no second program
+and no other route; a call past `[runs] max_tool_calls` ends it `limit_exceeded`. The config keys of
+Grok's switches are the service's too ("CLI settings"). An item or event type the adapter does not know still ends
 the run `failed: provider_error`. The service switches off by default the features its Codex adapter
 names ("CLI settings"), and every other feature follows the pinned CLI. At every pin bump the
 operator compares that list with `codex features list`, run with `HOME` and `CODEX_HOME` set to one
@@ -385,7 +400,8 @@ empty directory that holds the defaults file, so the comparison also shows the f
 that vanished or was renamed already stops runs (`--strict-config`); a new stable feature that is
 on by default does not. A CLI output line over 4 MiB ends the run `failed: provider_error`, and a
 tool's output travels in one line. Claude's `--max-turns` is `[runs] max_tool_calls` plus one and
-counts every tool-using response, built-in tools included. Codex has no turn limit by name, so
+counts every tool-using response, built-in tools included; a Grok tool run's `--max-turns` is
+`[runs] max_tool_calls` plus one too, and `[runs] max_tool_calls` may be at most 4294967294. Codex has no turn limit by name, so
 `[runs] max_tool_calls` bounds its calls to the app's tools and `[runs] max_duration_s` its run.
 
 **Install or check it (every provider).** `agent-runtime-service-login --config PATH --provider PROVIDER` (`anthropic`, `openai` or `xai`)

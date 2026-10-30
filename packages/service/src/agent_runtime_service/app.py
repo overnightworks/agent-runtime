@@ -19,9 +19,8 @@ before any token is verified or the body is read; the header's value is never re
    (``ServiceConfig.model_for``); a name the installation does not list
    (``ServiceConfig.offered_models``) answers ``model_not_offered``;
 6. the route (``agent_runtime_service.routing``), which reads that model and the
-   installation's listed models; a run that names tools and whose route is a provider without
-   the tool relay (Grok) answers ``not_enabled`` here, before a place, a capability or
-   a child;
+   installation's listed models; a caller and model no route serves answers ``not_enabled``
+   here, before a place, a capability or a child;
 7. for the CLI route, the service's admission limit (``agent_runtime_service.admission``): a
    subscription run beyond it answers ``busy`` with ``Retry-After`` before anything is
    signed;
@@ -82,7 +81,7 @@ from agent_runtime_service.capability import (
     capability_claims,
     signed_capability,
 )
-from agent_runtime_service.config import RELAY_ATTACHED_PROVIDERS, ServiceConfig
+from agent_runtime_service.config import ServiceConfig
 from agent_runtime_service.identity import Caller, CallerCheck, PersonCaller, agent_role
 from agent_runtime_service.quarantine import GroupConfirmation, Quarantine
 from agent_runtime_service.routing import Cli, NotEnabled, ServedRoute, route
@@ -257,11 +256,7 @@ def _admitted(
         caller.groups,
         model,
     )
-    if isinstance(served, NotEnabled) or (
-        isinstance(served, Cli)
-        and run_request.tools
-        and served.provider not in RELAY_ATTACHED_PROVIDERS
-    ):
+    if isinstance(served, NotEnabled):
         return rejection(RejectionCode.NOT_ENABLED)
     lease = None
     if isinstance(served, Cli):

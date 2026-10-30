@@ -621,8 +621,7 @@ class ToolCallBarrier:
     The bound reserves no connection, because idle keep-alive connections count toward the
     listener's cap too.
 
-    The listener cancels the task running ``call()`` when the CLI closes the connection of a
-    pending call, in the step it sees the close.
+    The listener cancels a pending call's ``call()`` task in the step it sees its connection close.
     """
 
     def __init__(self, run_id: str, app: AppTools, capability: Capability) -> None:
@@ -876,7 +875,8 @@ class McpRelayOwner:
 
     Every answer leaves through ``_cleared_for_cli``; a hit refuses the owner for good and is
     reported once to ``ToolCalls.reflected()``. A well-formed ``notifications/cancelled`` goes to
-    ``ToolCalls.cancel``; every notification is acknowledged; ``Unanswered`` passes untouched.
+    ``ToolCalls.cancel``; every notification is acknowledged; ``Unanswered`` passes untouched;
+    ``listed`` tells whether a ``tools/list`` was answered.
     """
 
     def __init__(
