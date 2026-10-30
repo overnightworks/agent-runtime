@@ -8,7 +8,24 @@ import stat
 from pathlib import Path
 from typing import Any
 
+from tests.support.provider_test_support import a_grok_login
+
+from agent_runtime.cli_settings import CliSettings
+from agent_runtime.grok.run import GrokRun
+from agent_runtime.grok_login import assess_grok_login
+from agent_runtime_client.wire import TurnMessage
+
 PRECONDITIONS_MARKER = "preconditions-passed"
+
+
+def a_grok_run(*settings: CliSettings) -> GrokRun:
+    return GrokRun(
+        Path("/opt/grok/bin/grok"),
+        assess_grok_login(json.dumps(a_grok_login()).encode()),
+        "system",
+        (TurnMessage(role="user", text="question"),),
+        settings=settings,
+    )
 
 
 def grok_line(**fields: Any) -> bytes:

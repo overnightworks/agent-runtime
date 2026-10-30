@@ -2,23 +2,22 @@
 
 from __future__ import annotations
 
-import json
 import tomllib
 from pathlib import Path
 
 import pytest
 from tests.support.codex_support import DEFAULT_SETTINGS
-from tests.support.provider_test_support import a_codex_login, a_grok_login, exception_chain
+from tests.support.grok_support import a_grok_run
+from tests.support.provider_test_support import a_codex_login
 from tests.support.service_config_support import (
     VALID_CONFIG,
     assert_startup_refuses,
     written,
 )
+from tests.support.service_support import everything_a_refusal_holds, reaches_text
 
 from agent_runtime.codex.run import CodexRun
 from agent_runtime.codex_login import assess_codex_login
-from agent_runtime.grok.run import GrokRun
-from agent_runtime.grok_login import assess_grok_login
 from agent_runtime_client.wire import TurnMessage
 from agent_runtime_service.cli import EXIT_BAD_CONFIG, main
 from agent_runtime_service.config import ConfigError, Provider, ServiceConfig, load_config
@@ -277,8 +276,7 @@ def test_a_path_another_owner_holds_stops_startup_naming_its_level_its_path_and_
     refusal = capsys.readouterr().err
     assert f"{table}: {path} is the service's; {owner}" in refusal
     assert VALUE_CANARY not in refusal
-    assert exception_chain(refused.value) == [refused.value]
-    assert VALUE_CANARY not in repr(refused.value.args)
+    assert not reaches_text(everything_a_refusal_holds(refused.value), [VALUE_CANARY])
 
 
 def test_an_owned_path_stops_a_start_as_it_stops_the_check(tmp_path, capsys):
@@ -319,7 +317,7 @@ def test_every_pass_through_class_loads_and_is_returned_at_its_level_as_written(
     levels = config.cli_settings_levels(APP, AGENT, Provider.XAI)
 
     assert levels[list(LEVELS).index(level)] == tomllib.loads(body)
-    assert tomllib.loads(a_grok_run_of(levels).run_files()["config.toml"].decode()) == (
+    assert tomllib.loads(a_grok_run(*levels).run_files()["config.toml"].decode()) == (
         tomllib.loads(body)
     )
 
@@ -500,17 +498,6 @@ GROK_EXAMPLE = (
 THE_EXAMPLES_APP = f'\n[apps.{DOCUMENTED_APP}]\nworkload_client = "{DOCUMENTED_APP}-test"\n'
 
 
-def a_grok_run_of(levels: tuple[dict[str, object], ...]) -> GrokRun:
-    return GrokRun(
-        Path("/opt/grok/bin/grok"),
-        assess_grok_login(json.dumps(a_grok_login()).encode()),
-        "system",
-        (TurnMessage(role="user", text="question"),),
-        model=None,
-        settings=levels,
-    )
-
-
 def a_codex_run_of(config: ServiceConfig, app: str, agent: str) -> CodexRun:
     return CodexRun(
         Path("/opt/codex/bin/codex"),
@@ -560,7 +547,7 @@ def test_the_documented_grok_example_reaches_a_grok_runs_config_file_as_written(
     )
     config = loaded(tmp_path, text + THE_EXAMPLES_APP + GROK_EXAMPLE)
 
-    run = a_grok_run_of(config.cli_settings_levels(DOCUMENTED_APP, "any-agent", Provider.XAI))
+    run = a_grok_run(*config.cli_settings_levels(DOCUMENTED_APP, "any-agent", Provider.XAI))
 
     assert tomllib.loads(run.run_files()["config.toml"].decode()) == (
         tomllib.loads(GROK_EXAMPLE)["apps"][DOCUMENTED_APP]["cli_settings"]["xai"]
