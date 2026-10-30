@@ -4015,6 +4015,96 @@ alone, is closed for one run in the outer-`bwrap` shape.
   have sent the access token out. The harness's own in-memory values were
   unreachable. This is B1's posture: same mounts, no `--unshare-net` in either.
 
+#### A1b-X0c-0 pinned Codex and Grok against the real relay, offline
+
+**What ran.** Slice A0 of #626 (#628), measured on 30.10.2026 at code revision
+`71d6977`. Pinned `codex-cli 0.163.0` (native executable, sha256 prefix
+`399ff69c431c`) and `grok 1.0.60 (01a8e1c591c0)` (sha256 prefix `10e6af64b247`);
+the harness checks both prefixes before each run and every run printed the
+version lines. No login, no secret and no model turn, so no quota. The harness
+(`harness.py`, `inner.py`, `summarize.py`) lives in the operator's probe directory
+`x0c-0/` outside the repository; it ran with `uv run` from the lane worktree under
+the probe lock, twice, with the same outcome in every cell: `runs/20261030T143006`
+(fresh) and `runs/20261030T143515` (repeated). Each cell's record is
+`runs/<run>/cells/<cell>.json`, one line per cell is `runs/<run>/summary.txt`. A
+first run (`runs/20261030T135539`) lost the output of the children it killed at
+the deadline; it is not cited.
+
+**How.** One `bwrap` with `--unshare-net` (its own loopback is the only
+interface), `--unshare-pid`, `--die-with-parent` and `--new-session`: system
+trees, the interpreter, the worktree, the two pinned installs and the scripts
+read-only, the run directory the only writable mount, no part of the real home.
+Inside it, per cell, a fresh real `tool_relay.Relay` on 127.0.0.1. Its owner
+answers through `mcp_wire.decide_server_message` and offers one tool, `echo`. A
+subclass records each request head the relay checked (method, target, headers,
+with `Authorization` kept only as whether it matched the relay's bearer), each
+body the owner was handed and each answer the relay wrote. The relay's secret is
+replaced in everything written, and the writer refuses a record that still holds
+it. Each CLI ran in a fresh home (`HOME` with `CODEX_HOME` or `GROK_HOME`) with
+`spawn.closed_environment` plus `RELAY_BEARER`, in its own process group, with a
+60 s deadline and then a group kill. Codex got `CodexRun`'s default settings
+merged with `mcp_servers.relay` as its `config.toml` and `CodexRun`'s argv
+(`exec --json --skip-git-repo-check --ignore-rules --ephemeral --strict-config -c
+model_instructions_file=… -`). Grok got `[mcp_servers.relay]` (`url`,
+`bearer_token_env_var`) in `$GROK_HOME/config.toml`.
+
+**Codex cells.**
+
+| Cell | Observed | Evidence (`cells/`) |
+|---|---|---|
+| The answer to the relay's `2025-11-25` | Codex asks `initialize` with `protocolVersion` `2025-06-18` and no version header, takes the relay's `2025-11-25`, and sends `notifications/initialized` (202) and `tools/list` (200) with `MCP-Protocol-Version: 2025-11-25`. No `GET`, no `DELETE`. | `codex-handshake.json` |
+| `tools/list` reached | Yes, in every cell whose bearer matched, within 0.25 s of the relay start; the relay listed `echo`. The turn then started (`thread.started`, `turn.started`), failed its name lookups for `api.openai.com` in the unshared network, and the harness killed it at 60 s. Whether the model was shown the tool is not reached (no model turn). | `codex-handshake.json`, `codex-optional.json` |
+| `required = true` against a 401 | The bearer variable held another random value: one `POST`, answered 401 without a body; no retry. Exit 1 after 5.26 s, nothing on stdout (no `thread.started`), stderr ends `Error: thread/start: thread/start failed: error creating thread: Fatal error: Failed to initialize session: required MCP servers failed to initialize: relay: handshaking with MCP server failed: … HTTP 401 …`. | `codex-401.json` |
+| `--strict-config` on the relay entry | `url` with `bearer_token_env_var` alone, `required = true` alone, `default_tools_approval_mode = "approve"` alone, `tool_timeout_sec = 60` alone and all five together are accepted (handshake and `thread.started`). The control `mcp_servers.relay.invented_x0c = 1` exits 1 at load with `unknown configuration field mcp_servers.relay.invented_x0c`. | `codex-strict-*.json`, `codex-handshake.json` |
+| Approval under `approval_policy = never`, read in rust-v0.163.0 (copies in `upstream/`: `codex-rs/core/src/mcp_tool_call.rs` sha256 prefix `e434c6380a20`, `codex-rs/codex-mcp/src/mcp/mod.rs` `42d8fa4b0f62`, `codex-rs/config/src/mcp_types.rs` `9e4f9013a9a9`) | For a server other than Codex's own apps server the mode is `mcp_servers.<server>.tools.<tool>.approval_mode`, else `default_tools_approval_mode`, else `auto` (`AppToolApproval`'s default). Mode `approve` needs no approval whatever the policy (`mcp_permission_prompt_is_auto_approved`). Otherwise `never` approves on its own only when the permission profile is disabled, external or has full disk write, which `sandbox_mode = "read-only"` does not give. Then `requires_mcp_tool_approval_for_mode` decides: `prompt` always asks, `writes` asks unless `readOnlyHint`, `auto` asks unless `readOnlyHint` is true or both `destructiveHint` and `openWorldHint` are false (`destructiveHint` true always asks). A call that needs approval under `never` is denied with `MCP tool call requires approval, but approval policy is never`. A turn whose `strict_auto_review` grant is on skips both shortcuts; nothing in the run's configuration sets it, which was read, not run. | `upstream/` |
+
+**Grok cells.**
+
+| Cell | Observed | Evidence (`cells/`) |
+|---|---|---|
+| `grok mcp doctor` | Exit 0 in 0.16 s: `relay (http: …/mcp)`, `server started`, `handshake OK (protocol 2025-11-25)`, `1 tools discovered`, `Found 1 healthy, 0 failing`. `grok mcp list` lists `relay`. | `grok-doctor.json`, `grok-list.json` |
+| The fallback after the empty 400 on `server/discover` | The first `POST` is a JSON-RPC request `server/discover` (id 0, headers `Mcp-Method: server/discover` and `Mcp-Protocol-Version: 2026-07-28`, `params._meta` with that version and `clientInfo` `grok-shell-relay` 1.0.60). The relay answers 400 without a body (the version header is outside the profile). Grok then sends `initialize` (`protocolVersion` `2025-11-25`, no version header), the relay answers `2025-11-25`, and `notifications/initialized` (202) and `tools/list` (200) follow with `MCP-Protocol-Version: 2025-11-25`. | `grok-doctor.json` |
+| `GET` and `DELETE` answered 405 | Not reached: Grok sent neither to the relay in any cell. G0a's fake server, which returned an `Mcp-Session-Id`, got both; the relay returns none. That the session id is what brings them is an inference, not measured. | `grok-doctor.json` |
+| `tools/list` | Reached by `mcp doctor`; the relay listed `echo`. No headless run reached it (next row). | `grok-doctor.json` |
+| Init before "Not signed in" under `--output-format streaming-messages-json` | Yes: the first line is `{"type":"system","subtype":"init",…,"tools":[],"mcp_servers":[],…}`, then a `result` line with `subtype` `error_during_execution`, `is_error` true and `errors` `["Not signed in. …"]`; exit 1 in 0.32 s. With `GrokRun`'s `streaming-json` the only line is `{"type":"error","message":"Not signed in. …"}`. No headless run sent a request to the relay: the login refusal comes before any MCP connection, so a turn's handshake order is not reached. | `grok-run-streaming-messages-json.json`, `grok-run-streaming-json.json` |
+| Flag shapes at parse | `--deny "*" --allow "MCPTool(relay__*)"` and `--tools "" --allow "MCPTool(relay__*)"` both reach the same refusal, with no warning on stderr. Their effect is a model-turn fact. | `grok-run-allow-relay.json`, `grok-run-tools-empty.json` |
+| `--help` | `--allow <RULE>` and `--deny <RULE>` are permission rules; `--tools <TOOLS>` is "Built-in tools to allow (comma-separated)"; `--disallowed-tools <TOOLS>` is "Built-in tools to remove"; `--permission-mode` takes `default`, `acceptEdits`, `auto`, `dontAsk`, `bypassPermissions`, `plan`. | `grok-help.json` |
+| The bundled guide (the 1.0.60 copy written into `$GROK_HOME/docs/user-guide/`) | Deny precedence: "Deny rules take precedence over allow rules" (`14-headless-mode.md`); `deny` > `ask` > `allow` across every source and scope, and a catch-all deny cannot be narrowed by allow rules: "For deny-by-default, use `defaultMode: "dontAsk"`" (`22-permissions-and-safety.md`). `--tools`: "Allowlist of built-in tools (comma-separated). MCP meta-tools remain available unless denied", "The final toolset retains requested tools plus always-on MCP meta-tools", and "A `--tools` entry that names no tool leaves the other tools available" (`14-headless-mode.md`). Meta-tools: the model reaches MCP tools through `search_tool` and `use_tool`, which take the qualified `server__tool` name (`07-mcp-servers.md`). `MCPTool(server__*)` matches that name; the rule families are `Bash`, `Read`, `Edit` (and `Write`), `Grep` (and `Glob`), `MCPTool`, `WebFetch` and `WebSearch`, and a bare `*` matches every tool. `read_file`, `list_dir`, `grep`, `web_search` and `todo_write` run without prompting "in every mode including `dontAsk`, unless a matching `deny` rule or a hook blocks them" (`22-permissions-and-safety.md`). | `grok-guide.json` |
+
+**In consequence.**
+- A0w is not demanded. Both CLIs take the relay's `2025-11-25` and reach
+  `tools/list`, so `mcp_wire` need not accept `2025-06-18`. Grok's `server/discover`
+  needs no JSON-RPC answer: it falls back after the empty 400. For Grok this rests
+  on `mcp doctor`; a turn's own handshake is A5's cell.
+- A1 can write the relay entry as #626 names it (`url`, `bearer_token_env_var`,
+  `required = true`, `default_tools_approval_mode = "approve"`, `tool_timeout_sec`
+  as an integer) over `CodexRun`'s defaults: `--strict-config` accepts it. The
+  handshake runs at start, before `thread.started`. A relay that does not connect
+  ends the CLI with exit 1 before `thread.started`, with an empty stdout and the
+  `required MCP servers failed to initialize: relay` text on stderr, so A1 maps
+  that exit to `provider_error` without waiting for a stream event. `approve` is
+  what lets a relay call run under `approval_policy = never` with the `read-only`
+  sandbox; without it Codex denies every call to a tool that lacks `readOnlyHint`.
+  A per-tool `mcp_servers.relay.tools.<tool>.approval_mode` would win over it,
+  which A1's refusal of `mcp_servers.relay` in `cli_settings.openai` covers.
+- A3 cannot keep `--deny "*"` with a relay: deny wins over allow, so
+  `--allow "MCPTool(relay__*)"` cannot open the relay under it. Read from the
+  guide, a shape that offers only relay tools is an empty built-in allowlist
+  (`--tools`), no catch-all deny, `--allow "MCPTool(relay__*)"`,
+  `--permission-mode dontAsk`, and deny rules for the families that run without
+  prompting (`Read`, `Grep`, `WebSearch`) and for `Bash`, `Edit`, `Write` and
+  `WebFetch`, besides `--no-subagents` and `--disable-web-search`. `todo_write`
+  has no rule family; only `--tools` removes it. Offline, two things cannot be
+  decided: whether `--tools ""` is read as an empty list or as an entry that names
+  no tool (which leaves every tool available), and whether a deny rule reaches a
+  meta-tool. A3 pins the shape as A5's hypothesis and A5's live cells decide it;
+  A-O1 is asked only if no shape holds.
+- A3's decoder must expect a relay call to arrive as the meta-tool `use_tool`
+  naming `relay__<tool>` (perhaps after a `search_tool`), not only as a tool
+  named after the app's tool; A5 measures which names the stream carries.
+  `[mcp_servers.relay]` with `url` and `bearer_token_env_var` in
+  `$GROK_HOME/config.toml` is read as written.
+
 ### A1b measured: claude 2.1.302
 
 Measured on 17.10.2026 on `$HOME/.local/share/claude/versions/2.1.302`
