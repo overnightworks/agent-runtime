@@ -63,8 +63,8 @@ A request the service refuses answers a `RunRejection` with one `RejectionCode`:
 
 | Code | Status | Meaning |
 |---|---|---|
-| `unauthorized` | 401 | A workload token is required, and a user token unless the app runs one of its own agents; every token sent must be valid. An `Agent-Job-Ticket` header on `POST /runs` or `GET /runs/{id}` is refused too. |
-| `forbidden` | 403 | The user is no member of the app, the request's `roles` lack the caller's role, the request names a tool while the app has no MCP origin, the two tokens do not belong together (`agent_runtime_service.identity` lists every cause), or a run without a user token names an agent the app may not run as itself. |
+| `unauthorized` | 401 | A workload token is required, and a user token unless the app runs one of its own agents; every token sent must be valid and carry a readable `sub` and group claim. An `Agent-Job-Ticket` header on `POST /runs` or `GET /runs/{id}` is refused too. |
+| `forbidden` | 403 | The user is no member of the app, the request's `roles` lack the caller's role, the request names a tool while the app has no MCP origin, the two tokens do not belong together ([webauth's host contract](https://github.com/overnightworks/webauth/blob/v0.26.0/docs/host-contract.md#a-services-callers) lists the causes of both codes in the order they are checked: every 401 and 503 about the tokens comes before any 403), or a run without a user token names an agent the app may not run as itself. |
 | `not_enabled` | 403 | No route is enabled for this caller and model, the run names tools and the chosen subscription provider cannot take tools yet. |
 | `unsupported_version` | 400 | `v` is not the JSON integer 4. |
 | `invalid_request` | 422 | The body is not a valid request for the route. |
@@ -80,9 +80,9 @@ app's own run. Selection is by header presence: any `Authorization` header, even
 malformed one, is the person's path and answers its own errors, and the request never falls through
 to the app's own run. The checks run in this order and the first failure answers:
 
-1. The workload token is verified (401, or 503 when the key set is unreachable) and bound to its
-   registered app as for a person's run (403).
-2. Its `sub` is valid Unicode text, and its group claim, if present, is a list of strings (401).
+1. The workload token is verified (401, or 503 when the key set is unreachable), its `sub` is valid
+   Unicode text and present, and its group claim, if present, is a list of strings (401).
+2. It is bound to its registered app as for a person's run (403).
 3. The app has an agent with `runs_as_app = true` in `[apps.<app>.agents.<agent>]`, else 401
    before the body is read.
 4. The body is checked as for a person's run, and its `agent` names such an agent, else 403

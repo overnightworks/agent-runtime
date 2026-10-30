@@ -36,7 +36,7 @@ file, the Claude token file, the Codex login document, the Grok login document a
 ## Who may run what
 
 A caller presents a workload token bound to one registered app and a user token
-bound to one principal (`agent_runtime_service.identity`); an app's own run, for an
+bound to one principal (`agent_runtime_service.identity`, which runs webauth's `ServiceCallerCheck`; [webauth's host contract](https://github.com/overnightworks/webauth/blob/v0.26.0/docs/host-contract.md#a-services-callers) lists its refusals); an app's own run, for an
 agent with `runs_as_app = true`, presents the workload token alone. The checks below run
 in this order for a person's run:
 

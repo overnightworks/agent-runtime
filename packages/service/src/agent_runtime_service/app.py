@@ -6,9 +6,10 @@ Both routes check the two tokens first, with the same answers. ``POST /runs`` an
 before any token is verified or the body is read; the header's value is never read. A
 ``POST`` is then checked in a fixed order, and the first failure answers:
 
-1. the workload token, then the user token, then membership of the app
-   (``/apps/<app>`` or a path below it), before the body is read or anything else
-   is decided (``agent_runtime_service.identity``);
+1. the caller check, webauth's ``ServiceCallerCheck`` (``agent_runtime_service.identity``),
+   before the body is read or anything else is decided: both tokens verified, their subjects
+   and group claims read (``unauthorized`` or ``unavailable``), then the workload binding, the
+   user's client binding and membership of the app (``/apps/<app>`` or a path below it);
 2. the body's framing, then its protocol version, then its shape
    (``agent_runtime_service.run_request``);
 3. the person's role in the app (``admin`` in ``/apps/<app>/admin`` or below, else ``user``)
@@ -136,10 +137,12 @@ def create_app(
 ) -> FastAPI:
     """The service's ASGI app.
 
+    The caller check (webauth's ``ServiceCallerCheck``) is built here once, from ``config``;
+    ``fetch_key_set`` and ``monotonic_clock`` are its injected key-set fetch and clock.
     ``wall_clock`` (aware UTC) stamps each capability's issue and expiry and is the default
     run-record store's clock. An injected
     ``records`` keeps its own clock, so the two can differ; ``wall_clock`` never reaches the
-    token verifier, which reads webauth's own.
+    caller check, which reads ``time.time``.
     ``confirm_group_gone`` is how the one quarantine asks whether a lost process group is gone.
     ``renewals`` runs while the app's lifespan does; without it the app renews nothing.
     """
