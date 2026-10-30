@@ -3,6 +3,6 @@ agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
 role = "builder"
 base = "a876e1d54e4d945dc8f96df6e8b6d639185d6954"
 branch = "claude/issue-607-r2-login-standing"
-scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "packages/service/src/agent_runtime_service/login.py", "packages/service/src/agent_runtime_service/login_standing.py", "packages/service/tests/test_login.py", "packages/service/tests/test_login_file.py", "packages/service/tests/test_login_standing.py"]
+scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "packages/service/src/agent_runtime_service/login.py", "packages/service/src/agent_runtime_service/login_standing.py", "packages/service/tests/test_login.py", "packages/service/tests/test_login_file.py", "packages/service/tests/test_login_standing.py", "packages/service/tests/test_renewal.py"]
 opened_commit = "ef4a461d4569919d7ba0aee6194bd1ca7a07d19f"
 whole_reason = "The standing judgement and the exit mapping are one public contract that a host's setup reads. A judgement without the command has no caller, and the exit codes the docs promise must match the code. The other files are its tests, the existing login tests whose exit pins move, and the three documents."
