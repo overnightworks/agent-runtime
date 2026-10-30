@@ -6,8 +6,9 @@ required, and ``model`` may be set again in ``[apps.<app>]`` and in
 startup refuses one that no ``[cli.<provider>]`` table lists in its ``models``.
 
 ``cli_settings`` may be set at the same three levels. ``cli_settings.openai`` holds Codex's own
-settings in Codex's own shape; ``cli_settings.anthropic`` holds Claude's, a ``tools`` list of
-built-in tool names and a ``settings`` table in Claude's own settings keys. The service passes
+settings in Codex's own shape; ``cli_settings.xai`` holds Grok's, in Grok's own ``config.toml``
+keys; ``cli_settings.anthropic`` holds Claude's, a ``tools`` list of built-in tool names and a
+``settings`` table in Claude's own settings keys. The service passes
 them through without a mapping, lowest level first, and refuses only a key whose fact another
 owner holds, and a value its run files cannot encode faithfully. It governs CLI runs only.
 
@@ -41,7 +42,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from functools import cached_property
 from pathlib import Path
-from typing import Annotated, Final, Protocol, Self, cast
+from typing import Annotated, Final, NamedTuple, Protocol, Self, cast
 
 from pydantic import (
     AfterValidator,
@@ -529,7 +530,7 @@ RULES_ON_THE_RAW_DOCUMENT: Final = (
 _CLI_SETTINGS_LEVEL: Final[Mapping[Provider, Callable[[CliSettingsConfig], CliSettings]]] = {
     Provider.ANTHROPIC: lambda table: table.anthropic.as_level(),
     Provider.OPENAI: lambda table: cast("CliSettings", table.openai),
-    Provider.XAI: lambda table: {},
+    Provider.XAI: lambda table: cast("CliSettings", table.xai),
 }
 
 
@@ -692,21 +693,32 @@ class ServiceConfig(_Section):
 
 def load_config(path: Path, *, read_logins: bool = True) -> ServiceConfig:
     """The configuration the file holds; only the login command loads without reading logins."""
+    loaded = _read_config(path, read_logins)
+    if isinstance(loaded, _Refusal):
+        # Raised here, where only the path and the refusal text live: no frame on the traceback
+        # holds the file or its parsed settings, which can carry the operator's credentials.
+        raise ConfigError(loaded.text)
+    return loaded
+
+
+class _Refusal(NamedTuple):
+    text: str
+
+
+def _read_config(path: Path, read_logins: bool) -> ServiceConfig | _Refusal:
+    shown_path = shown_text(str(path))
     try:
         text = path.read_text(encoding="utf-8")  # NOSONAR(S8707) the operator names this file
-    except OSError as error:
-        raise ConfigError(f"{shown_text(str(path))}: cannot be read: {error.strerror}") from error
-    except UnicodeDecodeError as error:
-        raise ConfigError(f"{shown_text(str(path))}: not UTF-8 TOML") from error
-    try:
         document = tomllib.loads(text)
-    except tomllib.TOMLDecodeError as error:
-        raise ConfigError(f"{shown_text(str(path))}: not TOML: {shown_text(str(error))}") from error
-    try:
         return ServiceConfig.model_validate(document, context=LoadContext(read_logins))
+    except OSError as error:
+        return _Refusal(f"{shown_path}: cannot be read: {error.strerror}")
+    except UnicodeDecodeError:
+        return _Refusal(f"{shown_path}: not UTF-8 TOML")
+    except tomllib.TOMLDecodeError as error:
+        return _Refusal(f"{shown_path}: not TOML: {shown_text(str(error))}")
     except ValidationError as error:
-        refusal = f"{shown_text(str(path))}: {_named_fields(error)}"
-    raise ConfigError(refusal)
+        return _Refusal(f"{shown_path}: {_named_fields(error)}")
 
 
 def _named_fields(error: ValidationError) -> str:

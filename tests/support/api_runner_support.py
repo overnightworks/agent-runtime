@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import httpx
 from tests.support.api_support import write_api_credentials
-from tests.support.service_support import LISTED_MODEL, service_config
+from tests.support.service_support import LISTED_MODEL, run_body, service_config
 
 from agent_runtime_service import api_runner
 from agent_runtime_service.cli_settings_config import CliSettingsConfig
-from agent_runtime_service.config import DefaultsConfig, Provider, ServiceConfig
+from agent_runtime_service.config import AgentConfig, DefaultsConfig, Provider, ServiceConfig
 
 
 def configured(tmp_path, **api):
@@ -29,15 +29,21 @@ def with_default_model(config, model):
 
 
 def with_cli_settings(config, settings):
-    """``config`` with the same ``cli_settings.openai`` table at ``[defaults]`` and every app."""
-    table = CliSettingsConfig(openai=settings)
+    """``config`` with the same ``openai`` and ``xai`` tables at ``[defaults]``, every app and the
+    agent the API tests run, so a leak from any level reaches the gateway payload."""
+    table = CliSettingsConfig(openai=settings, xai=settings)
+
+    def app_with(app):
+        agents = {
+            name: agent.model_copy(update={"cli_settings": table})
+            for name, agent in {run_body()["agent"]: AgentConfig(), **app.agents}.items()
+        }
+        return app.model_copy(update={"cli_settings": table, "agents": agents})
+
     return config.model_copy(
         update={
             "defaults": config.defaults.model_copy(update={"cli_settings": table}),
-            "apps": {
-                name: app.model_copy(update={"cli_settings": table})
-                for name, app in config.apps.items()
-            },
+            "apps": {name: app_with(app) for name, app in config.apps.items()},
         }
     )
 

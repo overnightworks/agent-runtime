@@ -7,18 +7,20 @@ from pathlib import Path
 
 import pytest
 from tests.support.codex_support import DEFAULT_SETTINGS
+from tests.support.grok_support import a_grok_run
 from tests.support.provider_test_support import a_codex_login
 from tests.support.service_config_support import (
     VALID_CONFIG,
     assert_startup_refuses,
     written,
 )
+from tests.support.service_support import everything_a_refusal_holds, reaches_text
 
 from agent_runtime.codex.run import CodexRun
 from agent_runtime.codex_login import assess_codex_login
 from agent_runtime_client.wire import TurnMessage
 from agent_runtime_service.cli import EXIT_BAD_CONFIG, main
-from agent_runtime_service.config import Provider, ServiceConfig, load_config
+from agent_runtime_service.config import ConfigError, Provider, ServiceConfig, load_config
 
 DEFAULTS_LINE = f'defaults = {{ model = "{Provider.ANTHROPIC}/sonnet" }}\n'
 APP = "songmaker"
@@ -90,52 +92,234 @@ def test_the_levels_come_defaults_first_then_the_app_then_the_agent_unmerged(tmp
     )
 
 
-def test_xai_gets_three_empty_levels_while_codex_and_claude_settings_are_set_at_every_level(
+def test_xais_levels_hold_only_xais_settings_while_codex_and_claude_are_set_at_every_level(
     tmp_path,
 ):
     text = with_settings(
-        defaults='web_search = "live"', app='web_search = "cached"', agent='web_search = "off"'
+        provider="xai",
+        defaults='ui.theme = "a"',
+        app='ui.theme = "b"',
+        agent='ui.theme = "c"',
     )
     for level in LEVELS.values():
         text += f'\n[{level}.cli_settings.anthropic]\ntools = ["Read"]\n'
+        text += f'\n[{level}.cli_settings.openai]\nweb_search = "live"\n'
 
     config = loaded(tmp_path, text)
 
-    assert (
-        config.cli_settings_levels(APP, AGENT, Provider.OPENAI)
-        != config.cli_settings_levels(APP, AGENT, Provider.XAI)
-        == ({}, {}, {})
+    assert config.cli_settings_levels(APP, AGENT, Provider.XAI) == (
+        {"ui": {"theme": "a"}},
+        {"ui": {"theme": "b"}},
+        {"ui": {"theme": "c"}},
+    )
+    assert config.cli_settings_levels(APP, AGENT, Provider.OPENAI) == ({"web_search": "live"},) * 3
+
+
+TOKEN_OWNER = "set [cli.xai] token_file instead"
+SYSTEM_TEXT_OWNER = "set the run request's system text instead"
+PATCH_OWNER = "it can patch keys the service owns"
+CARRIER_OWNER = f"they can carry the inference credential; {TOKEN_OWNER}"
+MODEL_OWNER = "set model instead"
+WHOLE_TABLE_OWNERS = (
+    ("agent", SYSTEM_TEXT_OWNER),
+    ("model_providers", TOKEN_OWNER),
+    ("auth_provider", TOKEN_OWNER),
+)
+
+
+TABLE_HERE = "@table@"
+
+
+def tool_free(switch: str) -> str:
+    return f"the run is tool-free ({switch})"
+
+
+def owned(provider: str, body: str, path: str, owner: str):
+    return pytest.param(provider, body, path, owner, id=f"{provider}-{path}-{body[:12]}")
+
+
+def xai_rows(*rows: tuple[str, str, str]):
+    return (owned("xai", body, path, owner) for body, path, owner in rows)
+
+
+OWNED_PATHS = [
+    owned("openai", f'model = "{VALUE_CANARY}"', "model", MODEL_OWNER),
+    owned("openai", f'model_provider = "{VALUE_CANARY}"', "model_provider", MODEL_OWNER),
+    owned(
+        "openai",
+        f'model_instructions_file = "{VALUE_CANARY}"',
+        "model_instructions_file",
+        SYSTEM_TEXT_OWNER,
+    ),
+    owned(
+        "openai",
+        f'cli_auth_credentials_store = "{VALUE_CANARY}"',
+        "cli_auth_credentials_store",
+        "set [cli.openai] token_file instead",
+    ),
+    *xai_rows(
+        (f'models.default = "{VALUE_CANARY}"', "models.default", MODEL_OWNER),
+        (f'permission.deny = ["{VALUE_CANARY}"]', "permission.deny", tool_free('--deny "*"')),
+        (
+            f'subagents.enabled = "{VALUE_CANARY}"',
+            "subagents.enabled",
+            tool_free("--no-subagents"),
+        ),
+        (
+            f'disable_web_search = "{VALUE_CANARY}"',
+            "disable_web_search",
+            tool_free("--disable-web-search"),
+        ),
+        (f'auth = {{ oidc = {{ a = "{VALUE_CANARY}" }} }}', "auth.oidc", TOKEN_OWNER),
+        (
+            f'models.extra_headers = {{ x = "{VALUE_CANARY}" }}',
+            "models.extra_headers",
+            CARRIER_OWNER,
+        ),
+        ("models.extra_headers = {}", "models.extra_headers", CARRIER_OWNER),
+        (f'model.m1.model_provider = "{VALUE_CANARY}"', "model.m1.model_provider", MODEL_OWNER),
+        (
+            f'model.m1.system_prompt_label = "{VALUE_CANARY}"',
+            "model.m1.system_prompt_label",
+            SYSTEM_TEXT_OWNER,
+        ),
+        (f'models.agent_type = "{VALUE_CANARY}"', "models.agent_type", SYSTEM_TEXT_OWNER),
+        (f'model.m1.agent_type = "{VALUE_CANARY}"', "model.m1.agent_type", SYSTEM_TEXT_OWNER),
+        (f'campaigns = [{{ id = "{VALUE_CANARY}" }}]', "campaigns", PATCH_OWNER),
+        (
+            f'features.managed_config = "{VALUE_CANARY}"',
+            "features.managed_config",
+            PATCH_OWNER,
+        ),
+        (f'features.campaigns = "{VALUE_CANARY}"', "features.campaigns", PATCH_OWNER),
+        (
+            f'endpoints.managed_config_url = "{VALUE_CANARY}"',
+            "endpoints.managed_config_url",
+            PATCH_OWNER,
+        ),
+    ),
+    *(
+        owned("xai", f'{table}.{key} = "{VALUE_CANARY}"', f"{table}.{key}", TOKEN_OWNER)
+        for table in ("auth", "grok_com_config")
+        for key in ("auth_provider_command", "preferred_method", "oidc", "oauth2", "token_header")
+    ),
+    *(
+        owned(
+            "xai", f'model.m1.{key} = {{ x = "{VALUE_CANARY}" }}', f"model.m1.{key}", CARRIER_OWNER
+        )
+        for key in ("extra_headers", "query_params", "mtls_cert_dir")
+    ),
+    *(
+        owned("xai", f"model.m1.{key} = {{}}", f"model.m1.{key}", CARRIER_OWNER)
+        for key in ("extra_headers", "query_params", "mtls_cert_dir")
+    ),
+    *(
+        owned(
+            "xai",
+            f'model."grok-x.1".{key} = "{VALUE_CANARY}"',
+            f'model."grok-x.1".{key}',
+            TOKEN_OWNER,
+        )
+        for key in ("api_key", "env_key", "auth_provider")
+    ),
+    *(
+        owned(
+            "xai",
+            f'model.{quoted}.api_key = "{VALUE_CANARY}"',
+            f"model.{shown}.api_key",
+            TOKEN_OWNER,
+        )
+        for quoted, shown in (
+            ("'a\"b.c'", '"a\\"b.c"'),
+            ('""', '""'),
+            ('"my id"', '"my id"'),
+        )
+    ),
+    owned(
+        "xai",
+        f'model."grok-x.1".system_prompt_label = "{VALUE_CANARY}"',
+        'model."grok-x.1".system_prompt_label',
+        SYSTEM_TEXT_OWNER,
+    ),
+    owned(
+        "xai",
+        f'[[{TABLE_HERE}.version_overrides]]\nid = "{VALUE_CANARY}"',
+        "version_overrides",
+        PATCH_OWNER,
+    ),
+    *(
+        owned("xai", f'{key} = {{ x = "{VALUE_CANARY}" }}', key, owner)
+        for key, owner in WHOLE_TABLE_OWNERS
+    ),
+    *(owned("xai", f"{key} = {{}}", key, owner) for key, owner in WHOLE_TABLE_OWNERS),
+    *(
+        owned("xai", f"{key} = []", key, PATCH_OWNER)
+        for key in ("experiments", "version_overrides", "campaigns")
+    ),
+]
+
+
+@pytest.mark.parametrize("level", LEVELS)
+@pytest.mark.parametrize(("provider", "body", "path", "owner"), OWNED_PATHS)
+def test_a_path_another_owner_holds_stops_startup_naming_its_level_its_path_and_its_owner(
+    tmp_path, capsys, level, provider, body, path, owner
+):
+    table = f"{LEVELS[level]}.cli_settings.{provider}"
+    config_file = written(
+        tmp_path, with_settings(provider=provider, **{level: body.replace(TABLE_HERE, table)})
     )
 
+    assert main(["--config", str(config_file), "--check"]) == EXIT_BAD_CONFIG
+    with pytest.raises(ConfigError) as refused:
+        load_config(config_file)
 
-OWNERS = {
-    "model": "set model instead",
-    "model_provider": "set model instead",
-    "model_instructions_file": "set the run request's system text instead",
-    "cli_auth_credentials_store": "set [cli.openai] token_file instead",
+    refusal = capsys.readouterr().err
+    assert f"{table}: {path} is the service's; {owner}" in refusal
+    assert VALUE_CANARY not in refusal
+    assert not reaches_text(everything_a_refusal_holds(refused.value), [VALUE_CANARY])
+
+
+def test_an_owned_path_stops_a_start_as_it_stops_the_check(tmp_path, capsys):
+    path = written(tmp_path, with_settings(provider="xai", app='models.default = "x"'))
+
+    assert main(["--config", str(path)]) == EXIT_BAD_CONFIG
+
+    refusal = capsys.readouterr().err
+    assert f"{LEVELS['app']}.cli_settings.xai: models.default is the service's" in refusal
+
+
+PASS_THROUGH = {
+    "egress": 'endpoints.deployment_key = "k"\nmodel.m1.base_url = "https://h.test"\n'
+    'model.m1.env_http_headers = { x = "ENV_NAME" }',
+    "model choices": 'models.allowed_models = ["a"]\nmodels.web_search = "m"\n'
+    'models.default_reasoning_effort = "low"',
+    "login labels": "auth.auth_token_ttl = 60\nauth.force_login_team_uuid = []\n"
+    "grok_com_config.auth_token_ttl = 60\ngrok_com_config.force_login_team_uuid = []",
+    "rules": 'paths.extra_rule_dirs = ["r"]\ncompat.x.rules = true',
+    "hooks and display": 'hooks.x = []\nui.theme = "dark"',
+    "tool surface": 'permission.allow = ["x"]\nsubagents.models.x = "m"\n'
+    'mcp_servers.x.command = "c"\ntools.x = 1\nsandbox.x = 1\nauto_mode.x = 1\n'
+    "shell_environment_policy.x = 1\nskills.x = 1",
+    "the rest": "features.image_gen = true\nmemory = true\ncli.x = 1",
+    "arrays of tables": "mcp_servers.x.args = [{ a = 1 }]\nhooks.y = [{ b = [{ c = 2 }] }]",
+    "unknown keys": 'invented_key = 1\nnested.invented.deep = "x"',
+    "quoted dotted keys": '"auth.preferred_method" = "x"\n"models.default" = "y"',
 }
 
 
 @pytest.mark.parametrize("level", LEVELS)
-@pytest.mark.parametrize("key", OWNERS)
-def test_a_key_another_owner_holds_stops_startup_naming_its_level_its_key_and_its_owner(
-    tmp_path, capsys, level, key
+@pytest.mark.parametrize("body", PASS_THROUGH.values(), ids=PASS_THROUGH)
+def test_every_pass_through_class_loads_and_is_returned_at_its_level_as_written(
+    tmp_path, level, body
 ):
-    text = with_settings(**{level: f'{key} = "{VALUE_CANARY}"'})
+    config = loaded(tmp_path, with_settings(provider="xai", **{level: body}))
 
-    assert main(["--config", str(written(tmp_path, text)), "--check"]) == EXIT_BAD_CONFIG
+    levels = config.cli_settings_levels(APP, AGENT, Provider.XAI)
 
-    refusal = capsys.readouterr().err
-    assert f"{LEVELS[level]}.cli_settings.openai: {key} is the service's; {OWNERS[key]}" in refusal
-    assert VALUE_CANARY not in refusal
-
-
-def test_the_check_refuses_a_key_another_owner_holds_as_a_start_does(tmp_path, capsys):
-    path = written(tmp_path, with_settings(app='model = "gpt-5.5"'))
-
-    status = main(["--config", str(path), "--check"])
-
-    assert (status, "model is the service's" in capsys.readouterr().err) == (EXIT_BAD_CONFIG, True)
+    assert levels[list(LEVELS).index(level)] == tomllib.loads(body)
+    assert tomllib.loads(a_grok_run(*levels).run_files()["config.toml"].decode()) == (
+        tomllib.loads(body)
+    )
 
 
 @pytest.mark.parametrize(
@@ -143,6 +327,7 @@ def test_the_check_refuses_a_key_another_owner_holds_as_a_start_does(tmp_path, c
     [
         pytest.param("cli_settings.grok = {}", "cli_settings.grok", id="grok"),
         pytest.param('cli_settings.openai = "x"', "cli_settings.openai", id="not-a-table"),
+        pytest.param('cli_settings.xai = "x"', "cli_settings.xai", id="xai-not-a-table"),
     ],
 )
 def test_a_provider_key_the_service_does_not_serve_or_a_non_table_stops_startup_naming_it(
@@ -151,18 +336,6 @@ def test_a_provider_key_the_service_does_not_serve_or_a_non_table_stops_startup_
     text = VALID_CONFIG + f"\n[{LEVELS['agent']}]\n{body}\n"
 
     assert_startup_refuses(tmp_path, capsys, text, field)
-
-
-@pytest.mark.parametrize("level", LEVELS)
-@pytest.mark.parametrize("check", [[], ["--check"]], ids=["start", "check"])
-def test_cli_settings_for_xai_stop_startup_and_the_check_at_every_level(
-    tmp_path, capsys, level, check
-):
-    text = with_settings(provider="xai", **{level: ""})
-
-    assert main(["--config", str(written(tmp_path, text)), *check]) == EXIT_BAD_CONFIG
-
-    assert f"{LEVELS[level]}.cli_settings.xai" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
@@ -316,6 +489,12 @@ NATIVE_EXAMPLE = (
     .split("```toml\n", 1)[1]
     .split("```", 1)[0]
 )
+GROK_EXAMPLE = (
+    OPERATIONS_DOCUMENT.read_text(encoding="utf-8")
+    .split("### Grok", 1)[1]
+    .split("```toml\n", 1)[1]
+    .split("```", 1)[0]
+)
 THE_EXAMPLES_APP = f'\n[apps.{DOCUMENTED_APP}]\nworkload_client = "{DOCUMENTED_APP}-test"\n'
 
 
@@ -359,4 +538,17 @@ def test_the_quoted_variant_of_the_example_leaves_the_feature_off_and_adds_a_lit
     assert (settings["features"]["image_generation"], settings["features.image_generation"]) == (
         False,
         True,
+    )
+
+
+def test_the_documented_grok_example_reaches_a_grok_runs_config_file_as_written(tmp_path):
+    text = VALID_CONFIG.replace(
+        DEFAULTS_LINE, f'[defaults]\nmodel = "{Provider.ANTHROPIC}/sonnet"\n'
+    )
+    config = loaded(tmp_path, text + THE_EXAMPLES_APP + GROK_EXAMPLE)
+
+    run = a_grok_run(*config.cli_settings_levels(DOCUMENTED_APP, "any-agent", Provider.XAI))
+
+    assert tomllib.loads(run.run_files()["config.toml"].decode()) == (
+        tomllib.loads(GROK_EXAMPLE)["apps"][DOCUMENTED_APP]["cli_settings"]["xai"]
     )

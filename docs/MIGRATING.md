@@ -2,6 +2,13 @@
 
 Read by a host bumping its pin; each release that breaks a host has one section, newest first.
 
+## Migrating to 0.13.0
+
+| Before (0.12.0) | Now |
+| --- | --- |
+| `cli_settings.xai` stopped startup as an unknown key, and the service served no Grok run. | `cli_settings.xai` is accepted in `[defaults]`, `[apps.<app>]` and `[apps.<app>.agents.<agent>]`, in Grok's own `config.toml` shape, merged per key from the defaults up to the agent and written to the run home's `config.toml` (0600, even when empty). The paths the service owns (the model, the tool-free switches, the sign-in and credential carriers, the system text, the keys that patch configuration) stop startup (exit 2, naming the level, the path and its owner); every other key, unknown ones included, loads. ([operations.md](operations.md), "Grok") |
+| `GrokRun(binary, login, system, history, *, model)` | `GrokRun` also requires the keyword `settings=` (a tuple of tables, lowest level first, merged by `agent_runtime.cli_settings.merged`). Its run home also holds `config.toml` (0600), and `run_files()` raises `TypeError` (naming the path and the type) for a setting value TOML cannot hold. |
+
 ## Migrating to 0.12.0
 
 | Before (0.11.0) | Now |

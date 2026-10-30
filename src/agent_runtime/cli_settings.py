@@ -5,8 +5,8 @@ operator's `[defaults]`, app and agent tables (#488 F1). Tables merge per key, r
 any other pair is replaced by the later value. The merge is not associative, so callers pass
 every level to one call instead of merging some levels first.
 
-The merged settings are written as a TOML document (`toml_document`), the form the Codex CLI reads
-its configuration in.
+The merged settings are written as a TOML document (`toml_document`), the form the Codex and
+Grok CLIs read their configuration in.
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def toml_basic_string(value: str) -> str:
 _BARE_KEY: Final = re.compile(r"[A-Za-z0-9_-]+")
 
 
-def _toml_key(key: str) -> str:
+def toml_key(key: str) -> str:
     return key if _BARE_KEY.fullmatch(key) else toml_basic_string(key)
 
 
@@ -88,7 +88,7 @@ def _toml_value(path: str, value: TomlValue) -> str:
 
 def _toml_inline_table(path: str, table: CliSettings) -> str:
     entries = (
-        f"{_toml_key(key)} = {_toml_value(f'{path}.{key}' if path else key, value)}"
+        f"{toml_key(key)} = {_toml_value(f'{path}.{key}' if path else key, value)}"
         for key, value in table.items()
     )
     return f"{{ {', '.join(entries)} }}" if table else "{}"
@@ -96,6 +96,6 @@ def _toml_inline_table(path: str, table: CliSettings) -> str:
 
 def toml_document(settings: CliSettings) -> bytes:
     lines = (
-        f"{_toml_key(key)} = {_toml_value(key, value)}\n" for key, value in settings.items()
+        f"{toml_key(key)} = {_toml_value(key, value)}\n" for key, value in settings.items()
     )
     return "".join(lines).encode()

@@ -63,9 +63,11 @@ from tests.support.service_table_support import (
     a_codex_config,
     a_table_service,
     argv_of,
+    captured_settings,
     the_served_runs,  # noqa: F401 - the fixture is named in its decorator
     the_table,  # noqa: F401 - the fixture is named in its decorator
     with_claude_beside,
+    with_levels,
     write_login,
     written_document,
 )
@@ -157,7 +159,103 @@ def test_a_login_file_swapped_between_two_runs_serves_the_next_run_without_a_res
     assert (table.access_canary in before, "second-access-token" in after) == (True, True)
 
 
-def test_a_grok_run_gets_no_settings_file_and_the_base_arguments_whatever_the_other_providers_set(
+LEVEL_SETTINGS = (
+    {"web_search": "live", "features": False},
+    {"features": {"plugins": False, "hooks": True}},
+    {"features": {"image_generation": True}},
+)
+SETTING_CANARY = "setting-canary-6d02"
+
+
+@pytest.mark.parametrize(
+    ("agent", "features"),
+    [
+        pytest.param(
+            COWRITER,
+            {"plugins": False, "hooks": True, "image_generation": True},
+            id="the-agent-with-a-table",
+        ),
+        pytest.param("another-agent", {"plugins": False, "hooks": True}, id="an-agent-without-one"),
+    ],
+)
+def test_the_three_levels_reach_the_run_as_one_merged_file_over_the_tables_defaults(
+    tmp_path: Path,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    table: ProviderTable,
+    agent: str,
+    features: dict[str, bool],
+) -> None:
+    capture = tmp_path / "capture"
+    document = with_levels(
+        table.document(
+            tmp_path,
+            table.service_fake(tmp_path, capture=capture),
+            table.login_file(tmp_path),
+        ),
+        table,
+        agent,
+        *LEVEL_SETTINGS,
+    )
+
+    events = drive_over_http(child_cleanup, monkeypatch, a_codex_config(document), post_a_run)
+
+    assert shown(events)[-1] == ("succeeded", "done")
+    assert captured_settings(capture) == {
+        **table.default_settings,
+        "web_search": "live",
+        "features": features,
+    }
+
+
+def test_a_run_without_cli_settings_gets_exactly_the_tables_defaults_in_a_private_file(
+    tmp_path: Path,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    table: ProviderTable,
+) -> None:
+    config, capture = a_table_service(table, tmp_path)
+
+    events = drive_over_http(child_cleanup, monkeypatch, config, post_a_run)
+
+    assert (shown(events), captured_settings(capture)) == (
+        [("assistant_text", "done"), ("succeeded", "done")],
+        table.default_settings,
+    )
+
+
+def test_a_run_the_program_refuses_ends_closed_and_no_setting_or_program_text_reaches_a_frame(
+    tmp_path: Path,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    table: ProviderTable,
+) -> None:
+    refused = table.refused_run
+    document = table.document(
+        tmp_path,
+        table.service_fake(tmp_path, stream=refused.stream, then=refused.then),
+        table.login_file(tmp_path),
+    )
+    document["defaults"]["cli_settings"] = {table.provider.value: {"invented_key": SETTING_CANARY}}
+
+    def scenario(base_url: str) -> Any:
+        events = post_a_run(base_url)
+        return events, status_of(base_url, events)
+
+    events, status = drive_over_http(child_cleanup, monkeypatch, a_codex_config(document), scenario)
+
+    assert (shown(events), status.failure_code) == (
+        [("failed", RUNNER_FAILED_MESSAGE)],
+        FailureCode.PROVIDER_ERROR,
+    )
+    assert (tmp_path / table.preconditions_marker).exists()
+    assert [kind for _event, kind, _function in failure_lines(caplog)] == [refused.failure_class]
+    seen = f"{[e.model_dump_json() for e in events]} {status.model_dump_json()} {caplog.text}"
+    assert (CANARY in seen, SETTING_CANARY in seen) == (False, False)
+
+
+def test_a_grok_run_gets_only_xais_levels_and_the_base_arguments_whatever_the_others_set(
     tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     capture = tmp_path / "capture"
@@ -166,10 +264,11 @@ def test_a_grok_run_gets_no_settings_file_and_the_base_arguments_whatever_the_ot
         GROK_TABLE.service_fake(tmp_path, capture=capture),
         GROK_TABLE.login_file(tmp_path),
     )
-    codex_settings = {"openai": {"web_search": "live"}}
-    document["defaults"]["cli_settings"] = codex_settings
-    document["apps"]["songmaker"]["cli_settings"] = codex_settings
-    document["apps"]["songmaker"]["agents"] = {COWRITER: {"cli_settings": codex_settings}}
+    others = {"openai": {"web_search": "codex-live"}, "anthropic": {"tools": ["Read"]}}
+    own = {"xai": {"web_search": "grok-live"}}
+    document["defaults"]["cli_settings"] = {**others, **own}
+    document["apps"]["songmaker"]["cli_settings"] = others
+    document["apps"]["songmaker"]["agents"] = {COWRITER: {"cli_settings": others}}
     config = a_codex_config(document)
 
     drive_over_http(child_cleanup, monkeypatch, config, post_a_run)
@@ -180,11 +279,54 @@ def test_a_grok_run_gets_no_settings_file_and_the_base_arguments_whatever_the_ot
         "",
         (TurnMessage(role="user", text="a"),),
         model=GROK_TABLE.model,
+        settings=(),
     )
-    home_listing = (capture / "home").read_text().split()
-    assert "config.toml" not in home_listing
+    assert captured_settings(capture) == {"web_search": "grok-live"}
     base_arguments = base.start(Path("/home"), Path("/work")).child.arguments
     assert tuple(argv_of(capture)[2:]) == base_arguments[2:]
+
+
+def test_xai_settings_reach_neither_codexs_file_nor_claudes_arguments(
+    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    claude_directory = tmp_path / "claude-directory"
+    claude_directory.mkdir()
+    claude_capture = tmp_path / "claude-capture"
+    codex_capture = tmp_path / "capture"
+    document = with_claude_beside(
+        CODEX_TABLE.document(
+            tmp_path,
+            CODEX_TABLE.service_fake(tmp_path, capture=codex_capture),
+            CODEX_TABLE.login_file(tmp_path),
+        ),
+        a_fake_claude(claude_directory, capture=claude_capture),
+    )
+    xai = {"xai": {"invented_key": SETTING_CANARY}}
+    document["defaults"]["cli_settings"] = xai
+    document["apps"]["songmaker"]["cli_settings"] = xai
+    document["apps"]["songmaker"]["agents"] = {
+        COWRITER: {"cli_settings": xai},
+        "claude-agent": {"model": f"{Provider.ANTHROPIC}/{LISTED_MODEL}", "cli_settings": xai},
+    }
+    config = a_codex_config(document)
+
+    def scenario(base_url: str) -> list[Any]:
+        claude = post_run(
+            base_url, headers(), run_body(turn=THREE_MESSAGE_TURN, agent="claude-agent")
+        )
+        return [post_a_run(base_url), decoded_events(claude.content)]
+
+    codex_events, claude_events = drive_over_http(child_cleanup, monkeypatch, config, scenario)
+
+    assert (shown(codex_events)[-1], shown(claude_events)[-1]) == (
+        ("succeeded", "done"),
+        ("succeeded", "done"),
+    )
+    claude_files = " ".join(
+        path.read_text() for path in claude_capture.rglob("*") if path.is_file()
+    )
+    assert captured_settings(codex_capture) == CODEX_TABLE.default_settings
+    assert SETTING_CANARY not in claude_files
 
 
 def an_api_key_document(table: ProviderTable, login: Path) -> None:
@@ -409,7 +551,7 @@ def test_a_run_given_a_relay_is_refused_by_an_exception_not_an_assert(
     )
 
     build = cli_runner.RUN_ADAPTERS[table.provider](launch)
-    with pytest.raises(ValueError, match="no tool relay"):
+    with pytest.raises(ValueError, match=f"a {table.provider} run has no tool relay"):
         build(inputs)
 
 

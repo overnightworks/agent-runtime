@@ -23,7 +23,7 @@ from collections.abc import AsyncGenerator, Callable, Mapping
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol
 
 from pydantic import SecretStr
 
@@ -31,13 +31,11 @@ from agent_runtime.claude.run import ClaudeRun
 from agent_runtime.cli_run import CliRunAdapter, RelayAccess, astream_cli_run
 from agent_runtime.cli_settings import CliSettings
 from agent_runtime.codex.run import CodexRun
-from agent_runtime.codex_login import CodexLogin
 from agent_runtime.config import PrivateWorkingRoot
 from agent_runtime.events import StreamEvent
 from agent_runtime.grok.run import GrokRun
-from agent_runtime.grok_login import GrokLogin
 from agent_runtime.secret_file import read_token_file
-from agent_runtime_client.wire import Turn
+from agent_runtime_client.wire import Turn, TurnMessage
 from agent_runtime_service.config import Provider, ServiceConfig, read_codex_login, read_grok_login
 from agent_runtime_service.relayed_events import RelayedEvents
 from agent_runtime_service.routing import Cli, split_model
@@ -87,16 +85,30 @@ def claude_run(launch: ProviderLaunch) -> LoggedInRun:
     return partial(_claude_run, launch, SecretStr(read_token_file(launch.token_file)))
 
 
-def _refused_relay(provider: str, inputs: RunInputs) -> None:
+class _ToolFreeRunType[Login](Protocol):
+    def __call__(
+        self,
+        binary: Path,
+        login: Login,
+        system: str,
+        history: tuple[TurnMessage, ...],
+        *,
+        model: str | None,
+        settings: tuple[CliSettings, ...],
+    ) -> CliRunAdapter: ...
+
+
+def _tool_free_run[Login](
+    run_type: _ToolFreeRunType[Login],
+    launch: ProviderLaunch,
+    login: Login,
+    inputs: RunInputs,
+) -> CliRunAdapter:
     if inputs.relay is not None:
         raise ValueError(
-            f"a {provider} run has no tool relay; admission refuses tools before this point"
+            f"a {launch.provider} run has no tool relay; admission refuses tools before this point"
         )
-
-
-def _codex_run(launch: ProviderLaunch, login: CodexLogin, inputs: RunInputs) -> CliRunAdapter:
-    _refused_relay("Codex", inputs)
-    return CodexRun(
+    return run_type(
         launch.binary,
         login,
         inputs.turn.system,
@@ -107,22 +119,11 @@ def _codex_run(launch: ProviderLaunch, login: CodexLogin, inputs: RunInputs) -> 
 
 
 def codex_run(launch: ProviderLaunch) -> LoggedInRun:
-    return partial(_codex_run, launch, read_codex_login(launch.token_file))
-
-
-def _grok_run(launch: ProviderLaunch, login: GrokLogin, inputs: RunInputs) -> CliRunAdapter:
-    _refused_relay("Grok", inputs)
-    return GrokRun(
-        launch.binary,
-        login,
-        inputs.turn.system,
-        tuple(inputs.turn.messages),
-        model=inputs.model,
-    )
+    return partial(_tool_free_run, CodexRun, launch, read_codex_login(launch.token_file))
 
 
 def grok_run(launch: ProviderLaunch) -> LoggedInRun:
-    return partial(_grok_run, launch, read_grok_login(launch.token_file))
+    return partial(_tool_free_run, GrokRun, launch, read_grok_login(launch.token_file))
 
 
 RUN_ADAPTERS: Final[Mapping[Provider, AdapterFactory]] = {

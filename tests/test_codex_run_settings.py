@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import tomllib
+from collections.abc import Callable
 from datetime import UTC, date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,7 @@ from typing import Any
 import pytest
 from tests.support.codex_support import DEFAULT_SETTINGS as DEFAULTS
 from tests.support.codex_support import FEATURES_OFF
+from tests.support.grok_support import a_grok_run
 from tests.support.provider_test_support import (
     CANARY_ACCESS_TOKEN,
     CANARY_ID_TOKEN,
@@ -20,6 +22,7 @@ from tests.support.provider_test_support import (
 from agent_runtime.cli_settings import CliSettings, merged
 from agent_runtime.codex.run import CodexRun
 from agent_runtime.codex_login import assess_codex_login
+from agent_runtime.grok.run import GrokRun
 from agent_runtime_client.wire import TurnMessage
 
 VALUE_CANARY = "setting-value-canary-3f9a"
@@ -36,7 +39,7 @@ def a_run(*settings: CliSettings) -> CodexRun:
     )
 
 
-def written_settings(run: CodexRun) -> dict[str, Any]:
+def written_settings(run: CodexRun | GrokRun) -> dict[str, Any]:
     return tomllib.loads(run.run_files()["config.toml"].decode())
 
 
@@ -118,17 +121,24 @@ def test_every_toml_value_type_is_written_so_that_reading_it_back_gives_the_same
 
 
 class Plain:
-    pass
+    def __repr__(self) -> str:
+        return VALUE_CANARY
 
 
+@pytest.mark.parametrize("build", [a_run, a_grok_run], ids=["codex", "grok"])
 @pytest.mark.parametrize(
     ("value", "type_name"),
-    [(None, "NoneType"), (b"bytes", "bytes"), ({1}, "set"), (Plain(), "Plain")],
+    [
+        (None, "NoneType"),
+        (VALUE_CANARY.encode(), "bytes"),
+        ({VALUE_CANARY}, "set"),
+        (Plain(), "Plain"),
+    ],
 )
-def test_a_value_toml_cannot_hold_is_refused_naming_its_path_and_type_but_not_the_siblings(
-    value: object, type_name: str
+def test_a_value_toml_cannot_hold_is_refused_naming_its_path_and_type_but_not_its_content(
+    build: Callable[..., CodexRun | GrokRun], value: object, type_name: str
 ) -> None:
-    run = a_run({"features": {"kept": VALUE_CANARY, "broken": value}})  # type: ignore[dict-item]
+    run = build({"features": {"kept": VALUE_CANARY, "broken": value}})  # type: ignore[dict-item]
 
     with pytest.raises(TypeError) as refused:
         run.run_files()

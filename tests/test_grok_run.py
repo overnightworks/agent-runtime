@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import tomllib
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,7 @@ SYSTEM_TEXT = "system-canary-7d2e"
 HISTORY_TEXT = "history-canary-91ab"
 CLI_TEXT = "cli-text-canary-5c30"
 LOGIN_KEY = "grok-synthetic-key"
+SETTING_VALUE = "setting-value-canary-4f1a"
 EXPECTED_PROMPT = f"User: first question\n\nAssistant: first answer\n\nUser: {HISTORY_TEXT}"
 
 BASE_ARGUMENTS = (
@@ -81,6 +83,7 @@ def a_run(**changes: Any) -> GrokRun:
         "login": assess_grok_login(a_login()),
         "system": SYSTEM_TEXT,
         "history": a_history(),
+        "settings": (),
     }
     return GrokRun(**{**fields, **changes})
 
@@ -150,8 +153,30 @@ def test_the_home_gets_the_blanked_login_the_rules_and_the_prompt_as_files() -> 
         "auth.json": login.blanked_document,
         "AGENTS.md": SYSTEM_TEXT.encode(),
         "prompt.txt": EXPECTED_PROMPT.encode(),
+        "config.toml": b"",
     }
     assert json.loads(files["auth.json"])["xai.example"]["refresh_token"] == ""
+
+
+def test_the_levels_are_written_merged_to_the_config_file_and_reach_no_argv_or_environment(
+    tmp_path: Path,
+) -> None:
+    settings = (
+        {"invented": {"first": 1, "kept": SETTING_VALUE}, "scalar": {"was": "table"}},
+        {"invented": {"first": 2}, "scalar": "now", "list": ["a"]},
+        {"list": ["b"]},
+    )
+    run = a_run(settings=settings)
+    child = run.start(tmp_path / "home", tmp_path / "work").child
+
+    assert tomllib.loads(run.run_files()["config.toml"].decode()) == {
+        "invented": {"first": 2, "kept": SETTING_VALUE},
+        "scalar": "now",
+        "list": ["b"],
+    }
+    leaks = " ".join([*child.arguments, *child.environment.values(), repr(run)])
+    assert SETTING_VALUE not in leaks
+    assert LOGIN_KEY not in run.run_files()["config.toml"].decode()
 
 
 @pytest.mark.parametrize(

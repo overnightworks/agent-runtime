@@ -1989,6 +1989,25 @@ WebSocket form. A1b-G0b below measured all of these except L-live and M-live
 (moved to G0c), R1 (retired; G1 owns it), the nested `--sandbox` profile and the
 WebSocket form (out of scope).
 
+**Amendment (30.10.2026, #588 step 0, #617).** Step 0 and 0b ran the pinned `grok 1.0.60`
+(sha256 prefix `10e6af64b247`) offline: no login, network unshared, the operator's home hidden, a
+fresh `HOME=GROK_HOME`, each run bounded at 30 s. `$GROK_HOME/config.toml` is Grok's single user
+layer, and one mistyped value fails the whole run loudly (D6). 0b-1: `ui.max_thoughts_width =
+"wide"` prints `Error: Failed to create agent config: invalid type: string "wide", expected u16`
+and an ``in `ui.max_thoughts_width` `` line on stderr only, stdout stays empty, exit 1, so
+`GrokStreamDecoder` ends `GrokAnswerMissing` and the run `failed: provider_error`; the service
+adds no cause, because the core's stream runner drains stderr without keeping it. 0b-2: a 0-byte
+`config.toml` reaches `Not signed in`, exit 1, so the service writes the merged levels as that
+file on every run, empty ones included. D7: the three tool-free switches stay on the command line,
+and their config keys (`permission.deny`, `subagents.enabled`, `disable_web_search`) are owned.
+D8 as built: the owned paths (models, tool-free switches, the sign-in tables and their
+`grok_com_config` twin, credential carriers, system-text selectors and the keys that patch
+configuration) stop startup naming their owner, checked on the parsed table tree with an `<id>`
+wildcard and never descending into arrays; every other key is the operator's and loads, unknown
+ones included. Residuals the service cannot see: undocumented keys and aliases, the host's
+`/etc/grok` files, and managed configuration or campaign patches the program downloads, where
+requirements outrank the command line. The evidence is `~/.cache/agent-runtime-probes/g-serve-b-step0/`.
+
 **Scripts, verbatim.**
 
 `g0a.py`:
