@@ -129,23 +129,15 @@ def _expiry_text(expires_at: int | None) -> str:
         return str(expires_at)
 
 
-def _sign_in_exit(subject: str, token_file: Path) -> int:
-    """4, or 3 with the held-sibling sentence when a sibling may exist beside the login.
-
-    A login file with no name to derive a sibling from is a configuration the install refuses
-    the same way, so it is 2 here too.
-    """
-    sibling = swap_sibling_or_refusal(token_file)
-    if isinstance(sibling, SwapRefused):
-        _say(f"{subject}: {sibling.reason}")
-        return EXIT_BAD_CONFIG
+def _sign_in_exit(sibling: Path) -> int:
+    """4, or 3 with the held-sibling sentence when a sibling may exist beside the login."""
     if _sibling_left_over(sibling):
         _say(held_sibling_sentence(sibling))
         return EXIT_REMAINS
     return EXIT_SIGN_IN_AGAIN
 
 
-def _standing_exit(subject: str, token_file: Path, entry: RenewalEntry) -> int:
+def _standing_exit(subject: str, token_file: Path, sibling: Path, entry: RenewalEntry) -> int:
     """Reads the login once more and says where it stands; the exit follows the standing."""
     from agent_runtime.codex_login import CodexRenewalRefusal
     from agent_runtime_service.login_standing import (
@@ -158,7 +150,7 @@ def _standing_exit(subject: str, token_file: Path, entry: RenewalEntry) -> int:
         document = read_secret_file(token_file, "login file")
     except UnsoundSecretFile as refusal:
         _say(f"{subject}: {refusal}")
-        return _sign_in_exit(subject, token_file)
+        return _sign_in_exit(sibling)
     standing = login_standing(document, int(time.time()), entry)
     expiry = _expiry_text(standing.expires_at)
     window_minutes = RENEWAL_WINDOW_SECONDS // 60
@@ -186,12 +178,13 @@ def _standing_exit(subject: str, token_file: Path, entry: RenewalEntry) -> int:
     _say(f"{subject}: {sentences[standing.state]}")
     if standing.state is LoginStanding.EXPIRY_UNKNOWN:
         return EXIT_EXPIRY_UNKNOWN
-    return _sign_in_exit(subject, token_file) if standing.state.asks_for_sign_in else 0
+    return _sign_in_exit(sibling) if standing.state.asks_for_sign_in else 0
 
 
 def _checked(
     subject: str,
     token_file: Path,
+    sibling: Path,
     read_login: Callable[[Path], object],
     entry: RenewalEntry | None,
 ) -> int:
@@ -199,12 +192,12 @@ def _checked(
         read_login(token_file)
     except UnsoundSecretFile as refusal:
         _say(f"{subject}: {refusal}")
-        return _sign_in_exit(subject, token_file)
+        return _sign_in_exit(sibling)
     _say(
         f"{subject}: accepted by the service's reader;"
         " whether the provider still accepts it shows only in a run"
     )
-    return 0 if entry is None else _standing_exit(subject, token_file, entry)
+    return 0 if entry is None else _standing_exit(subject, token_file, sibling, entry)
 
 
 def _sibling_left_over(sibling: Path) -> bool:
@@ -221,13 +214,10 @@ def _sibling_left_over(sibling: Path) -> bool:
 def _installed(
     subject: str,
     token_file: Path,
+    sibling: Path,
     read_login: Callable[[Path], object],
     standard_input: BinaryIO | None,
 ) -> int:
-    sibling = swap_sibling_or_refusal(token_file)
-    if isinstance(sibling, SwapRefused):
-        _say(f"{subject}: not written: {sibling.reason}")
-        return EXIT_BAD_CONFIG
     if _sibling_left_over(sibling):
         _say(held_sibling_sentence(sibling))
         return EXIT_REMAINS
@@ -279,12 +269,17 @@ def main(argv: Sequence[str] | None = None, standard_input: BinaryIO | None = No
         _say(f"cli.{arguments.provider}: no such table")
         return EXIT_BAD_CONFIG
     subject = f"cli.{arguments.provider}.token_file"
+    sibling = swap_sibling_or_refusal(table.token_file)
+    if isinstance(sibling, SwapRefused):
+        _say(f"{subject}: {sibling.reason}")
+        return EXIT_BAD_CONFIG
     read_login = LOGIN_READERS[provider]
     if arguments.check:
-        return _checked(subject, table.token_file, read_login, RENEWALS.get(provider))
+        return _checked(subject, table.token_file, sibling, read_login, RENEWALS.get(provider))
     return _installed(
         subject,
         table.token_file,
+        sibling,
         read_login,
         sys.stdin.buffer if standard_input is None and sys.stdin is not None else standard_input,
     )
