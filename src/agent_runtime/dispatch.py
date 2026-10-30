@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Final
 
 from agent_runtime.catalog import ProviderRoute
 from agent_runtime.claude.adapter import (
@@ -23,7 +22,6 @@ from agent_runtime.claude.adapter import (
 from agent_runtime.claude.provider import (
     UnavailableError as ClaudeUnavailableError,
 )
-from agent_runtime.codex.image import codex_image_turn_is_available
 from agent_runtime.codex.transport import CodexCliToolTransport
 from agent_runtime.config import HostWiringError, current_config
 from agent_runtime.constants import (
@@ -33,7 +31,6 @@ from agent_runtime.constants import (
 )
 from agent_runtime.errors import (
     ProviderUnavailableError,
-    SafeRouteReason,
     SafeRouteReasonCode,
     ToolProtocolRejectionCode,
     normalize_route_failure,
@@ -44,10 +41,6 @@ from agent_runtime.grok.transport import GrokCliToolTransport
 from agent_runtime.openai_adapter import (
     call_openai_compatible_once,
     stream_openai_compatible_turn,
-)
-from agent_runtime.process import (
-    CliLoginUnusableError,
-    codex_cli_login_is_usable,
 )
 from agent_runtime.tool_loop import (
     ToolExecutor,
@@ -64,24 +57,11 @@ from agent_runtime.tools import (
 
 log = logging.getLogger(__name__)
 
-# Images come from Codex's CLI image turn; no other provider or route
-# ships an image tool today.
-_IMAGE_TOOL_PROVIDER: Final[str] = "codex"
-_IMAGE_TOOL_ROUTE: Final[ProviderRoute] = ProviderRoute.CLI
-
 
 @dataclass(frozen=True)
 class _ApiConnection:
     api_key: str
     api_url: str | None = None
-
-
-@dataclass(frozen=True)
-class ImageCapability:
-    """One route's image answer: does it own the tool, and what blocks it today."""
-
-    carries_image_tool: bool
-    failure: SafeRouteReason | None
 
 
 async def stream_turn(
@@ -343,31 +323,6 @@ def _require_secret(provider: str, route: ProviderRoute, secret) -> str:
     if not value:
         raise _unavailable(provider, route, SafeRouteReasonCode.API_KEY_NOT_SET)
     return value
-
-
-def image_capability(provider: str, route: ProviderRoute) -> ImageCapability:
-    """Answer whether one provider route can run an image turn, or name why not."""
-    if provider != _IMAGE_TOOL_PROVIDER or route is not _IMAGE_TOOL_ROUTE:
-        return ImageCapability(
-            carries_image_tool=False,
-            failure=normalize_route_failure(SafeRouteReasonCode.NO_IMAGE_TOOL),
-        )
-    return ImageCapability(
-        carries_image_tool=True, failure=_codex_cli_image_route_failure(),
-    )
-
-
-def _codex_cli_image_route_failure() -> SafeRouteReason | None:
-    """Name what keeps the mounted Codex CLI from running an image turn."""
-    if not codex_image_turn_is_available():
-        return normalize_route_failure(SafeRouteReasonCode.CLI_UNAVAILABLE)
-    try:
-        signed_in = codex_cli_login_is_usable()
-    except CliLoginUnusableError:
-        return normalize_route_failure(SafeRouteReasonCode.CLI_LOGIN_NOT_CONFIGURED)
-    if not signed_in:
-        return normalize_route_failure(SafeRouteReasonCode.CLI_LOGIN_NOT_CONFIGURED)
-    return None
 
 
 def _unavailable(
