@@ -1,4 +1,4 @@
-"""The two entry points a host calls to run a turn and to ask for an image."""
+"""The two entry points a host calls: ``stream_turn`` and ``call_provider_once``."""
 
 from __future__ import annotations
 
