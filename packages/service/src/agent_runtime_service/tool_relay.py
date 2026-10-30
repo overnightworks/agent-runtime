@@ -876,8 +876,7 @@ class McpRelayOwner:
 
     Every answer leaves through ``_cleared_for_cli``; a hit refuses the owner for good and is
     reported once to ``ToolCalls.reflected()``. A well-formed ``notifications/cancelled`` goes to
-    ``ToolCalls.cancel``, every notification is acknowledged, and an ``Unanswered`` call passes
-    through untouched.
+    ``ToolCalls.cancel``; every notification is acknowledged; ``Unanswered`` passes untouched.
     """
 
     def __init__(
