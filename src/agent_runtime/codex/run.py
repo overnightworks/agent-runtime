@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,6 +14,7 @@ from agent_runtime.anchored_turn import CliProcessPool, ReapBounds
 from agent_runtime.cli_run import (
     CliRunFailure,
     CliRunStart,
+    RelayAccess,
     StepEvent,
     parsed_line,
     require_runnable,
@@ -22,7 +24,7 @@ from agent_runtime.codex_login import CodexLogin, CodexLoginVerdict
 from agent_runtime.constants import CLI_GROUP_CONFIRMATION_SECONDS, CLI_TERMINATION_GRACE_SECONDS
 from agent_runtime.errors import CliLoginRefusedError, raise_without_chain
 from agent_runtime.events import AssistantTextEvent, FinalEvent
-from agent_runtime.spawn import ChildProcess, closed_environment
+from agent_runtime.spawn import ChildProcess, ChildProcessSpecificationError, closed_environment
 from agent_runtime.transcript import flatten_messages
 from agent_runtime_client.wire import TurnMessage
 
@@ -43,6 +45,10 @@ _SYSTEM_PROMPT_FILE_NAME: Final = "system-prompt"
 _HOME_VARIABLE: Final = "CODEX_HOME"
 
 _CONFIG_FILE_NAME: Final = "config.toml"
+RELAY_SERVER_NAME: Final = "relay"
+# The relay's secret reaches the child only as this variable, which the relay entry names; a
+# shell's environment filter keyed on `TOKEN` hides it.
+RELAY_TOKEN_VARIABLE: Final = "AGENT_RUNTIME_RELAY_TOKEN"  # noqa: S105 - an environment variable name and no secret
 _PICTURE_FOLDER_NAME: Final = "generated_images"
 
 _BASE_ARGUMENTS: Final = (
@@ -213,8 +219,10 @@ class CodexRun:
 
     Its defaults switch off the features this adapter names and set the read-only sandbox; every
     other feature follows the pinned CLI, and the run's ``settings`` (the operator's levels,
-    lowest first) may change any of them. It describes the run and starts nothing; the entry
-    makes the directories and the spawn owner starts the child.
+    lowest first) may change any of them. With a ``relay``, its settings file gets the service's
+    ``mcp_servers.relay`` entry over those levels, and the relay's secret reaches the child only
+    in its environment, under the variable that entry names. It describes the run and starts
+    nothing; the entry makes the directories and the spawn owner starts the child.
     """
 
     binary: Path
@@ -223,9 +231,21 @@ class CodexRun:
     history: tuple[TurnMessage, ...] = field(repr=False)
     model: str | None = field(kw_only=True)
     settings: tuple[CliSettings, ...] = field(kw_only=True, repr=False)
+    relay: RelayAccess | None = field(default=None, kw_only=True)
+    tool_timeout_seconds: float | None = field(default=None, kw_only=True)
 
     def __post_init__(self) -> None:
         require_runnable("Codex", self, CodexLogin, CodexLoginVerdict.USABLE)
+        if (self.relay is None) != (self.tool_timeout_seconds is None):
+            raise ChildProcessSpecificationError(
+                "A Codex run takes a relay and its tool_timeout_seconds together or neither"
+            )
+        if self.tool_timeout_seconds is not None and not (
+            math.isfinite(self.tool_timeout_seconds) and self.tool_timeout_seconds > 0
+        ):
+            raise ChildProcessSpecificationError(
+                "A Codex run needs a finite, positive tool_timeout_seconds"
+            )
 
     @property
     def pool(self) -> CliProcessPool:
@@ -239,14 +259,36 @@ class CodexRun:
         return {
             AUTH_FILE_NAME: self.login.blanked_document,
             _SYSTEM_PROMPT_FILE_NAME: self.system.encode(),
-            _CONFIG_FILE_NAME: toml_document(merged(_DEFAULT_SETTINGS, *self.settings)),
+            _CONFIG_FILE_NAME: toml_document(self._settings()),
         }
+
+    def _settings(self) -> CliSettings:
+        settings = merged(_DEFAULT_SETTINGS, *self.settings)
+        if self.relay is None or self.tool_timeout_seconds is None:
+            return settings
+        servers = settings.get("mcp_servers")
+        settings["mcp_servers"] = {
+            **(servers if isinstance(servers, dict) else {}),
+            RELAY_SERVER_NAME: {
+                "url": self.relay.url,
+                "bearer_token_env_var": RELAY_TOKEN_VARIABLE,
+                "required": True,
+                "default_tools_approval_mode": "approve",
+                "tool_timeout_sec": math.ceil(self.tool_timeout_seconds),
+            },
+        }
+        return settings
+
+    def _relay_environment(self) -> dict[str, str]:
+        return {} if self.relay is None else {RELAY_TOKEN_VARIABLE: self.relay.secret}
 
     def start(self, home: Path, working_directory: Path) -> CliRunStart:
         child = ChildProcess(
             binary=self.binary,
             arguments=self._arguments(home),
-            environment=closed_environment(home, **{_HOME_VARIABLE: str(home)}),
+            environment=closed_environment(
+                home, **{_HOME_VARIABLE: str(home)}, **self._relay_environment()
+            ),
             working_directory=working_directory,
         )
         return CliRunStart(

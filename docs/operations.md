@@ -62,7 +62,7 @@ in this order for a person's run:
    `[apps.<app>.agents.<agent>]`, else the app's, else `[defaults] model`. A subscription-group member's
    run goes to the CLI route of the model's provider; every other caller with API rights goes to the paid
    API, under the model's full name. A run that names
-   tools and whose provider has no tool relay yet (Codex, Grok) gets 403 `not_enabled`
+   tools and whose provider has no tool relay yet (Grok) gets 403 `not_enabled`
    before any place, capability or program, never a silent drop and never another route.
 
 An app's own run skips steps 1 and 2: its agent's table `[apps.<app>.agents.<agent>]` must say
@@ -183,6 +183,17 @@ Four top-level keys of `cli_settings.openai` stop startup at any level (exit 2, 
 because another setting already owns their fact: `model` and `model_provider` (set `model`),
 `model_instructions_file` (the run request's system text) and `cli_auth_credentials_store`
 (`[cli.openai] token_file`). A nested key such as `features.model` loads.
+
+A run that names tools gets the run's relay as `mcp_servers.relay` in that file, written over the
+levels: `url` (the relay on loopback), `bearer_token_env_var = "AGENT_RUNTIME_RELAY_TOKEN"`,
+`required = true`, `default_tools_approval_mode = "approve"` and `tool_timeout_sec`, the whole
+seconds of `[runs] max_duration_s` rounded up. The relay's per-run secret reaches the program only
+in that environment variable, never in its arguments or a file, and the app's capability never
+reaches it. `mcp_servers.relay`, any key below it or an empty table, is the service's and stops
+startup at any level (exit 2, `--check` agrees); the operator's own `mcp_servers.<name>` entries
+stay beside the relay. A tool run whose program exits non-zero (a relay that refuses it ends
+`codex-cli 0.163.0` with exit 1) or answers before the relay listed its tools ends
+`failed: provider_error`, with no second program and no other route.
 
 A typo is not caught at startup. The pinned CLI exits before its first line under
 `--strict-config`, so every run of that agent ends `failed: provider_error`, and the log names
@@ -373,7 +384,7 @@ that vanished or was renamed already stops runs (`--strict-config`); a new stabl
 on by default does not. A CLI output line over 4 MiB ends the run `failed: provider_error`, and a
 tool's output travels in one line. Claude's `--max-turns` is `[runs] max_tool_calls` plus one and
 counts every tool-using response, built-in tools included. Codex has no turn limit by name, so
-only `[runs] max_duration_s` bounds it.
+`[runs] max_tool_calls` bounds its calls to the app's tools and `[runs] max_duration_s` its run.
 
 **Install or check it (every provider).** `agent-runtime-service-login --config PATH --provider PROVIDER` (`anthropic`, `openai` or `xai`)
 reads the new document on standard input, checks it with the service's reader for that provider and

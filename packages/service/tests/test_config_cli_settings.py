@@ -120,6 +120,7 @@ SYSTEM_TEXT_OWNER = "set the run request's system text instead"
 PATCH_OWNER = "it can patch keys the service owns"
 CARRIER_OWNER = f"they can carry the inference credential; {TOKEN_OWNER}"
 MODEL_OWNER = "set model instead"
+RELAY_OWNER = "the service attaches the run's tool relay"
 WHOLE_TABLE_OWNERS = (
     ("agent", SYSTEM_TEXT_OWNER),
     ("model_providers", TOKEN_OWNER),
@@ -156,6 +157,14 @@ OWNED_PATHS = [
         f'cli_auth_credentials_store = "{VALUE_CANARY}"',
         "cli_auth_credentials_store",
         "set [cli.openai] token_file instead",
+    ),
+    *(
+        owned("openai", body, "mcp_servers.relay", RELAY_OWNER)
+        for body in (
+            f'mcp_servers.relay.url = "{VALUE_CANARY}"',
+            f'mcp_servers.relay.tools.x.approval_mode = "{VALUE_CANARY}"',
+            "mcp_servers.relay = {}",
+        )
     ),
     *xai_rows(
         (f'models.default = "{VALUE_CANARY}"', "models.default", MODEL_OWNER),
@@ -346,6 +355,7 @@ def test_a_provider_key_the_service_does_not_serve_or_a_non_table_stops_startup_
         'profile = "x"',
         'profiles = { x = { model = "y" } }',
         'projects = { "/work" = { trust_level = "trusted" } }',
+        'mcp_servers.other.url = "https://other.test/mcp"',
     ],
 )
 def test_any_other_key_loads_because_typos_are_not_caught_at_startup(tmp_path, body):
@@ -354,12 +364,11 @@ def test_any_other_key_loads_because_typos_are_not_caught_at_startup(tmp_path, b
     assert config.cli_settings_levels(APP, AGENT, Provider.OPENAI)[2] != {}
 
 
-def test_a_quoted_dotted_key_stays_one_literal_key(tmp_path):
-    config = loaded(tmp_path, with_settings(agent='"features.image_generation" = true'))
+@pytest.mark.parametrize("key", ["features.image_generation", "mcp_servers.relay"])
+def test_a_quoted_dotted_key_stays_one_literal_key(tmp_path, key):
+    config = loaded(tmp_path, with_settings(agent=f'"{key}" = true'))
 
-    assert config.cli_settings_levels(APP, AGENT, Provider.OPENAI)[2] == {
-        "features.image_generation": True
-    }
+    assert config.cli_settings_levels(APP, AGENT, Provider.OPENAI)[2] == {key: True}
 
 
 def claude_levels(tmp_path, text, agent=AGENT, app=APP):
