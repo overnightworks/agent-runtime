@@ -1,8 +1,0 @@
-claim_id = "72ef4001150b4a5ba510c7ecd5f65ce8"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "8135c6eb7381f0649d442774cc37ca0a3b62d757"
-branch = "claude/issue-638-a1-codex-attaches-the-relay"
-scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "docs/wire.md", "packages/service/src/agent_runtime_service/app.py", "packages/service/src/agent_runtime_service/cli_runner.py", "packages/service/src/agent_runtime_service/cli_settings_config.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/src/agent_runtime_service/run_tools.py", "packages/service/src/agent_runtime_service/tool_relay.py", "packages/service/tests/test_app_models.py", "packages/service/tests/test_cli_runner_codex_profile.py", "packages/service/tests/test_cli_runner_tables.py", "packages/service/tests/test_cli_runner_tools.py", "packages/service/tests/test_config_cli_settings.py", "packages/service/tests/test_run_tools.py", "src/agent_runtime/codex/run.py", "tests/support/cli_tools_support.py", "tests/support/relay_support.py", "tests/support/service_table_support.py", "tests/test_codex_run.py"]
-opened_commit = "78a7cb77b6dd9b5ec09e176a2eba65ab872c3aed"
-whole_reason = "Seven production files, about 75 added and 10 deleted lines, two of them one-line edits (the gate literal and app.py's docstring): the attachment, the listing guard and the startup refusal together make one ruled line true (a Codex tool run reaches the app only through an accepted relay, never silently without it), and admitting Codex before any one of them lands would open a route that line forbids."
