@@ -8,7 +8,7 @@ from typing import Final, Self, cast
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator, model_validator
 
 from agent_runtime.claude.run import check_tool_name, settings_document
-from agent_runtime.cli_settings import CliSettings
+from agent_runtime.cli_settings import CliSettings, toml_key
 
 
 class _CliSettingsSection(BaseModel):
@@ -16,19 +16,20 @@ class _CliSettingsSection(BaseModel):
 
 
 _ANY_ID: Final = "<id>"
+_SET_MODEL_INSTEAD: Final = "set model instead"
 _OwnedPaths = Mapping[tuple[str, ...], str]
 
 _CODEX_SETTINGS_THE_SERVICE_OWNS: Final[_OwnedPaths] = {
-    ("model",): "set model instead",
-    ("model_provider",): "set model instead",
+    ("model",): _SET_MODEL_INSTEAD,
+    ("model_provider",): _SET_MODEL_INSTEAD,
     ("model_instructions_file",): "set the run request's system text instead",
     ("cli_auth_credentials_store",): "set [cli.openai] token_file instead",
 }
 
 
 _CLAUDE_SETTINGS_THE_SERVICE_OWNS: Final[_OwnedPaths] = {
-    ("model",): "set model instead",
-    ("fallbackModel",): "set model instead",
+    ("model",): _SET_MODEL_INSTEAD,
+    ("fallbackModel",): _SET_MODEL_INSTEAD,
     ("agent",): "set the run request's system text and model instead",
     ("apiKeyHelper",): "set [cli.anthropic] token_file instead",
     ("env",): "the service builds the run's environment",
@@ -36,12 +37,12 @@ _CLAUDE_SETTINGS_THE_SERVICE_OWNS: Final[_OwnedPaths] = {
 }
 _APP_TOOL_PREFIX: Final = "mcp__"
 
-_GROK_TOKEN_OWNER: Final = "set [cli.xai] token_file instead"
+_GROK_LOGIN_FILE_OWNER: Final = "set [cli.xai] token_file instead"
 _GROK_PATCH_OWNER: Final = "it can patch keys the service owns"
 _GROK_SYSTEM_TEXT_OWNER: Final = "set the run request's system text instead"
 _GROK_TOOL_FREE_OWNER: Final = "the run is tool-free (--{switch})"
 _GROK_CREDENTIAL_CARRIER_OWNER: Final = (
-    f"they can carry the inference credential; {_GROK_TOKEN_OWNER}"
+    f"they can carry the inference credential; {_GROK_LOGIN_FILE_OWNER}"
 )
 # Grok reads the sign-in table under both of its names, so each owned path is written once.
 _GROK_SIGN_IN_TABLES: Final = ("auth", "grok_com_config")
@@ -56,24 +57,24 @@ _GROK_SIGN_IN_KEYS: Final = (
 
 def _grok_settings_the_service_owns() -> _OwnedPaths:
     owned: dict[tuple[str, ...], str] = {
-        ("models", "default"): "set model instead",
+        ("models", "default"): _SET_MODEL_INSTEAD,
         ("permission", "deny"): _GROK_TOOL_FREE_OWNER.format(switch='deny "*"'),
         ("subagents", "enabled"): _GROK_TOOL_FREE_OWNER.format(switch="no-subagents"),
         ("disable_web_search",): _GROK_TOOL_FREE_OWNER.format(switch="disable-web-search"),
         ("models", "extra_headers"): _GROK_CREDENTIAL_CARRIER_OWNER,
         ("models", "agent_type"): _GROK_SYSTEM_TEXT_OWNER,
-        ("model", _ANY_ID, "model_provider"): "set model instead",
+        ("model", _ANY_ID, "model_provider"): _SET_MODEL_INSTEAD,
         ("model", _ANY_ID, "system_prompt_label"): _GROK_SYSTEM_TEXT_OWNER,
         ("model", _ANY_ID, "agent_type"): _GROK_SYSTEM_TEXT_OWNER,
         ("agent",): _GROK_SYSTEM_TEXT_OWNER,
-        ("model_providers",): _GROK_TOKEN_OWNER,
-        ("auth_provider",): _GROK_TOKEN_OWNER,
+        ("model_providers",): _GROK_LOGIN_FILE_OWNER,
+        ("auth_provider",): _GROK_LOGIN_FILE_OWNER,
     }
     for table in _GROK_SIGN_IN_TABLES:
         for key in _GROK_SIGN_IN_KEYS:
-            owned[(table, key)] = _GROK_TOKEN_OWNER
+            owned[(table, key)] = _GROK_LOGIN_FILE_OWNER
     for key in ("api_key", "env_key", "auth_provider"):
-        owned[("model", _ANY_ID, key)] = _GROK_TOKEN_OWNER
+        owned[("model", _ANY_ID, key)] = _GROK_LOGIN_FILE_OWNER
     for key in ("extra_headers", "query_params", "mtls_cert_dir"):
         owned[("model", _ANY_ID, key)] = _GROK_CREDENTIAL_CARRIER_OWNER
     for path in (
@@ -118,13 +119,9 @@ def _first_owned_refusal(settings: object, owned: _OwnedPaths, prefix: str = "")
     for path, owner in owned.items():
         found = _set_path(settings, path)
         if found is not None:
-            path_text = ".".join(_dotted_segment(key) for key in found)
+            path_text = ".".join(toml_key(key) for key in found)
             return f"{prefix}{path_text} is the service's; {owner}"
     return None
-
-
-def _dotted_segment(key: str) -> str:
-    return f'"{key}"' if "." in key else key
 
 
 class ClaudeCliSettingsConfig(_CliSettingsSection):

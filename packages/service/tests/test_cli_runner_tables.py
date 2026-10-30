@@ -249,6 +249,7 @@ def test_a_run_the_program_refuses_ends_closed_and_no_setting_or_program_text_re
         [("failed", RUNNER_FAILED_MESSAGE)],
         FailureCode.PROVIDER_ERROR,
     )
+    assert (tmp_path / table.preconditions_marker).exists()
     assert [kind for _event, kind, _function in failure_lines(caplog)] == [refused.failure_class]
     seen = f"{[e.model_dump_json() for e in events]} {status.model_dump_json()} {caplog.text}"
     assert (CANARY in seen, SETTING_CANARY in seen) == (False, False)
@@ -321,7 +322,9 @@ def test_xai_settings_reach_neither_codexs_file_nor_claudes_arguments(
         ("succeeded", "done"),
         ("succeeded", "done"),
     )
-    claude_files = " ".join(path.read_text() for path in claude_capture.glob("*") if path.is_file())
+    claude_files = " ".join(
+        path.read_text() for path in claude_capture.rglob("*") if path.is_file()
+    )
     assert captured_settings(codex_capture) == CODEX_TABLE.default_settings
     assert SETTING_CANARY not in claude_files
 
@@ -548,7 +551,7 @@ def test_a_run_given_a_relay_is_refused_by_an_exception_not_an_assert(
     )
 
     build = cli_runner.RUN_ADAPTERS[table.provider](launch)
-    with pytest.raises(ValueError, match="no tool relay"):
+    with pytest.raises(ValueError, match=f"a {table.provider} run has no tool relay"):
         build(inputs)
 
 

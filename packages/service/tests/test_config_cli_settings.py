@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from tests.support.codex_support import DEFAULT_SETTINGS
-from tests.support.provider_test_support import a_codex_login, a_grok_login
+from tests.support.provider_test_support import a_codex_login, a_grok_login, exception_chain
 from tests.support.service_config_support import (
     VALID_CONFIG,
     assert_startup_refuses,
@@ -21,7 +21,7 @@ from agent_runtime.grok.run import GrokRun
 from agent_runtime.grok_login import assess_grok_login
 from agent_runtime_client.wire import TurnMessage
 from agent_runtime_service.cli import EXIT_BAD_CONFIG, main
-from agent_runtime_service.config import Provider, ServiceConfig, load_config
+from agent_runtime_service.config import ConfigError, Provider, ServiceConfig, load_config
 
 DEFAULTS_LINE = f'defaults = {{ model = "{Provider.ANTHROPIC}/sonnet" }}\n'
 APP = "songmaker"
@@ -128,6 +128,9 @@ WHOLE_TABLE_OWNERS = (
 )
 
 
+TABLE_HERE = "@table@"
+
+
 def tool_free(switch: str) -> str:
     return f"the run is tool-free ({switch})"
 
@@ -159,12 +162,12 @@ OWNED_PATHS = [
         (f'models.default = "{VALUE_CANARY}"', "models.default", MODEL_OWNER),
         (f'permission.deny = ["{VALUE_CANARY}"]', "permission.deny", tool_free('--deny "*"')),
         (
-            f"subagents.enabled = true # {VALUE_CANARY}",
+            f'subagents.enabled = "{VALUE_CANARY}"',
             "subagents.enabled",
             tool_free("--no-subagents"),
         ),
         (
-            f"disable_web_search = false # {VALUE_CANARY}",
+            f'disable_web_search = "{VALUE_CANARY}"',
             "disable_web_search",
             tool_free("--disable-web-search"),
         ),
@@ -185,11 +188,11 @@ OWNED_PATHS = [
         (f'model.m1.agent_type = "{VALUE_CANARY}"', "model.m1.agent_type", SYSTEM_TEXT_OWNER),
         (f'campaigns = [{{ id = "{VALUE_CANARY}" }}]', "campaigns", PATCH_OWNER),
         (
-            f"features.managed_config = true # {VALUE_CANARY}",
+            f'features.managed_config = "{VALUE_CANARY}"',
             "features.managed_config",
             PATCH_OWNER,
         ),
-        (f"features.campaigns = true # {VALUE_CANARY}", "features.campaigns", PATCH_OWNER),
+        (f'features.campaigns = "{VALUE_CANARY}"', "features.campaigns", PATCH_OWNER),
         (
             f'endpoints.managed_config_url = "{VALUE_CANARY}"',
             "endpoints.managed_config_url",
@@ -208,6 +211,10 @@ OWNED_PATHS = [
         for key in ("extra_headers", "query_params", "mtls_cert_dir")
     ),
     *(
+        owned("xai", f"model.m1.{key} = {{}}", f"model.m1.{key}", CARRIER_OWNER)
+        for key in ("extra_headers", "query_params", "mtls_cert_dir")
+    ),
+    *(
         owned(
             "xai",
             f'model."grok-x.1".{key} = "{VALUE_CANARY}"',
@@ -215,6 +222,31 @@ OWNED_PATHS = [
             TOKEN_OWNER,
         )
         for key in ("api_key", "env_key", "auth_provider")
+    ),
+    *(
+        owned(
+            "xai",
+            f'model.{quoted}.api_key = "{VALUE_CANARY}"',
+            f"model.{shown}.api_key",
+            TOKEN_OWNER,
+        )
+        for quoted, shown in (
+            ("'a\"b.c'", '"a\\"b.c"'),
+            ('""', '""'),
+            ('"my id"', '"my id"'),
+        )
+    ),
+    owned(
+        "xai",
+        f'model."grok-x.1".system_prompt_label = "{VALUE_CANARY}"',
+        'model."grok-x.1".system_prompt_label',
+        SYSTEM_TEXT_OWNER,
+    ),
+    owned(
+        "xai",
+        f'[[{TABLE_HERE}.version_overrides]]\nid = "{VALUE_CANARY}"',
+        "version_overrides",
+        PATCH_OWNER,
     ),
     *(
         owned("xai", f'{key} = {{ x = "{VALUE_CANARY}" }}', key, owner)
@@ -233,13 +265,20 @@ OWNED_PATHS = [
 def test_a_path_another_owner_holds_stops_startup_naming_its_level_its_path_and_its_owner(
     tmp_path, capsys, level, provider, body, path, owner
 ):
-    text = with_settings(provider=provider, **{level: body})
+    table = f"{LEVELS[level]}.cli_settings.{provider}"
+    config_file = written(
+        tmp_path, with_settings(provider=provider, **{level: body.replace(TABLE_HERE, table)})
+    )
 
-    assert main(["--config", str(written(tmp_path, text)), "--check"]) == EXIT_BAD_CONFIG
+    assert main(["--config", str(config_file), "--check"]) == EXIT_BAD_CONFIG
+    with pytest.raises(ConfigError) as refused:
+        load_config(config_file)
 
     refusal = capsys.readouterr().err
-    assert f"{LEVELS[level]}.cli_settings.{provider}: {path} is the service's; {owner}" in refusal
+    assert f"{table}: {path} is the service's; {owner}" in refusal
     assert VALUE_CANARY not in refusal
+    assert exception_chain(refused.value) == [refused.value]
+    assert VALUE_CANARY not in repr(refused.value.args)
 
 
 def test_an_owned_path_stops_a_start_as_it_stops_the_check(tmp_path, capsys):
@@ -280,6 +319,9 @@ def test_every_pass_through_class_loads_and_is_returned_at_its_level_as_written(
     levels = config.cli_settings_levels(APP, AGENT, Provider.XAI)
 
     assert levels[list(LEVELS).index(level)] == tomllib.loads(body)
+    assert tomllib.loads(a_grok_run_of(levels).run_files()["config.toml"].decode()) == (
+        tomllib.loads(body)
+    )
 
 
 @pytest.mark.parametrize(
@@ -458,6 +500,17 @@ GROK_EXAMPLE = (
 THE_EXAMPLES_APP = f'\n[apps.{DOCUMENTED_APP}]\nworkload_client = "{DOCUMENTED_APP}-test"\n'
 
 
+def a_grok_run_of(levels: tuple[dict[str, object], ...]) -> GrokRun:
+    return GrokRun(
+        Path("/opt/grok/bin/grok"),
+        assess_grok_login(json.dumps(a_grok_login()).encode()),
+        "system",
+        (TurnMessage(role="user", text="question"),),
+        model=None,
+        settings=levels,
+    )
+
+
 def a_codex_run_of(config: ServiceConfig, app: str, agent: str) -> CodexRun:
     return CodexRun(
         Path("/opt/codex/bin/codex"),
@@ -507,15 +560,8 @@ def test_the_documented_grok_example_reaches_a_grok_runs_config_file_as_written(
     )
     config = loaded(tmp_path, text + THE_EXAMPLES_APP + GROK_EXAMPLE)
 
-    run = GrokRun(
-        Path("/opt/grok/bin/grok"),
-        assess_grok_login(json.dumps(a_grok_login()).encode()),
-        "system",
-        (TurnMessage(role="user", text="question"),),
-        model=None,
-        settings=config.cli_settings_levels(DOCUMENTED_APP, "any-agent", Provider.XAI),
-    )
+    run = a_grok_run_of(config.cli_settings_levels(DOCUMENTED_APP, "any-agent", Provider.XAI))
 
-    assert tomllib.loads(run.run_files()["config.toml"].decode()) == {
-        "ui": {"max_thoughts_width": 120}
-    }
+    assert tomllib.loads(run.run_files()["config.toml"].decode()) == (
+        tomllib.loads(GROK_EXAMPLE)["apps"][DOCUMENTED_APP]["cli_settings"]["xai"]
+    )

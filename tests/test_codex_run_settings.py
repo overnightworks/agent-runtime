@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import math
 import tomllib
+from collections.abc import Callable
 from datetime import UTC, date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -15,11 +17,14 @@ from tests.support.provider_test_support import (
     CANARY_ACCESS_TOKEN,
     CANARY_ID_TOKEN,
     a_codex_login,
+    a_grok_login,
 )
 
 from agent_runtime.cli_settings import CliSettings, merged
 from agent_runtime.codex.run import CodexRun
 from agent_runtime.codex_login import assess_codex_login
+from agent_runtime.grok.run import GrokRun
+from agent_runtime.grok_login import assess_grok_login
 from agent_runtime_client.wire import TurnMessage
 
 VALUE_CANARY = "setting-value-canary-3f9a"
@@ -36,7 +41,17 @@ def a_run(*settings: CliSettings) -> CodexRun:
     )
 
 
-def written_settings(run: CodexRun) -> dict[str, Any]:
+def a_grok_run(*settings: CliSettings) -> GrokRun:
+    return GrokRun(
+        Path("/opt/grok/bin/grok"),
+        assess_grok_login(json.dumps(a_grok_login()).encode()),
+        "system",
+        (TurnMessage(role="user", text="question"),),
+        settings=settings,
+    )
+
+
+def written_settings(run: CodexRun | GrokRun) -> dict[str, Any]:
     return tomllib.loads(run.run_files()["config.toml"].decode())
 
 
@@ -121,14 +136,15 @@ class Plain:
     pass
 
 
+@pytest.mark.parametrize("build", [a_run, a_grok_run], ids=["codex", "grok"])
 @pytest.mark.parametrize(
     ("value", "type_name"),
     [(None, "NoneType"), (b"bytes", "bytes"), ({1}, "set"), (Plain(), "Plain")],
 )
 def test_a_value_toml_cannot_hold_is_refused_naming_its_path_and_type_but_not_the_siblings(
-    value: object, type_name: str
+    build: Callable[..., CodexRun | GrokRun], value: object, type_name: str
 ) -> None:
-    run = a_run({"features": {"kept": VALUE_CANARY, "broken": value}})  # type: ignore[dict-item]
+    run = build({"features": {"kept": VALUE_CANARY, "broken": value}})  # type: ignore[dict-item]
 
     with pytest.raises(TypeError) as refused:
         run.run_files()

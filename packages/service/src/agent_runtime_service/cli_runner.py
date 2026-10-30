@@ -23,7 +23,7 @@ from collections.abc import AsyncGenerator, Callable, Mapping
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol
 
 from pydantic import SecretStr
 
@@ -31,13 +31,11 @@ from agent_runtime.claude.run import ClaudeRun
 from agent_runtime.cli_run import CliRunAdapter, RelayAccess, astream_cli_run
 from agent_runtime.cli_settings import CliSettings
 from agent_runtime.codex.run import CodexRun
-from agent_runtime.codex_login import CodexLogin
 from agent_runtime.config import PrivateWorkingRoot
 from agent_runtime.events import StreamEvent
 from agent_runtime.grok.run import GrokRun
-from agent_runtime.grok_login import GrokLogin
 from agent_runtime.secret_file import read_token_file
-from agent_runtime_client.wire import Turn
+from agent_runtime_client.wire import Turn, TurnMessage
 from agent_runtime_service.config import Provider, ServiceConfig, read_codex_login, read_grok_login
 from agent_runtime_service.relayed_events import RelayedEvents
 from agent_runtime_service.routing import Cli, split_model
@@ -87,10 +85,23 @@ def claude_run(launch: ProviderLaunch) -> LoggedInRun:
     return partial(_claude_run, launch, SecretStr(read_token_file(launch.token_file)))
 
 
-def _tool_free_run(
-    run_type: type[CodexRun] | type[GrokRun],
+class _ToolFreeRunType[Login](Protocol):
+    def __call__(
+        self,
+        binary: Path,
+        login: Login,
+        system: str,
+        history: tuple[TurnMessage, ...],
+        *,
+        model: str | None,
+        settings: tuple[CliSettings, ...],
+    ) -> CliRunAdapter: ...
+
+
+def _tool_free_run[Login](
+    run_type: _ToolFreeRunType[Login],
     launch: ProviderLaunch,
-    login: CodexLogin | GrokLogin,
+    login: Login,
     inputs: RunInputs,
 ) -> CliRunAdapter:
     if inputs.relay is not None:
@@ -99,7 +110,7 @@ def _tool_free_run(
         )
     return run_type(
         launch.binary,
-        login,  # type: ignore[arg-type]  # each provider's reader returns its own run's login
+        login,
         inputs.turn.system,
         tuple(inputs.turn.messages),
         model=inputs.model,

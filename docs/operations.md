@@ -359,7 +359,7 @@ settings").
 **What a CLI run does with tools.** A Codex tool item in the stream does not fail the run; the
 service drops it and no frame shows it. A Grok tool event ends the run `failed: provider_error`,
 because the program starts with `--deny "*"`, `--no-subagents`, `--disable-web-search` and
-`--max-turns 1`; their config keys are the service's too ("CLI settings"). An item or event type the adapter does not know still ends
+`--max-turns 1`; the config keys of the first three are the service's too ("CLI settings"). An item or event type the adapter does not know still ends
 the run `failed: provider_error`. The service switches off by default the features its Codex adapter
 names ("CLI settings"), and every other feature follows the pinned CLI. At every pin bump the
 operator compares that list with `codex features list`, run with `HOME` and `CODEX_HOME` set to one

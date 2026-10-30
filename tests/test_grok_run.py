@@ -179,15 +179,6 @@ def test_the_levels_are_written_merged_to_the_config_file_and_reach_no_argv_or_e
     assert LOGIN_KEY not in run.run_files()["config.toml"].decode()
 
 
-def test_a_setting_toml_cannot_hold_stops_the_run_naming_its_path_and_type_not_its_value() -> None:
-    run = a_run(settings=({"nested": {"when": SETTING_VALUE.encode()}},))
-
-    with pytest.raises(TypeError, match=r"nested\.when is a bytes") as refused:
-        run.run_files()
-
-    assert SETTING_VALUE not in str(refused.value)
-
-
 @pytest.mark.parametrize(
     ("changes", "field_name"),
     [
