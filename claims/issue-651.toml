@@ -1,8 +1,0 @@
-claim_id = "cb04931f1e814d4199b848bbb7b569ac"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "fc3fef342d07de511810c697dea91758b46d837b"
-branch = "claude/issue-651-a4v-tool-timeout-rule"
-scope = ["docs/MIGRATING.md", "src/agent_runtime/claude/run.py", "src/agent_runtime/cli_run.py", "src/agent_runtime/codex/run.py", "src/agent_runtime/grok/run.py", "tests/test_claude_run.py", "tests/test_codex_run.py", "tests/test_grok_run.py"]
-opened_commit = "6849628c62b4f00f0f13d240700c01825158f178"
-whole_reason = "Four production files, about 20 changed lines: one rule moves to its owner and its three copies leave in the same commit, or two runs would keep a check the third no longer shares."
