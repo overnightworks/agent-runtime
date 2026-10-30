@@ -319,21 +319,29 @@ only `[runs] max_duration_s` bounds it.
 
 **Install or check it (every provider).** `agent-runtime-service-login --config PATH --provider PROVIDER` (`anthropic`, `openai` or `xai`)
 reads the new document on standard input, checks it with the service's reader for that provider and
-swaps it in beside the old file; the next run reads it without a restart. It exits 0 when the
-file is written, 1 when it is not written and the old file stays, 2 when it refused before
-reading anything (the platform, the configuration, a provider without a table, or a
-`.<file>.new` beside the login file, which may belong to a writer that still runs: stop the
-service and any other login command, confirm that no process the service started still runs,
-then remove it; one that appears while the command reads its input ends it with 1 and is left
-alone), and 3 when it is not written and its own `.<file>.new`, which may hold the new
-login, is not confirmed gone: it names the path. Exit 0 may say "written; durability not
-confirmed": the new login is in place, and a crash before the directory is written could bring
-back the old one, never a mix.
+swaps it in beside the old file; the next run reads it without a restart. One exit table serves
+install and `--check`: 0 when the file is written (or, for `--check`, when nothing is asked of the operator); 1 when it is not written and the old file stays; 2 for a refusal
+before anything was read (the platform, the configuration, a provider without a table, or usage); 3 when a `.<file>.new` is present and nothing was written, which
+may belong to a writer that still runs (wait about 60 s; if none runs, stop the service and any other
+login command, confirm that no process the service started still runs, then remove it), or when the
+command's own sibling, which may hold the new login, is not confirmed gone: it names the path; 4 to
+sign in again (`--check` only); 5 when the login's expiry cannot be read (`--check` only). Exit 0 may
+say "written; durability not confirmed": the new login is in place, and a crash before the directory
+is written could bring back the old one, never a mix.
 It needs what the service's own start reads except the logins, and write access to the login
 file's directory, so run it as the service's own user: the new file is created 0600 and owned by
 whoever runs the command. A failure before the swap leaves the old file untouched. `--check` runs the
-service's reader on the file as it stands and reads no input; exit 0 means the reader accepts
-the file, not that the provider does.
+service's reader on the file as it stands and reads no input; it writes nothing and prints no
+token. Its first line, kept verbatim, says the reader accepts the file, not that the provider does.
+For `openai` it then prints one standing line from the file alone: not due for renewal, due for
+renewal (exit 0, a running service renews it), or its expiry cannot be read with the cause (exit 5);
+the line gives the expiry in UTC. A login that holds no refresh token, is not a usable Codex login,
+has expired, or has been due for 90 minutes or more (twice the 15-minute interval plus the one-hour
+backoff) without being renewed exits 4: sign in again. A sign-in verdict while a `.<file>.new` is
+present exits 3 instead, with the held-sibling sentence. A sibling beside a login that is not due or
+only due is not mentioned, because a renewal holds one routinely. `anthropic` gets the reader's
+verdict alone (0, 4 or 3). A host's setup reads 0 as no action and 4 as sign in; every other code is
+a problem to show.
 
 **Renewal of a Codex login.** The service renews the `[cli.openai]` login itself, from its own
 lifespan: one round at start, then every 15 minutes, and one hour after a round in which an
@@ -356,8 +364,9 @@ the document it read. Runs keep their blanked copies and never renew.
   this bound comes after they have finished; give the supervisor's stop at least 60 s beyond that. A
   kill sooner, or a forced second SIGINT, can leave `.<file>.new` beside the login file.
 - **What a log line asks of the operator.** Only WARNING and ERROR lines are printed, because the
-  service configures no logging. `agent-runtime-service-login --check` shows today only whether the
-  reader accepts the file, not whether a renewal is due or failed (the expiry is the proof).
+  service configures no logging. `agent-runtime-service-login --check` shows it from the file: a
+  login still due 90 minutes after it fell due exits 4, a held sibling beside such a login exits 3,
+  and a successful renewal shows as exit 0 with a later expiry.
   - `sibling not created`: the service cannot create the sibling, because the directory is
     read-only or the login file is bound on its own (or cannot be checked for that). Bind the
     directory that holds the file, read-write.
@@ -376,7 +385,7 @@ the document it read. Runs keep their blanked copies and never renew.
     refused file), and a failed refresh costs none. A failure after a completed turn costs that
     turn; the hourly backoff caps it at 24 a day.
 - **The login command meanwhile.** The service holds `.<file>.new` for milliseconds every 15
-  minutes and up to about 45 s during a renewal. `agent-runtime-service-login` then exits 2
+  minutes and up to about 45 s during a renewal. `agent-runtime-service-login` then exits 3
   with the held-sibling sentence; run it again after the renewal.
 
 **When it fails.** A missing or refused file stops the service at startup, naming

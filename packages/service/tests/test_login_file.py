@@ -56,6 +56,7 @@ import agent_runtime_service.config as service_config
 import agent_runtime_service.login_file as login_file
 from agent_runtime.secret_file import MAX_SECRET_FILE_BYTES, UnsoundSecretFile, read_secret_file
 from agent_runtime_service.config import Provider
+from agent_runtime_service.login import EXIT_REMAINS
 from agent_runtime_service.login_file import (
     ReservedSwap,
     SiblingHeld,
@@ -277,7 +278,7 @@ def test_a_sibling_that_appears_after_the_check_is_refused_and_left_untouched(
         said,
     )
 
-    assert status == 1
+    assert status == EXIT_REMAINS
     assert (
         line_of(
             installation, f"not written: {login_file.held_sibling_sentence(installation.sibling)}"

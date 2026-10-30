@@ -12,6 +12,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -20,7 +21,6 @@ import pytest
 from tests.support.core_runtime_support import (
     no_installed_core_runtime,  # noqa: F401 - an autouse fixture
 )
-from tests.support.provider_test_support import a_codex_login
 from tests.support.service_login_support import (  # noqa: F401 - the fixtures are named in their decorators
     CANARY_FOREIGN,
     CANARY_REFRESH,
@@ -49,14 +49,21 @@ from tests.support.service_login_support import (  # noqa: F401 - the fixtures a
     what_the_writer_returned,
     what_was_said,
 )
+from tests.support.service_renewal_support import a_login_issued_at
 from tests.support.service_table_support import write_login
 
 import agent_runtime_service.config as service_config
 import agent_runtime_service.login as login
 import agent_runtime_service.process_hardening as hardening
+from agent_runtime_service.cli import EXIT_BAD_CONFIG
 from agent_runtime_service.cli import main as service_main
 from agent_runtime_service.config import Provider, load_config
-from agent_runtime_service.login import main
+from agent_runtime_service.login import (
+    EXIT_EXPIRY_UNKNOWN,
+    EXIT_REMAINS,
+    EXIT_SIGN_IN_AGAIN,
+    main,
+)
 from agent_runtime_service.login_file import SwappedDurably, SwapResult, held_sibling_sentence
 
 
@@ -103,7 +110,7 @@ def test_a_leftover_sibling_stops_the_command_before_it_reads_anything(
 
     status, heard = run(installation, stream, said)
 
-    assert (status, stream.was_read) == (2, False)
+    assert (status, stream.was_read) == (EXIT_REMAINS, False)
     assert heard == LINE_PREFIX + held_sibling_sentence(installation.sibling) + "\n"
     assert "earlier install" not in heard
     assert installation.unchanged()
@@ -119,9 +126,10 @@ def test_a_holders_reservation_stops_the_command_before_it_reads_and_the_holder_
 
     status, heard = run(installation, stream, said)
 
-    assert (status, stream.was_read) == (2, False)
+    assert (status, stream.was_read) == (EXIT_REMAINS, False)
     assert heard == LINE_PREFIX + held_sibling_sentence(installation.sibling) + "\n"
     assert os.lstat(installation.sibling) == held
+    assert installation.unchanged()
     assert holder.commit(b"holder\n", lambda path: None, replaces=None) == SwappedDurably()
 
 
@@ -139,7 +147,7 @@ def test_a_reservation_made_while_the_command_reads_refuses_it_and_the_holder_st
 
     status, heard = run(installation, stream, said)
 
-    assert status == 1
+    assert status == EXIT_REMAINS
     assert (
         heard
         == line_of(installation, f"not written: {held_sibling_sentence(installation.sibling)}")
@@ -160,7 +168,7 @@ def test_a_leftover_check_that_cannot_inspect_the_sibling_refuses_before_reading
 
     status, _ = run(installation, stream, said)
 
-    assert (status, stream.was_read, installation.unchanged()) == (2, False, True)
+    assert (status, stream.was_read, installation.unchanged()) == (EXIT_REMAINS, False, True)
 
 
 def a_commit_with_every_interrupt_arriving(
@@ -264,25 +272,34 @@ def test_a_process_whose_stderr_is_a_closed_pipe_exits_with_the_installs_status(
 
 # --check: matrix cells 14 and 15.
 
+CURRENT_MARGIN_SECONDS = 60
+
+
+def a_current_codex_login(last_refresh: str | None = None) -> bytes:
+    """A Codex login issued a minute ago: not due, readable and accepted by the reader."""
+    issued = a_login_issued_at(int(time.time()) - CURRENT_MARGIN_SECONDS)
+    if last_refresh is None:
+        return issued
+    return json.dumps({**json.loads(issued), "last_refresh": last_refresh}).encode()
+
 
 @pytest.mark.parametrize(
-    ("provider", "login_bytes"),
+    ("provider", "last_refresh"),
     [
-        pytest.param(Provider.OPENAI, a_codex_login(), id="codex"),
-        pytest.param(
-            Provider.OPENAI,
-            a_codex_login(last_refresh="2001-01-01T00:00:00Z"),
-            id="codex-long-since-refreshed",
-        ),
-        pytest.param(Provider.ANTHROPIC, NEW_CLAUDE_TOKEN, id="claude"),
-        pytest.param(Provider.XAI, GOOD_DOCUMENTS[Provider.XAI], id="grok"),
+        (Provider.OPENAI, None),
+        (Provider.OPENAI, "2001-01-01T00:00:00Z"),
+        (Provider.ANTHROPIC, None),
+        (Provider.XAI, None),
     ],
 )
 def test_check_accepts_a_file_the_reader_accepts_without_reading_input_or_writing(
-    tmp_path: Path, said: Said, provider: Provider, login_bytes: bytes
+    tmp_path: Path, said: Said, provider: Provider, last_refresh: str | None
 ) -> None:
     installation = an_installation(tmp_path, provider)
-    write_login(installation.login, login_bytes)
+    if provider is Provider.OPENAI:
+        write_login(installation.login, a_current_codex_login(last_refresh))
+    else:
+        write_login(installation.login, GOOD_DOCUMENTS[provider])
     stream = Stream(b"never read")
     before = installation.snapshot()
 
@@ -329,7 +346,7 @@ def test_check_refuses_a_missing_or_refused_file_with_the_readers_reason(
 
     status, heard = run(installation, stream, said, "--check")
 
-    assert (status, stream.was_read) == (1, False)
+    assert (status, stream.was_read) == (EXIT_SIGN_IN_AGAIN, False)
     assert installation.snapshot() == before
     assert f"{installation.login}" in heard
     assert reason in heard
@@ -477,7 +494,7 @@ def test_the_service_refuses_a_bad_login_at_start_and_only_the_command_repairs_i
     with said.watching():
         refused_at_start = service_main(["--config", str(installation.config)])
     stops = said.stderr
-    installed = main(installation.command(), Stream(GOOD_DOCUMENTS[Provider.OPENAI]))
+    installed = main(installation.command(), Stream(a_current_codex_login()))
     checked = main(installation.command("--check"), Stream(b""))
 
     assert refused_at_start == 2
@@ -503,8 +520,12 @@ def test_standard_input_that_does_not_exist_is_a_closed_refusal(
     assert installation.directory_holds() == [LOGIN_NAME]
 
 
+@pytest.mark.parametrize("mode", [(), ("--check",)], ids=["install", "check"])
 def test_a_login_file_without_a_file_name_is_refused_before_anything_is_read(
-    installation: Installation, said: Said, monkeypatch: pytest.MonkeyPatch
+    installation: Installation,
+    said: Said,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: tuple[str, ...],
 ) -> None:
     real_load_config = service_config.load_config
 
@@ -517,9 +538,9 @@ def test_a_login_file_without_a_file_name_is_refused_before_anything_is_read(
     monkeypatch.setattr(service_config, "load_config", rooted)
     stream = Stream(GOOD_DOCUMENTS[installation.provider])
 
-    status, heard = run(installation, stream, said)
+    status, heard = run(installation, stream, said, *mode)
 
-    assert (status, stream.was_read) == (2, False)
+    assert (status, stream.was_read) == (EXIT_BAD_CONFIG, False)
     assert "has no file name" in heard
     assert installation.unchanged()
 
@@ -572,5 +593,7 @@ def test_interrupts_before_the_read_are_disregarded(
 
     status, _ = run(installation, stream, said, *extra)
 
-    assert status == 0
+    assert status == (
+        EXIT_EXPIRY_UNKNOWN if (where, installation.provider) == ("check", Provider.OPENAI) else 0
+    )
     assert recorded_signals() == []
