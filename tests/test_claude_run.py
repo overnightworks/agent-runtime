@@ -325,9 +325,9 @@ def test_a_tool_free_run_carries_no_tool_timeout(tmp_path: Path) -> None:
     assert "MCP_TOOL_TIMEOUT" not in environment
 
 
-@pytest.mark.parametrize("seconds", [0, 0.0, -1.0, math.nan, math.inf, -math.inf])
+@pytest.mark.parametrize("seconds", [0, 0.0, -1.0, math.nan, math.inf, -math.inf, True, "5"])
 def test_a_tool_timeout_that_is_not_finite_and_positive_is_refused_by_field_name_only(
-    seconds: float,
+    seconds: object,
 ) -> None:
     with pytest.raises(ChildProcessSpecificationError, match="tool_timeout_seconds") as refusal:
         a_run(tool_timeout_seconds=seconds)

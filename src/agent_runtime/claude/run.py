@@ -34,6 +34,7 @@ from agent_runtime.cli_run import (
     examine_announcement,
     refuse_announcement,
     relay_authorization,
+    require_tool_timeout,
 )
 from agent_runtime.cli_settings import CliSettings, TomlValue, merged
 from agent_runtime.constants import (
@@ -215,10 +216,7 @@ class ClaudeRun:
             raise ChildProcessSpecificationError("A Claude run needs max_tool_calls of at least 1")
         if not self.history:
             raise ChildProcessSpecificationError("A Claude run needs a non-empty history")
-        if not (math.isfinite(self.tool_timeout_seconds) and self.tool_timeout_seconds > 0):
-            raise ChildProcessSpecificationError(
-                "A Claude run needs a finite, positive tool_timeout_seconds"
-            )
+        require_tool_timeout("Claude", self.tool_timeout_seconds)
         for level in self.settings:
             _checked_level(level)
 

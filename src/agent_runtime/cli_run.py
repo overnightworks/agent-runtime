@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
@@ -184,6 +185,18 @@ def require_runnable[LoginVerdict](
         raise ChildProcessSpecificationError(f"A {provider} run needs a usable login")
     if not run.history:
         raise ChildProcessSpecificationError(f"A {provider} run needs a non-empty history")
+
+
+def require_tool_timeout(provider: str, seconds: object) -> None:
+    """Refuse a tool timeout that is not a finite, positive int or float."""
+    if (
+        isinstance(seconds, bool)
+        or not isinstance(seconds, int | float)
+        or not (math.isfinite(seconds) and seconds > 0)
+    ):
+        raise ChildProcessSpecificationError(
+            f"A {provider} run needs a finite, positive tool_timeout_seconds"
+        )
 
 
 class CliLineDecoder(Protocol):
