@@ -46,9 +46,9 @@ from tests.support.service_support import (
     service_config,
 )
 from tests.support.service_table_support import (
-    CODEX_TABLE,
     CODEX_MODEL,
     CODEX_NAME,
+    CODEX_TABLE,
     a_codex_config,
     a_codex_login_file,
     a_config_with_both_providers,
