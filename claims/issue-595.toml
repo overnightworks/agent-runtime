@@ -1,0 +1,8 @@
+claim_id = "9cce3309d2db40e19d454577545c5336"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "a876e1d54e4d945dc8f96df6e8b6d639185d6954"
+branch = "claude/issue-595-g-serve-a-grok-tool-free"
+scope = ["AGENTS.md", "docs/ARCHITECTURE.md", "docs/decisions/0001-agent-service.md", "docs/host.md", "docs/operations.md", "docs/wire.md", "packages/service/src/agent_runtime_service/app.py", "packages/service/src/agent_runtime_service/cli_runner.py", "packages/service/src/agent_runtime_service/cli_version.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/tests/test_cli_codex_startup.py", "packages/service/tests/test_cli_runner_tables.py", "packages/service/tests/test_cli_table_startup.py", "packages/service/tests/test_cli_version.py", "packages/service/tests/test_config_cli_settings.py", "packages/service/tests/test_config_model.py", "packages/service/tests/test_login.py", "packages/service/tests/test_login_file.py", "packages/service/tests/test_login_file_xai.py", "packages/service/tests/test_routing.py", "tests/support/grok_support.py", "tests/support/service_login_support.py", "tests/support/service_table_support.py"]
+opened_commit = "2a02e84ecba85c0d03361a368cb5f643f860e602"
+whole_reason = "The xai table, its login reader, its version reader and its run adapter are one contract: accepting [cli.xai] without grok_run starts a service whose every xai run fails, and the login command needs the accepted table, so login and serving land together; the other files are its docs and tests."
