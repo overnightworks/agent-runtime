@@ -12,6 +12,8 @@ from pydantic import BaseModel, ConfigDict
 
 from agent_runtime.anchored_turn import CliProcessPool, ReapBounds
 from agent_runtime.cli_run import (
+    RELAY_SERVER_NAME,
+    RELAY_TOKEN_VARIABLE,
     CliRunFailure,
     CliRunStart,
     RelayAccess,
@@ -45,10 +47,6 @@ _SYSTEM_PROMPT_FILE_NAME: Final = "system-prompt"
 _HOME_VARIABLE: Final = "CODEX_HOME"
 
 _CONFIG_FILE_NAME: Final = "config.toml"
-RELAY_SERVER_NAME: Final = "relay"
-# The relay's secret reaches the child only as this variable, which the relay entry names; a
-# shell's environment filter keyed on `TOKEN` hides it.
-RELAY_TOKEN_VARIABLE: Final = "AGENT_RUNTIME_RELAY_TOKEN"  # noqa: S105 - an environment variable name and no secret
 _PICTURE_FOLDER_NAME: Final = "generated_images"
 
 _BASE_ARGUMENTS: Final = (

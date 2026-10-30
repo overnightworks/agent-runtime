@@ -73,7 +73,7 @@ from tests.support.service_table_support import (
 )
 
 import agent_runtime_service.cli_runner as cli_runner
-from agent_runtime.codex.run import RELAY_TOKEN_VARIABLE
+from agent_runtime.cli_run import RELAY_TOKEN_VARIABLE
 from agent_runtime_client.wire import (
     FailureCode,
     RunEvent,

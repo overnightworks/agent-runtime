@@ -22,7 +22,7 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
 from pathlib import Path
-from typing import ClassVar, NoReturn, Protocol
+from typing import ClassVar, Final, NoReturn, Protocol
 
 from pydantic import BaseModel, ValidationError
 
@@ -45,6 +45,11 @@ log = logging.getLogger(__name__)
 StepEvent = AssistantTextEvent | ToolCallEvent | ToolResultEvent
 
 _STDERR_CHUNK_BYTES = 64 * 1024
+
+RELAY_SERVER_NAME: Final = "relay"
+# The relay's secret reaches the child only as this variable, which the relay entry names; a
+# shell's environment filter keyed on `TOKEN` hides it.
+RELAY_TOKEN_VARIABLE: Final = "AGENT_RUNTIME_RELAY_TOKEN"  # noqa: S105 - an environment variable name and no secret
 
 
 class CliStreamLineTooLong(Exception):
