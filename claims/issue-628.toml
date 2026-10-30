@@ -1,0 +1,7 @@
+claim_id = "7cb8a01b9f504c53941c64786958cac4"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "71d697749628253db5a4896133245a2ab693c3f6"
+branch = "claude/issue-628-a0-probe-pinned-codex-and-grok-against-t"
+scope = ["docs/decisions/0001-agent-service.md"]
+opened_commit = "e2e0c2f781491c06d049a48355a100f8375ae2bc"
