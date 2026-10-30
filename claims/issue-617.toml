@@ -1,0 +1,8 @@
+claim_id = "9811762de3e74c2bb41c593a37473c51"
+agent = "Claude c03dc9a6-7387-437d-bd0a-eb5bcf1d35da"
+role = "builder"
+base = "ef2c1a39652cc0aac2808b467cd08d8b96cd97e5"
+branch = "claude/issue-617-g-serve-b-cli-settings-xai"
+scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "packages/service/src/agent_runtime_service/cli_runner.py", "packages/service/src/agent_runtime_service/cli_settings_config.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/tests/test_api_runner.py", "packages/service/tests/test_cli_runner_codex_profile.py", "packages/service/tests/test_cli_runner_tables.py", "packages/service/tests/test_config_cli_settings.py", "src/agent_runtime/cli_settings.py", "src/agent_runtime/grok/run.py", "tests/support/api_runner_support.py", "tests/support/grok_support.py", "tests/support/service_table_support.py", "tests/test_codex_run_settings.py", "tests/test_grok_run.py"]
+opened_commit = "3312f13fcaef7941774e3c58bce7d059c2573731"
+whole_reason = "Accepting cli_settings.xai is one contract with GrokRun writing it: a GrokRun settings field that no service passes is code reached only by tests, an accepted table that no run writes would lie to the operator, and the owned-path refusal is what makes the accepted table honest; the other files are its docs and tests."
