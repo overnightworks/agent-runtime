@@ -25,13 +25,12 @@ from agent_runtime.cli_run import CliRunStart
 from agent_runtime.codex.renewal import CodexRenewal, CopyUnchanged
 from agent_runtime.codex_login import (
     CodexRenewalRefusal,
-    CodexTiming,
     RenewableCodexLogin,
-    UnreadableTiming,
     read_codex_timing,
     renewable_codex_login,
 )
 from agent_runtime.config import PrivateWorkingRoot
+from agent_runtime.login_timing import AccessTokenTiming, UnreadableTiming
 from agent_runtime.process import (
     CliEnvironmentUnavailableError,
     CliRunOutcome,
@@ -122,7 +121,7 @@ class RenewalEntry:
 
     deadline_seconds: float
     renewable: Callable[[bytes], RenewableCodexLogin | CodexRenewalRefusal]
-    timing: Callable[[bytes, int], CodexTiming | UnreadableTiming]
+    timing: Callable[[bytes, int], AccessTokenTiming | UnreadableTiming]
     run: Callable[[Path, RenewableCodexLogin, int], CodexRenewal]
 
 
@@ -150,7 +149,10 @@ def _judged(
     if result.shares_refresh_token_with(original):
         return NotRenewedCause.REFRESH_TOKEN_UNCHANGED
     original_timing = entry.timing(original.document, now)
-    if isinstance(original_timing, CodexTiming) and timing.expires_at <= original_timing.expires_at:
+    if (
+        isinstance(original_timing, AccessTokenTiming)
+        and timing.expires_at <= original_timing.expires_at
+    ):
         return NotRenewedCause.EXPIRY_NOT_LATER
     return None
 
@@ -319,8 +321,8 @@ class ProviderRenewer:
             return self._abandoned(reserved, RenewalOutcome.POOL_FULL, source_timing=unreadable)
         return self._spawned(reserved, login, run, slot, unreadable)
 
-    def _is_due(self, timing: CodexTiming | UnreadableTiming, now: int) -> bool:
-        if isinstance(timing, CodexTiming):
+    def _is_due(self, timing: AccessTokenTiming | UnreadableTiming, now: int) -> bool:
+        if isinstance(timing, AccessTokenTiming):
             return timing.is_due(now)
         started = self._unreadable_renewal_started
         recent = (

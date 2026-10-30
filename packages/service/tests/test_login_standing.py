@@ -50,7 +50,7 @@ from tests.support.service_renewal_support import (
 from tests.support.service_table_support import write_login
 
 import agent_runtime_service.config as service_config
-from agent_runtime.codex_login import UnreadableTiming
+from agent_runtime.login_timing import UnreadableTiming
 from agent_runtime_service.config import Provider
 from agent_runtime_service.login import (
     EXIT_EXPIRY_UNKNOWN,
