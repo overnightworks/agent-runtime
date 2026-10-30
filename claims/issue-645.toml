@@ -1,7 +1,0 @@
-claim_id = "15a5819e819d443c84606ac3e7ca426f"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "086cf55020312c7a8dcd33fee24a77b5f67a8c4e"
-branch = "claude/issue-645-a2-live-codex-tool-turn"
-scope = ["docs/decisions/0001-agent-service.md"]
-opened_commit = "078af94b133f0dd2336f096047b4181d67fb9481"
