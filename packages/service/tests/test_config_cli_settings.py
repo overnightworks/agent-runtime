@@ -90,6 +90,24 @@ def test_the_levels_come_defaults_first_then_the_app_then_the_agent_unmerged(tmp
     )
 
 
+def test_xai_gets_three_empty_levels_while_codex_and_claude_settings_are_set_at_every_level(
+    tmp_path,
+):
+    text = with_settings(
+        defaults='web_search = "live"', app='web_search = "cached"', agent='web_search = "off"'
+    )
+    for level in LEVELS.values():
+        text += f'\n[{level}.cli_settings.anthropic]\ntools = ["Read"]\n'
+
+    config = loaded(tmp_path, text)
+
+    assert (
+        config.cli_settings_levels(APP, AGENT, Provider.OPENAI)
+        != config.cli_settings_levels(APP, AGENT, Provider.XAI)
+        == ({}, {}, {})
+    )
+
+
 OWNERS = {
     "model": "set model instead",
     "model_provider": "set model instead",
@@ -133,6 +151,18 @@ def test_a_provider_key_the_service_does_not_serve_or_a_non_table_stops_startup_
     text = VALID_CONFIG + f"\n[{LEVELS['agent']}]\n{body}\n"
 
     assert_startup_refuses(tmp_path, capsys, text, field)
+
+
+@pytest.mark.parametrize("level", LEVELS)
+@pytest.mark.parametrize("check", [[], ["--check"]], ids=["start", "check"])
+def test_cli_settings_for_xai_stop_startup_and_the_check_at_every_level(
+    tmp_path, capsys, level, check
+):
+    text = with_settings(provider="xai", **{level: ""})
+
+    assert main(["--config", str(written(tmp_path, text)), *check]) == EXIT_BAD_CONFIG
+
+    assert f"{LEVELS[level]}.cli_settings.xai" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(

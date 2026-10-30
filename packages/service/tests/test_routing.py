@@ -86,9 +86,10 @@ def test_a_named_model_runs_on_the_subscription_only_when_a_table_has_its_provid
     [
         pytest.param(f"{Provider.ANTHROPIC}/sonnet", CLI, id="anthropic-model"),
         pytest.param(f"{Provider.OPENAI}/gpt-5.5", Cli(Provider.OPENAI), id="openai-model"),
+        pytest.param(f"{Provider.XAI}/grok-4.6", Cli(Provider.XAI), id="xai-model"),
     ],
 )
 def test_a_model_goes_to_the_table_of_its_provider(model, expected):
-    tables = frozenset({Provider.ANTHROPIC, Provider.OPENAI})
+    tables = frozenset(Provider)
 
     assert _routed(SUBSCRIBER, tables=tables, model=model) == expected

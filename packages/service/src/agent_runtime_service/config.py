@@ -11,10 +11,11 @@ built-in tool names and a ``settings`` table in Claude's own settings keys. The 
 them through without a mapping, lowest level first, and refuses only a key whose fact another
 owner holds, and a value its run files cannot encode faithfully. It governs CLI runs only.
 
-The service runs the subscription programs of Claude (``[cli.anthropic]``) and of Codex
-(``[cli.openai]``). Each such table names the absolute program, the exact version it must
-report, the models it serves and its token file (a Claude setup token, or a Codex sign-in
-document), beside the ``[cli]`` section's private ``working_root``, checked at load.
+The service runs the subscription programs of Claude (``[cli.anthropic]``), of Codex
+(``[cli.openai]``) and of Grok (``[cli.xai]``). Each such table names the absolute program, the
+exact version it must report, the models it serves and its token file (a Claude setup token, a
+Codex sign-in document, or a Grok sign-in document), beside the ``[cli]`` section's private
+``working_root``, checked at load.
 ``identity.api_groups`` and ``[api]`` come together. An
 app that offers tools names its one https MCP origin, and the service signs a capability for
 each run that grants the tools its request names; an origin is never shared between apps and
@@ -40,7 +41,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from functools import cached_property
 from pathlib import Path
-from typing import Annotated, Final, Self, cast
+from typing import Annotated, Final, Protocol, Self, cast
 
 from pydantic import (
     AfterValidator,
@@ -61,8 +62,9 @@ from webauth.https_client import is_https_url
 from webauth.oidc_login import AdmissionConfig
 
 from agent_runtime.cli_settings import CliSettings
-from agent_runtime.codex_login import CodexLogin, CodexLoginVerdict, assess_codex_login
+from agent_runtime.codex_login import CodexLoginVerdict, assess_codex_login
 from agent_runtime.config import PrivateWorkingRoot, WorkingRootNotPrivateError
+from agent_runtime.grok_login import GrokLoginVerdict, assess_grok_login
 from agent_runtime.secret_file import (
     UnsoundSecretFile,
     read_secret_file,
@@ -109,6 +111,7 @@ class ConfigError(ValueError):
 class Provider(StrEnum):
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
+    XAI = "xai"
 
 
 class _Section(BaseModel):
@@ -163,23 +166,50 @@ CODEX_LOGIN_REFUSALS: Final = {
     ),
 }
 
+GROK_LOGIN_REFUSALS: Final = {
+    GrokLoginVerdict.MALFORMED: "is not a Grok login document",
+    GrokLoginVerdict.INCOMPLETE: (
+        "is not a complete Grok sign-in; an API key (XAI_API_KEY) is not a subscription login"
+    ),
+}
 
-def _judged_codex_login(path: Path) -> CodexLogin:
-    """The verdict on the file, returned: this frame holds the file's bytes and must not raise."""
-    return assess_codex_login(read_secret_file(path, "login file"))
+
+class _Judged(Protocol):
+    @property
+    def verdict(self) -> StrEnum: ...
 
 
-def read_codex_login(path: Path) -> CodexLogin:
-    """The usable Codex login the file holds; any other verdict is an ``UnsoundSecretFile``."""
-    login = _judged_codex_login(path)
-    if login.verdict is not CodexLoginVerdict.USABLE:
-        raise UnsoundSecretFile(f"{shown_text(str(path))} {CODEX_LOGIN_REFUSALS[login.verdict]}")
-    return login
+def _login_reader[Login: _Judged](
+    assess: Callable[[bytes], Login], usable: StrEnum, refusals: Mapping[StrEnum, str]
+) -> Callable[[Path], Login]:
+    """A reader of one login file: the usable login it holds; any other verdict is an
+    ``UnsoundSecretFile`` worded by ``refusals``.
+
+    The frame that holds the file's bytes only returns the verdict; the outer frame raises.
+    """
+
+    def judged(path: Path) -> Login:
+        return assess(read_secret_file(path, "login file"))
+
+    def read(path: Path) -> Login:
+        login = judged(path)
+        if login.verdict is not usable:
+            raise UnsoundSecretFile(f"{shown_text(str(path))} {refusals[login.verdict]}")
+        return login
+
+    return read
+
+
+read_codex_login = _login_reader(
+    assess_codex_login, CodexLoginVerdict.USABLE, CODEX_LOGIN_REFUSALS
+)
+read_grok_login = _login_reader(assess_grok_login, GrokLoginVerdict.USABLE, GROK_LOGIN_REFUSALS)
 
 
 LOGIN_READERS: Final[Mapping[Provider, Callable[[Path], object]]] = {
     Provider.ANTHROPIC: read_token_file,
     Provider.OPENAI: read_codex_login,
+    Provider.XAI: read_grok_login,
 }
 
 
@@ -283,7 +313,13 @@ def _private_working_root(value: object) -> PrivateWorkingRoot:
         raise ValueError(f"not private: {error.violation.value}") from None
 
 
-ProviderProgram = ClaudeProgram | CodexProgram
+class GrokProgram(ProgramPin):
+    """Grok's program and the sign-in document its runs log in with."""
+
+    token_file: Annotated[Path, BeforeValidator(_token_file_read_by(Provider.XAI))]
+
+
+ProviderProgram = ClaudeProgram | CodexProgram | GrokProgram
 
 
 class CliConfig(_Section):
@@ -294,6 +330,7 @@ class CliConfig(_Section):
     )
     anthropic: ClaudeProgram | None = None
     openai: CodexProgram | None = None
+    xai: GrokProgram | None = None
 
     def programs(self) -> Mapping[Provider, ProviderProgram]:
         """The pinned programs this installation sets, in ``Provider`` order."""
@@ -492,6 +529,7 @@ RULES_ON_THE_RAW_DOCUMENT: Final = (
 _CLI_SETTINGS_LEVEL: Final[Mapping[Provider, Callable[[CliSettingsConfig], CliSettings]]] = {
     Provider.ANTHROPIC: lambda table: table.anthropic.as_level(),
     Provider.OPENAI: lambda table: cast("CliSettings", table.openai),
+    Provider.XAI: lambda table: {},
 }
 
 

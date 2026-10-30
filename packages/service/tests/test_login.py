@@ -26,6 +26,7 @@ from tests.support.service_login_support import (  # noqa: F401 - the fixtures a
     CANARY_REFRESH,
     CODEX_FILE_REFUSAL,
     GOOD_DOCUMENTS,
+    GROK_FILE_REFUSAL,
     LINE_PREFIX,
     LOGIN_NAME,
     NEW_CLAUDE_TOKEN,
@@ -288,17 +289,18 @@ def a_current_codex_login(last_refresh: str | None = None) -> bytes:
         (Provider.OPENAI, None),
         (Provider.OPENAI, "2001-01-01T00:00:00Z"),
         (Provider.ANTHROPIC, None),
+        (Provider.XAI, None),
     ],
-    ids=["codex", "codex-long-since-refreshed", "claude"],
+    ids=["codex", "codex-long-since-refreshed", "claude", "grok"],
 )
 def test_check_accepts_a_file_the_reader_accepts_without_reading_input_or_writing(
     tmp_path: Path, said: Said, provider: Provider, last_refresh: str | None
 ) -> None:
     installation = an_installation(tmp_path, provider)
-    if provider is Provider.ANTHROPIC:
-        write_login(installation.login, NEW_CLAUDE_TOKEN)
-    else:
+    if provider is Provider.OPENAI:
         write_login(installation.login, a_current_codex_login(last_refresh))
+    else:
+        write_login(installation.login, GOOD_DOCUMENTS[provider])
     stream = Stream(b"never read")
     before = installation.snapshot()
 
@@ -312,20 +314,32 @@ def test_check_accepts_a_file_the_reader_accepts_without_reading_input_or_writin
 
 
 @pytest.mark.parametrize(
-    ("contents", "reason"),
+    ("provider", "contents", "reason"),
     [
-        pytest.param(None, "cannot be read: No such file or directory", id="missing"),
         pytest.param(
+            Provider.OPENAI,
+            None,
+            "cannot be read: No such file or directory",
+            id="missing",
+        ),
+        pytest.param(
+            Provider.OPENAI,
             json.dumps({"OPENAI_API_KEY": CANARY_FOREIGN}).encode(),
             CODEX_FILE_REFUSAL,
             id="api-key",
         ),
+        pytest.param(
+            Provider.XAI,
+            json.dumps({"XAI_API_KEY": CANARY_FOREIGN}).encode(),
+            GROK_FILE_REFUSAL,
+            id="xai-api-key",
+        ),
     ],
 )
 def test_check_refuses_a_missing_or_refused_file_with_the_readers_reason(
-    tmp_path: Path, said: Said, contents: bytes | None, reason: str
+    tmp_path: Path, said: Said, provider: Provider, contents: bytes | None, reason: str
 ) -> None:
-    installation = an_installation(tmp_path, Provider.OPENAI, old=False)
+    installation = an_installation(tmp_path, provider, old=False)
     if contents is not None:
         write_login(installation.login, contents)
     stream = Stream(b"never read")
@@ -343,19 +357,20 @@ def test_check_refuses_a_missing_or_refused_file_with_the_readers_reason(
 # Refused before reading: matrix cell 16.
 
 
+@pytest.mark.parametrize("provider", [Provider.OPENAI, Provider.XAI])
 def test_a_provider_without_a_table_is_refused_before_anything_is_read(
-    tmp_path: Path, said: Said
+    tmp_path: Path, said: Said, provider: Provider
 ) -> None:
     installation = an_installation(tmp_path, Provider.ANTHROPIC)
-    stream = Stream(GOOD_DOCUMENTS[Provider.OPENAI])
+    stream = Stream(GOOD_DOCUMENTS[provider])
 
     with said.watching():
         status = main(
-            ["--config", str(installation.config), "--provider", Provider.OPENAI.value], stream
+            ["--config", str(installation.config), "--provider", provider.value], stream
         )
 
     assert (status, stream.was_read, installation.unchanged()) == (2, False, True)
-    assert "cli.openai: no such table" in said.descriptor
+    assert f"cli.{provider}: no such table" in said.descriptor
 
 
 @pytest.mark.parametrize("obsolete_name", ["claude", "grok"])

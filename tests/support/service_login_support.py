@@ -8,28 +8,34 @@ from __future__ import annotations
 
 import errno
 import io
+import json
 import os
 import signal
 import sys
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pytest
-from tests.support.provider_test_support import a_codex_login, write_claude_token_file
+from tests.support.provider_test_support import (
+    a_codex_login,
+    a_grok_login,
+    write_claude_token_file,
+)
 from tests.support.service_support import TEST_ISSUER, _service_config_document, reaches_text
 from tests.support.service_table_support import (
-    a_service_fake,
-    codex_document,
+    TABLES,
+    ProviderTable,
     write_login,
     written_document,
 )
 
 import agent_runtime_service.config as service_config
 import agent_runtime_service.login as login
+from agent_runtime.secret_file import MAX_SECRET_FILE_BYTES
 from agent_runtime_service.config import Provider
 from agent_runtime_service.login import main
 from agent_runtime_service.login_file import (
@@ -48,6 +54,7 @@ NEW_CLAUDE_TOKEN = b"new-token\n"
 LINE_PREFIX = "agent-runtime-service-login: "
 LOGIN_NAME = "auth.json"
 CODEX_FILE_REFUSAL = "is not a complete Codex sign-in"
+GROK_FILE_REFUSAL = "is not a complete Grok sign-in"
 RUN_THE_COMMAND = "import sys; from agent_runtime_service.login import main; sys.exit(main())"
 
 
@@ -82,19 +89,32 @@ class Installation:
         return self.login.read_bytes(), self.login.stat().st_ino, self.directory_holds()
 
 
+def _a_claude_document(tmp_path: Path, path: Path, old: bool) -> dict[str, Any]:
+    if old:
+        write_claude_token_file(path, OLD_CLAUDE_TOKEN.strip())
+    return _service_config_document(TEST_ISSUER, None, None, token_file=path)
+
+
+def _a_table_document(table: ProviderTable) -> Callable[[Path, Path, bool], dict[str, Any]]:
+    def document(tmp_path: Path, path: Path, old: bool) -> dict[str, Any]:
+        if old:
+            write_login(path, table.login_document("old-access-token"))
+        return table.document(tmp_path, table.service_fake(tmp_path), path)
+
+    return document
+
+
+_DOCUMENT_OF: Mapping[Provider, Callable[[Path, Path, bool], dict[str, Any]]] = {
+    Provider.ANTHROPIC: _a_claude_document,
+    **{table.provider: _a_table_document(table) for table in TABLES},
+}
+
+
 def an_installation(tmp_path: Path, provider: Provider, *, old: bool = True) -> Installation:
     directory = tmp_path / "login"
     directory.mkdir()
     path = directory / LOGIN_NAME
-    if provider is Provider.OPENAI:
-        if old:
-            write_login(path, a_codex_login(tokens={"access_token": "old-access-token"}))
-        document = codex_document(tmp_path, a_service_fake(tmp_path), path)
-    else:
-        if old:
-            write_claude_token_file(path, OLD_CLAUDE_TOKEN.strip())
-        document = _service_config_document(TEST_ISSUER, None, None, token_file=path)
-    config = written_document(tmp_path, document)
+    config = written_document(tmp_path, _DOCUMENT_OF[provider](tmp_path, path, old))
     status = path.stat() if old else None
     return Installation(
         config,
@@ -106,7 +126,9 @@ def an_installation(tmp_path: Path, provider: Provider, *, old: bool = True) -> 
 
 
 @pytest.fixture(
-    name="installation", params=[Provider.OPENAI, Provider.ANTHROPIC], ids=["openai", "anthropic"]
+    name="installation",
+    params=[Provider.OPENAI, Provider.ANTHROPIC, Provider.XAI],
+    ids=["openai", "anthropic", "xai"],
 )
 def a_login_installation(
     request: pytest.FixtureRequest, tmp_path: Path, restored_signal_handlers: None
@@ -117,6 +139,7 @@ def a_login_installation(
 GOOD_DOCUMENTS = {
     Provider.OPENAI: a_codex_login(tokens={"refresh_token": CANARY_REFRESH}),
     Provider.ANTHROPIC: NEW_CLAUDE_TOKEN,
+    Provider.XAI: json.dumps(a_grok_login(CANARY_REFRESH)).encode(),
 }
 
 
@@ -272,6 +295,27 @@ def assert_not_written(
     assert reason in heard
     assert not any(canary in heard for canary in canaries)
     assert not reaches_text(refusals, canaries)
+
+
+def assert_document_refused(
+    tmp_path: Path,
+    said: Said,
+    refusals: list[SwapResult],
+    provider: Provider,
+    document: bytes,
+    canaries: tuple[str, ...],
+    reason: str,
+) -> None:
+    """The provider's reader refuses ``document``: it is not written and the old file stays."""
+    installation = an_installation(tmp_path, provider)
+    stream = Stream(document)
+
+    status, heard = run(installation, stream, said)
+
+    assert_not_written(installation, status, heard, refusals, canaries, reason)
+    assert f"the new document for {installation.login} was refused" in heard
+    assert str(installation.sibling) not in heard
+    assert stream.tell() == min(len(document), MAX_SECRET_FILE_BYTES + 1)
 
 
 def held_swap(login_path: Path) -> ReservedSwap:

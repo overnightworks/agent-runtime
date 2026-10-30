@@ -7,6 +7,7 @@ table descriptions are those of ``tests.support.service_table_support``.
 
 from __future__ import annotations
 
+import stat
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -14,12 +15,11 @@ from typing import Any
 import pytest
 from tests.support.anchored_support import ChildCleanup
 from tests.support.cli_tools_support import a_tool_app
-from tests.support.codex_support import PRECONDITIONS_MARKER
 from tests.support.core_runtime_support import (
     no_installed_core_runtime,  # noqa: F401 - an autouse fixture
 )
 from tests.support.mcp_app_fake import TestAuthority
-from tests.support.provider_test_support import held_slots
+from tests.support.provider_test_support import a_fake_claude, held_slots
 from tests.support.service_cli_runner_support import (
     MINT,
     THREE_MESSAGE_TURN,
@@ -36,7 +36,9 @@ from tests.support.service_cli_runner_support import (
 )
 from tests.support.service_support import (
     API_GROUP,
+    COWRITER,
     LISTED_MODEL,
+    PRESENTATOR_CLIENT,
     SONGMAKER_GROUP,
     SONGMAKER_TOOLS,
     SUBSCRIPTION_GROUP,
@@ -52,6 +54,8 @@ from tests.support.service_support import (
 )
 from tests.support.service_table_support import (
     CANARY,
+    CODEX_TABLE,
+    GROK_TABLE,
     PARKED,
     TABLES,
     FailingRun,
@@ -59,13 +63,19 @@ from tests.support.service_table_support import (
     a_codex_config,
     a_table_service,
     argv_of,
+    the_served_runs,  # noqa: F401 - the fixture is named in its decorator
     the_table,  # noqa: F401 - the fixture is named in its decorator
+    with_claude_beside,
     write_login,
+    written_document,
 )
 
 import agent_runtime_service.cli_runner as cli_runner
 from agent_runtime.cli_run import RelayAccess
-from agent_runtime_client.wire import FailureCode, RejectionCode, Turn
+from agent_runtime.grok.run import GrokRun
+from agent_runtime.grok_login import assess_grok_login
+from agent_runtime_client.wire import FailureCode, RejectionCode, Turn, TurnMessage
+from agent_runtime_service.cli import main
 from agent_runtime_service.cli_runner import CliRunner, mcp_tls_context
 from agent_runtime_service.config import Provider
 from agent_runtime_service.run_events import RUNNER_FAILED_MESSAGE
@@ -97,6 +107,35 @@ def test_a_run_streams_its_answer_with_the_configured_model_as_one_argument(
     assert all_children_gone(child_cleanup) == [True, True]
 
 
+def test_the_installed_login_is_unchanged_by_startup_the_check_and_two_runs(
+    tmp_path: Path,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    served_runs: list[dict[str, Any]],
+    table: ProviderTable,
+) -> None:
+    login = table.login_file(tmp_path)
+    document = table.document(tmp_path, table.service_fake(tmp_path), login)
+    path = written_document(tmp_path, document)
+
+    def installed() -> tuple[bytes, int, int]:
+        status = login.stat()
+        return login.read_bytes(), status.st_ino, stat.S_IMODE(status.st_mode)
+
+    before = installed()
+    started = [main(["--config", str(path)]), main(["--config", str(path), "--check"])]
+    drive_over_http(
+        child_cleanup,
+        monkeypatch,
+        a_codex_config(document),
+        lambda base_url: [post_a_run(base_url), post_a_run(base_url)],
+    )
+
+    assert (started, len(served_runs)) == ([0, 0], 1)
+    assert installed() == before
+    assert table.refresh_canary.encode() in before[0]
+
+
 def test_a_login_file_swapped_between_two_runs_serves_the_next_run_without_a_restart(
     tmp_path: Path,
     child_cleanup: ChildCleanup,
@@ -115,7 +154,37 @@ def test_a_login_file_swapped_between_two_runs_serves_the_next_run_without_a_res
 
     before, after = drive_over_http(child_cleanup, monkeypatch, config, scenario)
 
-    assert (table.canaries[0] in before, "second-access-token" in after) == (True, True)
+    assert (table.access_canary in before, "second-access-token" in after) == (True, True)
+
+
+def test_a_grok_run_gets_no_settings_file_and_the_base_arguments_whatever_the_other_providers_set(
+    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    capture = tmp_path / "capture"
+    document = GROK_TABLE.document(
+        tmp_path,
+        GROK_TABLE.service_fake(tmp_path, capture=capture),
+        GROK_TABLE.login_file(tmp_path),
+    )
+    codex_settings = {"openai": {"web_search": "live"}}
+    document["defaults"]["cli_settings"] = codex_settings
+    document["apps"]["songmaker"]["cli_settings"] = codex_settings
+    document["apps"]["songmaker"]["agents"] = {COWRITER: {"cli_settings": codex_settings}}
+    config = a_codex_config(document)
+
+    drive_over_http(child_cleanup, monkeypatch, config, post_a_run)
+
+    base = GrokRun(
+        Path("/grok"),
+        assess_grok_login(GROK_TABLE.login_document(None)),
+        "",
+        (TurnMessage(role="user", text="a"),),
+        model=GROK_TABLE.model,
+    )
+    home_listing = (capture / "home").read_text().split()
+    assert "config.toml" not in home_listing
+    base_arguments = base.start(Path("/home"), Path("/work")).child.arguments
+    assert tuple(argv_of(capture)[2:]) == base_arguments[2:]
 
 
 def an_api_key_document(table: ProviderTable, login: Path) -> None:
@@ -123,7 +192,7 @@ def an_api_key_document(table: ProviderTable, login: Path) -> None:
 
 
 def not_json(table: ProviderTable, login: Path) -> None:
-    write_login(login, b"not-json " + table.canaries[0].encode())
+    write_login(login, b"not-json " + table.access_canary.encode())
 
 
 @pytest.mark.parametrize(
@@ -151,7 +220,7 @@ def test_a_login_file_gone_bad_fails_its_run_before_the_program_and_a_repair_ser
         failed = post_a_run(base_url)
         left_behind = (
             status_of(base_url, failed).failure_code,
-            (tmp_path / PRECONDITIONS_MARKER).exists(),
+            (tmp_path / table.preconditions_marker).exists(),
             list(private_root_of(config).iterdir()),
         )
         write_login(login, table.login_document(None))
@@ -203,6 +272,7 @@ def test_a_failing_run_ends_with_the_services_text_and_its_closed_cause_only(
     )
     assert [kind for _event, kind, _function in failure_lines(caplog)] == [failing.failure_class]
     assert CANARY not in f"{[e.model_dump_json() for e in events]} {caplog.text}"
+    assert (list(private_root_of(config).iterdir()), held_slots(table.pool)) == ([], 0)
 
 
 def test_neither_the_program_arguments_nor_the_service_log_hold_a_login_value(
@@ -343,25 +413,70 @@ def test_a_run_given_a_relay_is_refused_by_an_exception_not_an_assert(
         build(inputs)
 
 
-@pytest.mark.parametrize(
-    ("app_model", "answer"),
-    [
-        pytest.param(None, "from-the-table", id="the-default-model"),
-        pytest.param(f"{Provider.ANTHROPIC}/{LISTED_MODEL}", "done", id="the-apps-model"),
-    ],
-)
-def test_a_run_goes_to_the_table_of_the_configured_models_provider(
+ROTATIONS = [
+    pytest.param((first, second, third), id="-".join((first, second, third)))
+    for first, second, third in (
+        (Provider.ANTHROPIC, Provider.OPENAI, Provider.XAI),
+        (Provider.OPENAI, Provider.XAI, Provider.ANTHROPIC),
+        (Provider.XAI, Provider.ANTHROPIC, Provider.OPENAI),
+    )
+]
+
+
+@pytest.mark.parametrize("providers_by_level", ROTATIONS)
+def test_a_run_goes_to_the_program_of_the_provider_its_defaults_app_or_agent_model_names(
     tmp_path: Path,
     child_cleanup: ChildCleanup,
     monkeypatch: pytest.MonkeyPatch,
-    table: ProviderTable,
-    app_model: str | None,
-    answer: str,
+    providers_by_level: tuple[Provider, Provider, Provider],
 ) -> None:
-    document = table.document_with_both(tmp_path, table.answering("from-the-table", True))
-    if app_model is not None:
-        document["apps"]["songmaker"]["model"] = app_model
+    directories = {name: tmp_path / name for name in ("openai", "xai", "anthropic")}
+    for directory in directories.values():
+        directory.mkdir()
+    document, grok_document = (
+        table.document(
+            directories[table.provider],
+            table.service_fake(
+                directories[table.provider], table.answering(table.provider.value, True)
+            ),
+            table.login_file(directories[table.provider]),
+        )
+        for table in (CODEX_TABLE, GROK_TABLE)
+    )
+    document["cli"][Provider.XAI] = grok_document["cli"][Provider.XAI]
+    with_claude_beside(document, a_fake_claude(directories["anthropic"]))
+    models = {
+        Provider.ANTHROPIC: f"{Provider.ANTHROPIC}/{LISTED_MODEL}",
+        Provider.OPENAI: CODEX_TABLE.listed,
+        Provider.XAI: GROK_TABLE.listed,
+    }
+    by_defaults, by_app, by_agent = providers_by_level
+    document["defaults"] = {"model": models[by_defaults]}
+    document["apps"]["songmaker"]["model"] = models[by_app]
+    document["apps"]["songmaker"]["agents"] = {COWRITER: {"model": models[by_agent]}}
+    presentator = run_headers(
+        MINT.workload(client=PRESENTATOR_CLIENT),
+        MINT.user(azp=PRESENTATOR_CLIENT, groups=[SUBSCRIPTION_GROUP, "/apps/presentator"]),
+    )
 
-    events = drive_over_http(child_cleanup, monkeypatch, a_codex_config(document), post_a_run)
+    def scenario(base_url: str) -> list[tuple[str, str]]:
+        runs = [
+            (presentator, COWRITER),
+            (headers(), "an-agent-without-a-model"),
+            (headers(), COWRITER),
+        ]
+        return [
+            shown(
+                decoded_events(
+                    post_run(
+                        base_url, who, run_body(turn=THREE_MESSAGE_TURN, agent=agent)
+                    ).content
+                )
+            )[-1]
+            for who, agent in runs
+        ]
 
-    assert shown(events)[-1] == ("succeeded", answer)
+    answered = drive_over_http(child_cleanup, monkeypatch, a_codex_config(document), scenario)
+
+    answers = {Provider.ANTHROPIC: "done", Provider.OPENAI: "openai", Provider.XAI: "xai"}
+    assert answered == [("succeeded", answers[provider]) for provider in providers_by_level]

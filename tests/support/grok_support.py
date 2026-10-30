@@ -31,13 +31,15 @@ def a_fake_grok(
     *,
     system_text: str,
     expected_prompt: str,
+    version_line: str | None = None,
     capture: Path | None = None,
 ) -> Path:
     """A stand-in for the CLI: a distinct exit code on a wrong run, else a marker file.
 
     A run checks its home, the blanked login, the rules file, the prompt file named by
     ``--prompt-file`` and its empty stdin before it prints ``stream``; with ``capture`` it
-    first records its arguments and the login it was given.
+    first records its arguments, the login it was given and a listing of its home.
+    ``version_line`` is what ``--version`` prints.
     """
     (directory / "stream.jsonl").write_bytes(b"".join(stream))
     guards = (
@@ -50,6 +52,11 @@ def a_fake_grok(
     )
     lines = [
         "#!/bin/sh",
+        *(
+            ()
+            if version_line is None
+            else (f'[ "$1" = --version ] && {{ echo {shlex.quote(version_line)}; exit 0; }}',)
+        ),
         'for argument in "$@"; do [ "$previous" = --prompt-file ] && prompt_file=$argument;'
         " previous=$argument; done",
         *(f"{test} || exit {code}" for test, code in guards),
@@ -59,6 +66,7 @@ def a_fake_grok(
             f"mkdir -p {shlex.quote(str(capture))}",
             f"printf '%s\\n' \"$@\" > {shlex.quote(str(capture / 'argv'))}",
             f'cp "$GROK_HOME/auth.json" {shlex.quote(str(capture / "auth.json"))}',
+            f'ls -A "$GROK_HOME" > {shlex.quote(str(capture / "home"))}',
         ]
     lines += [
         f": > {shlex.quote(str(directory / PRECONDITIONS_MARKER))}",
