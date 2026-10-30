@@ -304,6 +304,30 @@ def test_without_descriptor_information_the_device_comparison_decides(
     ]
 
 
+def test_the_device_comparison_follows_the_directory_and_tells_the_root_from_a_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(login_file, "_DESCRIPTOR_INFORMATION", tmp_path / "absent")
+    (tmp_path / "link").symlink_to("/proc")
+
+    assert [
+        login_file.is_mount_point(path) for path in (Path("/"), tmp_path / "link" / "version")
+    ] == [
+        True,
+        False,
+    ]
+
+
+def test_the_device_comparison_raises_for_a_login_below_a_regular_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(login_file, "_DESCRIPTOR_INFORMATION", tmp_path / "absent")
+    (tmp_path / "plain").write_bytes(b"")
+
+    with pytest.raises(NotADirectoryError):
+        login_file.is_mount_point(tmp_path / "plain" / "login")
+
+
 def test_a_missing_descriptor_entry_is_a_closed_refusal_without_a_sibling(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
