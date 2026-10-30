@@ -4078,27 +4078,29 @@ model_instructions_file=… -`). Grok got `[mcp_servers.relay]` (`url`,
   on `mcp doctor`; a turn's own handshake is A5's cell.
 - A1 can write the relay entry as #626 names it (`url`, `bearer_token_env_var`,
   `required = true`, `default_tools_approval_mode = "approve"`, `tool_timeout_sec`
-  as an integer) over `CodexRun`'s defaults: `--strict-config` accepts it. The
-  handshake runs at start, before `thread.started`. A relay that does not connect
-  ends the CLI with exit 1 before `thread.started`, with an empty stdout and the
-  `required MCP servers failed to initialize: relay` text on stderr, so A1 maps
-  that exit to `provider_error` without waiting for a stream event. `approve` is
+  as an integer) over `CodexRun`'s defaults: `--strict-config` accepts it. A
+  relay that answers 401 ends the CLI with exit 1, an empty stdout (no
+  `thread.started`) and the `required MCP servers failed to initialize: relay`
+  text on stderr, so A1 maps that exit to `provider_error` without waiting for a
+  stream event. That a refused connection, a timeout or a malformed answer ends
+  the same way is inferred, not measured, and a working run's order of
+  `tools/list` against `thread.started` is not shown. `approve` is
   what lets a relay call run under `approval_policy = never` with the `read-only`
   sandbox; without it Codex denies every call to a tool that lacks `readOnlyHint`.
   A per-tool `mcp_servers.relay.tools.<tool>.approval_mode` would win over it,
   which A1's refusal of `mcp_servers.relay` in `cli_settings.openai` covers.
-- A3 cannot keep `--deny "*"` with a relay: deny wins over allow, so
-  `--allow "MCPTool(relay__*)"` cannot open the relay under it. Read from the
+- A3 cannot keep `--deny "*"` with a relay: per the guide, deny wins over allow,
+  so `--allow "MCPTool(relay__*)"` cannot open the relay under it. Read from the
   guide, a shape that offers only relay tools is an empty built-in allowlist
   (`--tools`), no catch-all deny, `--allow "MCPTool(relay__*)"`,
   `--permission-mode dontAsk`, and deny rules for the families that run without
   prompting (`Read`, `Grep`, `WebSearch`) and for `Bash`, `Edit`, `Write` and
   `WebFetch`, besides `--no-subagents` and `--disable-web-search`. `todo_write`
   has no rule family; only `--tools` removes it. Offline, two things cannot be
-  decided: whether `--tools ""` is read as an empty list or as an entry that names
-  no tool (which leaves every tool available), and whether a deny rule reaches a
-  meta-tool. A3 pins the shape as A5's hypothesis and A5's live cells decide it;
-  A-O1 is asked only if no shape holds.
+  decided: whether `--tools ""` is read as an empty list or as an entry that
+  names no tool (which leaves every tool available), and whether a deny rule
+  reaches a meta-tool. A3 pins the shape as A5's hypothesis and A5's live cells
+  decide it; A-O1 is asked only if no shape holds.
 - A3's decoder must expect a relay call to arrive as the meta-tool `use_tool`
   naming `relay__<tool>` (perhaps after a `search_tool`), not only as a tool
   named after the app's tool; A5 measures which names the stream carries.
