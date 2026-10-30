@@ -3,6 +3,6 @@ agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
 role = "builder"
 base = "8135c6eb7381f0649d442774cc37ca0a3b62d757"
 branch = "claude/issue-631-slice-2-of-623-get-models-lists-the-offe"
-scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "docs/wire.md", "packages/client/src/agent_runtime_client/wire.py", "packages/client/tests/test_wire_protocol.py", "packages/service/src/agent_runtime_service/app.py", "packages/service/src/agent_runtime_service/identity.py", "packages/service/tests/test_app_models.py", "tests/support/service_support.py"]
+scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "docs/wire.md", "packages/client/src/agent_runtime_client/wire.py", "packages/client/tests/test_wire_model_list.py", "packages/client/tests/test_wire_protocol.py", "packages/service/src/agent_runtime_service/app.py", "packages/service/src/agent_runtime_service/identity.py", "packages/service/tests/test_app_models.py", "tests/support/service_support.py"]
 opened_commit = "d1e58039252c4a598263046bfbd6c9f16629f42c"
 whole_reason = "One read surface: the list type, the route that fills it from the offer's owner, the workload proof it reuses, and its docs and tests."
