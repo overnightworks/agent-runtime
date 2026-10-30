@@ -33,6 +33,8 @@ from pydantic import (
     ConfigDict,
     Field,
     PlainSerializer,
+    SerializerFunctionWrapHandler,
+    model_serializer,
     model_validator,
 )
 
@@ -478,4 +480,11 @@ class RunRequest(_WireModel):
     turn: Turn
     roles: AgentRoles
     tools: dict[NonEmptyUnicodeText, Annotated[ToolEffect, Field(strict=False)]]
-    model: ModelName | None = Field(default=None, exclude_if=lambda model: model is None)
+    model: ModelName | None = None
+
+    @model_serializer(mode="wrap")
+    def _omit_the_unnamed_model(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        body = handler(self)
+        if body.get("model") is None:
+            body.pop("model", None)
+        return body
