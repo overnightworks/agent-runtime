@@ -211,6 +211,23 @@ body rules be fixed before the build.
 
   The role the call returns is not used here. Authority: the line of #382's accepted design „/apps/<app> (or a descendant): may use the app at all; the service checks this at admission, segment-aware“, which the operator was shown and accepted with „ja klingt gut! gib es dem head!“ and „wir bauen das entsprechend“ (21.10.2026).
 
+  *Amendment (30.10.2026, #621, head decision at the pull; webauth v0.26.0).* The proof of U1'
+  and the order of checks above is webauth's `ServiceCallerCheck` (`webauth.service_callers`),
+  built once per process from `[identity]`, `[apps]` and the ruled constants `agent-workload`
+  and 300 s; it holds the one `JwtVerifier`, and the service runs each call in a worker
+  thread. Its facts are unchanged. Its order for a person's run is: both tokens verified
+  (401 or 503), then the workload token's `sub` and group claim, then the person token's
+  (401), then the workload binding, the user's `azp`, the user's `sub` against the workload's,
+  and membership (403). Three changes follow, on `POST /runs` and `GET /runs/{id}`:
+  an absent workload `sub` leaves the 403 binding row and is 401, like an empty one; a
+  workload token whose `sub` is not valid text or whose group claim is malformed is 401,
+  before its own binding and before the user's `azp`, `sub` and membership; and an app's own run
+  answers the same 401 for those faults before any 403. The wire codes, statuses and headers stay.
+  `person_caller` does not say which token a refusal concerns, so the former order, which read
+  the user token's `sub` and groups before the workload binding, would need a second copy of the
+  proof beside webauth's. The service keeps the wire codes, the wire role, and the 401 for an app
+  none of whose agents may run as itself, after the proof and before the body.
+
   *Amendment (21.10.2026, #402).* The table gains one row, after the 422
   `invalid_request` row and before the row for tools from an app without an origin:
 
@@ -630,6 +647,11 @@ compromise.
   free (O6). The alternative, a `forbidden` answer only for an app with an origin,
   was rejected. Counterexamples: a 500 with a traceback; a subject repaired,
   replaced or escaped into another string; `capability_too_large` for it.
+  *Amendment (30.10.2026, #621; the operator ruled option A on #621 on 30.10.2026).* The
+  mechanism moves: `identity.py` no longer applies `UnicodeText` through a `TypeAdapter`;
+  `webauth.service_callers` checks the person's and the workload's `sub` with its `is_utf8`, the
+  same acceptance, as `INVALID_SUBJECT`, which the service answers 401. O7's behaviour stands:
+  401 on `POST` and `GET`, before every 403, and no valid-Unicode subject is refused.
 - **D11 hand-off.** `AdmittedRun.capability: Capability | None`, with no default, so
   every construction names it. The alternative, `Runner.run(admitted, capability)`,
   would change every runner.

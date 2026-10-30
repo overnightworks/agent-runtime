@@ -64,6 +64,7 @@ from tests.support.service_support import (
     the_app_on,
     tool_call,
 )
+from webauth.service_callers import Principal
 
 from agent_runtime.events import (
     AssistantTextEvent,
@@ -82,7 +83,6 @@ from agent_runtime_client.wire import (
 )
 from agent_runtime_service.app import create_app
 from agent_runtime_service.config import RunConfig
-from agent_runtime_service.identity import Principal
 from agent_runtime_service.run_liveness import (
     FailedPart,
     RunFailures,

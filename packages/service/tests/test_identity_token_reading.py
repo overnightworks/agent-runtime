@@ -21,7 +21,6 @@ from tests.support.service_support import (
     SONGMAKER_CLIENT,
     TEST_JWKS_URL,
     ScriptedRunner,
-    StepClock,
     TokenMint,
     assert_rejected,
     decoded_events,
@@ -33,12 +32,13 @@ from tests.support.service_support import (
     service_config,
 )
 from webauth.https_client import KeySetFetchError
-from webauth.jwt_verification import JwtVerifier, Rejected, RejectionReason, VerifiedClaims
+from webauth.jwt_verification import RejectionReason
+from webauth.service_callers import CallerRefusal, CallerRefusalReason
 
 from agent_runtime.events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import RejectionCode
 from agent_runtime_service.app import create_app
-from agent_runtime_service.identity import build_verifier
+from agent_runtime_service.identity import rejection_code
 from agent_runtime_service.runners import Runners
 
 ANSWER = (AssistantTextEvent(text="via the CLI"), FinalEvent(text="answer"))
@@ -94,14 +94,16 @@ def _admitted(response: httpx.Response) -> None:
     assert [event.type for event in decoded_events(response.content)][-1] == "succeeded"
 
 
-def _verifier_and_mint() -> tuple[JwtVerifier, TokenMint]:
-    """A fresh, cold verifier over a mint of its own, so its recording is this token's alone."""
-    mint = TokenMint()
-    return build_verifier(service_config().identity, mint.fetch_key_set, StepClock()), mint
-
-
-def _user_token(mint: TokenMint, header: str, **signing: Any) -> str:
-    return mint.raw_token(header, _payload(mint.user_claims()), **signing)
+def _post_over_a_fresh_service(mint: TokenMint, header: str, **signing: Any) -> httpx.Response:
+    """A run whose workload token has ``header``, over a cold service on a mint of its own."""
+    app = create_app(
+        service_config(),
+        runners=Runners(cli=ScriptedRunner(ANSWER), api=ScriptedRunner(ANSWER)),
+        fetch_key_set=mint.fetch_key_set,
+    )
+    workload = mint.raw_token(header, _payload(mint.workload_claims()), **signing)
+    with served(app) as base_url:
+        return post_run(base_url, run_headers(workload, mint.user()))
 
 
 def _embedded_ec_jwk() -> dict[str, str]:
@@ -112,12 +114,11 @@ def _embedded_ec_jwk() -> dict[str, str]:
 
 
 def test_a_token_the_attacker_signed_is_refused_whatever_url_its_header_names():
-    verifier, mint = _verifier_and_mint()
-    header = _header(jku=ATTACKER_URL)
+    mint = TokenMint()
 
-    answer = verifier.verify(_user_token(mint, header, key=ATTACKER_KEY))
+    response = _post_over_a_fresh_service(mint, _header(jku=ATTACKER_URL), key=ATTACKER_KEY)
 
-    assert answer == Rejected(RejectionReason.INVALID_SIGNATURE)
+    assert_rejected(response, UNAUTHORIZED, 401)
     assert mint.fetched_urls == [TEST_JWKS_URL]
 
 
@@ -125,23 +126,23 @@ def test_a_token_the_attacker_signed_is_refused_whatever_url_its_header_names():
     "members", [{"jku": ATTACKER_URL}, {"jwk": _embedded_ec_jwk()}], ids=["jku", "jwk"]
 )
 def test_a_token_the_issuer_signed_is_admitted_with_a_key_naming_header(members):
-    verifier, mint = _verifier_and_mint()
+    mint = TokenMint()
 
-    answer = verifier.verify(_user_token(mint, _header(**members)))
+    response = _post_over_a_fresh_service(mint, _header(**members))
 
-    assert isinstance(answer, VerifiedClaims)
+    _admitted(response)
     assert mint.fetched_urls == [TEST_JWKS_URL]
 
 
 @pytest.mark.parametrize("signer", ["attacker", "issuer"])
 def test_a_header_carrying_a_full_rsa_key_is_refused_for_its_size_before_any_fetch(signer):
-    verifier, mint = _verifier_and_mint()
+    mint = TokenMint()
     header = _header(jwk=mint.key_set()["keys"][0])
     key = ATTACKER_KEY if signer == "attacker" else None
 
-    answer = verifier.verify(_user_token(mint, header, key=key, oversized_header=True))
+    response = _post_over_a_fresh_service(mint, header, key=key, oversized_header=True)
 
-    assert answer == Rejected(RejectionReason.MALFORMED_TOKEN)
+    assert_rejected(response, UNAUTHORIZED, 401)
     assert mint.fetched_urls == []
 
 
@@ -209,20 +210,6 @@ def test_a_badly_signed_token_with_a_payload_that_is_no_object_is_refused_over_h
     token = MINT.raw_token(_header(), "[1]", key=ATTACKER_KEY)
 
     _refused(runners, service, run_headers(MINT.workload(), token), UNAUTHORIZED, 401)
-
-
-@pytest.mark.parametrize(
-    ("signer", "reason"),
-    [
-        pytest.param(ATTACKER_KEY, RejectionReason.INVALID_SIGNATURE, id="bad-signature"),
-        pytest.param(None, RejectionReason.MALFORMED_TOKEN, id="good-signature"),
-    ],
-)
-def test_the_signature_answers_before_the_payload_is_read(signer, reason):
-    verifier, mint = _verifier_and_mint()
-    token = mint.raw_token(_header(), "[1]", key=signer)
-
-    assert verifier.verify(token) == Rejected(reason)
 
 
 def _cold_issuer(_url: str) -> bytes:
@@ -328,3 +315,27 @@ def test_a_signed_claim_that_is_not_a_number_is_admitted(service):
     token = MINT.raw_token(_header(), _payload(MINT.user_claims(), unrelated=(float("nan"),)))
 
     _admitted(post_run(service, run_headers(MINT.workload(), token)))
+
+
+UNAVAILABLE_REASONS = {CallerRefusalReason.KEY_SET_UNAVAILABLE}
+UNAUTHORIZED_REASONS = {
+    CallerRefusalReason.MISSING_TOKEN,
+    CallerRefusalReason.TOKEN_REJECTED,
+    CallerRefusalReason.INVALID_SUBJECT,
+    CallerRefusalReason.MALFORMED_GROUPS,
+}
+
+
+@pytest.mark.parametrize("reason", list(CallerRefusalReason))
+def test_every_refusal_webauth_makes_has_the_wire_code_of_its_class(reason):
+    rejected = reason is CallerRefusalReason.TOKEN_REJECTED
+    rejection = RejectionReason.INVALID_SIGNATURE if rejected else None
+    expected = (
+        RejectionCode.UNAVAILABLE
+        if reason in UNAVAILABLE_REASONS
+        else RejectionCode.UNAUTHORIZED
+        if reason in UNAUTHORIZED_REASONS
+        else RejectionCode.FORBIDDEN
+    )
+
+    assert rejection_code(CallerRefusal(reason, rejection)) is expected

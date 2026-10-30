@@ -104,7 +104,6 @@ def test_a_valid_file_loads_with_its_configured_identity_and_the_documented_defa
     assert config.runs.stall_timeout_s == 30.0
     assert (config.runs.max_tool_calls, config.runs.max_bytes) == (30, 4194304)
     assert config.runs.max_parallel_cli_runs == 5
-    assert config.app_of_workload_client("songmaker-test") == "songmaker"
 
 
 def test_an_installation_without_an_origin_needs_no_signing_section(tmp_path):

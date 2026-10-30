@@ -6,9 +6,10 @@ Both routes check the two tokens first, with the same answers. ``POST /runs`` an
 before any token is verified or the body is read; the header's value is never read. A
 ``POST`` is then checked in a fixed order, and the first failure answers:
 
-1. the workload token, then the user token, then membership of the app
-   (``/apps/<app>`` or a path below it), before the body is read or anything else
-   is decided (``agent_runtime_service.identity``);
+1. the caller check, webauth's ``ServiceCallerCheck`` (``agent_runtime_service.identity``),
+   before the body is read or anything else is decided: both tokens verified, their subjects
+   and group claims read (``unauthorized`` or ``unavailable``), then the workload binding, the
+   user's client binding and membership of the app (``/apps/<app>`` or a path below it);
 2. the body's framing, then its protocol version, then its shape
    (``agent_runtime_service.run_request``);
 3. the person's role in the app (``admin`` in ``/apps/<app>/admin`` or below, else ``user``)
@@ -52,6 +53,7 @@ from fastapi.responses import Response, StreamingResponse
 from starlette.types import Receive, Scope, Send
 from webauth.https_client import fetch_key_set_over_https
 from webauth.jwt_verification import KeySetFetch, MonotonicClock
+from webauth.service_callers import WorkloadCaller
 
 from agent_runtime import lost_groups
 from agent_runtime_client.capability import MAX_CAPABILITY_CHARACTERS
@@ -71,13 +73,7 @@ from agent_runtime_service.capability import (
     signed_capability,
 )
 from agent_runtime_service.config import RELAY_ATTACHED_PROVIDERS, ServiceConfig
-from agent_runtime_service.identity import (
-    AppCaller,
-    Caller,
-    CallerCheck,
-    PersonCaller,
-    build_verifier,
-)
+from agent_runtime_service.identity import Caller, CallerCheck, PersonCaller, agent_role
 from agent_runtime_service.quarantine import GroupConfirmation, Quarantine
 from agent_runtime_service.routing import Cli, NotEnabled, ServedRoute, route
 from agent_runtime_service.run_events import run_frames
@@ -141,14 +137,16 @@ def create_app(
 ) -> FastAPI:
     """The service's ASGI app.
 
+    The caller check (webauth's ``ServiceCallerCheck``) is built here once, from ``config``;
+    ``fetch_key_set`` and ``monotonic_clock`` are its injected key-set fetch and clock.
     ``wall_clock`` (aware UTC) stamps each capability's issue and expiry and is the default
     run-record store's clock. An injected
     ``records`` keeps its own clock, so the two can differ; ``wall_clock`` never reaches the
-    token verifier, which reads webauth's own.
+    caller check, which reads ``time.time``.
     ``confirm_group_gone`` is how the one quarantine asks whether a lost process group is gone.
     ``renewals`` runs while the app's lifespan does; without it the app renews nothing.
     """
-    callers = CallerCheck(build_verifier(config.identity, fetch_key_set, monotonic_clock), config)
+    callers = CallerCheck(config, fetch_key_set, monotonic_clock)
     installed_records = records or RunRecords(wall_clock)
     subscription_slot = AdmissionSlot(config.runs.max_parallel_cli_runs)
     quarantine = Quarantine(LoopClock(), confirm_group_gone)
@@ -276,9 +274,9 @@ def _admitted(
 
 
 def _may_run(config: ServiceConfig, caller: Caller, run_request: RunRequest) -> bool:
-    if isinstance(caller, AppCaller):
+    if isinstance(caller, WorkloadCaller):
         return config.apps[caller.app].runs_as_itself(run_request.agent)
-    return caller.role in run_request.roles
+    return agent_role(caller) in run_request.roles
 
 
 def _release(lease: Lease | None) -> None:

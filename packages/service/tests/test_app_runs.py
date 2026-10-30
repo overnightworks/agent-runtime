@@ -23,8 +23,11 @@ import pytest
 from tests.support.bounds import TEST_WAIT_SECONDS
 from tests.support.held_runner_support import HeldRunner
 from tests.support.service_config_support import (
+    MCP_SECTION,
+    SIGNING_SECTION,
     VALID_CONFIG,
     assert_startup_refuses,
+    refused_on_one_line,
     written,
 )
 from tests.support.service_support import (
@@ -50,6 +53,7 @@ from tests.support.service_support import (
     service_config,
 )
 from tests.support.service_table_support import CODEX_NAME, a_config_with_both_providers
+from tests.support.token_rejection_support import UNKNOWN_RUN
 from webauth.https_client import KeySetFetchError
 
 from agent_runtime.events import AssistantTextEvent, FinalEvent
@@ -66,7 +70,6 @@ API_SCRIPT = (AssistantTextEvent(text="via the API"), FinalEvent(text="API answe
 SERVICE_ACCOUNT = f"service-account-user-of-{SONGMAKER_CLIENT}"
 LISTED = f"{Provider.ANTHROPIC}/{LISTED_MODEL}"
 ENABLED_COWRITER: Final = {COWRITER: {"runs_as_app": True}}
-UNKNOWN_RUN = "00000000-0000-4000-8000-000000000000"
 
 
 def _config(
@@ -250,6 +253,47 @@ def test_p7_a_person_without_the_requested_role_is_forbidden_though_the_agent_ru
     refused = service.start(_person(groups=[SONGMAKER_GROUP]), roles=["admin"])
 
     assert_rejected(refused, RejectionCode.FORBIDDEN, 403)
+    assert service.started == 0
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        pytest.param({"sub": None}, id="without-a-subject"),
+        pytest.param({"sub": "service-\ud800"}, id="subject-with-a-lone-surrogate"),
+        pytest.param({"groups": "/subscription-members"}, id="malformed-groups"),
+        pytest.param(
+            {"sub": None, "realm_access": {"roles": []}}, id="without-a-subject-and-not-a-workload"
+        ),
+        pytest.param(
+            {"sub": "service-\ud800", "client_id": PRESENTATOR_CLIENT},
+            id="lone-surrogate-and-client-id-differs-from-azp",
+        ),
+        pytest.param(
+            {"groups": "/subscription-members", "realm_access": {"roles": []}},
+            id="malformed-groups-and-not-a-workload",
+        ),
+        pytest.param(
+            {"groups": "/subscription-members", "client": "unknown-app"},
+            id="malformed-groups-and-unregistered-client",
+        ),
+    ],
+)
+@pytest.mark.parametrize("route", ["POST", "GET"])
+def test_an_own_token_with_an_unreadable_identity_is_unauthorized_before_any_forbidden_fault(
+    service, claims, route
+):
+    claims = dict(claims)
+    client = claims.pop("client", SONGMAKER_CLIENT)
+    headers = _own(client=client, **claims)
+
+    response = (
+        service.start(headers)
+        if route == "POST"
+        else get_run(service.base_url, headers, UNKNOWN_RUN)
+    )
+
+    assert_rejected(response, RejectionCode.UNAUTHORIZED, 401)
     assert service.started == 0
 
 
@@ -564,3 +608,11 @@ def test_an_apps_agent_table_names_the_agents_that_run_as_the_app(tmp_path):
 )
 def test_a_refused_agent_table_stops_startup_naming_the_field(tmp_path, capsys, text, named_field):
     assert_startup_refuses(tmp_path, capsys, text, named_field)
+
+
+def test_a_configuration_without_an_app_stops_startup_naming_apps(tmp_path, capsys):
+    no_apps = VALID_CONFIG.split("[apps.songmaker]")[0] + "[apps]\n"
+    text = no_apps.replace(SIGNING_SECTION, "").replace(MCP_SECTION, "")
+
+    assert_startup_refuses(tmp_path, capsys, text, "apps")
+    assert refused_on_one_line(written(tmp_path, text), capsys).startswith("apps")

@@ -26,6 +26,7 @@ from tests.support.wire_builders import (
     started,
     succeeded,
 )
+from webauth.service_callers import Principal
 
 from agent_runtime_client.wire import (
     PROTOCOL_VERSION,
@@ -36,7 +37,6 @@ from agent_runtime_client.wire import (
     RunState,
     RunStatus,
 )
-from agent_runtime_service.identity import Principal
 from agent_runtime_service.run_records import RunRecorder, RunRecords
 
 ISSUER = "https://keycloak.test/realms/agent-test"

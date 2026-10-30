@@ -53,6 +53,7 @@ from tests.support.api_support import API_COMPLETION_URL, process_api_credential
 from tests.support.bounds import TEST_WAIT_SECONDS
 from tests.support.mcp_app_fake import TestAuthority, TlsCredentials
 from tests.support.provider_test_support import fake_cli_executable
+from webauth.service_callers import Principal
 
 import agent_runtime_service.signing as signing
 from agent_runtime.config import PrivateWorkingRoot
@@ -72,7 +73,6 @@ from agent_runtime_client.wire import (
 from agent_runtime_service.admission import AdmissionSlot
 from agent_runtime_service.app import create_app
 from agent_runtime_service.config import Provider, RunConfig, ServiceConfig
-from agent_runtime_service.identity import Principal
 from agent_runtime_service.quarantine import GroupConfirmation, Quarantine
 from agent_runtime_service.routing import Cli
 from agent_runtime_service.run_events import run_frames
@@ -675,7 +675,7 @@ class TokenMint:
 
 
 # The verifier's bound on a token's header segment: webauth.jwt_verification
-# _MAX_HEADER_SEGMENT_CHARACTERS (v0.25.0).
+# _MAX_HEADER_SEGMENT_CHARACTERS (v0.26.0).
 MAX_HEADER_SEGMENT: Final = 512
 
 

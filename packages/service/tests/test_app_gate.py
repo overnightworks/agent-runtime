@@ -42,6 +42,7 @@ from tests.support.service_support import (
     served,
 )
 from tests.support.wire_builders import started
+from webauth.service_callers import Principal
 
 from agent_runtime.events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.agents import load_agent
@@ -49,7 +50,6 @@ from agent_runtime_client.wire import RejectionCode, TurnMessage, TurnRole
 from agent_runtime_service.admission import AdmissionSlot
 from agent_runtime_service.app import create_app
 from agent_runtime_service.config import Provider, ServiceConfig
-from agent_runtime_service.identity import Principal
 from agent_runtime_service.routing import Api
 from agent_runtime_service.run_records import RunRecords
 from agent_runtime_service.runners import Runners
