@@ -14,7 +14,6 @@ from typing import Any
 import pytest
 from tests.support.anchored_support import ChildCleanup
 from tests.support.cli_tools_support import a_tool_app
-from tests.support.codex_support import PRECONDITIONS_MARKER
 from tests.support.core_runtime_support import (
     no_installed_core_runtime,  # noqa: F401 - an autouse fixture
 )
@@ -36,6 +35,7 @@ from tests.support.service_cli_runner_support import (
 )
 from tests.support.service_support import (
     API_GROUP,
+    COWRITER,
     LISTED_MODEL,
     SONGMAKER_GROUP,
     SONGMAKER_TOOLS,
@@ -52,6 +52,7 @@ from tests.support.service_support import (
 )
 from tests.support.service_table_support import (
     CANARY,
+    GROK_TABLE,
     PARKED,
     TABLES,
     FailingRun,
@@ -65,7 +66,9 @@ from tests.support.service_table_support import (
 
 import agent_runtime_service.cli_runner as cli_runner
 from agent_runtime.cli_run import RelayAccess
-from agent_runtime_client.wire import FailureCode, RejectionCode, Turn
+from agent_runtime.grok.run import GrokRun
+from agent_runtime.grok_login import assess_grok_login
+from agent_runtime_client.wire import FailureCode, RejectionCode, Turn, TurnMessage
 from agent_runtime_service.cli_runner import CliRunner, mcp_tls_context
 from agent_runtime_service.config import Provider
 from agent_runtime_service.run_events import RUNNER_FAILED_MESSAGE
@@ -115,7 +118,37 @@ def test_a_login_file_swapped_between_two_runs_serves_the_next_run_without_a_res
 
     before, after = drive_over_http(child_cleanup, monkeypatch, config, scenario)
 
-    assert (table.canaries[0] in before, "second-access-token" in after) == (True, True)
+    assert (table.access_canary in before, "second-access-token" in after) == (True, True)
+
+
+def test_a_grok_run_gets_no_settings_file_and_the_base_arguments_whatever_the_other_providers_set(
+    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    capture = tmp_path / "capture"
+    document = GROK_TABLE.document(
+        tmp_path,
+        GROK_TABLE.service_fake(tmp_path, capture=capture),
+        GROK_TABLE.login_file(tmp_path),
+    )
+    codex_settings = {"openai": {"web_search": "live"}}
+    document["defaults"]["cli_settings"] = codex_settings
+    document["apps"]["songmaker"]["cli_settings"] = codex_settings
+    document["apps"]["songmaker"]["agents"] = {COWRITER: {"cli_settings": codex_settings}}
+    config = a_codex_config(document)
+
+    drive_over_http(child_cleanup, monkeypatch, config, post_a_run)
+
+    base = GrokRun(
+        Path("/grok"),
+        assess_grok_login(GROK_TABLE.login_document(None)),
+        "",
+        (TurnMessage(role="user", text="a"),),
+        model=GROK_TABLE.model,
+    )
+    home_listing = (capture / "home").read_text().split()
+    assert "config.toml" not in home_listing
+    base_arguments = base.start(Path("/home"), Path("/work")).child.arguments
+    assert tuple(argv_of(capture)[2:]) == base_arguments[2:]
 
 
 def an_api_key_document(table: ProviderTable, login: Path) -> None:
@@ -123,7 +156,7 @@ def an_api_key_document(table: ProviderTable, login: Path) -> None:
 
 
 def not_json(table: ProviderTable, login: Path) -> None:
-    write_login(login, b"not-json " + table.canaries[0].encode())
+    write_login(login, b"not-json " + table.access_canary.encode())
 
 
 @pytest.mark.parametrize(
@@ -151,7 +184,7 @@ def test_a_login_file_gone_bad_fails_its_run_before_the_program_and_a_repair_ser
         failed = post_a_run(base_url)
         left_behind = (
             status_of(base_url, failed).failure_code,
-            (tmp_path / PRECONDITIONS_MARKER).exists(),
+            (tmp_path / table.preconditions_marker).exists(),
             list(private_root_of(config).iterdir()),
         )
         write_login(login, table.login_document(None))

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final
@@ -19,6 +20,10 @@ from agent_runtime_service.config import VERSION_PATTERN, CliConfig, ProgramPin,
 
 CLAUDE_VERSION_SUFFIX: Final = " (Claude Code)"
 CODEX_VERSION_PREFIX: Final = "codex-cli "
+
+GROK_VERSION_LINE: Final = re.compile(
+    rf"grok ({VERSION_PATTERN.pattern}) \([0-9a-f]{{12}}\)(?: \[\w+\])?", re.ASCII
+)
 
 VersionReader = Callable[[str], str | None]
 
@@ -43,9 +48,16 @@ def codex_version_output(stdout: str) -> str | None:
     return version if version != text and VERSION_PATTERN.fullmatch(version) else None
 
 
+def grok_version_output(stdout: str) -> str | None:
+    """The version ``grok --version`` printed, or ``None`` when the output is anything else."""
+    matched = GROK_VERSION_LINE.fullmatch(stdout.removesuffix("\n"))
+    return None if matched is None else matched.group(1)
+
+
 VERSION_READERS: Final[Mapping[Provider, VersionReader]] = {
     Provider.ANTHROPIC: claude_version_output,
     Provider.OPENAI: codex_version_output,
+    Provider.XAI: grok_version_output,
 }
 
 

@@ -36,6 +36,7 @@ from tests.support.service_login_support import (  # noqa: F401 - the fixtures a
     accepts_anything,
     an_installation,
     an_old_file_fails,
+    assert_document_refused,
     assert_not_written,
     descriptors_closed,
     held_swap,
@@ -160,15 +161,7 @@ def test_a_document_the_tables_reader_refuses_is_not_written_and_the_old_file_st
     canaries: tuple[str, ...],
     reason: str,
 ) -> None:
-    installation = an_installation(tmp_path, provider)
-    stream = Stream(document)
-
-    status, heard = run(installation, stream, said)
-
-    assert_not_written(installation, status, heard, refusals, canaries, reason)
-    assert f"the new document for {installation.login} was refused" in heard
-    assert str(installation.sibling) not in heard
-    assert stream.tell() == min(len(document), MAX_SECRET_FILE_BYTES + 1)
+    assert_document_refused(tmp_path, said, refusals, provider, document, canaries, reason)
 
 
 def test_a_login_directory_that_cannot_be_written_refuses_the_create(

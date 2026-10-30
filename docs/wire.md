@@ -225,5 +225,5 @@ run's full flags and switches in the real deployment, inside its home and outsid
 it, is not measured yet; issue #115, step 12b, owns that measurement.
 
 **The provider.** The turn's text, the app's tool definitions, and the results of the
-app's tools the run calls, reach the provider (Anthropic for Claude, OpenAI for Codex) under the
+app's tools the run calls, reach the provider (Anthropic for Claude, OpenAI for Codex, xAI for Grok) under the
 operator's subscription. What the provider keeps follows its terms, not this service.

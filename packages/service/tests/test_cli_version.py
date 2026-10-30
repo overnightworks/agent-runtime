@@ -40,6 +40,7 @@ from tests.support.service_support import (
     process_token_file,
 )
 from tests.support.service_table_support import (
+    GROK_TABLE,
     a_codex_login_file,
     the_served_runs,  # noqa: F401 - the fixture is named in its decorator
 )
@@ -53,9 +54,16 @@ from agent_runtime_service.cli_version import (
     ProgramVersionRefused,
     claude_version_output,
     codex_version_output,
+    grok_version_output,
     require_pinned_versions,
 )
-from agent_runtime_service.config import ClaudeProgram, CliConfig, CodexProgram, ProgramPin
+from agent_runtime_service.config import (
+    ClaudeProgram,
+    CliConfig,
+    CodexProgram,
+    GrokProgram,
+    ProgramPin,
+)
 
 RUN_TREE_PATTERN = "agent-run-*"
 A_LIVE_GROUP = KillUntilGoneResult(GroupCensus.LIVE, ended_in_time=True)
@@ -391,6 +399,31 @@ def test_codex_reads_only_its_exact_version_line(stdout, version):
     assert codex_version_output(stdout) == version
 
 
+@pytest.mark.parametrize(
+    ("stdout", "version"),
+    [
+        pytest.param("grok 1.0.60 (01a8e1c591c0)\n", "1.0.60", id="one-terminal-newline"),
+        pytest.param("grok 1.0.60 (01a8e1c591c0)", "1.0.60", id="no-newline"),
+        pytest.param("grok 1.0.60 (01a8e1c591c0) [stable]\n", "1.0.60", id="channel"),
+        pytest.param("grok 1.0.60 (01a8e1c591c0)\n\n", None, id="two-newlines"),
+        pytest.param(" grok 1.0.60 (01a8e1c591c0)\n", None, id="leading-space"),
+        pytest.param("grok 1.0.60 (01a8e1c591c0) \n", None, id="trailing-space"),
+        pytest.param("grok 1.0.60 (01a8e1c591c)\n", None, id="eleven-hex-digits"),
+        pytest.param("grok 1.0.60 (01a8e1c591c0f)\n", None, id="thirteen-hex-digits"),
+        pytest.param("grok 1.0.60 (01A8E1C591C0)\n", None, id="uppercase-hex"),
+        pytest.param("grok 1.0.60\n", None, id="no-hash"),
+        pytest.param("grok 1.0.060 (01a8e1c591c0)\n", None, id="leading-zero"),
+        pytest.param("grok 1.0.60 (01a8e1c591c0)\nbanner\n", None, id="second-line"),
+        pytest.param("banner\ngrok 1.0.60 (01a8e1c591c0)\n", None, id="banner-line"),
+        pytest.param("grok-cli 1.0.60 (01a8e1c591c0)\n", None, id="another-program-name"),
+        pytest.param("grok 1.0.6\u0660 (01a8e1c591c0)\n", None, id="non-ascii-digit"),
+        pytest.param("", None, id="empty"),
+    ],
+)
+def test_grok_reads_only_its_exact_version_line(stdout, version):
+    assert grok_version_output(stdout) == version
+
+
 def _a_pin(
     directory: Path, printed: str, version: str, program_type: type[ProgramPin], login: Path
 ) -> tuple[ProgramPin, Path]:
@@ -429,6 +462,46 @@ def test_with_both_programs_pinned_both_are_probed_and_the_first_miss_refuses_na
         f"cli.openai.version: {codex.binary} reports 0.163.1, not the pinned 0.163.0"
     )
     assert (claude_calls.exists(), codex_calls.exists()) == (True, True)
+
+
+def test_with_three_programs_pinned_all_are_probed_in_order_and_the_first_miss_refuses_naming_it(
+    tmp_path, working_root
+):
+    pins = {
+        "anthropic": _a_pin(
+            tmp_path / "claude",
+            PRINTS_THE_PIN,
+            PINNED_CLAUDE_VERSION,
+            ClaudeProgram,
+            process_token_file(),
+        ),
+        "openai": _a_pin(
+            tmp_path / "codex",
+            "codex-cli 0.163.0\n",
+            "0.163.0",
+            CodexProgram,
+            a_codex_login_file(tmp_path),
+        ),
+        "xai": _a_pin(
+            tmp_path / "grok",
+            "grok 1.0.61 (01a8e1c591c0)\n",
+            GROK_TABLE.pin,
+            GrokProgram,
+            GROK_TABLE.login_file(tmp_path),
+        ),
+    }
+    cli = CliConfig(
+        working_root=str(working_root), **{name: pin for name, (pin, _calls) in pins.items()}
+    )
+
+    with pytest.raises(ProgramVersionRefused) as refused:
+        require_pinned_versions(cli)
+
+    grok = pins["xai"][0]
+    assert str(refused.value) == (
+        f"cli.xai.version: {grok.binary} reports 1.0.61, not the pinned {GROK_TABLE.pin}"
+    )
+    assert [calls.exists() for _pin, calls in pins.values()] == [True, True, True]
 
 
 def _the_unstarted_refusal(program: Path) -> str:

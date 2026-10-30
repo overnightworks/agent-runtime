@@ -31,7 +31,7 @@ CA bundles, and exits 0 without binding the port. Otherwise it prints the start'
 refusal line and exits 2. Run it with the new image and file before stopping the old service.
 
 The configuration is read once; a restart applies a change. The signing key
-file, the Claude token file, the Codex login document and any API credential file are read and checked with it.
+file, the Claude token file, the Codex login document, the Grok login document and any API credential file are read and checked with it.
 
 ## Who may run what
 
@@ -57,7 +57,7 @@ in this order for a person's run:
    `[apps.<app>.agents.<agent>]`, else the app's, else `[defaults] model`. A subscription-group member's
    run goes to the CLI route of the model's provider; every other caller with API rights goes to the paid
    API, under the model's full name. A run that names
-   tools and whose provider has no tool relay yet (Codex) gets 403 `not_enabled`
+   tools and whose provider has no tool relay yet (Codex, Grok) gets 403 `not_enabled`
    before any place, capability or program, never a silent drop and never another route.
 
 An app's own run skips steps 1 and 2: its agent's table `[apps.<app>.agents.<agent>]` must say
@@ -67,7 +67,7 @@ The list is an aid for a cooperative app and no boundary; the groups are the bou
 
 At most `[runs] max_parallel_cli_runs` (default 5) CLI runs are admitted; one
 beyond gets 429 `busy` with `Retry-After` and never falls back to the API
-route. The CLI runner serves Claude and Codex and checks each pinned version at startup.
+route. The CLI runner serves Claude, Codex and Grok and checks each pinned version at startup.
 The optional API runner serves buffered text and granted app tools through the
 configured gateway; it takes no subscription place. Both routes use the app's
 MCP origin and trust configuration. The CLI and API runners are installed independently.
@@ -258,8 +258,9 @@ group is refused `not_enabled` ([ARCHITECTURE.md](ARCHITECTURE.md)).
 The file is named as `cli.<provider>.token_file`; the core library never creates, renews
 or rewrites it, and the service's login command installs a new one. The service renews a
 Codex login itself ("Renewal of a Codex login" below); a Claude token has no renewal and is the
-operator's to keep fresh. Claude (`[cli.anthropic]`) and Codex
-(`[cli.openai]`) have a table each, and every table needs its `token_file`; the service refuses a
+operator's to keep fresh; a Grok login has no renewal yet, and the copy a run holds had an access
+token that lived 6.0 h in one sample. Claude (`[cli.anthropic]`), Codex (`[cli.openai]`) and Grok
+(`[cli.xai]`) have a table each, and every table needs its `token_file`; the service refuses a
 table for another provider and a leftover `[profiles]` section.
 
 ```toml
@@ -285,8 +286,27 @@ document comes from the pinned program's device-code sign-in made in a home of i
 operator's terminal home, because the two would rotate each other's renewal token away; the
 host's setup makes it.
 
+**The xAI table.** `[cli.xai]` holds the Grok program and takes `binary`, `version`, `models` and
+`token_file`. The program must print exactly one line for `--version`,
+`grok <version> (<12 lowercase hex digits>)` with an optional ` [channel]`, and `version` must equal
+the version in it. The file is the Grok sign-in document: JSON whose realm objects hold the
+sign-in's `key` and renewal token, at a mode that gives nothing to group or others, at most
+16 KiB, a link followed and its target checked. The login is read at startup and again at the
+start of every run, before any tool or program, so a swapped file counts on the next run. A document
+holding only an API key (`XAI_API_KEY`), a realm without a key, a Codex document, a bare key line
+and a Claude setup token are refused, never showing content. The service hands the program a copy
+whose renewal tokens are emptied, as a 0600 file in the run's home; the installed file keeps the
+full document. The document comes from `grok login --device-code`, made in a home of its own and
+never the operator's terminal home, which the host's setup (hal's guided login) does; the
+service installs it with `agent-runtime-service-login --provider xai`. A run serves text only:
+the route's model reaches the program as one `--model=<name>` argument, and a request that names
+tools is refused at admission. The service sets no settings for Grok, and `cli_settings.xai` is
+refused.
+
 **What a CLI run does with tools.** A Codex tool item in the stream does not fail the run; the
-service drops it and no frame shows it. An item or event type the adapter does not know still ends
+service drops it and no frame shows it. A Grok tool event ends the run `failed: provider_error`,
+because the program starts with `--deny "*"`, `--no-subagents`, `--disable-web-search` and
+`--max-turns 1`. An item or event type the adapter does not know still ends
 the run `failed: provider_error`. The service switches off by default the features its Codex adapter
 names ("CLI settings"), and every other feature follows the pinned CLI. At every pin bump the
 operator compares that list with `codex features list`, run with `HOME` and `CODEX_HOME` set to one
@@ -297,7 +317,7 @@ tool's output travels in one line. Claude's `--max-turns` is `[runs] max_tool_ca
 counts every tool-using response, built-in tools included. Codex has no turn limit by name, so
 only `[runs] max_duration_s` bounds it.
 
-**Install or check it (both providers).** `agent-runtime-service-login --config PATH --provider PROVIDER` (`anthropic` or `openai`)
+**Install or check it (every provider).** `agent-runtime-service-login --config PATH --provider PROVIDER` (`anthropic`, `openai` or `xai`)
 reads the new document on standard input, checks it with the service's reader for that provider and
 swaps it in beside the old file; the next run reads it without a restart. It exits 0 when the
 file is written, 1 when it is not written and the old file stays, 2 when it refused before
@@ -364,7 +384,9 @@ the document it read. Runs keep their blanked copies and never renew.
 `provider_error` before any child starts. An expired token also fails the run as
 `provider_error`. A login the CLI refuses names `CliLoginRefusedError` in
 the log line; for Codex that is a `turn.failed` whose text carries `401 Unauthorized`, the only
-signal codex 0.163.0 gives, so a version bump re-checks it.
+signal codex 0.163.0 gives, so a version bump re-checks it; for Grok it is an error event whose
+text begins `Not signed in`, the only form measured so far (what an expired or revoked key prints is
+not measured).
 
 An app that still calls the core directly names the same file in the provider's
 block of its `ProviderRuntimeConfig`; that interim path reads Codex and Grok

@@ -265,18 +265,21 @@ def test_a_process_whose_stderr_is_a_closed_pipe_exits_with_the_installs_status(
 
 
 @pytest.mark.parametrize(
-    "login_bytes",
+    ("provider", "login_bytes"),
     [
-        a_codex_login(),
-        a_codex_login(last_refresh="2001-01-01T00:00:00Z"),
-        NEW_CLAUDE_TOKEN,
+        pytest.param(Provider.OPENAI, a_codex_login(), id="codex"),
+        pytest.param(
+            Provider.OPENAI,
+            a_codex_login(last_refresh="2001-01-01T00:00:00Z"),
+            id="codex-long-since-refreshed",
+        ),
+        pytest.param(Provider.ANTHROPIC, NEW_CLAUDE_TOKEN, id="claude"),
+        pytest.param(Provider.XAI, GOOD_DOCUMENTS[Provider.XAI], id="grok"),
     ],
-    ids=["codex", "codex-long-since-refreshed", "claude"],
 )
 def test_check_accepts_a_file_the_reader_accepts_without_reading_input_or_writing(
-    tmp_path: Path, said: Said, login_bytes: bytes
+    tmp_path: Path, said: Said, provider: Provider, login_bytes: bytes
 ) -> None:
-    provider = Provider.ANTHROPIC if login_bytes == NEW_CLAUDE_TOKEN else Provider.OPENAI
     installation = an_installation(tmp_path, provider)
     write_login(installation.login, login_bytes)
     stream = Stream(b"never read")
@@ -323,19 +326,20 @@ def test_check_refuses_a_missing_or_refused_file_with_the_readers_reason(
 # Refused before reading: matrix cell 16.
 
 
+@pytest.mark.parametrize("provider", [Provider.OPENAI, Provider.XAI])
 def test_a_provider_without_a_table_is_refused_before_anything_is_read(
-    tmp_path: Path, said: Said
+    tmp_path: Path, said: Said, provider: Provider
 ) -> None:
     installation = an_installation(tmp_path, Provider.ANTHROPIC)
-    stream = Stream(GOOD_DOCUMENTS[Provider.OPENAI])
+    stream = Stream(GOOD_DOCUMENTS[provider])
 
     with said.watching():
         status = main(
-            ["--config", str(installation.config), "--provider", Provider.OPENAI.value], stream
+            ["--config", str(installation.config), "--provider", provider.value], stream
         )
 
     assert (status, stream.was_read, installation.unchanged()) == (2, False, True)
-    assert "cli.openai: no such table" in said.descriptor
+    assert f"cli.{provider}: no such table" in said.descriptor
 
 
 @pytest.mark.parametrize("obsolete_name", ["claude", "grok"])

@@ -19,7 +19,7 @@ proves it. The traps it cannot show:
   back with `current_config()`; they gain no explicit-argument twin that skips
   it. The agent service installs no core runtime: it reads its own config file
   and passes each fact as an argument to the subscription run (`ClaudeRun`,
-  `CodexRun` and `CodexRenewal`, which validate at construction; the service's
+  `CodexRun`, `GrokRun` and `CodexRenewal`, which validate at construction; the service's
   `ProviderRenewer`, which takes binary, login file, working root and clocks the same way;
   `run_directories`, whose root is a
   `PrivateWorkingRoot` validated at construction and whose file names are

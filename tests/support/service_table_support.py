@@ -2,7 +2,8 @@
 
 One ``ProviderTable`` describes a table the service serves; the service's startup, run, login and
 entrance test modules run their twin rows over ``TABLES``. Test values per table: its login, its
-listed model and its pinned version (Codex: ``gpt-5.5`` and 0.163.0).
+listed model and its pinned version (Codex: ``gpt-5.5`` and 0.163.0; Grok: ``grok-4.6`` and
+1.0.60).
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +19,9 @@ import pytest
 import uvicorn
 from pydantic import ValidationError
 from tests.support.codex_support import DONE, THREAD, a_fake_codex, a_message, an_item, codex_line
+from tests.support.codex_support import PRECONDITIONS_MARKER as CODEX_PRECONDITIONS_MARKER
+from tests.support.grok_support import END, a_fake_grok, a_text, grok_line
+from tests.support.grok_support import PRECONDITIONS_MARKER as GROK_PRECONDITIONS_MARKER
 from tests.support.provider_test_support import (
     CANARY_ACCESS_TOKEN,
     CANARY_ID_TOKEN,
@@ -37,6 +42,7 @@ from tests.support.service_support import (
 
 from agent_runtime.anchored_turn import CliProcessPool
 from agent_runtime.codex.run import CODEX_CLI_PROCESS_POOL
+from agent_runtime.grok.run import GROK_CLI_PROCESS_POOL
 from agent_runtime_service.config import Provider, ServiceConfig
 
 TURN_STDIN = "User: a\n\nAssistant: b\n\nUser: c"
@@ -63,12 +69,17 @@ class ProviderTable:
     pin: str
     login_name: str
     version_line: str
+    preconditions_marker: str
+    """The file the stand-in leaves once the run it was given passed its guards."""
     pool: CliProcessPool
     login_document: Callable[[str | None], bytes]
     """The sound login; given an access token, the same login holding that token."""
     stand_in: Callable[..., Path]
+    """The service-side stand-in: the CLI's fake with the turn input and version line bound."""
     answering: Callable[[str, bool], tuple[bytes, ...]]
     """The stand-in's stream for an answer, complete or cut before its end."""
+    access_canary: str
+    """The secret the child's copy of the login holds (the one that is not blanked)."""
     canaries: tuple[str, ...]
     not_a_document: str
     incomplete: str
@@ -97,9 +108,6 @@ class ProviderTable:
             directory,
             self.answering("done", True) if stream is None else stream,
             then,
-            system_text=SYSTEM_TEXT,
-            expected_stdin=TURN_STDIN,
-            version_line=self.version_line,
             **kw,
         )
 
@@ -139,6 +147,15 @@ class ProviderTable:
         return with_claude_beside(own, a_fake_claude(claude_directory))
 
 
+CODEX_VERSION_LINE = "codex-cli 0.163.0"
+
+GROK_VERSION_LINE = "grok 1.0.60 (01a8e1c591c0)"
+
+GROK_KEY = "grok-synthetic-key"
+
+GROK_REFRESH_CANARY = "canary-grok-refresh-token"
+
+
 def a_codex_login_with(access_token: str | None = None) -> bytes:
     return a_codex_login(tokens=None if access_token is None else {"access_token": access_token})
 
@@ -159,11 +176,18 @@ CODEX_TABLE = ProviderTable(
     model="gpt-5.5",
     pin="0.163.0",
     login_name="codex-login.json",
-    version_line="codex-cli 0.163.0",
+    version_line=CODEX_VERSION_LINE,
+    preconditions_marker=CODEX_PRECONDITIONS_MARKER,
     pool=CODEX_CLI_PROCESS_POOL,
     login_document=a_codex_login_with,
-    stand_in=a_fake_codex,
+    stand_in=partial(
+        a_fake_codex,
+        system_text=SYSTEM_TEXT,
+        expected_stdin=TURN_STDIN,
+        version_line=CODEX_VERSION_LINE,
+    ),
     answering=a_codex_stream,
+    access_canary=CANARY_ACCESS_TOKEN,
     canaries=(CANARY_ACCESS_TOKEN, CANARY_ID_TOKEN),
     not_a_document="is not a Codex login document",
     incomplete=(
@@ -200,7 +224,72 @@ CODEX_TABLE = ProviderTable(
     ),
 )
 
-TABLES = (CODEX_TABLE,)
+def a_grok_login_with(key: str | None = None) -> bytes:
+    realm = {"key": GROK_KEY if key is None else key, "refresh_token": GROK_REFRESH_CANARY}
+    return json.dumps({"xai.example": realm}).encode()
+
+
+def a_grok_stream(text: str, finished: bool) -> tuple[bytes, ...]:
+    return (a_text(text), *((END,) if finished else ()))
+
+
+GROK_TABLE = ProviderTable(
+    provider=Provider.XAI,
+    model="grok-4.6",
+    pin="1.0.60",
+    login_name="grok-login.json",
+    version_line=GROK_VERSION_LINE,
+    preconditions_marker=GROK_PRECONDITIONS_MARKER,
+    pool=GROK_CLI_PROCESS_POOL,
+    login_document=a_grok_login_with,
+    stand_in=partial(
+        a_fake_grok,
+        system_text=SYSTEM_TEXT,
+        expected_prompt=TURN_STDIN,
+        version_line=GROK_VERSION_LINE,
+    ),
+    answering=a_grok_stream,
+    access_canary=GROK_KEY,
+    canaries=(GROK_KEY, GROK_REFRESH_CANARY),
+    not_a_document="is not a Grok login document",
+    incomplete=(
+        "is not a complete Grok sign-in; an API key (XAI_API_KEY) is not a subscription login"
+    ),
+    malformed_login=json.dumps({"xai.example": {"key": 5}}).encode(),
+    api_key_login=json.dumps({"XAI_API_KEY": GROK_KEY}).encode(),
+    empty_token_login=a_grok_login_with(""),
+    failing_runs=(
+        FailingRun(
+            "failed-turn-with-a-bare-401",
+            (grok_line(type="error", message=f"401 {CANARY}"),),
+            "exit 1",
+            "GrokTurnFailed",
+        ),
+        FailingRun(
+            "login-refused",
+            (grok_line(type="error", message=f"Not signed in. {CANARY}"),),
+            "exit 1",
+            "CliLoginRefusedError",
+        ),
+        FailingRun(
+            "unknown-event",
+            (grok_line(type="surprise", data=CANARY),),
+            "exit 0",
+            "GrokUnknownStreamPart",
+        ),
+        FailingRun(
+            "tool-call-before-login-refused",
+            (
+                grok_line(type="tool_call", title=CANARY),
+                grok_line(type="error", message=f"Not signed in. {CANARY}"),
+            ),
+            "exit 1",
+            "GrokToolCalled",
+        ),
+    ),
+)
+
+TABLES = (CODEX_TABLE, GROK_TABLE)
 
 
 @pytest.fixture(name="table", params=TABLES, ids=lambda table: table.provider.value)

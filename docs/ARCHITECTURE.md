@@ -122,6 +122,7 @@ flowchart LR
     subgraph service ["the agent service"]
         claudefile["Claude login file<br/>one-year token, no refresh token"]
         codexfile["Codex login file<br/>access token and refresh token"]
+        grokfile["Grok login file<br/>key and refresh token"]
         renewer["renewer<br/>(every 15 min, hourly after a failure)"]
         renewalhome["renewal home under [cli] working_root<br/>full copy, for the turn and longer if kept"]
     end
@@ -129,24 +130,29 @@ flowchart LR
     subgraph runs ["one run"]
         claudeenv["CLAUDE_CODE_OAUTH_TOKEN<br/>in the child's environment"]
         codexcopy["Codex copy in the run's private home<br/>refresh token blanked"]
+        grokcopy["Grok copy in the run's private home<br/>refresh token blanked"]
     end
 
     operator -->|"claude setup-token, then<br/>agent-runtime-service-login"| claudefile
     operator -->|"device-code sign-in in a home of its own, then<br/>agent-runtime-service-login"| codexfile
+    operator -->|"grok login --device-code in a home of its own, then<br/>agent-runtime-service-login"| grokfile
     claudefile -->|"read at every run start"| claudeenv
+    grokfile -->|"read at every run start, copy for each run"| grokcopy
     codexfile -->|"copy for each run"| codexcopy
     codexfile -->|"full copy once past half its lifetime"| renewalhome
     renewer -->|"one tool-free turn of the pinned codex"| renewalhome
     renewalhome -->|"swapped in through the one writer,<br/>only over the document it read"| codexfile
     renewalhome -.->|"the renewing turn refreshes the tokens"| provider
     codexcopy -.->|"may use the access token,<br/>cannot renew it"| provider(["provider"])
+    grokcopy -.->|"may use the key,<br/>cannot renew it"| provider
     claudeenv -.->|"may use the token"| provider
     operator -.- terminal
 ```
 
 *Question: where does each provider's subscription login live, and what does a run
 hold? Source: [operations.md](operations.md) (the login file and the login
-command), `agent_runtime.codex_login.blanked_copy`, `agent_runtime.claude.run`,
+command), `agent_runtime.codex_login.blanked_copy`, `agent_runtime.grok_login.blanked_copy`,
+`agent_runtime.claude.run`,
 `agent_runtime_service.renewal` and `agent_runtime_service.renewal_schedule`, and the decision
 record [0001](decisions/0001-agent-service.md) (A1b-K0, the measured lifetime; A1b-R1, the renewal).*
 
@@ -157,7 +163,9 @@ record [0001](decisions/0001-agent-service.md) (A1b-K0, the measured lifetime; A
   login: two logins sharing one refresh token would rotate each other's away. A
   run gets a `0600` copy in its private run home with `refresh_token` blanked, so it
   can use the access token (about 240 hours measured) but cannot renew it.
-- **Grok.** The service has no Grok login table today (a `[cli.grok]` table is refused); the route is not built.
+- **Grok.** A dedicated service login too, made by `grok login --device-code` in a home of
+  its own and installed with the login command. The service reads it at startup and at every
+  run start, and a run gets a `0600` copy in its private run home with `refresh_token` blanked.
 - **Who renews.** The service renews a Codex login itself, from its own lifespan: at start
   and then about every 15 minutes, hourly after a failed attempt. Once the access token has
   less than half its lifetime left, one tool-free turn of the pinned `codex` runs on a full
@@ -165,7 +173,7 @@ record [0001](decisions/0001-agent-service.md) (A1b-K0, the measured lifetime; A
   only over the document it renewed. Runs keep their blanked copies and never renew. The
   operator signs in again only when a renewal fails for good; no lifetime is promised
   beyond what was measured. A Claude login has no refresh token and is the operator's to
-  swap.
+  swap; a Grok login is not renewed by the service yet.
 
 ## Crosscutting concepts
 

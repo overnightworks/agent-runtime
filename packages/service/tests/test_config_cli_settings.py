@@ -90,6 +90,24 @@ def test_the_levels_come_defaults_first_then_the_app_then_the_agent_unmerged(tmp
     )
 
 
+def test_xai_gets_three_empty_levels_while_codex_and_claude_settings_are_set_at_every_level(
+    tmp_path,
+):
+    text = with_settings(
+        defaults='web_search = "live"', app='web_search = "cached"', agent='web_search = "off"'
+    )
+    for level in LEVELS.values():
+        text += f'\n[{level}.cli_settings.anthropic]\ntools = ["Read"]\n'
+
+    config = loaded(tmp_path, text)
+
+    assert (
+        config.cli_settings_levels(APP, AGENT, Provider.OPENAI)
+        != config.cli_settings_levels(APP, AGENT, Provider.XAI)
+        == ({}, {}, {})
+    )
+
+
 OWNERS = {
     "model": "set model instead",
     "model_provider": "set model instead",
@@ -124,6 +142,7 @@ def test_the_check_refuses_a_key_another_owner_holds_as_a_start_does(tmp_path, c
     ("body", "field"),
     [
         pytest.param("cli_settings.grok = {}", "cli_settings.grok", id="grok"),
+        pytest.param("cli_settings.xai = {}", "cli_settings.xai", id="xai"),
         pytest.param('cli_settings.openai = "x"', "cli_settings.openai", id="not-a-table"),
     ],
 )

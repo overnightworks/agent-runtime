@@ -15,6 +15,7 @@ from tests.support.service_support import (
     _service_config_document,
     _toml_lines,
 )
+from tests.support.service_table_support import GROK_TABLE
 
 from agent_runtime_service.config import ConfigError, Provider, load_config
 
@@ -74,6 +75,25 @@ def test_a_model_that_is_malformed_or_listed_by_no_cli_table_is_refused_naming_i
     setter, field = LEVELS[level]
     document = _document()
     setter(document, name)
+
+    assert field in _refusal(tmp_path, document)
+
+
+def _grok_document(tmp_path: Path) -> dict[str, Any]:
+    binary = GROK_TABLE.service_fake(tmp_path)
+    return GROK_TABLE.document(tmp_path, binary, GROK_TABLE.login_file(tmp_path))
+
+
+@pytest.mark.parametrize("level", LEVELS)
+def test_an_xai_model_the_xai_table_lists_loads_and_one_it_does_not_is_refused_naming_its_field(
+    tmp_path, level
+):
+    setter, field = LEVELS[level]
+    document = _grok_document(tmp_path)
+    setter(document, GROK_TABLE.listed)
+    assert _load(tmp_path, document).defaults.model == GROK_TABLE.listed
+
+    setter(document, f"{Provider.XAI}/not-listed")
 
     assert field in _refusal(tmp_path, document)
 

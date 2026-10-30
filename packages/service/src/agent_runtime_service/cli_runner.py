@@ -1,7 +1,7 @@
 """The CLI route's runner: the provider a route names, run through the core with its tools.
 
-``CliRunner.run`` builds the provider run of the route's provider, Claude's or Codex's. It first
-reads the provider table's login file with that provider's reader, so a swapped file takes
+``CliRunner.run`` builds the provider run of the route's provider, Claude's, Codex's or Grok's.
+It first reads the provider table's login file with that provider's reader, so a swapped file takes
 effect on the next run without a restart, and a file gone bad fails that run as an
 ``UnsoundSecretFile`` before any tool connection or child (decision record 0001, lines 2 and
 14); the secret file's size limit bounds that read, so it stays on the event loop. The
@@ -34,9 +34,11 @@ from agent_runtime.codex.run import CodexRun
 from agent_runtime.codex_login import CodexLogin
 from agent_runtime.config import PrivateWorkingRoot
 from agent_runtime.events import StreamEvent
+from agent_runtime.grok.run import GrokRun
+from agent_runtime.grok_login import GrokLogin
 from agent_runtime.secret_file import read_token_file
 from agent_runtime_client.wire import Turn
-from agent_runtime_service.config import Provider, ServiceConfig, read_codex_login
+from agent_runtime_service.config import Provider, ServiceConfig, read_codex_login, read_grok_login
 from agent_runtime_service.relayed_events import RelayedEvents
 from agent_runtime_service.routing import Cli, split_model
 from agent_runtime_service.run_liveness import RunClock
@@ -85,9 +87,15 @@ def claude_run(launch: ProviderLaunch) -> LoggedInRun:
     return partial(_claude_run, launch, SecretStr(read_token_file(launch.token_file)))
 
 
-def _codex_run(launch: ProviderLaunch, login: CodexLogin, inputs: RunInputs) -> CliRunAdapter:
+def _refused_relay(provider: str, inputs: RunInputs) -> None:
     if inputs.relay is not None:
-        raise ValueError("a Codex run has no tool relay; admission refuses tools before this point")
+        raise ValueError(
+            f"a {provider} run has no tool relay; admission refuses tools before this point"
+        )
+
+
+def _codex_run(launch: ProviderLaunch, login: CodexLogin, inputs: RunInputs) -> CliRunAdapter:
+    _refused_relay("Codex", inputs)
     return CodexRun(
         launch.binary,
         login,
@@ -102,9 +110,25 @@ def codex_run(launch: ProviderLaunch) -> LoggedInRun:
     return partial(_codex_run, launch, read_codex_login(launch.token_file))
 
 
+def _grok_run(launch: ProviderLaunch, login: GrokLogin, inputs: RunInputs) -> CliRunAdapter:
+    _refused_relay("Grok", inputs)
+    return GrokRun(
+        launch.binary,
+        login,
+        inputs.turn.system,
+        tuple(inputs.turn.messages),
+        model=inputs.model,
+    )
+
+
+def grok_run(launch: ProviderLaunch) -> LoggedInRun:
+    return partial(_grok_run, launch, read_grok_login(launch.token_file))
+
+
 RUN_ADAPTERS: Final[Mapping[Provider, AdapterFactory]] = {
     Provider.ANTHROPIC: claude_run,
     Provider.OPENAI: codex_run,
+    Provider.XAI: grok_run,
 }
 
 
