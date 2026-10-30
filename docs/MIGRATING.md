@@ -11,6 +11,9 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | A run refused a model only by its grammar. | `RejectionCode.MODEL_NOT_OFFERED` (`model_not_offered`, 422): a valid name the installation does not offer, answered after the `forbidden` checks and before the route. Handle the new member where a client switches over `RejectionCode`. |
 | `AgentDefinition.request(messages)` | `AgentDefinition.request(messages, *, model=None)`; without `model` the field is absent from the body. The agent file still refuses a `model:` key. |
 | The startup check assembled the listed models itself. | `ServiceConfig.offered_models()` owns the offer; the startup check and admission read it. |
+| A Codex run that named tools answered 403 `not_enabled`. | It is admitted, and the run's relay serves it the app's tools as for Claude; a Grok tool run still answers 403 `not_enabled`. The tool definitions and results of a Codex run reach OpenAI. |
+| `cli_settings.openai` passed `mcp_servers.relay` through. | `mcp_servers.relay`, any key below it or an empty table, stops startup at any level (exit 2, `--check` agrees): the service writes that entry. Rename an own server of that name; other `mcp_servers.<name>` entries still load and stay beside the relay. |
+| `CodexRun(binary, login, system, history, *, model, settings)` | Two more keywords, `relay` (`RelayAccess` or `None`) and `tool_timeout_seconds` (`float` or `None`), both `None` by default; one without the other, or a timeout that is not finite and positive, raises `ChildProcessSpecificationError`. A host that builds a tool-free `CodexRun` needs nothing. |
 
 ## Migrating to 0.13.0
 

@@ -207,8 +207,10 @@ run id, and not the capability, which it sends only to the app's MCP server. Fro
 the service the CLI receives the app's turn, the model the run
 selected, the app's tool definitions and tool
 results through the relay, the run's fixed flags and limits, the path of its system
-prompt file and, when the run offers tools, of its relay file with the relay's
-loopback address and per-run secret, and the service's own subscription credential;
+prompt file and, when the run offers tools, the relay's loopback address and
+per-run secret (a Claude run gets both in its relay file; a Codex run gets the
+address in its `config.toml` and the secret only in its environment), and the
+service's own subscription credential;
 [host.md](host.md), "The child environment is closed", lists the rest of its
 environment. What the app writes is the app's: the definitions of the tools it
 names, its turn and the text of its tool results can reach the provider, including
@@ -229,8 +231,8 @@ it, is not measured yet; issue #115, step 12b, owns that measurement.
 **The provider.** On the subscription route, the turn's text reaches the provider
 (Anthropic for Claude, OpenAI for Codex, xAI for Grok) under the operator's
 subscription, and the app's tool definitions and the results of the app's tools reach
-only Anthropic: a Claude run carries them, and a tool request for a Codex or Grok run
-is refused at admission. On the API route, the turn, the model, granted definitions
+Anthropic on a Claude run and OpenAI on a Codex run; a tool request for a Grok run is
+refused at admission. On the API route, the turn, the model, granted definitions
 and accepted results reach the gateway, which forwards them to the provider the model
 names ([API text results](#api-text-results)). What the gateway and the provider keep
 follows their terms, not this service.
