@@ -80,7 +80,6 @@ _SAMPLE_TURNS = TurnRuntimeConfig(
         code_mode_host_binary=_SAMPLE_ROOT / "codex" / "code-mode-host",
         resources_directory=_SAMPLE_ROOT / "codex" / "resources",
         max_concurrent_processes=4,
-        max_concurrent_image_runs=2,
     ),
     grok=GrokTurnRuntime(
         prompt_file_prefix="notes-cli-prompt-",

@@ -20,13 +20,13 @@
 "src/agent_runtime/claude/provider.py" = 1965
 "src/agent_runtime/process.py" = 2404
 "src/agent_runtime/spawn.py" = 1137
-"tests/support/provider_test_support.py" = 2189
+"tests/support/provider_test_support.py" = 2188
 "tests/support/service_support.py" = 1543
 "tests/test_catalog.py" = 1045
 "tests/test_claude_provider.py" = 5486
 "tests/test_claude_provider_streaming.py" = 1168
 "tests/test_claude_run.py" = 856
-"tests/test_codex_cli_adapter.py" = 3089
+"tests/test_codex_cli_adapter.py" = 1722
 "tests/test_grok_cli_adapter.py" = 1212
 "tests/test_process.py" = 6198
 "tests/test_process_run_directories.py" = 840

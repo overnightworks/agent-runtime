@@ -1,6 +1,6 @@
 """The private directory names a host's mount policy has to permit.
 
-Every confined Codex run, the image turn and the tool turn, works inside
+Every confined Codex tool turn works inside
 Bubblewrap with exactly one writable place: a ``codex-home`` below a directory
 named by one of these prefixes. Each directory is created directly below the
 host's private ``cli_working_directory_root``, so a host profile permits
@@ -16,6 +16,5 @@ from __future__ import annotations
 
 from typing import Final
 
-CODEX_IMAGE_TURN_DIRECTORY_PREFIX: Final = "agent-cli-codex-image-turn-"
 CODEX_TOOL_TURN_DIRECTORY_PREFIX: Final = "agent-cli-codex-tool-turn-"
 CODEX_HOME_DIRECTORY_NAME: Final = "codex-home"

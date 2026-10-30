@@ -1,10 +1,8 @@
 """The Codex CLI's shared plumbing: its isolation, its login, its events.
 
-Both Codex routes — the tool transport and the image
-turn — drive the same binary: they install the same redacted login into a
-private home, spawn through the same admission-bound runner, and read the
-same JSON event grammar. That common ground lives here so neither route
-owns the other's internals.
+The tool transport drives the Codex binary: it installs a redacted login into
+a private home, spawns through the admission-bound runner, and reads the JSON
+event grammar. That plumbing lives here, apart from the transport's turn loop.
 """
 
 from __future__ import annotations
@@ -66,7 +64,6 @@ ITEM_EVENT_TYPES: Final = frozenset(
         CODEX_ITEM_COMPLETED_EVENT,
     }
 )
-INFORMATIONAL_EVENT_TYPES: Final = frozenset({"thread.started", "turn.started"})
 
 
 class CodexCliStreamFailure(Exception):
@@ -115,8 +112,7 @@ def release_turn_reservations(
     """Release a turn's home token and its pool slot, the slot even when the token raises.
 
     Not ``process.released_when_the_runner_ends``: the Codex slot is bound to
-    the spawned pid, so a spawn failure and a reap release it differently, and
-    the image path releases here before any runner exists.
+    the spawned pid, so a spawn failure and a reap release it differently.
     """
     try:
         home_reservation.release()

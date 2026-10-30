@@ -572,7 +572,6 @@ def test_a_host_with_a_removed_flat_codex_field_is_refused_naming_the_field(
         pytest.param("codex_code_mode_host_binary", id="code-mode-host-binary"),
         pytest.param("codex_resources_directory", id="resources-directory"),
         pytest.param("codex_max_concurrent_processes", id="max-concurrent-processes"),
-        pytest.param("codex_max_concurrent_image_runs", id="max-concurrent-image-runs"),
     ],
 )
 def test_a_host_with_a_removed_flat_codex_turn_field_is_refused_naming_the_field(

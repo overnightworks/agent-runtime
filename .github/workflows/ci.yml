@@ -53,7 +53,7 @@ jobs:
       # The workspace's own packages are put on the path rather than built, so
       # every checking step runs only locked wheels and no setup script.
       - name: Install dependencies
-        run: uv sync --locked --all-packages --extra dev --extra image --no-build --no-install-workspace
+        run: uv sync --locked --all-packages --extra dev --no-build --no-install-workspace
 
       - name: Ruff
         env:
@@ -268,7 +268,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install the lowest declared direct dependencies
-        run: uv sync --all-packages --extra dev --extra image --no-build --no-install-workspace
+        run: uv sync --all-packages --extra dev --no-build --no-install-workspace
 
       - name: Versions the suite runs against
         run: uv pip list

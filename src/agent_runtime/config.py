@@ -104,7 +104,6 @@ class CodexTurnRuntime(BaseModel):
     code_mode_host_binary: Path
     resources_directory: Path
     max_concurrent_processes: int = Field(ge=1)
-    max_concurrent_image_runs: int = Field(ge=1)
 
 
 class TurnRuntimeConfig(BaseModel):

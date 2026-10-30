@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib
 import inspect
 import json
-import os
 import pkgutil
 import re
 import sys
@@ -15,15 +14,11 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic import SecretStr
 from tests.support.provider_test_support import (
-    A_CODEX_LOGIN_WITH_INVALID_UTF8,
     CLAUDE_MODEL_CATALOG_STDOUT,
     a_claude_cli_child,
-    a_codex_login,
-    call_within_deadline,
     drive_turn,
     fake_cli_executable,
     install_claude_cli_children,
-    override_codex_runtime,
     override_provider_runtime,
     override_turn_runtime,
     remove_the_codex_turn_block_with_no_login_and_no_binary,
@@ -45,7 +40,7 @@ from agent_runtime.config import (
     reset_config,
 )
 from agent_runtime.constants import CLAUDE_NO_SESSION_PERSISTENCE_FLAG
-from agent_runtime.dispatch import ImageCapability, call_provider_once, image_capability
+from agent_runtime.dispatch import call_provider_once
 from agent_runtime.errors import (
     ProviderUnavailableError,
     SafeRouteReasonCode,
@@ -104,29 +99,6 @@ def test_a_turn_without_the_providers_block_raises_the_named_wiring_error(
     assert type(turn.error) is ProviderNotConfiguredError
     assert (turn.error.provider, turn.error.block) == (provider, block)
     assert turn.events == []
-    assert spawned_children == []
-
-
-@pytest.mark.parametrize(
-    ("remove_block", "block"),
-    [
-        pytest.param(lambda: override_provider_runtime(codex=None), "codex", id="codex-block"),
-        pytest.param(
-            remove_the_codex_turn_block_with_no_login_and_no_binary,
-            "turns.codex",
-            id="turns-codex-block",
-        ),
-    ],
-)
-def test_codex_image_capability_without_its_block_raises_the_named_wiring_error(
-    remove_block, block, spawned_children,
-):
-    remove_block()
-
-    with pytest.raises(ProviderNotConfiguredError) as refused:
-        image_capability("codex", ProviderRoute.CLI)
-
-    assert (refused.value.provider, refused.value.block) == ("codex", block)
     assert spawned_children == []
 
 
@@ -404,70 +376,6 @@ def test_stream_turn_takes_only_keyword_arguments():
     parameters = inspect.signature(dispatch.stream_turn).parameters.values()
 
     assert {parameter.kind for parameter in parameters} == {inspect.Parameter.KEYWORD_ONLY}
-
-
-def test_image_capability_says_a_grok_cli_route_carries_no_image_tool():
-    capability = image_capability("grok", ProviderRoute.CLI)
-
-    assert isinstance(capability, ImageCapability)
-    assert capability.carries_image_tool is False
-    assert capability.failure.code is SafeRouteReasonCode.NO_IMAGE_TOOL
-
-
-
-def _codex_image_failure(monkeypatch, auth_file: Path):
-    monkeypatch.setattr(dispatch, "codex_image_turn_is_available", lambda: True)
-    override_codex_runtime(token_file=auth_file)
-    return call_within_deadline(image_capability, "codex", ProviderRoute.CLI).failure
-
-
-@pytest.mark.parametrize(
-    ("document", "failure_code"),
-    [
-        pytest.param(a_codex_login(), None, id="complete"),
-        pytest.param(
-            b'{"auth_mode":"chatgpt","tokens":{"access_token":"a"}}',
-            SafeRouteReasonCode.CLI_LOGIN_NOT_CONFIGURED, id="only-an-access-token",
-        ),
-        pytest.param(b"{}", SafeRouteReasonCode.CLI_LOGIN_NOT_CONFIGURED, id="tokens-absent"),
-        pytest.param(
-            a_codex_login(tokens={"account_id": 7}),
-            SafeRouteReasonCode.CLI_LOGIN_NOT_CONFIGURED, id="numeric-account-id",
-        ),
-        pytest.param(
-            A_CODEX_LOGIN_WITH_INVALID_UTF8, SafeRouteReasonCode.CLI_LOGIN_NOT_CONFIGURED,
-            id="invalid-encoding",
-        ),
-    ],
-)
-def test_codex_image_preflight_needs_a_usable_login(
-    monkeypatch, tmp_path: Path, document: bytes, failure_code: SafeRouteReasonCode | None,
-):
-    auth_file = tmp_path / "auth.json"
-    auth_file.write_bytes(document)
-
-    failure = _codex_image_failure(monkeypatch, auth_file)
-
-    assert (failure.code if failure else None) is failure_code
-
-
-def test_codex_image_preflight_refuses_a_fifo_login_without_waiting(monkeypatch, tmp_path: Path):
-    auth_file = tmp_path / "auth.json"
-    os.mkfifo(auth_file)
-
-    failure = _codex_image_failure(monkeypatch, auth_file)
-
-    assert failure.code is SafeRouteReasonCode.CLI_LOGIN_NOT_CONFIGURED
-
-
-def test_codex_image_preflight_says_the_cli_is_unavailable_when_an_image_dependency_is_missing(
-    monkeypatch,
-):
-    monkeypatch.setattr(dispatch, "codex_image_turn_is_available", lambda: False)
-
-    failure = image_capability("codex", ProviderRoute.CLI).failure
-
-    assert failure.code is SafeRouteReasonCode.CLI_UNAVAILABLE
 
 
 MIGRATING = Path(__file__).resolve().parents[1] / "docs" / "MIGRATING.md"

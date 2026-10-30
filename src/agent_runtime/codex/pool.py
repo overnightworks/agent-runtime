@@ -11,10 +11,9 @@ from agent_runtime.errors import CodexProcessPoolSaturatedError
 
 
 class CodexProcessKind(StrEnum):
-    """The two Codex process classes with distinct admission limits."""
+    """The Codex process classes."""
 
     TEXT = "text"
-    IMAGE = "image"
 
 
 @dataclass(eq=False)
@@ -28,15 +27,10 @@ class CodexProcessReservation:
 class CodexProcessPool:
     """Keep reserved, live, and zombie Codex processes within their caps."""
 
-    def __init__(self, *, maximum_processes: int, maximum_image_runs: int) -> None:
+    def __init__(self, *, maximum_processes: int) -> None:
         if maximum_processes < 1:
             raise ValueError("Codex process cap must be at least one")
-        if maximum_image_runs < 1:
-            raise ValueError("Codex image cap must be at least one")
-        if maximum_image_runs > maximum_processes:
-            raise ValueError("Codex image cap cannot exceed the total process cap")
         self._maximum_processes = maximum_processes
-        self._maximum_image_runs = maximum_image_runs
         self._lock = threading.Lock()
         self._reservations: set[CodexProcessReservation] = set()
 
@@ -45,11 +39,6 @@ class CodexProcessPool:
         with self._lock:
             if len(self._reservations) >= self._maximum_processes:
                 raise CodexProcessPoolSaturatedError(kind=kind, scope="total")
-            if (
-                kind is CodexProcessKind.IMAGE
-                and self._image_reservation_count() >= self._maximum_image_runs
-            ):
-                raise CodexProcessPoolSaturatedError(kind=kind, scope="image")
             reservation = CodexProcessReservation(kind=kind)
             self._reservations.add(reservation)
             return reservation
@@ -86,17 +75,6 @@ class CodexProcessPool:
         with self._lock:
             return len(self._reservations)
 
-    def image_reservation_count(self) -> int:
-        """Return image slots, including unbound and zombie reservations."""
-        with self._lock:
-            return self._image_reservation_count()
-
-    def _image_reservation_count(self) -> int:
-        return sum(
-            reservation.kind is CodexProcessKind.IMAGE
-            for reservation in self._reservations
-        )
-
 
 _process_pool: CodexProcessPool | None = None
 _process_pool_lock = threading.Lock()
@@ -110,6 +88,5 @@ def get_codex_process_pool() -> CodexProcessPool:
         if _process_pool is None:
             _process_pool = CodexProcessPool(
                 maximum_processes=turns.max_concurrent_processes,
-                maximum_image_runs=turns.max_concurrent_image_runs,
             )
         return _process_pool
