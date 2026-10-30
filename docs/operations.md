@@ -338,10 +338,10 @@ renewal (exit 0, a running service renews it), or its expiry cannot be read with
 the line gives the expiry in UTC. A login that holds no refresh token, is not a usable Codex login,
 has expired, or has been due for 90 minutes or more (twice the 15-minute interval plus the one-hour
 backoff) without being renewed exits 4: sign in again. A sign-in verdict while a `.<file>.new` is
-present exits 3 instead, with the held-sibling sentence. A sibling beside a login that is not due or
-only due is not mentioned, because a renewal holds one routinely. `anthropic` and `xai` get the
-reader's verdict alone (0, 4 or 3). A host's setup reads 0 as no action and 4 as sign in; every other code is
-a problem to show.
+present exits 3 instead, with the held-sibling sentence. A sibling beside a login
+that is not due or only due is not mentioned, because a renewal holds one routinely.
+`anthropic` and `xai` get the reader's verdict alone (0, 4 or 3). A host's setup
+reads 0 as no action and 4 as sign in; every other code is a problem to show.
 
 **Renewal of a Codex login.** The service renews the `[cli.openai]` login itself, from its own
 lifespan: one round at start, then every 15 minutes, and one hour after a round in which an
