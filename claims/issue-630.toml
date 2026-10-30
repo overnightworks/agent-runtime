@@ -1,8 +1,0 @@
-claim_id = "8ed8eb43848341cd9179e9134b4f1371"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "71d697749628253db5a4896133245a2ab693c3f6"
-branch = "claude/issue-630-slice-1-of-623-protocol-5-a-run-names-a"
-scope = ["README.md", "docs/ARCHITECTURE.md", "docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "docs/wire.md", "packages/client/src/agent_runtime_client/agents.py", "packages/client/src/agent_runtime_client/wire.py", "packages/client/tests/test_agents_file.py", "packages/client/tests/test_wire_protocol.py", "packages/service/src/agent_runtime_service/app.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/src/agent_runtime_service/routing.py", "packages/service/tests/test_app_entrance.py", "packages/service/tests/test_app_keycloak.py", "packages/service/tests/test_app_models.py", "packages/service/tests/test_config_model.py", "tests/support/api_runner_support.py", "tests/support/service_support.py"]
-opened_commit = "7c67adcff3cf67e5698fda0ffa0b45ef65db2b2e"
-whole_reason = "One protocol switch on the request side: the version, the field, its owner of the offer, its refusal code, the client keyword that writes it, and the docs that would otherwise say no model is ever named."
