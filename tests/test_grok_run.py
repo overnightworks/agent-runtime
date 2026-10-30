@@ -274,12 +274,17 @@ def test_the_allow_rule_opens_exactly_the_server_the_config_entry_names(tmp_path
     assert arguments[arguments.index("--allow") + 1] == f"MCPTool({server}__*)"
 
 
-def test_a_relay_run_writes_the_relay_entry_over_the_merged_levels_beside_their_keys() -> None:
+@pytest.mark.parametrize(
+    ("seconds", "whole_seconds"), [(1.0, 1), (2.5, 3), (899.01, 900), (900.0, 900)]
+)
+def test_a_relay_run_writes_the_relay_entry_over_the_merged_levels_beside_their_keys(
+    seconds: float, whole_seconds: int
+) -> None:
     levels: tuple[CliSettings, ...] = (
         {"invented": {"first": 1, "kept": SETTING_VALUE}, "permission": {"allow": ["Read"]}},
         {"invented": {"first": 2}},
     )
-    settings = written_settings(a_relay_run(*levels))
+    settings = written_settings(a_relay_run(*levels, tool_timeout_seconds=seconds))
     servers = settings.pop("mcp_servers")
 
     assert settings == {
@@ -290,21 +295,9 @@ def test_a_relay_run_writes_the_relay_entry_over_the_merged_levels_beside_their_
         "relay": {
             "url": a_relay().url,
             "bearer_token_env_var": RELAY_TOKEN_VARIABLE,
-            "tool_timeout_sec": 900,
+            "tool_timeout_sec": whole_seconds,
         }
     }
-
-
-@pytest.mark.parametrize("seconds", [1.0, 2.5, 899.01])
-def test_the_relay_waits_for_a_tool_up_to_the_whole_seconds_of_the_runs_maximum(
-    seconds: float,
-) -> None:
-    entry = written_settings(a_relay_run(tool_timeout_seconds=seconds))["mcp_servers"]["relay"]
-
-    assert (entry["tool_timeout_sec"], seconds <= entry["tool_timeout_sec"] < seconds + 1) == (
-        math.ceil(seconds),
-        True,
-    )
 
 
 @pytest.mark.parametrize(
