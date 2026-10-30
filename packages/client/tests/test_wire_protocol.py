@@ -773,7 +773,26 @@ def test_any_other_agent_roles_are_refused(roles: object) -> None:
         AGENT_ROLES.validate_python(roles)
 
 
-@pytest.mark.parametrize("model", ["anthropic/sonnet", None, "", 5])
-def test_a_run_request_that_carries_a_model_is_refused(model: object) -> None:
+def test_a_run_request_may_name_a_model_or_none() -> None:
+    named = RunRequest.model_validate({**REQUEST, "model": "anthropic/sonnet"})
+    null = RunRequest.model_validate({**REQUEST, "model": None})
+
+    assert (named.model, null.model, RunRequest.model_validate(REQUEST).model) == (
+        "anthropic/sonnet",
+        None,
+        None,
+    )
+
+
+@pytest.mark.parametrize(
+    "model", ["", "Opus", "anthropic", "anthropic/opus@1", "ANTHROPIC/opus", 5]
+)
+def test_a_run_request_naming_a_model_off_the_grammar_is_refused(model: object) -> None:
     with pytest.raises(ValidationError, match="model"):
         RunRequest.model_validate({**REQUEST, "model": model})
+
+
+@pytest.mark.parametrize("version", [3, 4, 6])
+def test_a_body_of_another_protocol_version_is_refused(version: int) -> None:
+    with pytest.raises(ValidationError):
+        RunRequest.model_validate({**REQUEST, "v": version})

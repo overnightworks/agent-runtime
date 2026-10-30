@@ -106,6 +106,7 @@ _STATUS: Final[Mapping[RejectionCode, HTTPStatus]] = {
     RejectionCode.UNAVAILABLE: HTTPStatus.SERVICE_UNAVAILABLE,
     RejectionCode.NOT_FOUND: HTTPStatus.NOT_FOUND,
     RejectionCode.CAPABILITY_TOO_LARGE: HTTPStatus.UNPROCESSABLE_ENTITY,
+    RejectionCode.MODEL_NOT_OFFERED: HTTPStatus.UNPROCESSABLE_ENTITY,
 }
 
 _MESSAGE: Final[Mapping[RejectionCode, str]] = {
@@ -121,6 +122,7 @@ _MESSAGE: Final[Mapping[RejectionCode, str]] = {
     RejectionCode.NOT_FOUND: "No such run.",
     RejectionCode.CAPABILITY_TOO_LARGE: "This run's capability would exceed"
     f" {MAX_CAPABILITY_CHARACTERS} characters.",
+    RejectionCode.MODEL_NOT_OFFERED: "The service does not offer the model the request names.",
 }
 
 
@@ -232,7 +234,12 @@ def _admitted(
     scope = config.capability_scope(caller.app, run_request.tools)
     if run_request.tools and scope is None:
         return rejection(RejectionCode.FORBIDDEN)
-    model = config.model_for(caller.app, run_request.agent)
+    if run_request.model is None:
+        model = config.model_for(caller.app, run_request.agent)
+    elif run_request.model in config.offered_models():
+        model = run_request.model
+    else:
+        return rejection(RejectionCode.MODEL_NOT_OFFERED)
     served = route(
         config.identity,
         config.subscription_models().keys(),

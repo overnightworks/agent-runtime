@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import traceback
 from pathlib import Path
 
@@ -440,6 +441,20 @@ def test_request_is_the_current_protocol_body_with_agent_prompt_and_tool_effects
         "edit_note": ToolEffect.SIDE_EFFECTING,
     }
     assert set(request.model_dump()) == {"v", "agent", "turn", "roles", "tools"}
+
+
+def test_request_names_the_model_it_is_given_and_omits_the_field_otherwise(
+    tmp_path: Path,
+) -> None:
+    agent = load(tmp_path, agent_text())
+    messages = [TurnMessage(role=TurnRole.USER, text="hi")]
+
+    named = agent.request(messages, model="anthropic/opus")
+
+    assert named.model == "anthropic/opus"
+    assert named.model_dump(mode="json")["model"] == "anthropic/opus"
+    assert named.v == PROTOCOL_VERSION
+    assert "model" not in json.loads(agent.request(messages).model_dump_json())
 
 
 @pytest.mark.parametrize("roles", ["[admin]", "[admin, user]"])

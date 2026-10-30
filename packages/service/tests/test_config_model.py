@@ -167,3 +167,12 @@ def test_a_cli_table_that_lists_no_models_is_refused_naming_the_default_model(tm
     document["cli"][Provider.ANTHROPIC]["models"] = []
 
     assert DEFAULTS in _refusal(tmp_path, document)
+
+
+def test_the_offered_models_are_the_full_names_of_every_cli_table_list(tmp_path):
+    document = _document()
+    document["cli"][Provider.ANTHROPIC]["models"] = ["sonnet", "opus"]
+
+    offered = _load(tmp_path, document).offered_models()
+
+    assert offered == frozenset({f"{Provider.ANTHROPIC}/sonnet", f"{Provider.ANTHROPIC}/opus"})
