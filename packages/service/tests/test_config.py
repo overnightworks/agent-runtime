@@ -104,7 +104,6 @@ def test_a_valid_file_loads_with_its_configured_identity_and_the_documented_defa
     assert config.runs.stall_timeout_s == 30.0
     assert (config.runs.max_tool_calls, config.runs.max_bytes) == (30, 4194304)
     assert config.runs.max_parallel_cli_runs == 5
-    assert config.app_of_workload_client("songmaker-test") == "songmaker"
 
 
 def test_an_installation_without_an_origin_needs_no_signing_section(tmp_path):
@@ -123,6 +122,18 @@ def test_o11_a_leftover_models_table_of_an_app_stops_startup_naming_the_field(tm
     assert refused_on_one_line(written(tmp_path, text), capsys).startswith(
         "apps.songmaker.models"
     )
+
+
+def _without_apps() -> str:
+    """The valid file with ``[apps]`` present and empty, and nothing that needs an app's origin."""
+    return _with(
+        f'[apps.songmaker]\nworkload_client = "songmaker-test"\n{SONGMAKER_ORIGIN_LINE}',
+        "[apps]\n",
+    ).replace(SIGNING_SECTION, "").replace(MCP_SECTION, "")
+
+
+def test_a_configuration_without_an_app_stops_startup_naming_apps(tmp_path, capsys):
+    assert refused_on_one_line(written(tmp_path, _without_apps()), capsys).startswith("apps")
 
 
 LEFTOVER_PROFILES = f'\n[profiles.claude-main]\nprovider = "claude"\n{TOKEN_FILE_LINE}\n'
@@ -285,6 +296,7 @@ def _with_key_set_url(url: str) -> str:
             )
         ),
         pytest.param("[identity\n", "not TOML", id="not-toml"),
+        pytest.param(_without_apps(), "apps", id="empty-apps"),
         pytest.param(_with(SIGNING_KEY_LINE, ""), "signing.key_file", id="signing-without-key"),
         pytest.param(
             _with(SIGNING_KEY_LINE, f'{SIGNING_KEY_LINE}\nkey = "x"'),

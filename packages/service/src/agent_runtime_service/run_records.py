@@ -19,6 +19,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Final
 from uuid import UUID
 
+from webauth.service_callers import Principal
+
 from agent_runtime_client.wire import (
     PROTOCOL_VERSION,
     Cancelled,
@@ -32,7 +34,6 @@ from agent_runtime_client.wire import (
     Succeeded,
     TerminalEvent,
 )
-from agent_runtime_service.identity import Principal
 
 RECORD_RETENTION: Final = timedelta(hours=1)
 MAX_ENDED_RECORDS: Final = 10_000

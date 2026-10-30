@@ -40,6 +40,18 @@ def _user_with_the_workload_subject() -> str:
 UNAUTHORIZED = RejectionCode.UNAUTHORIZED
 FORBIDDEN = RejectionCode.FORBIDDEN
 
+UNREADABLE_WORKLOAD_IDENTITIES: dict[str, dict[str, object]] = {
+    "malformed-groups": {"groups": "/subscription-members"},
+    "lone-surrogate-subject": {"sub": "service-\ud800"},
+}
+
+FAULTS_BESIDE_AN_UNREADABLE_WORKLOAD: dict[str, tuple[dict[str, object], dict[str, object]]] = {
+    "alone": ({}, {}),
+    "workload-binding": ({"realm_access": {"roles": []}}, {}),
+    "person-client-binding": ({}, {"azp": PRESENTATOR_CLIENT}),
+    "membership": ({}, {"groups": ["/subscription-members"]}),
+}
+
 TOKEN_REJECTIONS = [
     pytest.param(_no_token, _no_token, UNAUTHORIZED, id="no-tokens"),
     pytest.param(_no_token, MINT.user, UNAUTHORIZED, id="no-workload-token"),
@@ -125,7 +137,7 @@ TOKEN_REJECTIONS = [
         lambda: MINT.workload(sub=""), MINT.user, UNAUTHORIZED, id="workload-with-empty-subject"
     ),
     pytest.param(
-        lambda: MINT.workload(sub=None), MINT.user, FORBIDDEN, id="workload-without-subject"
+        lambda: MINT.workload(sub=None), MINT.user, UNAUTHORIZED, id="workload-without-subject"
     ),
     pytest.param(
         MINT.workload,
@@ -144,5 +156,17 @@ TOKEN_REJECTIONS = [
         lambda: "not.a.jwt",
         UNAUTHORIZED,
         id="an-unusable-token-answers-before-a-forbidden-one",
+    ),
+    *(
+        pytest.param(
+            lambda unreadable=unreadable, workload=workload: MINT.workload(
+                **unreadable, **workload
+            ),
+            lambda person=person: MINT.user(**person),
+            UNAUTHORIZED,
+            id=f"workload-{identity}-{fault}",
+        )
+        for identity, unreadable in UNREADABLE_WORKLOAD_IDENTITIES.items()
+        for fault, (workload, person) in FAULTS_BESIDE_AN_UNREADABLE_WORKLOAD.items()
     ),
 ]

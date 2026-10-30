@@ -40,7 +40,6 @@ import tomllib
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from functools import cached_property
 from pathlib import Path
 from typing import Annotated, Final, NamedTuple, Protocol, Self, cast
 
@@ -543,7 +542,7 @@ class ServiceConfig(_Section):
     api: ApiConfig | None = None
     mcp: McpConfig | None = None
     signing: SigningConfig | None = None
-    apps: dict[NonEmptyText, AppConfig]
+    apps: dict[NonEmptyText, AppConfig] = Field(min_length=1)
     _admissions: dict[str, AdmissionConfig] = PrivateAttr(default_factory=dict)
 
     @model_validator(mode="before")
@@ -682,13 +681,6 @@ class ServiceConfig(_Section):
             login_group=group,
             admin_group=f"{group}/admin",
         )
-
-    def app_of_workload_client(self, client_id: str) -> str | None:
-        return self._apps_by_workload_client.get(client_id)
-
-    @cached_property
-    def _apps_by_workload_client(self) -> dict[str, str]:
-        return {app.workload_client: app_name for app_name, app in self.apps.items()}
 
 
 def load_config(path: Path, *, read_logins: bool = True) -> ServiceConfig:

@@ -32,10 +32,10 @@ from tests.support.service_support import (
 from tests.support.token_rejection_support import TOKEN_REJECTIONS
 from tests.support.wire_builders import started, succeeded
 from webauth.https_client import KeySetFetchError
+from webauth.service_callers import Principal
 
 from agent_runtime_client.wire import PROTOCOL_VERSION, RejectionCode, RunState, RunStatus
 from agent_runtime_service.app import create_app
-from agent_runtime_service.identity import Principal
 from agent_runtime_service.run_records import RunRecorder, RunRecords
 
 MINT = shared_mint()

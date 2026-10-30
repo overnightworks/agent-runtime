@@ -30,12 +30,14 @@ from tests.support.service_support import (
     SONGMAKER_GROUP,
     SONGMAKER_TOOLS,
     SUBSCRIPTION_GROUP,
+    UNKNOWN_RUN,
     ScriptedRunner,
     StepClock,
     TokenMint,
     asgi_post_status,
     assert_rejected,
     decoded_events,
+    get_run,
     post_run,
     run_body,
     run_headers,
@@ -314,13 +316,19 @@ def test_one_key_set_fetch_serves_every_request_of_the_process():
     assert mint.key_set_fetches == 1
 
 
+@pytest.mark.parametrize("route", ["POST", "GET"])
 @pytest.mark.parametrize(("workload_token", "user_token", "code"), TOKEN_REJECTIONS)
 def test_tokens_that_do_not_bind_one_app_to_one_user_are_refused(
-    service, workload_token: TokenFor, user_token: TokenFor, code
+    service, workload_token: TokenFor, user_token: TokenFor, code, route
 ):
     workload, user = workload_token(), user_token()
+    headers = run_headers(workload, user)
 
-    response = post_run(service, run_headers(workload, user))
+    response = (
+        post_run(service, headers)
+        if route == "POST"
+        else get_run(service, headers, UNKNOWN_RUN)
+    )
 
     assert_rejected(response, code, 401 if code is UNAUTHORIZED else 403)
     for token in (workload, user):

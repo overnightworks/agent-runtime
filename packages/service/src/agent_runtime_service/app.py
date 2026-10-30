@@ -52,6 +52,7 @@ from fastapi.responses import Response, StreamingResponse
 from starlette.types import Receive, Scope, Send
 from webauth.https_client import fetch_key_set_over_https
 from webauth.jwt_verification import KeySetFetch, MonotonicClock
+from webauth.service_callers import WorkloadCaller
 
 from agent_runtime import lost_groups
 from agent_runtime_client.capability import MAX_CAPABILITY_CHARACTERS
@@ -71,13 +72,7 @@ from agent_runtime_service.capability import (
     signed_capability,
 )
 from agent_runtime_service.config import RELAY_ATTACHED_PROVIDERS, ServiceConfig
-from agent_runtime_service.identity import (
-    AppCaller,
-    Caller,
-    CallerCheck,
-    PersonCaller,
-    build_verifier,
-)
+from agent_runtime_service.identity import Caller, CallerCheck, PersonCaller, agent_role
 from agent_runtime_service.quarantine import GroupConfirmation, Quarantine
 from agent_runtime_service.routing import Cli, NotEnabled, ServedRoute, route
 from agent_runtime_service.run_events import run_frames
@@ -148,7 +143,7 @@ def create_app(
     ``confirm_group_gone`` is how the one quarantine asks whether a lost process group is gone.
     ``renewals`` runs while the app's lifespan does; without it the app renews nothing.
     """
-    callers = CallerCheck(build_verifier(config.identity, fetch_key_set, monotonic_clock), config)
+    callers = CallerCheck(config, fetch_key_set, monotonic_clock)
     installed_records = records or RunRecords(wall_clock)
     subscription_slot = AdmissionSlot(config.runs.max_parallel_cli_runs)
     quarantine = Quarantine(LoopClock(), confirm_group_gone)
@@ -276,9 +271,9 @@ def _admitted(
 
 
 def _may_run(config: ServiceConfig, caller: Caller, run_request: RunRequest) -> bool:
-    if isinstance(caller, AppCaller):
+    if isinstance(caller, WorkloadCaller):
         return config.apps[caller.app].runs_as_itself(run_request.agent)
-    return caller.role in run_request.roles
+    return agent_role(caller) in run_request.roles
 
 
 def _release(lease: Lease | None) -> None:

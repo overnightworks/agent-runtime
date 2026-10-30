@@ -37,6 +37,7 @@ from tests.support.service_support import (
     SONGMAKER_GROUP,
     SUBSCRIPTION_GROUP,
     TEST_ISSUER,
+    UNKNOWN_RUN,
     ScriptedRunner,
     TokenMint,
     WallClock,
@@ -66,7 +67,6 @@ API_SCRIPT = (AssistantTextEvent(text="via the API"), FinalEvent(text="API answe
 SERVICE_ACCOUNT = f"service-account-user-of-{SONGMAKER_CLIENT}"
 LISTED = f"{Provider.ANTHROPIC}/{LISTED_MODEL}"
 ENABLED_COWRITER: Final = {COWRITER: {"runs_as_app": True}}
-UNKNOWN_RUN = "00000000-0000-4000-8000-000000000000"
 
 
 def _config(
@@ -250,6 +250,47 @@ def test_p7_a_person_without_the_requested_role_is_forbidden_though_the_agent_ru
     refused = service.start(_person(groups=[SONGMAKER_GROUP]), roles=["admin"])
 
     assert_rejected(refused, RejectionCode.FORBIDDEN, 403)
+    assert service.started == 0
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [
+        pytest.param({"sub": None}, id="without-a-subject"),
+        pytest.param({"sub": "service-\ud800"}, id="subject-with-a-lone-surrogate"),
+        pytest.param({"groups": "/subscription-members"}, id="malformed-groups"),
+        pytest.param(
+            {"sub": None, "realm_access": {"roles": []}}, id="without-a-subject-and-not-a-workload"
+        ),
+        pytest.param(
+            {"sub": "service-\ud800", "client_id": PRESENTATOR_CLIENT},
+            id="lone-surrogate-and-client-id-differs-from-azp",
+        ),
+        pytest.param(
+            {"groups": "/subscription-members", "realm_access": {"roles": []}},
+            id="malformed-groups-and-not-a-workload",
+        ),
+        pytest.param(
+            {"groups": "/subscription-members", "client": "unknown-app"},
+            id="malformed-groups-and-unregistered-client",
+        ),
+    ],
+)
+@pytest.mark.parametrize("route", ["POST", "GET"])
+def test_an_own_token_with_an_unreadable_identity_is_unauthorized_before_any_forbidden_fault(
+    service, claims, route
+):
+    claims = dict(claims)
+    client = claims.pop("client", SONGMAKER_CLIENT)
+    headers = _own(client=client, **claims)
+
+    response = (
+        service.start(headers)
+        if route == "POST"
+        else get_run(service.base_url, headers, UNKNOWN_RUN)
+    )
+
+    assert_rejected(response, RejectionCode.UNAUTHORIZED, 401)
     assert service.started == 0
 
 
