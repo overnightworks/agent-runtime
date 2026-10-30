@@ -121,6 +121,7 @@ PATCH_OWNER = "it can patch keys the service owns"
 CARRIER_OWNER = f"they can carry the inference credential; {TOKEN_OWNER}"
 MODEL_OWNER = "set model instead"
 RELAY_OWNER = "the service attaches the run's tool relay"
+ONLY_THE_RELAY_OWNER = "a Grok run takes no MCP server beside the run's tool relay"
 WHOLE_TABLE_OWNERS = (
     ("agent", SYSTEM_TEXT_OWNER),
     ("model_providers", TOKEN_OWNER),
@@ -131,8 +132,8 @@ WHOLE_TABLE_OWNERS = (
 TABLE_HERE = "@table@"
 
 
-def tool_free(switch: str) -> str:
-    return f"the run is tool-free ({switch})"
+def the_services_switch(switch: str) -> str:
+    return f"the service sets {switch}"
 
 
 def owned(provider: str, body: str, path: str, owner: str):
@@ -159,25 +160,39 @@ OWNED_PATHS = [
         "set [cli.openai] token_file instead",
     ),
     *(
-        owned("openai", body, "mcp_servers.relay", RELAY_OWNER)
+        owned(provider, body, "mcp_servers.relay", RELAY_OWNER)
+        for provider in ("openai", "xai")
         for body in (
             f'mcp_servers.relay.url = "{VALUE_CANARY}"',
             f'mcp_servers.relay.tools.x.approval_mode = "{VALUE_CANARY}"',
             "mcp_servers.relay = {}",
+            f'mcp_servers.other.command = "{VALUE_CANARY}"\nmcp_servers.relay = {{}}',
+        )
+    ),
+    *(
+        owned("xai", body, path, ONLY_THE_RELAY_OWNER)
+        for body, path in (
+            (f'mcp_servers.other.command = "{VALUE_CANARY}"', "mcp_servers.other"),
+            ("mcp_servers.other = {}", "mcp_servers.other"),
+            (f'mcp_servers."my id".url = "{VALUE_CANARY}"', 'mcp_servers."my id"'),
         )
     ),
     *xai_rows(
         (f'models.default = "{VALUE_CANARY}"', "models.default", MODEL_OWNER),
-        (f'permission.deny = ["{VALUE_CANARY}"]', "permission.deny", tool_free('--deny "*"')),
+        (
+            f'permission.deny = ["{VALUE_CANARY}"]',
+            "permission.deny",
+            the_services_switch("--deny"),
+        ),
         (
             f'subagents.enabled = "{VALUE_CANARY}"',
             "subagents.enabled",
-            tool_free("--no-subagents"),
+            the_services_switch("--no-subagents"),
         ),
         (
             f'disable_web_search = "{VALUE_CANARY}"',
             "disable_web_search",
-            tool_free("--disable-web-search"),
+            the_services_switch("--disable-web-search"),
         ),
         (f'auth = {{ oidc = {{ a = "{VALUE_CANARY}" }} }}', "auth.oidc", TOKEN_OWNER),
         (
@@ -307,12 +322,13 @@ PASS_THROUGH = {
     "rules": 'paths.extra_rule_dirs = ["r"]\ncompat.x.rules = true',
     "hooks and display": 'hooks.x = []\nui.theme = "dark"',
     "tool surface": 'permission.allow = ["x"]\nsubagents.models.x = "m"\n'
-    'mcp_servers.x.command = "c"\ntools.x = 1\nsandbox.x = 1\nauto_mode.x = 1\n'
+    'tools.x = 1\nsandbox.x = 1\nauto_mode.x = 1\nmcp_servers = {}\n'
     "shell_environment_policy.x = 1\nskills.x = 1",
     "the rest": "features.image_gen = true\nmemory = true\ncli.x = 1",
-    "arrays of tables": "mcp_servers.x.args = [{ a = 1 }]\nhooks.y = [{ b = [{ c = 2 }] }]",
+    "arrays of tables": "tools.x.args = [{ a = 1 }]\nhooks.y = [{ b = [{ c = 2 }] }]",
     "unknown keys": 'invented_key = 1\nnested.invented.deep = "x"',
-    "quoted dotted keys": '"auth.preferred_method" = "x"\n"models.default" = "y"',
+    "quoted dotted keys": '"auth.preferred_method" = "x"\n"models.default" = "y"\n'
+    '"mcp_servers.other" = "z"',
 }
 
 
