@@ -58,7 +58,6 @@ HISTORY_TEXT = "history-canary-91ab"
 CLI_TEXT = "cli-text-canary-5c30"
 LOGIN_KEY = "grok-synthetic-key"
 SETTING_VALUE = "setting-value-canary-4f1a"
-RELAY_SECRET = "relay-secret-canary-0e5b"
 EXPECTED_PROMPT = f"User: first question\n\nAssistant: first answer\n\nUser: {HISTORY_TEXT}"
 
 BASE_ARGUMENTS = (
@@ -214,7 +213,7 @@ def test_a_run_with_a_refused_field_is_not_built_and_the_error_names_the_field(
 
 
 def a_relay() -> RelayAccess:
-    return RelayAccess(url="http://127.0.0.1:4711/mcp", secret=RELAY_SECRET)
+    return RelayAccess(url="http://127.0.0.1:4711/mcp", secret="relay-secret-canary-0e5b")
 
 
 def relay_fields(**changes: Any) -> dict[str, Any]:
@@ -320,24 +319,25 @@ def test_the_relay_entry_replaces_whatever_a_level_set_for_it(level: CliSettings
     )
 
 
-OTHER_SERVER: CliSettings = {"url": f"https://{SETTING_VALUE}.test/mcp"}
+def another_server() -> CliSettings:
+    return {"url": f"https://{SETTING_VALUE}.test/mcp"}
 
 
 @pytest.mark.parametrize(
     "levels",
     [
-        pytest.param(({"mcp_servers": {"other": OTHER_SERVER}},), id="another-server"),
+        pytest.param(({"mcp_servers": {"other": another_server()}},), id="another-server"),
         pytest.param(
-            ({"mcp_servers": {"relay": {}, "other": OTHER_SERVER}},), id="beside-a-relay-entry"
+            ({"mcp_servers": {"relay": {}, "other": another_server()}},), id="beside-a-relay-entry"
         ),
         pytest.param(
-            ({"mcp_servers": {"other": OTHER_SERVER}}, {"mcp_servers": "not-a-table"}),
+            ({"mcp_servers": {"other": another_server()}}, {"mcp_servers": "not-a-table"}),
             id="in-a-lower-level",
         ),
         pytest.param(
             (
                 {"permission": {"allow": ["MCPTool(other__*)"]}},
-                {"mcp_servers": {"other": OTHER_SERVER}},
+                {"mcp_servers": {"other": another_server()}},
             ),
             id="with-a-compact-allow-rule",
         ),
@@ -345,7 +345,7 @@ OTHER_SERVER: CliSettings = {"url": f"https://{SETTING_VALUE}.test/mcp"}
             (
                 {
                     "permission": {"rules": [{"tool": "MCPTool(other__*)", "action": "allow"}]},
-                    "mcp_servers": {"other": OTHER_SERVER},
+                    "mcp_servers": {"other": another_server()},
                 },
             ),
             id="with-a-structured-allow-rule",
@@ -360,13 +360,13 @@ def test_a_relay_run_refuses_a_level_naming_another_mcp_server_by_its_path_alone
 
     assert [
         secret
-        for secret in (SETTING_VALUE, RELAY_SECRET, SYSTEM_TEXT, HISTORY_TEXT)
+        for secret in (SETTING_VALUE, a_relay().secret, SYSTEM_TEXT, HISTORY_TEXT)
         if secret in str(refused.value)
     ] == []
 
 
 def test_a_run_without_a_relay_writes_another_mcp_server_as_it_was_set() -> None:
-    level: CliSettings = {"mcp_servers": {"other": OTHER_SERVER}}
+    level: CliSettings = {"mcp_servers": {"other": another_server()}}
 
     assert written_settings(a_run(settings=(level,))) == level
 
@@ -378,15 +378,15 @@ def test_the_relay_secret_is_only_in_the_variable_the_entry_names(tmp_path: Path
     variable = written_settings(run)["mcp_servers"]["relay"]["bearer_token_env_var"]
 
     environment = start.child.environment
-    holders = [name for name, value in environment.items() if RELAY_SECRET in value]
+    holders = [name for name, value in environment.items() if a_relay().secret in value]
     assert (variable, holders, environment[variable]) == (
         RELAY_TOKEN_VARIABLE,
         [variable],
-        RELAY_SECRET,
+        a_relay().secret,
     )
     assert set(environment) == {*closed_environment(home), "GROK_HOME", variable}
     visible = [*start.child.arguments, *run.run_files().values(), repr(run), repr(start)]
-    assert [part for part in visible if RELAY_SECRET in str(part)] == []
+    assert [part for part in visible if a_relay().secret in str(part)] == []
 
 
 @pytest.mark.parametrize(
@@ -430,7 +430,7 @@ def test_a_relay_its_timeout_and_its_call_limit_come_together_and_in_range(
 
     assert [
         secret
-        for secret in (RELAY_SECRET, SYSTEM_TEXT, HISTORY_TEXT)
+        for secret in (a_relay().secret, SYSTEM_TEXT, HISTORY_TEXT)
         if secret in str(refused.value) or secret in str(refused.value.args)
     ] == []
 
@@ -562,13 +562,13 @@ def test_a_relay_run_hands_its_secret_only_to_the_childs_environment_and_answers
 
     assert events == [AssistantTextEvent(text="ok"), FinalEvent(text="ok")]
     environment = (capture / "environment").read_text().splitlines()
-    assert [line for line in environment if RELAY_SECRET in line] == [
-        f"{RELAY_TOKEN_VARIABLE}={RELAY_SECRET}"
+    assert [line for line in environment if a_relay().secret in line] == [
+        f"{RELAY_TOKEN_VARIABLE}={a_relay().secret}"
     ]
     config = tomllib.loads((capture / "config.toml").read_text())
     assert config["mcp_servers"]["relay"]["bearer_token_env_var"] == RELAY_TOKEN_VARIABLE
     given = [(capture / name).read_text() for name in ("argv", "config.toml", "auth.json", "home")]
-    assert [part for part in given if RELAY_SECRET in part] == []
+    assert [part for part in given if a_relay().secret in part] == []
     assert not list(private_root.iterdir())
 
 
