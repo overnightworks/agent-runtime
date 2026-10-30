@@ -19,7 +19,8 @@ from tests.support.core_runtime_support import (
     no_installed_core_runtime,  # noqa: F401 - an autouse fixture
 )
 from tests.support.mcp_app_fake import TestAuthority
-from tests.support.service_cli_runner_support import eventually
+from tests.support.provider_test_support import held_slots
+from tests.support.service_cli_runner_support import eventually, private_root_of
 from tests.support.service_support import (
     failure_lines,
     fake_app_authority,  # noqa: F401 - a fixture, requested by name
@@ -81,9 +82,7 @@ def test_a_tool_runs_settings_file_holds_the_relay_it_was_given_over_the_default
     monkeypatch: pytest.MonkeyPatch,
     table: ProviderTable,
 ) -> None:
-    run = a_tool_run(
-        table, tmp_path, authority, child_cleanup, monkeypatch, calls=[a_save_note()]
-    )
+    run = a_tool_run(table, tmp_path, authority, child_cleanup, monkeypatch, calls=[a_save_note()])
 
     settings = captured_settings(run.capture.directory / "files")
     entry = run.capture.relay
@@ -105,9 +104,7 @@ def test_the_relay_secret_reaches_the_cli_only_in_its_environment_and_the_capabi
 ) -> None:
     caplog.set_level("DEBUG")
 
-    run = a_tool_run(
-        table, tmp_path, authority, child_cleanup, monkeypatch, calls=[a_save_note()]
-    )
+    run = a_tool_run(table, tmp_path, authority, child_cleanup, monkeypatch, calls=[a_save_note()])
 
     secret, capability = run.capture.relay_secret, run.app.capability
     environment = run.capture.text_of("environment").splitlines()
@@ -189,6 +186,7 @@ def test_a_tool_run_ends_provider_error_unless_its_relay_listed_and_one_child_ra
         ending == (RunState.SUCCEEDED, None)
     )
     eventually(lambda: relay_refuses(run.capture.relay_port, 10.0))
+    assert (list(private_root_of(run.config).iterdir()), held_slots(table.pool)) == ([], 0)
 
 
 def test_a_tool_free_run_on_an_app_with_an_origin_is_the_run_of_an_app_without_one(
@@ -279,6 +277,7 @@ def test_a_grok_relay_run_ends_provider_error_on_what_its_stream_may_not_show(
     )
     assert [kind for _event, kind, _function in failure_lines(caplog)] == [failure_class]
     eventually(lambda: relay_refuses(run.capture.relay_port, 10.0))
+    assert (list(private_root_of(run.config).iterdir()), held_slots(GROK_TABLE.pool)) == ([], 0)
 
 
 @pytest.mark.parametrize("max_tool_calls", [1, 4294967294])

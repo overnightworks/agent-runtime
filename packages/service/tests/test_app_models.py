@@ -321,6 +321,16 @@ def test_m17_a_caller_in_no_route_group_is_not_enabled_though_the_model_is_offer
     assert service.started == 0
 
 
+def test_m17_a_caller_in_no_route_group_is_not_enabled_for_a_tool_run_on_a_subscription_model(
+    tmp_path, table
+):
+    with _serving(a_config_with_both_providers(tmp_path, table)) as serving:
+        response = serving.person_run([SONGMAKER_GROUP], model=table.listed, tools=SONGMAKER_TOOLS)
+
+    assert_rejected(response, RejectionCode.NOT_ENABLED, 403)
+    assert serving.started == 0
+
+
 def test_m18_tools_on_a_subscription_model_are_admitted(tmp_path, table):
     with _serving(a_config_with_both_providers(tmp_path, table)) as serving:
         response = serving.person_run(model=table.listed, tools=SONGMAKER_TOOLS)
