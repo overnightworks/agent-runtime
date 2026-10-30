@@ -123,9 +123,9 @@ _MESSAGE: Final[Mapping[RejectionCode, str]] = {
     RejectionCode.NOT_ENABLED: "AI is not enabled for this request.",
     RejectionCode.BUSY: "The service is busy; retry later.",
     RejectionCode.UNSUPPORTED_VERSION: f"This service speaks protocol version {PROTOCOL_VERSION}.",
-    RejectionCode.UNAUTHORIZED: "A workload token is required, and a user token unless the app"
-    " runs one of its own agents; every token sent must be valid, and an"
-    f" {JOB_TICKET_HEADER} header is refused.",
+    RejectionCode.UNAUTHORIZED: "A workload token is required; a run also needs a user token unless"
+    " the app runs one of its own agents, and every token a run sends must be valid."
+    f" An {JOB_TICKET_HEADER} header is refused.",
     RejectionCode.FORBIDDEN: "The tokens do not permit this request.",
     RejectionCode.INVALID_REQUEST: "The body is not a valid request for the route.",
     RejectionCode.UNAVAILABLE: "The service cannot check tokens right now; retry later.",
