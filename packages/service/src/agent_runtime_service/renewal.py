@@ -331,7 +331,7 @@ class ProviderRenewer:
         self,
         reserved: ReservedSwap,
         login: RenewableLogin,
-        run: CodexRenewal,
+        run: RenewalRun,
         slot: CliProcessReservation,
         source_timing: UnreadableTiming | None,
     ) -> RenewalReport:
@@ -361,7 +361,7 @@ class ProviderRenewer:
     def _prepared(
         self,
         tree: ExitStack,
-        run: CodexRenewal,
+        run: RenewalRun,
         slot: CliProcessReservation,
         source_timing: UnreadableTiming | None,
     ) -> _Prepared | None:
