@@ -20,7 +20,6 @@ from typing import Final
 
 import httpx
 import pytest
-import uvicorn
 from tests.support.bounds import TEST_WAIT_SECONDS
 from tests.support.held_runner_support import HeldRunner
 from tests.support.service_config_support import (
@@ -611,11 +610,7 @@ def test_a_refused_agent_table_stops_startup_naming_the_field(tmp_path, capsys, 
     assert_startup_refuses(tmp_path, capsys, text, named_field)
 
 
-def test_a_configuration_without_an_app_stops_startup_naming_apps(tmp_path, capsys, monkeypatch):
-    def never_serve(*_arguments, **_where):
-        raise AssertionError("a refused configuration reached serving")
-
-    monkeypatch.setattr(uvicorn, "run", never_serve)
+def test_a_configuration_without_an_app_stops_startup_naming_apps(tmp_path, capsys):
     no_apps = VALID_CONFIG.split("[apps.songmaker]")[0] + "[apps]\n"
     text = no_apps.replace(SIGNING_SECTION, "").replace(MCP_SECTION, "")
 

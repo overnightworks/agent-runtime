@@ -317,9 +317,25 @@ def test_a_signed_claim_that_is_not_a_number_is_admitted(service):
     _admitted(post_run(service, run_headers(MINT.workload(), token)))
 
 
+UNAVAILABLE_REASONS = {CallerRefusalReason.KEY_SET_UNAVAILABLE}
+UNAUTHORIZED_REASONS = {
+    CallerRefusalReason.MISSING_TOKEN,
+    CallerRefusalReason.TOKEN_REJECTED,
+    CallerRefusalReason.INVALID_SUBJECT,
+    CallerRefusalReason.MALFORMED_GROUPS,
+}
+
+
 @pytest.mark.parametrize("reason", list(CallerRefusalReason))
-def test_every_refusal_webauth_makes_has_a_wire_code(reason):
+def test_every_refusal_webauth_makes_has_the_wire_code_of_its_class(reason):
     rejected = reason is CallerRefusalReason.TOKEN_REJECTED
     rejection = RejectionReason.INVALID_SIGNATURE if rejected else None
+    expected = (
+        RejectionCode.UNAVAILABLE
+        if reason in UNAVAILABLE_REASONS
+        else RejectionCode.UNAUTHORIZED
+        if reason in UNAUTHORIZED_REASONS
+        else RejectionCode.FORBIDDEN
+    )
 
-    assert rejection_code(CallerRefusal(reason, rejection)) in set(RejectionCode)
+    assert rejection_code(CallerRefusal(reason, rejection)) is expected
