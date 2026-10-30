@@ -1,0 +1,8 @@
+claim_id = "b5a7ae02ad8346b2abfb7b41504c2cb1"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "914617ed83822209c106bc220502cea72e40aa1f"
+branch = "claude/issue-621-webauth-0-26-0-caller-check"
+scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "docs/wire.md", "packages/service/pyproject.toml", "packages/service/src/agent_runtime_service/app.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/src/agent_runtime_service/identity.py", "packages/service/src/agent_runtime_service/run_records.py", "packages/service/src/agent_runtime_service/runners.py", "packages/service/tests/fixtures/keycloak/requirements.in", "packages/service/tests/fixtures/keycloak/requirements.txt", "packages/service/tests/test_app_entrance.py", "packages/service/tests/test_app_gate.py", "packages/service/tests/test_app_keycloak.py", "packages/service/tests/test_app_run_status.py", "packages/service/tests/test_app_runs.py", "packages/service/tests/test_config.py", "packages/service/tests/test_identity_token_reading.py", "packages/service/tests/test_run_events.py", "packages/service/tests/test_run_records.py", "packages/service/tests/test_run_records_recording.py", "tests/support/service_support.py", "tests/support/token_rejection_support.py", "uv.lock"]
+opened_commit = "99f049ef3e004107554d05ee301d3c8aa2963d9e"
+whole_reason = "The caller proof changes owner in one contract: the pin brings ServiceCallerCheck, the service's own checks and records go in the same change so that one proof answers the wire, the empty-[apps] refusal keeps --check honest about what the new check refuses, and the other files are its docs, pins and tests."
