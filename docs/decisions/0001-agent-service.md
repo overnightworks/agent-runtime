@@ -5594,6 +5594,18 @@ own agent, with the service account as principal and no on-behalf-of caller.
   does lose every run record); a capability's `exp` is fixed at admission and independent of run
   liveness.
 
+*Amendment (30.10.2026, #631, #623).* The credential-alone list above gains one read. Authority:
+the operator's ruling on #623 and its card O1, ruled A: an app's workload token alone reads `GET
+/models`, for every registered app.
+- **A stolen workload access token** of any registered app, with or without an agent that runs as
+  the app, reads the list of offered models until its `exp` plus `[identity] leeway_seconds`. The
+  list is the configuration's `ServiceConfig.offered_models()`, the same bytes for every app and
+  instance, and holds no secret, run state or per-app fact. It starts nothing and costs no place.
+- The route reads no `Authorization` header and answers an `Agent-Job-Ticket` header `401` before
+  any token is read. The other refusals are the caller check's, in its order: `401`, `503`,
+  then `403` for a token bound to no registered app. The `runs_as_app` refusal stays on `POST
+  /runs` and `GET /runs/{id}`.
+
 **Amendment (27.10.2026, #494).** The service configuration is the model's one owner: `[defaults]
 model`, overridden by `[apps.<app>] model` and `[apps.<app>.agents.<agent>] model`, the most
 specific level winning. Neither the request nor the agent file names a model, and no app reads a

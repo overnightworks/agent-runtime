@@ -37,6 +37,15 @@ the operator enabled ([The app's own runs](#the-apps-own-runs)). `POST /runs` an
 `GET /runs/{id}` returns the run's `RunStatus`, readable only by the app and
 user that started it, or for the app's own run by that app with its workload token alone ([What a run keeps](#what-a-run-keeps) says what the record holds).
 
+`GET /models` returns the `ModelList` `{"v": 5, "object": "list", "data": [{"id": "<provider>/<model>", "object": "model"}]}`:
+exactly the models a run may name (`ServiceConfig.offered_models()`), sorted by id, `Cache-Control:
+no-store`. The workload token of any registered app reads it alone, whether or not it runs an
+agent as itself; `Authorization` is never read. It derives from the configuration only, so every app
+and every instance of one configuration answers the same bytes, whatever runs are in flight.
+An `Agent-Job-Ticket` header is `401` before any token is read; the other refusals are `RunRejection`
+bodies: `401` for a missing or invalid workload token, `503` with `Retry-After` for an unreachable
+key set, `403` for a token bound to no registered app. Every listed name is admitted as a run's `model`.
+
 The stream's events are `run_started`, `assistant_text`, `tool_call`,
 `tool_result`, `heartbeat` and one terminal event: `succeeded`, `failed`
 (with a `FailureCode`) or `cancelled`. `run_started` carries `model` (the full
