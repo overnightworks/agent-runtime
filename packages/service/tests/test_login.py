@@ -54,6 +54,7 @@ from tests.support.service_table_support import write_login
 import agent_runtime_service.config as service_config
 import agent_runtime_service.login as login
 import agent_runtime_service.process_hardening as hardening
+from agent_runtime_service.cli import EXIT_BAD_CONFIG
 from agent_runtime_service.cli import main as service_main
 from agent_runtime_service.config import Provider, load_config
 from agent_runtime_service.login import (
@@ -127,6 +128,7 @@ def test_a_holders_reservation_stops_the_command_before_it_reads_and_the_holder_
     assert (status, stream.was_read) == (EXIT_REMAINS, False)
     assert heard == LINE_PREFIX + held_sibling_sentence(installation.sibling) + "\n"
     assert os.lstat(installation.sibling) == held
+    assert installation.unchanged()
     assert holder.commit(b"holder\n", lambda path: None, replaces=None) == SwappedDurably()
 
 
@@ -504,8 +506,12 @@ def test_standard_input_that_does_not_exist_is_a_closed_refusal(
     assert installation.directory_holds() == [LOGIN_NAME]
 
 
+@pytest.mark.parametrize("mode", [(), ("--check",)], ids=["install", "check"])
 def test_a_login_file_without_a_file_name_is_refused_before_anything_is_read(
-    installation: Installation, said: Said, monkeypatch: pytest.MonkeyPatch
+    installation: Installation,
+    said: Said,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: tuple[str, ...],
 ) -> None:
     real_load_config = service_config.load_config
 
@@ -518,9 +524,9 @@ def test_a_login_file_without_a_file_name_is_refused_before_anything_is_read(
     monkeypatch.setattr(service_config, "load_config", rooted)
     stream = Stream(GOOD_DOCUMENTS[installation.provider])
 
-    status, heard = run(installation, stream, said)
+    status, heard = run(installation, stream, said, *mode)
 
-    assert (status, stream.was_read) == (2, False)
+    assert (status, stream.was_read) == (EXIT_BAD_CONFIG, False)
     assert "has no file name" in heard
     assert installation.unchanged()
 

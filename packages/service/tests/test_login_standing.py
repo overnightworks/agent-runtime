@@ -188,16 +188,31 @@ def an_openai_login(tmp_path: Path, document: bytes) -> Installation:
     return installation
 
 
-def checked(installation: Installation, said: Said) -> tuple[int, str]:
-    """``--check`` reads no input and changes nothing: the file, its inode, the directory."""
+def checked(
+    installation: Installation,
+    said: Said,
+    *,
+    leaves: tuple[bytes | None, list[str]] | None = None,
+    also_secret: tuple[bytes, ...] = (),
+) -> tuple[int, str]:
+    """``--check`` reads no input and changes nothing: the file, its inode, the directory.
+
+    ``leaves`` names the login's bytes and the directory listing a hook deliberately leaves
+    instead; ``also_secret`` adds the documents a hook swaps in to those that stay unprinted.
+    """
     stream = Stream(b"never read")
     before = installation.snapshot()
+    documents = (*also_secret, *([before[0]] if before[0] is not None else []))
 
     status, heard = run(installation, stream, said, "--check")
 
     assert not stream.was_read
-    assert installation.snapshot() == before
-    assert not any(secret in heard for secret in secrets_in(installation.login.read_bytes()))
+    after = installation.snapshot()
+    if leaves is None:
+        assert after == before
+    else:
+        assert (after[0], after[2]) == leaves
+    assert not any(secret in heard for document in documents for secret in secrets_in(document))
     return status, heard
 
 
@@ -211,6 +226,10 @@ def secrets_in(document: bytes) -> tuple[str, ...]:
 
 def issued_ago(seconds: int, **keywords: Any) -> bytes:
     return a_login_at(int(time.time()) - seconds, **keywords)
+
+
+def utc_text(epoch_seconds: int) -> str:
+    return datetime.fromtimestamp(epoch_seconds, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def expiry_of(heard: str) -> str:
@@ -227,8 +246,7 @@ def test_a_login_issued_a_minute_ago_is_not_due_and_gives_its_expiry_in_utc(
 
     assert status == 0
     assert heard.startswith(line_of(installation, ACCEPTED))
-    expires = datetime.fromtimestamp(issued + LIFETIME, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    assert f"{LoginStanding.USABLE}; it expires at {expires}\n" in heard
+    assert f"{LoginStanding.USABLE}; it expires at {utc_text(issued + LIFETIME)}\n" in heard
 
 
 def test_an_expiry_in_the_year_2100_is_written_in_full(tmp_path: Path, said: Said) -> None:
@@ -352,7 +370,7 @@ def test_every_sign_in_verdict_with_a_held_sibling_gives_three(
     write_login(installation.login, document)
     holder = held_swap(installation.login)
 
-    status, heard = run(installation, Stream(b""), said, "--check")
+    status, heard = checked(installation, said)
 
     assert status == EXIT_REMAINS
     assert heard.endswith(LINE_PREFIX + held_sibling_sentence(installation.sibling) + "\n")
@@ -425,10 +443,10 @@ def swapped_right_after_accepting(
 
 
 @pytest.mark.parametrize(
-    ("newer", "exit_status", "said_so"),
+    ("newer_age", "exit_status", "said_so"),
     [
-        (issued_ago(MARGIN_SECONDS), 0, str(LoginStanding.USABLE)),
-        (issued_ago(LIFETIME + MARGIN_SECONDS), EXIT_SIGN_IN_AGAIN, str(LoginStanding.EXPIRED)),
+        (MARGIN_SECONDS, 0, str(LoginStanding.USABLE)),
+        (LIFETIME + MARGIN_SECONDS, EXIT_SIGN_IN_AGAIN, str(LoginStanding.EXPIRED)),
     ],
     ids=["overdue-then-fresh", "fresh-then-expired"],
 )
@@ -436,20 +454,28 @@ def test_the_standing_describes_the_document_of_the_second_read(
     tmp_path: Path,
     said: Said,
     monkeypatch: pytest.MonkeyPatch,
-    newer: bytes,
+    newer_age: int,
     exit_status: int,
     said_so: str,
 ) -> None:
     older = overdue_login() if exit_status == 0 else issued_ago(MARGIN_SECONDS)
     installation = an_openai_login(tmp_path, older)
+    newer_issued = int(time.time()) - newer_age
+    newer = a_login_at(newer_issued)
     swapped_right_after_accepting(monkeypatch, installation, newer)
 
     with said.watching():
-        status, heard = run(installation, Stream(b""), said, "--check")
+        status, heard = checked(
+            installation,
+            said,
+            leaves=(newer, installation.directory_holds()),
+            also_secret=(newer,),
+        )
 
     assert status == exit_status
     assert said_so in heard
     assert "not renewed" not in heard
+    assert utc_text(newer_issued + LIFETIME) in heard
 
 
 def test_a_file_removed_after_the_reader_accepted_it_asks_for_a_sign_in(
@@ -457,8 +483,11 @@ def test_a_file_removed_after_the_reader_accepted_it_asks_for_a_sign_in(
 ) -> None:
     installation = an_openai_login(tmp_path, issued_ago(MARGIN_SECONDS))
     swapped_right_after_accepting(monkeypatch, installation, None)
+    listing_without_login = [
+        name for name in installation.directory_holds() if name != installation.login.name
+    ]
 
-    status, heard = run(installation, Stream(b""), said, "--check")
+    status, heard = checked(installation, said, leaves=(None, listing_without_login))
 
     assert status == EXIT_SIGN_IN_AGAIN
     assert "cannot be read: No such file or directory" in heard
@@ -505,6 +534,6 @@ def test_the_standing_module_is_not_imported_when_the_command_module_is() -> Non
         " sys.exit('agent_runtime_service.login_standing' in sys.modules)"
     )
 
-    finished = subprocess.run([sys.executable, "-I", "-c", probe], capture_output=True, check=False)
+    finished = subprocess.run([sys.executable, "-c", probe], capture_output=True, check=False)
 
     assert finished.returncode == 0

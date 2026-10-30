@@ -43,7 +43,6 @@ from agent_runtime_service.login_file import (
     SwapResult,
     held_sibling_sentence,
     swap_in_login_file,
-    swap_sibling,
     swap_sibling_or_refusal,
 )
 from agent_runtime_service.process_hardening import StartupHardeningRefused, harden_process
@@ -130,9 +129,16 @@ def _expiry_text(expires_at: int | None) -> str:
         return str(expires_at)
 
 
-def _sign_in_exit(token_file: Path) -> int:
-    """4, or 3 with the held-sibling sentence when a sibling may exist beside the login."""
-    sibling = swap_sibling(token_file)
+def _sign_in_exit(subject: str, token_file: Path) -> int:
+    """4, or 3 with the held-sibling sentence when a sibling may exist beside the login.
+
+    A login file with no name to derive a sibling from is a configuration the install refuses
+    the same way, so it is 2 here too.
+    """
+    sibling = swap_sibling_or_refusal(token_file)
+    if isinstance(sibling, SwapRefused):
+        _say(f"{subject}: {sibling.reason}")
+        return EXIT_BAD_CONFIG
     if _sibling_left_over(sibling):
         _say(held_sibling_sentence(sibling))
         return EXIT_REMAINS
@@ -141,6 +147,7 @@ def _sign_in_exit(token_file: Path) -> int:
 
 def _standing_exit(subject: str, token_file: Path, entry: RenewalEntry) -> int:
     """Reads the login once more and says where it stands; the exit follows the standing."""
+    from agent_runtime.codex_login import CodexRenewalRefusal
     from agent_runtime_service.login_standing import (
         RENEWAL_WINDOW_SECONDS,
         LoginStanding,
@@ -151,7 +158,7 @@ def _standing_exit(subject: str, token_file: Path, entry: RenewalEntry) -> int:
         document = read_secret_file(token_file, "login file")
     except UnsoundSecretFile as refusal:
         _say(f"{subject}: {refusal}")
-        return _sign_in_exit(token_file)
+        return _sign_in_exit(subject, token_file)
     standing = login_standing(document, int(time.time()), entry)
     expiry = _expiry_text(standing.expires_at)
     window_minutes = RENEWAL_WINDOW_SECONDS // 60
@@ -165,7 +172,7 @@ def _standing_exit(subject: str, token_file: Path, entry: RenewalEntry) -> int:
             f"{standing.state}: {standing.cause}; the service still tries to renew it once a day,"
             " and an update of agent-runtime is needed to read it"
         ),
-        LoginStanding.NOT_USABLE: "the document is not a usable Codex login; sign in again",
+        LoginStanding.NOT_USABLE: f"{CodexRenewalRefusal.NOT_USABLE}; sign in again",
         LoginStanding.NOT_RENEWABLE: (
             f"{standing.state}, so the service cannot renew it; sign in again"
         ),
@@ -179,7 +186,7 @@ def _standing_exit(subject: str, token_file: Path, entry: RenewalEntry) -> int:
     _say(f"{subject}: {sentences[standing.state]}")
     if standing.state is LoginStanding.EXPIRY_UNKNOWN:
         return EXIT_EXPIRY_UNKNOWN
-    return _sign_in_exit(token_file) if standing.state.asks_for_sign_in else 0
+    return _sign_in_exit(subject, token_file) if standing.state.asks_for_sign_in else 0
 
 
 def _checked(
@@ -192,7 +199,7 @@ def _checked(
         read_login(token_file)
     except UnsoundSecretFile as refusal:
         _say(f"{subject}: {refusal}")
-        return _sign_in_exit(token_file)
+        return _sign_in_exit(subject, token_file)
     _say(
         f"{subject}: accepted by the service's reader;"
         " whether the provider still accepts it shows only in a run"

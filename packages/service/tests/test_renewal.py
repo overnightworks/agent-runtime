@@ -62,6 +62,7 @@ from agent_runtime.process import CliRunReason
 from agent_runtime.secret_file import SecretFileFault
 from agent_runtime_service import login_file
 from agent_runtime_service.config import Provider, read_codex_login
+from agent_runtime_service.login import EXIT_REMAINS
 from agent_runtime_service.login_file import held_sibling_sentence
 from agent_runtime_service.renewal import Cleanup, NotRenewedCause, RenewalOutcome
 
@@ -638,7 +639,8 @@ def test_the_login_command_during_the_hold_is_refused_and_the_renewal_still_comm
 
     report = logged_once(caplog, arrangement.renewer.attempt)
 
-    assert heard == [(2, LINE_PREFIX + held_sibling_sentence(installation.sibling) + "\n")]
+    held_line = LINE_PREFIX + held_sibling_sentence(installation.sibling) + "\n"
+    assert heard == [(EXIT_REMAINS, held_line)]
     assert stream.was_read is False
     assert report.outcome is RenewalOutcome.RENEWED
 
