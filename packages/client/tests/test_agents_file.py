@@ -46,9 +46,7 @@ def agent_text(
 def with_field_replaced(front_matter: str) -> str:
     base = "name: notes-assistant\ndescription: d\nappRoles: [admin]\n"
     replaced_key = front_matter.lstrip().split(":")[0]
-    kept = "".join(
-        line + "\n" for line in base.splitlines() if line.split(":")[0] != replaced_key
-    )
+    kept = "".join(line + "\n" for line in base.splitlines() if line.split(":")[0] != replaced_key)
     return kept + front_matter
 
 
@@ -97,9 +95,7 @@ def test_minimal_file_has_no_tools(tmp_path: Path) -> None:
     ],
     ids=["blank-lines", "indented-code", "trailing-spaces", "blank-whitespace-lines"],
 )
-def test_prompt_drops_only_surrounding_blank_lines(
-    tmp_path: Path, body: str, prompt: str
-) -> None:
+def test_prompt_drops_only_surrounding_blank_lines(tmp_path: Path, body: str, prompt: str) -> None:
     assert load(tmp_path, agent_text(body=body)).prompt == prompt
 
 
@@ -238,9 +234,7 @@ def test_missing_empty_or_multiline_description_is_refused(
         ("tools:\n  - read_note\ntools: [edit_note]", "tools"),
     ],
 )
-def test_duplicate_key_is_refused_and_named(
-    tmp_path: Path, front_matter: str, key: str
-) -> None:
+def test_duplicate_key_is_refused_and_named(tmp_path: Path, front_matter: str, key: str) -> None:
     path = front_matter_file(tmp_path, with_field_replaced(front_matter))
 
     with pytest.raises(AgentFileError, match=f"{key}: appears twice"):
@@ -369,9 +363,7 @@ def test_yaml_anchors_and_tags_are_read_as_yaml_reads_them(tmp_path: Path) -> No
         ("a:b", "a:b"),
     ],
 )
-def test_scalars_are_plain_or_quoted_text(
-    tmp_path: Path, description: str, expected: str
-) -> None:
+def test_scalars_are_plain_or_quoted_text(tmp_path: Path, description: str, expected: str) -> None:
     assert load(tmp_path, agent_text(description=description)).description == expected
 
 
