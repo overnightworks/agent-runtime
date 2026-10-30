@@ -11,6 +11,7 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | A run refused a model only by its grammar. | `RejectionCode.MODEL_NOT_OFFERED` (`model_not_offered`, 422): a valid name the installation does not offer, answered after the `forbidden` checks and before the route. Handle the new member where a client switches over `RejectionCode`. |
 | `AgentDefinition.request(messages)` | `AgentDefinition.request(messages, *, model=None)`; without `model` the field is absent from the body. The agent file still refuses a `model:` key. |
 | The startup check assembled the listed models itself. | `ServiceConfig.offered_models()` owns the offer; the startup check and admission read it. |
+| An app learned the installation's models only from its operator. | `GET /models` answers the workload token of any registered app, with no `runs_as_app` agent needed and `Authorization` never read, 200 `application/json` with `agent_runtime_client.wire.ModelList` (`{v: 5, object: "list", data: [{id, object: "model"}]}`): `ServiceConfig.offered_models()` sorted by id, `Cache-Control: no-store`, the same bytes for every app and instance. Refusals are `RunRejection` bodies: 401 (an `Agent-Job-Ticket` header first), 503 with `Retry-After`, 403 for a token bound to no registered app. ([wire.md](wire.md)) |
 
 ## Migrating to 0.13.0
 
