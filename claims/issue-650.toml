@@ -1,8 +1,0 @@
-claim_id = "0556047a0872443496b71b3b34fc669f"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "963b634bd0a8d44ec6087553dab9e3de5d7bf69e"
-branch = "claude/issue-650-a4-grok-relay-service"
-scope = ["docs/ARCHITECTURE.md", "docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "docs/wire.md", "packages/service/src/agent_runtime_service/app.py", "packages/service/src/agent_runtime_service/cli_runner.py", "packages/service/src/agent_runtime_service/cli_settings_config.py", "packages/service/src/agent_runtime_service/config.py", "packages/service/src/agent_runtime_service/tool_relay.py", "packages/service/tests/test_app_models.py", "packages/service/tests/test_cli_runner_codex_profile.py", "packages/service/tests/test_cli_runner_relay_tables.py", "packages/service/tests/test_cli_runner_tables.py", "packages/service/tests/test_config.py", "packages/service/tests/test_config_cli_settings.py", "src/agent_runtime/grok/run.py", "tests/support/cli_tools_support.py", "tests/support/service_table_support.py"]
-opened_commit = "34e21662028420a3da1797b28d461c4312c69d97"
-whole_reason = "Six production files, about 85 changed lines, two of them one- or two-line edits: admitting Grok, attaching its relay in the runner and the startup refusals together make one ruled line true for Grok (a tool run reaches the app only through an accepted relay), and admitting before the refusals would open the app's tools to runs that then fail."
