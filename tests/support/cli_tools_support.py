@@ -333,10 +333,10 @@ def a_relay_calling_codex(
 ) -> Path:
     """The pinned Codex's stand-in for a relay run; it captures into ``directory/capture``.
 
-    ``lists`` is when it lists the relay's tools: ``first`` (before its first line, as the
-    pinned CLI does), ``after-text`` (after a first message) or ``never`` (it answers without
-    the relay, as a tool-free run must). With ``wrong_bearer`` it sends that instead of the
-    secret and, refused, exits 1 with an empty stdout. Each call comes with Codex's own
+    ``lists`` is when it lists the relay's tools: ``first`` (before its first line),
+    ``after-text`` (after a first message) or ``never`` (it answers without the relay, as a
+    tool-free run must). With ``wrong_bearer`` it sends that instead of the secret and,
+    refused, exits 1 with an empty stdout. Each call comes with Codex's own
     ``mcp_tool_call`` lines carrying ``stray_text``.
     """
     plan = {
