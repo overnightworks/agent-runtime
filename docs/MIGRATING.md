@@ -11,6 +11,7 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | A Grok run ended on any tool event. | A Grok tool run ends `failed: provider_error` on a native tool event, a relay call Grok shows as failed (even when the app answered it with an error), `max_turns_reached`, a non-zero exit or an answer before the relay listed its tools, and `limit_exceeded` on a call past `[runs] max_tool_calls`. |
 | `cli_settings.xai` passed `mcp_servers.*` through. | `mcp_servers.relay` and every other `mcp_servers.<id>`, any key below or an empty table, stop startup at any level (exit 2, `--check` agrees); `mcp_servers = {}` loads. The refusal of `permission.deny`, `subagents.enabled` and `disable_web_search` now names the service's switch as their owner. |
 | `[runs] max_tool_calls` had no upper bound. | A value above 4294967294 stops startup. |
+| `ClaudeRun`, `CodexRun` and `GrokRun` took `tool_timeout_seconds=True` as 1 second, and a string raised a bare `TypeError`. | Both raise `ChildProcessSpecificationError` naming `tool_timeout_seconds`; an `int` or `float` that is finite and positive is still accepted. |
 
 ## Migrating to 0.15.0
 

@@ -412,7 +412,7 @@ def test_the_relay_secret_is_only_in_the_variable_the_entry_names(tmp_path: Path
                 "tool_timeout_seconds",
                 id=f"timeout-{seconds}",
             )
-            for seconds in (math.nan, math.inf, 0.0, -1.0)
+            for seconds in (math.nan, math.inf, 0.0, -1.0, True, "5")
         ),
         *(
             pytest.param(
@@ -433,6 +433,13 @@ def test_a_relay_its_timeout_and_its_call_limit_come_together_and_in_range(
         for secret in (a_relay().secret, SYSTEM_TEXT, HISTORY_TEXT)
         if secret in str(refused.value) or secret in str(refused.value.args)
     ] == []
+
+
+@pytest.mark.parametrize("seconds", [5, 0.5])
+def test_a_whole_or_fractional_positive_tool_timeout_is_accepted_with_a_relay(
+    seconds: float,
+) -> None:
+    assert a_relay_run(tool_timeout_seconds=seconds).tool_timeout_seconds == seconds
 
 
 def test_the_streamed_text_is_its_text_events_then_the_whole_answer_stripped() -> None:

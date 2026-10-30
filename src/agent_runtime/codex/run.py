@@ -20,6 +20,7 @@ from agent_runtime.cli_run import (
     StepEvent,
     parsed_line,
     require_runnable,
+    require_tool_timeout,
 )
 from agent_runtime.cli_settings import CliSettings, merged, toml_basic_string, toml_document
 from agent_runtime.codex_login import CodexLogin, CodexLoginVerdict
@@ -239,12 +240,8 @@ class CodexRun:
             raise ChildProcessSpecificationError(
                 "A Codex run takes a relay and its tool_timeout_seconds together or neither"
             )
-        if self.tool_timeout_seconds is not None and not (
-            math.isfinite(self.tool_timeout_seconds) and self.tool_timeout_seconds > 0
-        ):
-            raise ChildProcessSpecificationError(
-                "A Codex run needs a finite, positive tool_timeout_seconds"
-            )
+        if self.tool_timeout_seconds is not None:
+            require_tool_timeout("Codex", self.tool_timeout_seconds)
 
     @property
     def pool(self) -> CliProcessPool:

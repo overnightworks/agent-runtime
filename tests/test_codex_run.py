@@ -349,7 +349,7 @@ def test_the_operators_own_servers_and_settings_stay_beside_the_relay() -> None:
             pytest.param(
                 {"relay": a_relay(), "tool_timeout_seconds": seconds}, id=f"timeout-{seconds}"
             )
-            for seconds in (math.nan, math.inf, 0.0, -1.0)
+            for seconds in (math.nan, math.inf, 0.0, -1.0, True, "5")
         ),
     ],
 )
@@ -360,6 +360,13 @@ def test_a_relay_and_its_tool_timeout_come_together_and_the_timeout_is_finite_an
         a_run(**changes)
 
     assert a_relay().secret not in str(refused.value)
+
+
+@pytest.mark.parametrize("seconds", [5, 0.5])
+def test_a_whole_or_fractional_positive_tool_timeout_is_accepted_with_a_relay(
+    seconds: float,
+) -> None:
+    assert a_relay_run(tool_timeout_seconds=seconds).tool_timeout_seconds == seconds
 
 
 def test_the_happy_stream_is_its_text_events_then_the_last_message() -> None:

@@ -20,6 +20,7 @@ from agent_runtime.cli_run import (
     StepEvent,
     parsed_line,
     require_runnable,
+    require_tool_timeout,
 )
 from agent_runtime.cli_settings import CliSettings, merged, toml_document, toml_key
 from agent_runtime.constants import CLI_GROUP_CONFIRMATION_SECONDS, CLI_TERMINATION_GRACE_SECONDS
@@ -273,11 +274,7 @@ class GrokRun:
             self._require_no_server_beside_the_relay()
 
     def _require_relay_limits(self) -> None:
-        timeout = self.tool_timeout_seconds
-        if not (timeout is not None and math.isfinite(timeout) and timeout > 0):
-            raise ChildProcessSpecificationError(
-                "A Grok run needs a finite, positive tool_timeout_seconds"
-            )
+        require_tool_timeout("Grok", self.tool_timeout_seconds)
         calls = self.max_tool_calls
         if not (
             isinstance(calls, int)
