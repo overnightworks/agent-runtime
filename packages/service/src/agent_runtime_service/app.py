@@ -15,14 +15,17 @@ before any token is verified or the body is read; the header's value is never re
 3. the person's role in the app (``admin`` in ``/apps/<app>/admin`` or below, else ``user``)
    must be one of the body's ``roles``, else ``forbidden``;
 4. tools named by an app without an MCP origin answer ``forbidden``, before the route;
-5. the route (``agent_runtime_service.routing``), which reads the configured model
-   (``ServiceConfig.model_for``) and the installation's listed models; a run that names tools
-   and whose route is a provider without the tool relay (Codex, Grok) answers
-   ``not_enabled`` here, before a place, a capability or a child;
-6. for the CLI route, the service's admission limit (``agent_runtime_service.admission``): a
+5. the model: the request's, when it names one, else the configured one
+   (``ServiceConfig.model_for``); a name the installation does not list
+   (``ServiceConfig.offered_models``) answers ``model_not_offered``;
+6. the route (``agent_runtime_service.routing``), which reads that model and the
+   installation's listed models; a run that names tools and whose route is a provider without
+   the tool relay (Codex, Grok) answers ``not_enabled`` here, before a place, a capability or
+   a child;
+7. for the CLI route, the service's admission limit (``agent_runtime_service.admission``): a
    subscription run beyond it answers ``busy`` with ``Retry-After`` before anything is
    signed;
-7. for an app with an MCP origin, whether the run's capability, which signs exactly the
+8. for an app with an MCP origin, whether the run's capability, which signs exactly the
    request's tool names, fits the 8,192 characters every verifier accepts
    (``capability_too_large``).
 
