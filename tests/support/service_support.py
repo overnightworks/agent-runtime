@@ -849,9 +849,6 @@ async def asgi_post_status(
     return sent[0]["status"]
 
 
-UNKNOWN_RUN: Final = "00000000-0000-4000-8000-000000000000"
-
-
 def get_run(base_url: str, headers: Mapping[str, str], segment: str) -> httpx.Response:
     return httpx.get(f"{base_url}/runs/{segment}", headers=dict(headers), timeout=10)
 

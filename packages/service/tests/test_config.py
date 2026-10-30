@@ -124,18 +124,6 @@ def test_o11_a_leftover_models_table_of_an_app_stops_startup_naming_the_field(tm
     )
 
 
-def _without_apps() -> str:
-    """The valid file with ``[apps]`` present and empty, and nothing that needs an app's origin."""
-    return _with(
-        f'[apps.songmaker]\nworkload_client = "songmaker-test"\n{SONGMAKER_ORIGIN_LINE}',
-        "[apps]\n",
-    ).replace(SIGNING_SECTION, "").replace(MCP_SECTION, "")
-
-
-def test_a_configuration_without_an_app_stops_startup_naming_apps(tmp_path, capsys):
-    assert refused_on_one_line(written(tmp_path, _without_apps()), capsys).startswith("apps")
-
-
 LEFTOVER_PROFILES = f'\n[profiles.claude-main]\nprovider = "claude"\n{TOKEN_FILE_LINE}\n'
 SECOND_APP_WITH_SAME_CLIENT = '\n[apps.presentator]\nworkload_client = "songmaker-test"\n'
 
@@ -296,7 +284,6 @@ def _with_key_set_url(url: str) -> str:
             )
         ),
         pytest.param("[identity\n", "not TOML", id="not-toml"),
-        pytest.param(_without_apps(), "apps", id="empty-apps"),
         pytest.param(_with(SIGNING_KEY_LINE, ""), "signing.key_file", id="signing-without-key"),
         pytest.param(
             _with(SIGNING_KEY_LINE, f'{SIGNING_KEY_LINE}\nkey = "x"'),

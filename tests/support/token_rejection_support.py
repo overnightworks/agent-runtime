@@ -18,6 +18,8 @@ OTHER_MINT = TokenMint()
 
 TokenFor = Callable[[], str | None]
 
+UNKNOWN_RUN = "00000000-0000-4000-8000-000000000000"
+
 
 def _no_token() -> None:
     return None
