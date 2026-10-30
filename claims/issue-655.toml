@@ -3,6 +3,6 @@ agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
 role = "builder"
 base = "292fe64edcdd70b1e9643871dc45408234f23178"
 branch = "claude/issue-655-a1c-codex-offers-only-relay-tools"
-scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "src/agent_runtime/codex/protocol.py", "src/agent_runtime/codex/run.py", "src/agent_runtime/codex/transport.py", "tests/test_codex_run.py", "tests/test_codex_run_settings.py"]
+scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "src/agent_runtime/codex/protocol.py", "src/agent_runtime/codex/run.py", "src/agent_runtime/codex/transport.py", "tests/support/codex_support.py", "tests/test_codex_run.py", "tests/test_codex_run_settings.py"]
 opened_commit = "7c6819baa34337a763d56dc63fcb5740b04f8ef0"
 whole_reason = "Three production files, about 30 added and 5 deleted lines: the defaults, the relay key and the notice rule together make line 15 true for a Codex run (the model is offered only the relay's tools and the switched-on built-ins, and a run that cannot offer the relay's tools says so), and the notice's one owner moves in the same commit because both of its readers change."
