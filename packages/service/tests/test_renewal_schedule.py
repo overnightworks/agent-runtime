@@ -43,7 +43,7 @@ from tests.support.service_renewal_support import (  # noqa: F401 - the autouse 
     writing,
 )
 
-from agent_runtime_service import renewal_schedule
+from agent_runtime_service import login_file, renewal_schedule
 from agent_runtime_service.config import Provider
 from agent_runtime_service.renewal import RenewalOutcome
 from agent_runtime_service.renewal_schedule import (
@@ -249,6 +249,22 @@ def test_a_round_with_a_failed_report_waits_the_backoff(
 
     assert logged_outcomes(caplog)[0] is outcome
     assert pause.seconds == [RENEWAL_BACKOFF_SECONDS]
+
+
+def test_a_login_file_that_is_a_mount_point_is_refused_without_a_child_and_waits_the_backoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG)
+    runner = a_fake_runner(monkeypatch)
+    arrangement = an_arrangement(tmp_path)
+    monkeypatch.setattr(login_file, "is_mount_point", lambda path: True)
+    pause = RecordingPause(1)
+
+    run_rounds(a_schedule(arrangement, pause=pause), pause)
+
+    assert logged_outcomes(caplog)[0] is RenewalOutcome.RESERVE_REFUSED
+    assert (runner.calls, pause.seconds) == (0, [RENEWAL_BACKOFF_SECONDS])
+    assert arrangement.source_is_intact()
 
 
 def test_a_success_after_a_failure_returns_to_the_interval(

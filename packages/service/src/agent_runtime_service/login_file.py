@@ -10,6 +10,7 @@ that is never finished keeps its sibling on disk, which keeps every other writer
 from __future__ import annotations
 
 import contextlib
+import errno
 import os
 import threading
 from collections.abc import Callable
@@ -20,6 +21,7 @@ from typing import Final
 from agent_runtime.secret_file import UnsoundSecretFile, read_secret_file, shown_text
 
 LOGIN_FILE_MODE: Final = 0o600
+_DESCRIPTOR_INFORMATION: Final = Path("/proc/self/fdinfo")
 
 
 def swap_sibling(path: Path) -> Path:
@@ -216,11 +218,91 @@ class ReservedSwap:
         )
 
 
+def mount_identifier(descriptor_information: str) -> str:
+    """The mount id in the kernel's text about a descriptor; a text without one cannot tell."""
+    for line in descriptor_information.splitlines():
+        name, _, value = line.partition(":")
+        if name == "mnt_id":
+            return value.strip()
+    raise OSError(errno.ENODATA, "the descriptor information holds no mount id")
+
+
+def _descriptor_information(descriptor: int) -> str:
+    try:
+        return (_DESCRIPTOR_INFORMATION / str(descriptor)).read_text()
+    except FileNotFoundError:
+        # OSError(ENOENT, ...) would be a FileNotFoundError again, which means an absent login file
+        raise OSError(errno.ENODATA, "the descriptor information cannot be found") from None
+
+
+def _mount_identity(path: Path, flags: int) -> str:
+    descriptor = os.open(path, os.O_PATH | os.O_CLOEXEC | flags)
+    try:
+        return mount_identifier(_descriptor_information(descriptor))
+    finally:
+        os.close(descriptor)
+
+
+def _descriptor_information_exists() -> bool:
+    try:
+        os.stat(_DESCRIPTOR_INFORMATION)
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def _is_mount_point_by_device(path: Path) -> bool:
+    """The device comparison of ``posixpath.ismount``, with its errors kept."""
+    try:
+        own = os.lstat(path)
+    except FileNotFoundError:
+        return False
+    parent = os.stat(path.parent)
+    return own.st_dev != parent.st_dev or own.st_ino == parent.st_ino
+
+
+def is_mount_point(path: Path) -> bool:
+    """Whether ``path`` is a mount point as the kernel sees it, a same-filesystem bind too.
+
+    The file is measured itself, its directory with links followed, so a login reached through a
+    symlinked directory is not taken for a mount point of its own. Only the login file's own
+    absence means it is none; any other failure to tell is an ``OSError`` for the caller.
+    """
+    # Device numbers, which the fallback compares, are shared by a bind of the same filesystem.
+    if not _descriptor_information_exists():
+        return _is_mount_point_by_device(path)
+    try:
+        return _mount_identity(path, os.O_NOFOLLOW) != _mount_identity(path.parent, os.O_DIRECTORY)
+    except FileNotFoundError:  # only the opens of the login file and its directory raise it
+        return False
+
+
+def _mount_point_refusal(path: Path) -> SwapRefused | None:
+    try:
+        mounted = is_mount_point(path)
+    except OSError as error:
+        return SwapRefused(
+            f"{shown_text(str(path))} cannot be checked for a mount point: {error.strerror}", False
+        )
+    except Exception as error:
+        return SwapRefused(f"failed: {type(error).__name__}", False)
+    if mounted:
+        return SwapRefused(
+            f"{shown_text(str(path))} is a mount point, which a rename cannot replace; bind the"
+            " directory that holds the file, read-write",
+            False,
+        )
+    return None
+
+
 def reserve_swap(path: Path) -> ReservedSwap | SwapRefused:
     """Create the sibling of ``path`` exclusively and hold it; reads and keeps no content."""
     sibling = swap_sibling_or_refusal(path)
     if isinstance(sibling, SwapRefused):
         return sibling
+    refusal = _mount_point_refusal(path)
+    if refusal is not None:
+        return refusal
     try:
         descriptor = os.open(
             sibling, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, LOGIN_FILE_MODE
