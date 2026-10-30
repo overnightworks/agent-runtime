@@ -854,6 +854,7 @@ class RepeatedToolOffer(Exception):
     def __init__(self) -> None:
         super().__init__("an allowed tool was offered more than once")
 
+
 class UnofferedTool(Exception):
     """A signed tool is missing from the app's list; the message names no tool."""
 
@@ -873,12 +874,10 @@ def _narrowed_to(
 class McpRelayOwner:
     """Answers the CLI's MCP messages and lets no body carrying the capability out.
 
-    Every answer leaves through ``_cleared_for_cli``. A hit refuses the owner for good and is
-    reported once to ``ToolCalls.reflected()``, which ends the run like a reflected result. A
-    ``notifications/cancelled`` with a well-formed ``requestId`` is routed to
-    ``ToolCalls.cancel``; every notification is still acknowledged. An ``Unanswered`` call
-    passes through untouched: it carries no body, and the CLI no longer waits for it.
-    ``listed`` tells whether it has answered a ``tools/list``.
+    Every answer leaves through ``_cleared_for_cli``; a hit refuses the owner for good and is
+    reported once to ``ToolCalls.reflected()``. A well-formed ``notifications/cancelled`` goes to
+    ``ToolCalls.cancel``, every notification is acknowledged, and an ``Unanswered`` call passes
+    through untouched.
     """
 
     def __init__(
