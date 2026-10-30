@@ -5,6 +5,7 @@ from __future__ import annotations
 import errno
 import fnmatch
 import os
+import shlex
 import stat
 import tempfile
 import threading
@@ -425,83 +426,72 @@ def test_grok_reads_only_its_exact_version_line(stdout, version):
 
 
 def _a_pin(
-    directory: Path, printed: str, version: str, program_type: type[ProgramPin], login: Path
-) -> tuple[ProgramPin, Path]:
+    directory: Path, printed: str, version: str, program_type: type[ProgramPin], login: Path,
+    order: Path,
+) -> ProgramPin:
+    """A pin on a program that prints ``printed``; each start first appends its directory name."""
     directory.mkdir()
-    calls = directory / "calls"
-    program = fake_cli_executable(directory, {("--version",): printed}, calls_log=calls)
-    pin = program_type(
-        binary=str(program), version=version, models=frozenset(), token_file=str(login)
+    program = shlex.quote(str(fake_cli_executable(directory, {("--version",): printed})))
+    probe = directory / "probe"
+    probe.write_text(
+        f'#!/bin/sh\necho {directory.name} >> {shlex.quote(str(order))}\nexec {program} "$@"\n'
     )
-    return pin, calls
+    probe.chmod(probe.stat().st_mode | stat.S_IXUSR)
+    return program_type(
+        binary=str(probe), version=version, models=frozenset(), token_file=str(login)
+    )
 
 
-def test_with_both_programs_pinned_both_are_probed_and_the_first_miss_refuses_naming_it(
-    tmp_path, working_root
+PROBES_IN_ORDER = ("anthropic", "openai", "xai")
+
+
+@pytest.mark.parametrize(
+    ("missing", "reported"),
+    [
+        pytest.param("anthropic", "2.1.303", id="anthropic"),
+        pytest.param("openai", "0.163.1", id="openai"),
+        pytest.param("xai", "1.0.61", id="xai"),
+    ],
+)
+def test_the_pinned_programs_are_probed_in_order_and_the_first_miss_refuses_and_stops_the_rest(
+    tmp_path, working_root, missing, reported
 ):
-    claude, claude_calls = _a_pin(
-        tmp_path / "claude",
-        PRINTS_THE_PIN,
-        PINNED_CLAUDE_VERSION,
-        ClaudeProgram,
-        process_token_file(),
-    )
-    codex, codex_calls = _a_pin(
-        tmp_path / "codex",
-        "codex-cli 0.163.1\n",
-        "0.163.0",
-        CodexProgram,
-        a_codex_login_file(tmp_path),
-    )
-    cli = CliConfig(working_root=str(working_root), anthropic=claude, openai=codex)
-
-    with pytest.raises(ProgramVersionRefused) as refused:
-        require_pinned_versions(cli)
-
-    assert str(refused.value) == (
-        f"cli.openai.version: {codex.binary} reports 0.163.1, not the pinned 0.163.0"
-    )
-    assert (claude_calls.exists(), codex_calls.exists()) == (True, True)
-
-
-def test_with_three_programs_pinned_all_are_probed_in_order_and_the_first_miss_refuses_naming_it(
-    tmp_path, working_root
-):
+    order = tmp_path / "order"
+    prints = {
+        "anthropic": PRINTS_THE_PIN,
+        "openai": "codex-cli 0.163.0\n",
+        "xai": GROK_TABLE.version_line + "\n",
+    }
+    prints[missing] = {
+        "anthropic": "2.1.303 (Claude Code)\n",
+        "openai": "codex-cli 0.163.1\n",
+        "xai": "grok 1.0.61 (01a8e1c591c0)\n",
+    }[missing]
     pins = {
         "anthropic": _a_pin(
-            tmp_path / "claude",
-            PRINTS_THE_PIN,
-            PINNED_CLAUDE_VERSION,
-            ClaudeProgram,
-            process_token_file(),
+            tmp_path / "anthropic", prints["anthropic"], PINNED_CLAUDE_VERSION, ClaudeProgram,
+            process_token_file(), order,
         ),
         "openai": _a_pin(
-            tmp_path / "codex",
-            "codex-cli 0.163.0\n",
-            "0.163.0",
-            CodexProgram,
-            a_codex_login_file(tmp_path),
+            tmp_path / "openai", prints["openai"], "0.163.0", CodexProgram,
+            a_codex_login_file(tmp_path), order,
         ),
         "xai": _a_pin(
-            tmp_path / "grok",
-            "grok 1.0.61 (01a8e1c591c0)\n",
-            GROK_TABLE.pin,
-            GrokProgram,
-            GROK_TABLE.login_file(tmp_path),
+            tmp_path / "xai", prints["xai"], GROK_TABLE.pin, GrokProgram,
+            GROK_TABLE.login_file(tmp_path), order,
         ),
     }
-    cli = CliConfig(
-        working_root=str(working_root), **{name: pin for name, (pin, _calls) in pins.items()}
-    )
+    cli = CliConfig(working_root=str(working_root), **pins)
 
     with pytest.raises(ProgramVersionRefused) as refused:
         require_pinned_versions(cli)
 
-    grok = pins["xai"][0]
     assert str(refused.value) == (
-        f"cli.xai.version: {grok.binary} reports 1.0.61, not the pinned {GROK_TABLE.pin}"
+        f"cli.{missing}.version: {pins[missing].binary} reports {reported}, "
+        f"not the pinned {pins[missing].version}"
     )
-    assert [calls.exists() for _pin, calls in pins.values()] == [True, True, True]
+    probed = PROBES_IN_ORDER[: PROBES_IN_ORDER.index(missing) + 1]
+    assert order.read_text().split() == list(probed)
 
 
 def _the_unstarted_refusal(program: Path) -> str:

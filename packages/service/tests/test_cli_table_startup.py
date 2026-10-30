@@ -17,7 +17,6 @@ from pydantic import ValidationError
 from tests.support.core_runtime_support import (
     no_installed_core_runtime,  # noqa: F401 - an autouse fixture
 )
-from tests.support.provider_test_support import CANARY_ACCESS_TOKEN
 from tests.support.service_config_support import (
     refused_on_one_line,
 )
@@ -29,6 +28,7 @@ from tests.support.service_support import (
     reaches_text,
 )
 from tests.support.service_table_support import (
+    TABLES,
     ProviderTable,
     a_codex_config,
     the_refusal_of,
@@ -110,12 +110,12 @@ LOGIN_FAULTS = [
         id="over-16-KiB",
     ),
     pytest.param(
-        a_login_that_is(lambda table: b"sk-api-key-line-" + CANARY_ACCESS_TOKEN.encode()),
+        a_login_that_is(lambda table: b"sk-api-key-line-" + table.access_canary.encode()),
         lambda table: table.not_a_document,
         id="bare-key",
     ),
     pytest.param(
-        a_login_that_is(lambda table: b"sk-ant-oat01-" + CANARY_ACCESS_TOKEN.encode()),
+        a_login_that_is(lambda table: b"sk-ant-oat01-" + table.access_canary.encode()),
         lambda table: table.not_a_document,
         id="claude-token",
     ),
@@ -134,7 +134,19 @@ LOGIN_FAULTS = [
         lambda table: table.incomplete,
         id="empty-token",
     ),
+    pytest.param(
+        a_login_that_is(lambda table: table.keyless_login),
+        lambda table: table.incomplete,
+        id="keyless",
+    ),
+    pytest.param(
+        a_login_that_is(lambda table: table.foreign_login),
+        lambda table: table.incomplete,
+        id="the-other-tables-document",
+    ),
 ]
+
+EVERY_TABLES_CANARIES = [canary for table in TABLES for canary in table.canaries]
 
 
 @pytest.mark.parametrize(("make", "reason_of"), LOGIN_FAULTS)
@@ -151,7 +163,7 @@ def test_a_login_file_that_is_not_a_sound_login_stops_the_start_naming_the_fault
     refusal = refused_on_one_line(written_document(tmp_path, document), capsys)
 
     assert refusal.startswith(f"cli.{table.provider}.token_file: {login} {reason_of(table)}")
-    assert [c for c in table.canaries if c in refusal] == []
+    assert [c for c in EVERY_TABLES_CANARIES if c in refusal] == []
 
 
 @pytest.mark.parametrize(("make", "reason_of"), LOGIN_FAULTS)
@@ -167,7 +179,7 @@ def test_a_refused_login_holds_no_token_in_what_the_refusal_holds(
 
     held = everything_a_refusal_holds(refused.value)
     assert reason_of(table) in str(refused.value)
-    assert not reaches_text(held, list(table.canaries))
+    assert not reaches_text(held, EVERY_TABLES_CANARIES)
 
 
 def test_a_link_to_a_sound_login_loads_and_a_link_to_an_open_one_is_judged_by_its_target(

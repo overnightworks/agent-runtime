@@ -142,7 +142,6 @@ def test_the_check_refuses_a_key_another_owner_holds_as_a_start_does(tmp_path, c
     ("body", "field"),
     [
         pytest.param("cli_settings.grok = {}", "cli_settings.grok", id="grok"),
-        pytest.param("cli_settings.xai = {}", "cli_settings.xai", id="xai"),
         pytest.param('cli_settings.openai = "x"', "cli_settings.openai", id="not-a-table"),
     ],
 )
@@ -152,6 +151,18 @@ def test_a_provider_key_the_service_does_not_serve_or_a_non_table_stops_startup_
     text = VALID_CONFIG + f"\n[{LEVELS['agent']}]\n{body}\n"
 
     assert_startup_refuses(tmp_path, capsys, text, field)
+
+
+@pytest.mark.parametrize("level", LEVELS)
+@pytest.mark.parametrize("check", [[], ["--check"]], ids=["start", "check"])
+def test_cli_settings_for_xai_stop_startup_and_the_check_at_every_level(
+    tmp_path, capsys, level, check
+):
+    text = with_settings(provider="xai", **{level: ""})
+
+    assert main(["--config", str(written(tmp_path, text)), *check]) == EXIT_BAD_CONFIG
+
+    assert f"{LEVELS[level]}.cli_settings.xai" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(

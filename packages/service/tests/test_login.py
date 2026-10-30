@@ -26,6 +26,7 @@ from tests.support.service_login_support import (  # noqa: F401 - the fixtures a
     CANARY_REFRESH,
     CODEX_FILE_REFUSAL,
     GOOD_DOCUMENTS,
+    GROK_FILE_REFUSAL,
     LINE_PREFIX,
     LOGIN_NAME,
     NEW_CLAUDE_TOKEN,
@@ -295,20 +296,32 @@ def test_check_accepts_a_file_the_reader_accepts_without_reading_input_or_writin
 
 
 @pytest.mark.parametrize(
-    ("contents", "reason"),
+    ("provider", "contents", "reason"),
     [
-        pytest.param(None, "cannot be read: No such file or directory", id="missing"),
         pytest.param(
+            Provider.OPENAI,
+            None,
+            "cannot be read: No such file or directory",
+            id="missing",
+        ),
+        pytest.param(
+            Provider.OPENAI,
             json.dumps({"OPENAI_API_KEY": CANARY_FOREIGN}).encode(),
             CODEX_FILE_REFUSAL,
             id="api-key",
         ),
+        pytest.param(
+            Provider.XAI,
+            json.dumps({"XAI_API_KEY": CANARY_FOREIGN}).encode(),
+            GROK_FILE_REFUSAL,
+            id="xai-api-key",
+        ),
     ],
 )
 def test_check_refuses_a_missing_or_refused_file_with_the_readers_reason(
-    tmp_path: Path, said: Said, contents: bytes | None, reason: str
+    tmp_path: Path, said: Said, provider: Provider, contents: bytes | None, reason: str
 ) -> None:
-    installation = an_installation(tmp_path, Provider.OPENAI, old=False)
+    installation = an_installation(tmp_path, provider, old=False)
     if contents is not None:
         write_login(installation.login, contents)
     stream = Stream(b"never read")

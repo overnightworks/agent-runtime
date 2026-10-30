@@ -79,6 +79,14 @@ def test_a_model_that_is_malformed_or_listed_by_no_cli_table_is_refused_naming_i
     assert field in _refusal(tmp_path, document)
 
 
+def _model_at(config, level: str) -> str | None:
+    return {
+        "defaults": lambda: config.defaults.model,
+        "app": lambda: config.apps["songmaker"].model,
+        "agent": lambda: config.apps["songmaker"].agents["notes"].model,
+    }[level]()
+
+
 def _grok_document(tmp_path: Path) -> dict[str, Any]:
     binary = GROK_TABLE.service_fake(tmp_path)
     return GROK_TABLE.document(tmp_path, binary, GROK_TABLE.login_file(tmp_path))
@@ -91,7 +99,7 @@ def test_an_xai_model_the_xai_table_lists_loads_and_one_it_does_not_is_refused_n
     setter, field = LEVELS[level]
     document = _grok_document(tmp_path)
     setter(document, GROK_TABLE.listed)
-    assert _load(tmp_path, document).defaults.model == GROK_TABLE.listed
+    assert _model_at(_load(tmp_path, document), level) == GROK_TABLE.listed
 
     setter(document, f"{Provider.XAI}/not-listed")
 

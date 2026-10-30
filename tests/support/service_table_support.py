@@ -28,6 +28,7 @@ from tests.support.provider_test_support import (
     SYSTEM_TEXT,
     a_codex_login,
     a_fake_claude,
+    a_grok_login,
     a_private_root,
 )
 from tests.support.service_support import (
@@ -81,11 +82,16 @@ class ProviderTable:
     access_canary: str
     """The secret the child's copy of the login holds (the one that is not blanked)."""
     canaries: tuple[str, ...]
+    refresh_canary: str
+    """The renewal secret the installed login holds and no child or log ever does."""
     not_a_document: str
     incomplete: str
     malformed_login: bytes
     api_key_login: bytes
     empty_token_login: bytes
+    keyless_login: bytes
+    foreign_login: bytes
+    """A sound login of the other table: no sign-in of this one."""
     failing_runs: tuple[FailingRun, ...]
 
     @property
@@ -151,9 +157,18 @@ CODEX_VERSION_LINE = "codex-cli 0.163.0"
 
 GROK_VERSION_LINE = "grok 1.0.60 (01a8e1c591c0)"
 
-GROK_KEY = "grok-synthetic-key"
+_GROK_REALM = next(iter(a_grok_login().values()))
 
-GROK_REFRESH_CANARY = "canary-grok-refresh-token"
+GROK_KEY = _GROK_REALM["key"]
+
+GROK_REFRESH_CANARY = _GROK_REALM["refresh_token"]
+
+
+def a_grok_login_with(key: str | None = None) -> bytes:
+    login = a_grok_login()
+    if key is not None:
+        next(iter(login.values()))["key"] = key
+    return json.dumps(login).encode()
 
 
 def a_codex_login_with(access_token: str | None = None) -> bytes:
@@ -189,6 +204,7 @@ CODEX_TABLE = ProviderTable(
     answering=a_codex_stream,
     access_canary=CANARY_ACCESS_TOKEN,
     canaries=(CANARY_ACCESS_TOKEN, CANARY_ID_TOKEN),
+    refresh_canary=json.loads(a_codex_login())["tokens"]["refresh_token"],
     not_a_document="is not a Codex login document",
     incomplete=(
         "is not a complete Codex sign-in; an API key (OPENAI_API_KEY) is not a subscription login"
@@ -196,6 +212,8 @@ CODEX_TABLE = ProviderTable(
     malformed_login=a_codex_login(tokens={"access_token": 5}),
     api_key_login=json.dumps({"OPENAI_API_KEY": CANARY_ACCESS_TOKEN}).encode(),
     empty_token_login=a_codex_login(tokens={"id_token": ""}),
+    keyless_login=json.dumps({"auth_mode": "chatgpt"}).encode(),
+    foreign_login=a_grok_login_with(),
     failing_runs=(
         FailingRun(
             "failed-turn-with-a-bare-401",
@@ -224,11 +242,6 @@ CODEX_TABLE = ProviderTable(
     ),
 )
 
-def a_grok_login_with(key: str | None = None) -> bytes:
-    realm = {"key": GROK_KEY if key is None else key, "refresh_token": GROK_REFRESH_CANARY}
-    return json.dumps({"xai.example": realm}).encode()
-
-
 def a_grok_stream(text: str, finished: bool) -> tuple[bytes, ...]:
     return (a_text(text), *((END,) if finished else ()))
 
@@ -251,6 +264,7 @@ GROK_TABLE = ProviderTable(
     answering=a_grok_stream,
     access_canary=GROK_KEY,
     canaries=(GROK_KEY, GROK_REFRESH_CANARY),
+    refresh_canary=GROK_REFRESH_CANARY,
     not_a_document="is not a Grok login document",
     incomplete=(
         "is not a complete Grok sign-in; an API key (XAI_API_KEY) is not a subscription login"
@@ -258,6 +272,8 @@ GROK_TABLE = ProviderTable(
     malformed_login=json.dumps({"xai.example": {"key": 5}}).encode(),
     api_key_login=json.dumps({"XAI_API_KEY": GROK_KEY}).encode(),
     empty_token_login=a_grok_login_with(""),
+    keyless_login=json.dumps({"xai.example": {"refresh_token": GROK_REFRESH_CANARY}}).encode(),
+    foreign_login=a_codex_login(),
     failing_runs=(
         FailingRun(
             "failed-turn-with-a-bare-401",
