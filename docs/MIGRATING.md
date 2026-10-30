@@ -6,6 +6,11 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 
 | Before (0.13.0) | Now |
 | --- | --- |
+| Wire protocol 4: `PROTOCOL_VERSION = 4`, a `v: 4` body was admitted. | Protocol 5: `PROTOCOL_VERSION = 5`. The service answers a `v: 4` body 400 `unsupported_version`, and a protocol 4 client refuses the service's `v: 5` events, rejections and status. The service, every app and the hal pin move together on one day. |
+| A request named no model: the configuration chose it, and a body carrying `model` answered 422 `invalid_request`. | `RunRequest.model` is optional: absent or `null` runs the configured model as before; a name the installation offers (the full names in its `[cli.<provider>] models`) runs exactly that model and `run_started` names it. |
+| A run refused a model only by its grammar. | `RejectionCode.MODEL_NOT_OFFERED` (`model_not_offered`, 422): a valid name the installation does not offer, answered after the `forbidden` checks and before the route. Handle the new member where a client switches over `RejectionCode`. |
+| `AgentDefinition.request(messages)` | `AgentDefinition.request(messages, *, model=None)`; without `model` the field is absent from the body. The agent file still refuses a `model:` key. |
+| The startup check assembled the listed models itself. | `ServiceConfig.offered_models()` owns the offer; the startup check and admission read it. |
 | `agent_runtime.codex_login.CodexRenewalRefusal` (its `NOT_USABLE` read "the document is not a usable Codex login") | `agent_runtime.login_renewal.RenewalRefusal`, with no alias; `NOT_USABLE` reads "the document is not a usable login". |
 | `agent_runtime.codex.renewal.CopyUnchanged` | `agent_runtime.login_renewal.CopyUnchanged`, with no alias. |
 | `agent_runtime.codex_login.UnreadableTiming` and `agent_runtime.codex_login.CodexTiming` | `agent_runtime.login_timing.UnreadableTiming` and `agent_runtime.login_timing.AccessTokenTiming`, with no alias. |

@@ -2,8 +2,8 @@
 
 ``route`` is the one decider: the CLI route of the model's provider for members of a
 subscription group when a ``[cli.<provider>]`` table has that provider, else the API route
-for members of an API group, else not enabled. The model is the configured one
-(``ServiceConfig.model_for``); the route never chooses it. Membership of the app is
+for members of an API group, else not enabled. The model is the resolved one (the request's,
+else ``ServiceConfig.model_for``); the route never chooses it. Membership of the app is
 the caller check's gate (``agent_runtime_service.identity``), before any route is chosen.
 """
 

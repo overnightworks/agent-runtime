@@ -210,6 +210,7 @@ def _service_config_document(
     songmaker: Mapping[str, object] | None,
     claude_binary: Path | None = None,
     token_file: Path | None = None,
+    claude_models: Sequence[str] = (LISTED_MODEL,),
 ) -> dict[str, Any]:
     return {
         **({} if runs is None else {"runs": runs}),
@@ -227,7 +228,7 @@ def _service_config_document(
             Provider.ANTHROPIC.value: {
                 "binary": str(claude_binary or process_claude_cli()),
                 "version": PINNED_CLAUDE_VERSION,
-                "models": [LISTED_MODEL],
+                "models": list(claude_models),
                 "token_file": str(token_file or process_token_file()),
             },
         },
@@ -257,10 +258,11 @@ def service_config(
     songmaker: Mapping[str, object] | None = None,
     claude_binary: Path | None = None,
     token_file: Path | None = None,
+    claude_models: Sequence[str] = (LISTED_MODEL,),
 ) -> ServiceConfig:
     """The test configuration; its Claude table logs in from ``token_file``, default the process."""
     return ServiceConfig.model_validate(
-        _service_config_document(issuer, runs, songmaker, claude_binary, token_file)
+        _service_config_document(issuer, runs, songmaker, claude_binary, token_file, claude_models)
     )
 
 
@@ -280,11 +282,7 @@ def _toml_lines(table: Mapping[str, object], path: tuple[str, ...] = ()) -> list
     return lines
 
 
-def service_config_file(
-    directory: Path,
-    *,
-    subscription_groups: list[str],
-) -> Path:
+def service_config_file(directory: Path, *, subscription_groups: list[str]) -> Path:
     """The test configuration written as the TOML file ``load_config`` reads."""
     document = _service_config_document(TEST_ISSUER, None, None)
     document["identity"]["subscription_groups"] = subscription_groups
