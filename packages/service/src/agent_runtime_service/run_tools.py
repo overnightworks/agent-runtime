@@ -21,7 +21,6 @@ from agent_runtime_service.run_liveness import (
 from agent_runtime_service.tool_relay import (
     McpRelayOwner,
     Relay,
-    RelayOwner,
     RelayRequest,
     ToolCallBarrier,
     Unanswered,
@@ -123,7 +122,8 @@ class RunTools:
 
     ``open_session`` enters ``open_app_tools``, lists the app's tools and builds the
     ``ToolCallBarrier`` and ``McpRelayOwner``. ``open`` immediately attaches the relay;
-    ``access`` and ``calls`` are what the runner uses. A failure after the client was entered,
+    ``access``, ``calls`` and ``listed`` (whether the relay answered a ``tools/list``) are what
+    the runner uses. A failure after the client was entered,
     a cancellation included, leaves the
     client within ``UPSTREAM_ABORT_SECONDS`` and propagates as the same object: no cancellation
     of the opener, direct or AnyIO's level one, cuts that leaving short or replaces the failure.
@@ -159,7 +159,7 @@ class RunTools:
         self,
         run_id: str,
         clock: RunClock,
-        owner: RelayOwner,
+        owner: McpRelayOwner,
         barrier: ToolCallBarrier,
         upstream: AsyncExitStack,
         *,
@@ -213,6 +213,10 @@ class RunTools:
     @property
     def calls(self) -> ToolCallBarrier:
         return self._barrier
+
+    @property
+    def listed(self) -> bool:
+        return self._owner.listed
 
     async def answer(self, request: RelayRequest) -> HttpAnswer | Unanswered:
         return await self._owner.answer(request)

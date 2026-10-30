@@ -27,14 +27,17 @@ from tests.support.relay_support import (
     RUN_ID,
     RawClient,
     SuppressingOwner,
+    json_rpc,
     port_of,
     post,
+    post_message,
     yield_until,
 )
 from tests.support.run_tools_support import (
     CALLS_EVENT,
     CAPABILITY,
     CLIENT_EVENT,
+    SUPPORTED,
     TOKEN,
     Cancellation,
     Scene,
@@ -173,6 +176,27 @@ async def stalled_tools(scene: Scene, plan: Stalls) -> RunTools:
 class Target:
     async def call(self) -> str:
         return "ran"
+
+
+@pytest.mark.parametrize(
+    ("method", "listed"),
+    [pytest.param("tools/list", True, id="listing"), pytest.param("ping", False, id="ping")],
+)
+def test_the_tools_tell_whether_their_relay_answered_a_tool_listing(
+    authority, monkeypatch, caplog, method, listed
+):
+    async def scenario(scene: Scene) -> None:
+        tools = await scene.open()
+        before = tools.listed
+        client = await RawClient.connect(port_of(door_of(tools)))
+        await client.send(post_message(door_of(tools), json_rpc(method, 1), SUPPORTED))
+        reply = await reply_of(client)
+
+        assert (before, "result" in reply, tools.listed) == (False, True, listed)
+        assert await ending_of(start_close(tools, injected_reap())) is None
+        await scene.release_and_drain()
+
+    run_scene(scenario, authority, monkeypatch, caplog)
 
 
 def test_a_stall_released_before_its_first_call_lets_that_call_through(monkeypatch):

@@ -879,6 +879,7 @@ class McpRelayOwner:
     ``notifications/cancelled`` with a well-formed ``requestId`` is routed to
     ``ToolCalls.cancel``; every notification is still acknowledged. An ``Unanswered`` call
     passes through untouched: it carries no body, and the CLI no longer waits for it.
+    ``listed`` tells whether it has answered a ``tools/list``.
     """
 
     def __init__(
@@ -889,6 +890,11 @@ class McpRelayOwner:
         self._narrowed_names = frozenset(tool.name for tool in self._narrowed)
         self._calls = calls
         self._refused = False
+        self._listed = False
+
+    @property
+    def listed(self) -> bool:
+        return self._listed
 
     async def answer(self, request: RelayRequest) -> HttpAnswer | Unanswered:
         self._require_not_refused()
@@ -919,6 +925,7 @@ class McpRelayOwner:
                     self._calls.cancel(cancelled)
                 return ACKNOWLEDGEMENT
             case Listing(request_id):
+                self._listed = True
                 return answer_for(tools_list_response(request_id, self._narrowed))
             case Unoffered(request_id):
                 self._calls.unoffered()

@@ -9,7 +9,10 @@ provider's factory takes the launch and reads the login; the run it returns take
 the run's model and the relay's access, so no factory sees the admitted run or its capability.
 When the run's capability grants tools it then opens the run's tool set (``RunTools``), hands
 the adapter only the relay's address and secret, and merges the relay's tool events with the
-core's text and ending (``RelayedEvents``); the CLI's own tool lines are dropped. Its one exit
+core's text and ending (``RelayedEvents``); the CLI's own tool lines are dropped. A relay run
+whose core yields its final before the relay answered a ``tools/list`` ends with
+``RelayNeverListed``: the CLI answered without the app's tools, which no run may do silently,
+whatever kept it from the relay. Its one exit
 path closes the tool set once, with the core's reap, so a login refusal, a failed exit, a
 barrier refusal or a lost containment reaches the service's run supervision as it was raised. It
 reads no installed core configuration: each fact arrives as an argument.
@@ -32,7 +35,8 @@ from agent_runtime.cli_run import CliRunAdapter, RelayAccess, astream_cli_run
 from agent_runtime.cli_settings import CliSettings
 from agent_runtime.codex.run import CodexRun
 from agent_runtime.config import PrivateWorkingRoot
-from agent_runtime.events import StreamEvent
+from agent_runtime.errors import raise_without_chain
+from agent_runtime.events import FinalEvent, StreamEvent
 from agent_runtime.grok.run import GrokRun
 from agent_runtime.secret_file import read_token_file
 from agent_runtime_client.wire import Turn, TurnMessage
@@ -42,6 +46,13 @@ from agent_runtime_service.routing import Cli, split_model
 from agent_runtime_service.run_liveness import RunClock
 from agent_runtime_service.run_tools import RunTools
 from agent_runtime_service.runners import AdmittedRun
+
+
+class RelayNeverListed(Exception):
+    """A relay run's CLI ended its answer before the relay answered its tool listing."""
+
+    def __init__(self) -> None:
+        super().__init__("the run's CLI answered before it listed the relay's tools")
 
 
 @dataclass(frozen=True)
@@ -193,6 +204,8 @@ class CliRunner:
                 None if tools is None else tools.calls,
             )
             async for event in events:
+                if isinstance(event, FinalEvent) and tools is not None and not tools.listed:
+                    raise_without_chain(RelayNeverListed())
                 yield event
         finally:
             await self._finish(tools, events)
