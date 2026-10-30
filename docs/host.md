@@ -19,7 +19,6 @@ releases in [MIGRATING.md](MIGRATING.md).
 | provider | `claude`, `grok` or `codex` (`ProviderName`). |
 | route | `cli` or `api` (`ProviderRoute`); a *provider route* is one provider on one route. |
 | one-shot completion | A tool-free single request bounded by a caller-owned deadline (`call_provider_once`). |
-| image turn | A Codex CLI turn that produces one image under an `ImagePolicy`. |
 | tool markup | The tag namespace and product name a host's text-protocol tools wear (`ToolProtocolMarkup`). |
 | user | The person a turn runs for (`user_id`). |
 | working root | The host's private directory below which the library creates every private directory and file: `cli_working_directory_root` for the catalog and turn paths, a `PrivateWorkingRoot` for a subscription run's `run_directories`. |
@@ -44,10 +43,9 @@ pip-based host pins both wheel URLs. Tags are never moved; a broken release gets
 the next patch tag.
 
 Optional extras sit between the name and the `@` in URL form
-(`overnightworks-agent-runtime[api,image] @ …`):
+(`overnightworks-agent-runtime[api] @ …`):
 
 - `[api]` (core) pulls in the Anthropic SDK used by the Claude HTTP-API route.
-- `[image]` (core) pulls in Pillow, used by the Codex image path.
 - `[mcp-server]` (client) pulls in PyJWT with cryptography, used by
   `agent_runtime_client.mcp_server` to verify a run capability.
 
@@ -70,8 +68,7 @@ that also runs turns adds `TurnRuntimeConfig` as `turns` (an optional
 `McpServerSpec`, `turns.codex`, `turns.grok`); a turn path reached without its
 block raises `TurnRuntimeNotConfiguredError` or `ProviderNotConfiguredError`
 instead of running against a guess. These errors share the base `HostWiringError`
-and `dispatch.stream_turn`, `dispatch.call_provider_once` and
-`dispatch.image_capability` raise them unchanged. File-name prefixes in the
+and `dispatch.stream_turn` and `dispatch.call_provider_once` raise them unchanged. File-name prefixes in the
 configuration (`McpServerSpec.config_file_prefix`,
 `GrokTurnRuntime.prompt_file_prefix`) are 1 to 64 characters from
 `A-Z a-z 0-9 . _ -`; the library appends random characters and creates the file
@@ -104,8 +101,7 @@ lifetime.
 **Ports passed in.** `ToolExecutor` (`agent_runtime.tool_loop`) runs one tool
 call; `ToolCatalog` (`agent_runtime.tools`) holds the tool declarations and the
 host-declared `ToolProtocolMarkup`; `McpServerSpec` (`agent_runtime.config`)
-says how the host's MCP server is launched; `ImagePolicy` (`agent_runtime.images`)
-constrains an image turn. Their docstrings state what a failure is and what the
+says how the host's MCP server is launched. Their docstrings state what a failure is and what the
 loop logs. A turn emits the in-process `StreamEvent` union
 (`agent_runtime.events`); the service's wire is `agent_runtime_client.wire`, not that
 union.
@@ -255,41 +251,21 @@ carry no media type.
 ## Sandbox
 
 `agent_runtime.sandbox.paths` holds directory-name prefix constants —
-`CODEX_IMAGE_TURN_DIRECTORY_PREFIX`, `CODEX_TOOL_TURN_DIRECTORY_PREFIX`,
-`CODEX_HOME_DIRECTORY_NAME`. They are the contract between this package and a
-host's kernel sandbox profile: every confined Codex run works inside Bubblewrap
+`CODEX_TOOL_TURN_DIRECTORY_PREFIX` and `CODEX_HOME_DIRECTORY_NAME`. They are the
+contract between this package and a host's kernel sandbox profile: every confined Codex run works inside Bubblewrap
 with one writable place, and its directory lies directly below the host's
 private `cli_working_directory_root`. This library ships the constants, not a
 profile. A host brings its own AppArmor/seccomp profile and derives it from
 these values: it permits exactly
 `/oldroot<R>/<prefix>*/codex-home/ -> /newroot<R>/<prefix>*/codex-home/` for the
-image and tool prefixes, where `R` is the root's resolved path. A renamed prefix
+tool prefix, where `R` is the root's resolved path. A renamed prefix
 or a moved root needs the profile reloaded with the pin, so a rename becomes a
 red test rather than a silently refused mount. A host's sandbox proof allocates
-its directory as an image turn does: `CODEX_IMAGE_TURN_DIRECTORY_PREFIX` plus a
+its directory as a tool turn does: `CODEX_TOOL_TURN_DIRECTORY_PREFIX` plus a
 random part, below the root.
-
-The Codex image gate admits the events Codex CLI 0.163.0 measurably emits for
-an image turn, and no command at all: a `command_execution` item ends the turn
-as `blocked_item`. A host still on 0.147.0, whose CLI read the skill through the
-shell, must move to 0.163.0. If a later CLI reads the skill through the shell
-again, the logged `types` show `item.started:command_execution`, and that path is
-measured before it is admitted. On 0.163.0 the image call itself is invisible to
-`exec --json`, so the gate's block checks cover only the tool calls the CLI
-*reports*. A returned PNG is tied to the turn only by its location under the
-private `CODEX_HOME` and by the re-encode under the host's `ImagePolicy`. The gate
-is therefore defence in depth; the containment is the read-only sandbox plus the
-host's AppArmor and seccomp profile, which the host owns.
 
 ## Safe diagnostic codes
 
-The library logs closed diagnostic codes for rejected Grok tool-protocol and Codex
-image-gate paths. They identify a stable rejection class without copying prompts,
-arguments, paths, IDs or exception text into logs. The Codex image route's codes
-are `unexpected_event`, `blocked_item` and `unexpected_item`, logged as
-`Codex image tool rejected route=cli code=<code> types=[...]`; a completed turn
-that drew nothing is logged as `Codex image not created route=cli types=[...]`.
-`types` is the turn's event sequence as closed event and kind *names*, never
-contents: anything outside the gate's sets is `other`, consecutive repeats read
-`name*N`, and a long turn keeps its last 32 names behind a leading `...+K`.
-`ImageToolBlockedError` carries the same names as `observed`.
+The library logs closed diagnostic codes for rejected Grok tool-protocol paths. They
+identify a stable rejection class without copying prompts, arguments, paths, IDs or
+exception text into logs.

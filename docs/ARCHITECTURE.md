@@ -179,8 +179,8 @@ record [0001](decisions/0001-agent-service.md) (A1b-K0, the measured lifetime; A
 
 **Host facts come from the host.** The library reaches back into no host.
 Deployment facts arrive as configuration (`ProviderRuntimeConfig`) or explicit
-arguments; the tool set, the MCP server and the image constraints arrive as
-ports (`ToolExecutor`, `ToolCatalog`, `McpServerSpec`, `ImagePolicy`). No path
+arguments; the tool set and the MCP server arrive as
+ports (`ToolExecutor`, `ToolCatalog`, `McpServerSpec`). No path
 invents a default for a host fact, and an unconfigured path fails loud.
 
 **One spawn owner, one bounded runner.** Every child is a `ChildProcess` with a

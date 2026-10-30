@@ -9,7 +9,7 @@ proves it. The traps it cannot show:
 
 - The service's wire has one owner, `agent_runtime_client.wire`.
 - `agent_runtime.events` is the core's in-process turn event, never a second wire.
-- The `[api]`, `[image]` and `[mcp-server]` extras stay optional: their libraries are imported only inside the route or module that needs them.
+- The `[api]` and `[mcp-server]` extras stay optional: their libraries are imported only inside the route or module that needs them.
 
 ## Code patterns
 
@@ -27,8 +27,8 @@ proves it. The traps it cannot show:
   each such entry working after `reset_config()`. No path invents a default for a
   host fact.
 - Host obligations are ports, passed in. The tool set (`ToolExecutor`,
-  `ToolCatalog`), the MCP server (`McpServerSpec`), and the image constraints
-  (`ImagePolicy`) arrive from the host; the library never invents them.
+  `ToolCatalog`) and the MCP server (`McpServerSpec`) arrive from the host; the
+  library never invents them.
 - One spawn owner, one bounded runner. Every child is a `ChildProcess`
   (complete environment, absolute binary, explicit `cwd`) created only in
   `agent_runtime.spawn`; the bounded runner
@@ -41,15 +41,14 @@ proves it. The traps it cannot show:
 ## Checks
 
 ```bash
-uv sync --all-packages --extra dev --extra image
+uv sync --all-packages --extra dev
 uv run pytest -q
 uv run ruff check src tests packages conftest.py
 uv run lint-imports
 uv build --all-packages
 ```
 
-The suite needs no live provider, and `[image]` is required at collection
-(one test imports Pillow at module load). CI's "Host vocabulary" step greps
+The suite needs no live provider. CI's "Host vocabulary" step greps
 `src packages tests docs` for host words; `.github/host-vocabulary-allowed.txt`
 owns the allowed hits. The required check is `quality / verdict`
 (`quality/config.toml`, `.github/workflows/ci.yml`).

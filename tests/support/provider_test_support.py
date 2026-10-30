@@ -773,11 +773,10 @@ def override_codex_turn_runtime(**codex_turn_facts: Any) -> None:
 
 
 def use_codex_process_pool(monkeypatch, process_pool) -> None:
-    """Give every Codex module that admits a process the same test pool."""
-    from agent_runtime.codex import image, transport
+    """Give the Codex transport, which admits every process, the test pool."""
+    from agent_runtime.codex import transport
 
-    for module in (image, transport):
-        monkeypatch.setattr(module, "get_codex_process_pool", lambda: process_pool)
+    monkeypatch.setattr(transport, "get_codex_process_pool", lambda: process_pool)
 
 
 SECRET_ENV_KEYS: tuple[str, ...] = (
