@@ -3,6 +3,6 @@ agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
 role = "builder"
 base = "17705830215aef47fee26c2efb7a3cec0d8f7fc6"
 branch = "claude/issue-646-a1f-codex-shell-snapshot-off"
-scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "src/agent_runtime/codex/run.py", "tests/support/codex_support.py"]
+scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "src/agent_runtime/codex/run.py", "tests/support/codex_support.py", "tests/test_codex_run_settings.py"]
 opened_commit = "8652ae4ecf99a14ca327cf4ef343b54e4ce8ce1a"
 whole_reason = "One default key with its pinned copy and the three documents that name the Codex defaults; splitting would leave the documents or the pin disagreeing with the code."
