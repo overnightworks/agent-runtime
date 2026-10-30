@@ -46,6 +46,7 @@ from tests.support.service_support import (
     service_config,
 )
 from tests.support.service_table_support import (
+    CODEX_TABLE,
     CODEX_MODEL,
     CODEX_NAME,
     a_codex_config,
@@ -56,6 +57,7 @@ from tests.support.service_table_support import (
     captured_settings,
     codex_document,
     with_claude_beside,
+    with_levels,
 )
 from webauth.https_client import KeySetFetchError
 
@@ -193,6 +195,14 @@ def test_m6_a_model_of_another_provider_runs_on_that_providers_route(
     )
     document = with_claude_beside(codex, a_fake_claude(claude_directory))
     document["defaults"] = {"model": models.sonnet}
+    document = with_levels(
+        document,
+        CODEX_TABLE,
+        COWRITER,
+        {"web_search": "live", "sandbox_mode": "danger-full-access"},
+        {"sandbox_mode": "workspace-write"},
+        {"approval_policy": "on-request"},
+    )
 
     def run_naming_codex(base_url: str) -> list[RunEvent]:
         body = run_body(turn=THREE_MESSAGE_TURN, model=CODEX_NAME)
@@ -202,7 +212,12 @@ def test_m6_a_model_of_another_provider_runs_on_that_providers_route(
 
     assert (events[0].model, shown(events)[-1]) == (CODEX_NAME, ("succeeded", "done"))
     assert [a for a in argv_of(capture) if a.startswith("--model")] == [f"--model={CODEX_MODEL}"]
-    assert captured_settings(capture) == DEFAULT_SETTINGS
+    assert captured_settings(capture) == {
+        **DEFAULT_SETTINGS,
+        "web_search": "live",
+        "sandbox_mode": "workspace-write",
+        "approval_policy": "on-request",
+    }
 
 
 @pytest.mark.parametrize("model", ["anthropic/unlisted", "openai/unlisted"])
