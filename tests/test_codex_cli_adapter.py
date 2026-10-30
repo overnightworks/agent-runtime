@@ -71,7 +71,6 @@ from agent_runtime.catalog import ProviderRoute, list_provider_models
 from agent_runtime.codex import protocol as codex_protocol
 from agent_runtime.codex import transport as codex_transport
 from agent_runtime.codex.pool import (
-    CodexProcessKind,
     CodexProcessPool,
     get_codex_process_pool,
 )
@@ -538,7 +537,7 @@ def test_deadline_before_spawn_keeps_the_codex_slot_until_late_reap(monkeypatch)
         )
 
     monkeypatch.setattr(codex_protocol, "run_cli_bounded", fake_runner)
-    reservation = process_pool.reserve(CodexProcessKind.TEXT)
+    reservation = process_pool.reserve()
     turn_home = codex_protocol.create_codex_turn_home(CODEX_TOOL_TURN_DIRECTORY_PREFIX)
 
     codex_protocol.run_reserved_codex_cli(
@@ -553,7 +552,7 @@ def test_deadline_before_spawn_keeps_the_codex_slot_until_late_reap(monkeypatch)
     turn_home.home.close()
 
     with pytest.raises(CodexProcessPoolSaturatedError):
-        process_pool.reserve(CodexProcessKind.TEXT)
+        process_pool.reserve()
     assert turn_home.home.path.exists()
     callbacks["on_spawned"](41)
     callbacks["on_reaped"](41, True)
@@ -1550,7 +1549,7 @@ def test_a_tool_turn_without_a_binary_reserves_nothing(
     override_codex_runtime(binary="no-such-codex-binary-7c1d")
     runner = Mock()
     monkeypatch.setattr(codex_protocol, "run_cli_bounded", runner)
-    held_slots = [turn_frame.process_pool.reserve(CodexProcessKind.TEXT) for _ in range(8)]
+    held_slots = [turn_frame.process_pool.reserve() for _ in range(8)]
     if not pool_is_saturated:
         turn_frame.process_pool.abandon_unspawned(held_slots.pop())
     expected_holdings = len(held_slots)
@@ -1638,7 +1637,7 @@ def test_a_tool_round_whose_worker_cannot_start_releases_its_home(
 def test_a_saturated_pool_returns_the_turns_home_token(monkeypatch, turn_frame) -> None:
     pool = CodexProcessPool(maximum_processes=1)
     use_codex_process_pool(monkeypatch, pool)
-    pool.reserve(CodexProcessKind.TEXT)
+    pool.reserve()
     runner = Mock()
     monkeypatch.setattr(codex_protocol, "run_cli_bounded", runner)
     _the_child_plays(monkeypatch, ":")

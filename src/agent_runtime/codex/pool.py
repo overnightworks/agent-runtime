@@ -4,23 +4,15 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
-from enum import StrEnum
 
 from agent_runtime.config import current_codex_turn_runtime
 from agent_runtime.errors import CodexProcessPoolSaturatedError
-
-
-class CodexProcessKind(StrEnum):
-    """The Codex process classes."""
-
-    TEXT = "text"
 
 
 @dataclass(eq=False)
 class CodexProcessReservation:
     """A reserved process slot, optionally bound to the CLI process PID."""
 
-    kind: CodexProcessKind
     pid: int | None = None
 
 
@@ -34,12 +26,12 @@ class CodexProcessPool:
         self._lock = threading.Lock()
         self._reservations: set[CodexProcessReservation] = set()
 
-    def reserve(self, kind: CodexProcessKind) -> CodexProcessReservation:
+    def reserve(self) -> CodexProcessReservation:
         """Reserve before spawning, including while a killed process is unreaped."""
         with self._lock:
             if len(self._reservations) >= self._maximum_processes:
-                raise CodexProcessPoolSaturatedError(kind=kind, scope="total")
-            reservation = CodexProcessReservation(kind=kind)
+                raise CodexProcessPoolSaturatedError()
+            reservation = CodexProcessReservation()
             self._reservations.add(reservation)
             return reservation
 

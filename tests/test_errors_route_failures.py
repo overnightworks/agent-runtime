@@ -42,7 +42,6 @@ from agent_runtime.text_tool_protocol import (
 @pytest.mark.parametrize(
     ("code", "message"),
     [
-        (SafeRouteReasonCode.NO_IMAGE_TOOL, "no image tool"),
         (SafeRouteReasonCode.API_KEY_NOT_SET, "API key is not set."),
         (SafeRouteReasonCode.CLI_LOGIN_NOT_CONFIGURED, "CLI is not signed in."),
         (SafeRouteReasonCode.CLI_AUTH_REJECTED, "CLI login was rejected or has expired."),
@@ -63,7 +62,7 @@ def test_route_failure_code_has_its_exact_safe_message(code, message):
     assert normalize_route_failure(code).model_dump() == {"code": code, "message": message}
 
 
-def test_the_reason_codes_are_exactly_the_fifteen_public_values():
+def test_the_reason_codes_are_exactly_the_fourteen_public_values():
     assert {code.value for code in SafeRouteReasonCode} == {
         "api_key_not_set",
         "cli_login_not_configured",
@@ -78,7 +77,6 @@ def test_the_reason_codes_are_exactly_the_fifteen_public_values():
         "tool_execution_failed",
         "tool_protocol_error",
         "tool_limit_exceeded",
-        "no_image_tool",
         "route_failed",
     }
 
@@ -292,7 +290,7 @@ _PLAIN_ERRORS = {
     "catalog-with-reason": ProviderModelCatalogUnavailableError(
         "codex", "ignored", _TOOL_PROTOCOL_REASON,
     ),
-    "pool-saturated": CodexProcessPoolSaturatedError(kind="turn", scope="host"),
+    "pool-saturated": CodexProcessPoolSaturatedError(),
     "containment-lost": ContainmentLost(RetainedGroup(pgid=4242, generation=7)),
 }
 
