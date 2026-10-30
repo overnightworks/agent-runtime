@@ -25,6 +25,7 @@ from tests.support.cli_tools_support import (
     ToolApp,
     a_relay_calling_codex,
     a_tool_app,
+    relay_refuses,
 )
 from tests.support.codex_support import (
     DEFAULT_SETTINGS,
@@ -408,6 +409,7 @@ def test_a_codex_tool_run_ends_provider_error_unless_its_relay_listed_and_one_ch
     assert ("succeeded" in [kind for kind, _ in run.shape]) is (
         ending == (RunState.SUCCEEDED, None)
     )
+    eventually(lambda: relay_refuses(run.capture.relay_port, 10.0))
 
 
 def test_a_tool_free_codex_run_on_an_app_with_an_origin_gets_no_relay_and_the_same_argv(

@@ -14,7 +14,6 @@ import gc
 import json
 import math
 import signal
-import socket
 import threading
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
@@ -34,6 +33,7 @@ from tests.support.cli_tools_support import (
     ToolApp,
     a_relay_calling_claude,
     a_tool_app,
+    relay_refuses,
 )
 from tests.support.descendant_support import DescendantRow
 from tests.support.mcp_app_fake import (
@@ -963,21 +963,13 @@ def test_a_held_final_with_a_stuck_app_ends_by_supervision(
     assert len(run.app.calls) == 1
 
 
-def relay_refuses(port: int) -> bool:
-    try:
-        socket.create_connection(("127.0.0.1", port), timeout=SETTLE_SECONDS).close()
-    except ConnectionRefusedError:
-        return True
-    return False
-
-
 def nothing_left_running(
     captures: Sequence[ChildCapture], *, private_root_left_empty: bool = False
 ) -> Callable[[ServiceConfig], None]:
     def check(config: ServiceConfig) -> None:
         eventually(lambda: (held_claude_slots(), pending_tool_tasks()) == (0, []))
         for capture in captures:
-            eventually(lambda: relay_refuses(capture.relay_port))
+            eventually(lambda: relay_refuses(capture.relay_port, SETTLE_SECONDS))
         if private_root_left_empty:
             eventually(lambda: list(private_root_of(config).iterdir()) == [])
 

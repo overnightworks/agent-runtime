@@ -16,6 +16,7 @@ was given the same way, and prints ``exec --json`` lines around its calls.
 from __future__ import annotations
 
 import json
+import socket
 import stat
 import sys
 import tomllib
@@ -420,10 +421,22 @@ class CodexChildCapture(ChildCapture):
         return tomllib.loads(self.run_files["config.toml"])["mcp_servers"]["relay"]
 
     @property
+    def relay_port(self) -> int:
+        return urlsplit(self.relay["url"]).port or 0
+
+    @property
     def relay_secret(self) -> str:
         variable = f"{self.relay['bearer_token_env_var']}="
         lines = self.text_of("environment").splitlines()
         return next(line.removeprefix(variable) for line in lines if line.startswith(variable))
+
+
+def relay_refuses(port: int, timeout_seconds: float) -> bool:
+    try:
+        socket.create_connection(("127.0.0.1", port), timeout=timeout_seconds).close()
+    except ConnectionRefusedError:
+        return True
+    return False
 
 
 @dataclass(frozen=True)
