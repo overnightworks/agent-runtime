@@ -2,6 +2,16 @@
 
 Read by a host bumping its pin; each release that breaks a host has one section, newest first.
 
+## Migrating to 0.14.0
+
+| Before (0.13.0) | Now |
+| --- | --- |
+| Wire protocol 4: `PROTOCOL_VERSION = 4`, a `v: 4` body was admitted. | Protocol 5: `PROTOCOL_VERSION = 5`. The service answers a `v: 4` body 400 `unsupported_version`, and a protocol 4 client refuses the service's `v: 5` events, rejections and status. The service, every app and the hal pin move together on one day. |
+| A request named no model: the configuration chose it, and a body carrying `model` answered 422 `invalid_request`. | `RunRequest.model` is optional: absent or `null` runs the configured model as before; a name the installation offers (the full names in its `[cli.<provider>] models`) runs exactly that model and `run_started` names it. |
+| A run refused a model only by its grammar. | `RejectionCode.MODEL_NOT_OFFERED` (`model_not_offered`, 422): a valid name the installation does not offer, answered after the `forbidden` checks and before the route. Handle the new member where a client switches over `RejectionCode`. |
+| `AgentDefinition.request(messages)` | `AgentDefinition.request(messages, *, model=None)`; without `model` the field is absent from the body. The agent file still refuses a `model:` key. |
+| The startup check assembled the listed models itself. | `ServiceConfig.offered_models()` owns the offer; the startup check and admission read it. |
+
 ## Migrating to 0.13.0
 
 | Before (0.12.0) | Now |

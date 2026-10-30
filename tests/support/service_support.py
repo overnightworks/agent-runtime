@@ -282,11 +282,7 @@ def _toml_lines(table: Mapping[str, object], path: tuple[str, ...] = ()) -> list
     return lines
 
 
-def service_config_file(
-    directory: Path,
-    *,
-    subscription_groups: list[str],
-) -> Path:
+def service_config_file(directory: Path, *, subscription_groups: list[str]) -> Path:
     """The test configuration written as the TOML file ``load_config`` reads."""
     document = _service_config_document(TEST_ISSUER, None, None)
     document["identity"]["subscription_groups"] = subscription_groups

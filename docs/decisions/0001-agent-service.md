@@ -15,11 +15,12 @@ Apps stop talking to language models themselves. An app sends a **purpose** (the
 name of its agent, such as `cowriter`; it labels the run and routes nothing), the turn data, and two tokens — the
 end user's and its own. One agent service decides who is asking, whether they may
 use the operator's subscription, and which route serves the caller. The app
-never names a provider, a model, a route or a user id, and never holds an LLM or
-subscription credential.
+never names a route or a user id, names a model only from the service's offer, and never holds an
+LLM or subscription credential.
 
 *Amendment (22.10.2026, #382, #406).* The purpose labels the run and its capability; it chooses
-no route and no model (amended 23.10.2026, H5).
+no route and no model (amended 23.10.2026, H5). *Amendment (30.10.2026, #623).* A run may name
+a model the service offers; see the amendment at the end of H12.
 
 There are exactly two routes:
 
@@ -5521,6 +5522,21 @@ H5's `GET /offer` and "Wire version 2 stays". Authority: the operator's rulings 
 - D5: the wire word `purpose` becomes `agent`.
 - D6: an installation without a `[cli]` model list does not start until the paid route brings
   its own model list.
+
+**Amendment (30.10.2026, #623).** A run may name its model. The operator, asked which model choice
+the service should offer an app, answered „Modell pro Lauf (Recommended)“: „Ein Agent pro Zweck;
+neues Modell = nur Konfiguration in hal, Apps sehen es sofort. Hebt deine Regel D1 (#494,
+27.10.) und dein A zu #623 auf. Neue Protokollversion = ein gemeinsamer Umstiegstag für alle
+Apps, eigenes Release nach 0.13.0.“ This supersedes D1 for the request: `RunRequest.model` is
+optional, absent or `null` keeps the configured model, and a named model wins over the agent,
+app and default levels. The configuration stays the one owner of what is offered
+(`ServiceConfig.offered_models()`, the full names in the `[cli.<provider>] models` lists, the
+same for every app); a valid name outside it answers 422 `model_not_offered` after the
+`forbidden` checks and before the route, and `run_started` names the model that was selected.
+The agent file still names no model. D2 and D3 stay: names are versionless
+`<provider>/<model>`, never substituted and never a fallback. Protocol 5 replaces protocol 4 on
+one switch day for all apps. Slice 1 (#630) builds the request field; `GET /models` follows in
+slice 2.
 
 ## Out of scope at this size
 

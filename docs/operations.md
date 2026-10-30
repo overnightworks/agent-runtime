@@ -52,7 +52,9 @@ in this order for a person's run:
    [ARCHITECTURE.md](ARCHITECTURE.md) owns the order. The keys that feed it: the
    subscription groups (`[identity]
    subscription_groups`), the programs (`[cli.<provider>]`), and the API groups (`api_groups`,
-   set together with `[api]`). The app sends no model: admission takes the
+   set together with `[api]`). A run names a model or none: a name must be one the
+   installation offers, the full names in the `[cli.<provider>] models` lists, else 422
+   `model_not_offered` after the `forbidden` checks and before the route. Without one, admission takes the
    run's model from the configuration, the agent's `model` in
    `[apps.<app>.agents.<agent>]`, else the app's, else `[defaults] model`. A subscription-group member's
    run goes to the CLI route of the model's provider; every other caller with API rights goes to the paid
