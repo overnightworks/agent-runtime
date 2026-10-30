@@ -229,6 +229,6 @@ it, is not measured yet; issue #115, step 12b, owns that measurement.
 subscription, and the app's tool definitions and the results of the app's tools reach
 only Anthropic: a Claude run carries them, and a tool request for a Codex or Grok run
 is refused at admission. On the API route, the turn, the model, granted definitions
-and accepted results reach the gateway instead
-([API text results](#api-text-results)). What the provider keeps follows its terms,
-not this service.
+and accepted results reach the gateway, which forwards them to the provider the model
+names ([API text results](#api-text-results)). What the gateway and the provider keep
+follows their terms, not this service.
