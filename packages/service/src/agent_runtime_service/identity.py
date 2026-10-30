@@ -109,11 +109,16 @@ class CallerCheck:
         )
         return rejection_code(proven) if isinstance(proven, CallerRefusal) else proven
 
+    async def workload_caller(self, workload_token: str | None) -> WorkloadCaller | RejectionCode:
+        """The registered app behind a workload token, else the refusal."""
+        proven = await anyio.to_thread.run_sync(self._check.workload_caller, workload_token)
+        return rejection_code(proven) if isinstance(proven, CallerRefusal) else proven
+
     async def app_caller(self, workload_token: str | None) -> WorkloadCaller | RejectionCode:
         """The app behind a workload token that runs one of its own agents, else the refusal."""
-        proven = await anyio.to_thread.run_sync(self._check.workload_caller, workload_token)
-        if isinstance(proven, CallerRefusal):
-            return rejection_code(proven)
+        proven = await self.workload_caller(workload_token)
+        if isinstance(proven, RejectionCode):
+            return proven
         if not self._config.apps[proven.app].has_an_agent_that_runs_as_itself:
             return RejectionCode.UNAUTHORIZED
         return proven

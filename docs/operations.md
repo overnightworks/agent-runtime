@@ -25,6 +25,9 @@ or one that no `[cli.<provider>] models` lists. An installation without a `[cli]
 refused naming `cli`, because it has no list to check a model against; the paid route gets its own list with the
 paid-route work (#463).
 
+The offered models are those lists' full names; an app reads them with `GET /models`, on its workload
+token alone, so a new model is a configuration change and a restart ([wire.md](wire.md)).
+
 `agent-runtime-service --config PATH --check` runs every step of a start up to serving,
 including the configuration with its credential files, the pinned program versions and the
 CA bundles, and exits 0 without binding the port. Otherwise it prints the start's one

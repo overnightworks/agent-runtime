@@ -37,6 +37,15 @@ the operator enabled ([The app's own runs](#the-apps-own-runs)). `POST /runs` an
 `GET /runs/{id}` returns the run's `RunStatus`, readable only by the app and
 user that started it, or for the app's own run by that app with its workload token alone ([What a run keeps](#what-a-run-keeps) says what the record holds).
 
+`GET /models` returns the `ModelList` `{"v": 5, "object": "list", "data": [{"id": "<provider>/<model>", "object": "model"}]}`:
+exactly the models a run may name (`ServiceConfig.offered_models()`), sorted by id, `Cache-Control:
+no-store`. The workload token of any registered app reads it alone, whether or not it runs an
+agent as itself; `Authorization` is never read. It derives from the configuration only, so every app
+and every instance of one configuration answers the same bytes, whatever runs are in flight.
+An `Agent-Job-Ticket` header is `401` before any token is read; the other refusals are `RunRejection`
+bodies: `401` for a missing or invalid workload token, `503` with `Retry-After` for an unreachable
+key set, `403` for a token bound to no registered app. Every listed name is admitted as a run's `model`.
+
 The stream's events are `run_started`, `assistant_text`, `tool_call`,
 `tool_result`, `heartbeat` and one terminal event: `succeeded`, `failed`
 (with a `FailureCode`) or `cancelled`. `run_started` carries `model` (the full
@@ -64,7 +73,7 @@ A request the service refuses answers a `RunRejection` with one `RejectionCode`:
 
 | Code | Status | Meaning |
 |---|---|---|
-| `unauthorized` | 401 | A workload token is required, and a user token unless the app runs one of its own agents; every token sent must be valid and carry a readable `sub` and group claim. An `Agent-Job-Ticket` header on `POST /runs` or `GET /runs/{id}` is refused too. |
+| `unauthorized` | 401 | On `POST /runs` and `GET /runs/{id}`: a workload token is required, and a user token unless the app runs one of its own agents; every token sent must be valid and carry a readable `sub` and group claim. On `GET /models` only the workload token is read, and a missing or invalid one is refused. An `Agent-Job-Ticket` header on any of these routes is refused too. |
 | `forbidden` | 403 | The user is no member of the app, the request's `roles` lack the caller's role, the request names a tool while the app has no MCP origin, the two tokens do not belong together ([webauth's host contract](https://github.com/overnightworks/webauth/blob/v0.26.0/docs/host-contract.md#a-services-callers) lists the causes of both codes in the order they are checked: every 401 and 503 about the tokens comes before any 403), or a run without a user token names an agent the app may not run as itself. |
 | `not_enabled` | 403 | No route is enabled for this caller and model, the run names tools and the chosen subscription provider cannot take tools yet. |
 | `unsupported_version` | 400 | `v` is not the JSON integer 5. |

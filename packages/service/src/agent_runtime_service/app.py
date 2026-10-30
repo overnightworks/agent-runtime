@@ -37,6 +37,11 @@ that is never cached. No answer echoes a token. A ``GET /runs/{id}`` answers the
 ``RunStatus`` to its owner, and one ``not_found`` to everyone else: for an id
 nobody began, an expired or evicted run, another app's or user's run, and a
 path segment that is not a run id's text form.
+
+``GET /models`` answers the ``ModelList`` of ``ServiceConfig.offered_models`` to the workload
+token of any registered app, whether or not one of its agents runs as the app. It reads no
+``Authorization`` header and no run state, so every instance of one configuration answers the
+same bytes; a refusal is the caller check's, after the job-ticket refusal.
 """
 
 from __future__ import annotations
@@ -62,6 +67,8 @@ from agent_runtime import lost_groups
 from agent_runtime_client.capability import MAX_CAPABILITY_CHARACTERS
 from agent_runtime_client.wire import (
     PROTOCOL_VERSION,
+    ModelList,
+    ModelListEntry,
     ModelName,
     RejectionCode,
     RunRejection,
@@ -116,9 +123,9 @@ _MESSAGE: Final[Mapping[RejectionCode, str]] = {
     RejectionCode.NOT_ENABLED: "AI is not enabled for this request.",
     RejectionCode.BUSY: "The service is busy; retry later.",
     RejectionCode.UNSUPPORTED_VERSION: f"This service speaks protocol version {PROTOCOL_VERSION}.",
-    RejectionCode.UNAUTHORIZED: "A workload token is required, and a user token unless the app"
-    " runs one of its own agents; every token sent must be valid, and an"
-    f" {JOB_TICKET_HEADER} header is refused.",
+    RejectionCode.UNAUTHORIZED: "A workload token is required; a run also needs a user token unless"
+    " the app runs one of its own agents, and every token a run sends must be valid."
+    f" An {JOB_TICKET_HEADER} header is refused.",
     RejectionCode.FORBIDDEN: "The tokens do not permit this request.",
     RejectionCode.INVALID_REQUEST: "The body is not a valid request for the route.",
     RejectionCode.UNAVAILABLE: "The service cannot check tokens right now; retry later.",
@@ -180,6 +187,7 @@ def create_app(
         )
 
     app.get("/runs/{run_id}")(_run_status_route(callers, installed_records))
+    app.get("/models")(_models_route(callers, _model_list_of(config)))
 
     return app
 
@@ -384,6 +392,32 @@ def _run_status_route(
         )
 
     return run_status
+
+
+def _model_list_of(config: ServiceConfig) -> ModelList:
+    return ModelList(
+        v=PROTOCOL_VERSION,
+        data=[ModelListEntry(id=name) for name in sorted(config.offered_models())],
+    )
+
+
+def _models_route(
+    callers: CallerCheck, offer: ModelList
+) -> Callable[[Request], Awaitable[Response]]:
+    """``GET /models``: the offer to the workload token of any registered app, nothing else read."""
+    body = offer.model_dump_json()
+
+    async def models(request: Request) -> Response:
+        if JOB_TICKET_HEADER in request.headers:
+            return rejection(RejectionCode.UNAUTHORIZED)
+        caller = await callers.workload_caller(request.headers.get(WORKLOAD_TOKEN_HEADER))
+        if isinstance(caller, RejectionCode):
+            return rejection(caller)
+        return Response(
+            content=body, media_type=_JSON_MEDIA_TYPE, headers={"Cache-Control": "no-store"}
+        )
+
+    return models
 
 
 def rejection(code: RejectionCode) -> Response:
