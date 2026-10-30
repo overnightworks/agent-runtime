@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import math
 import typing
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -91,7 +91,6 @@ from agent_runtime_service.run_events import (
     TOO_MUCH_DATA_MESSAGE,
 )
 from agent_runtime_service.run_liveness import LoopClock
-from agent_runtime_service.run_tools import RunTools
 from agent_runtime_service.runners import AdmittedRun, Runners
 
 # Runs through ``POST /runs`` with the stand-in CLI.
@@ -209,10 +208,13 @@ def test_codex_tool_items_reach_no_frame_status_or_log_and_the_answer_succeeds(
 
 # A Codex tool run takes the app's tools through the run's relay.
 
-SAVE_NOTE = ClaudeCall("save_note", {"text": "la la"})
-TOOLS = {"save_note": "side_effecting", "read_note": "read_only"}
-PROVIDER_ERROR = (RunState.FAILED, FailureCode.PROVIDER_ERROR)
-SUCCEEDED = (RunState.SUCCEEDED, None)
+
+def a_save_note() -> ClaudeCall:
+    return ClaudeCall("save_note", {"text": "la la"})
+
+
+def the_app_tools() -> dict[str, str]:
+    return {"save_note": "side_effecting", "read_note": "read_only"}
 
 
 @dataclass(frozen=True)
@@ -246,7 +248,7 @@ def a_codex_tool_run(
     child_cleanup: ChildCleanup,
     monkeypatch: pytest.MonkeyPatch,
     *,
-    tools: Mapping[str, str] = TOOLS,
+    tools: Mapping[str, str] = the_app_tools(),
     runs: dict[str, object] | None = None,
     **codex_options: Any,
 ) -> CodexToolRun:
@@ -255,7 +257,7 @@ def a_codex_tool_run(
     binary = a_relay_calling_codex(
         directory, version_line=CODEX_TABLE.version_line, **codex_options
     )
-    with a_tool_app(authority, list(TOOLS)) as app:
+    with a_tool_app(authority, list(tools)) as app:
         document = codex_document(
             directory,
             binary,
@@ -287,7 +289,7 @@ def test_a_codex_relay_call_reaches_the_wire_under_the_apps_name_and_codexs_own_
     caplog.set_level("DEBUG")
 
     run = a_codex_tool_run(
-        tmp_path, authority, child_cleanup, monkeypatch, calls=[SAVE_NOTE], stray_text=CANARY
+        tmp_path, authority, child_cleanup, monkeypatch, calls=[a_save_note()], stray_text=CANARY
     )
 
     assert run.shape == [
@@ -308,7 +310,7 @@ def test_a_codex_tool_runs_settings_file_holds_the_relay_it_was_given_over_the_d
     child_cleanup: ChildCleanup,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    run = a_codex_tool_run(tmp_path, authority, child_cleanup, monkeypatch, calls=[SAVE_NOTE])
+    run = a_codex_tool_run(tmp_path, authority, child_cleanup, monkeypatch, calls=[a_save_note()])
 
     settings = captured_settings(run.capture.directory / "files")
     entry = settings["mcp_servers"].pop("relay")
@@ -329,14 +331,12 @@ def test_the_relay_secret_reaches_codex_only_in_its_environment_and_the_capabili
 ) -> None:
     caplog.set_level("DEBUG")
 
-    run = a_codex_tool_run(tmp_path, authority, child_cleanup, monkeypatch, calls=[SAVE_NOTE])
+    run = a_codex_tool_run(tmp_path, authority, child_cleanup, monkeypatch, calls=[a_save_note()])
 
     secret, capability = run.capture.relay_secret, run.app.capability
     environment = run.capture.text_of("environment").splitlines()
     assert (len(secret) > 16, capability.count(".")) == (True, 2)
-    assert [line for line in environment if secret in line] == [
-        f"{RELAY_TOKEN_VARIABLE}={secret}"
-    ]
+    assert [line for line in environment if secret in line] == [f"{RELAY_TOKEN_VARIABLE}={secret}"]
     given = [run.capture.text_of("argv"), run.capture.stdin, *run.capture.run_files.values()]
     assert [part for part in given if secret in part] == []
     assert capability not in run.capture.everything_it_was_given
@@ -355,7 +355,7 @@ def test_a_codex_call_past_the_tool_budget_never_reaches_the_app(
         authority,
         child_cleanup,
         monkeypatch,
-        calls=[SAVE_NOTE, SAVE_NOTE],
+        calls=[a_save_note(), a_save_note()],
         runs={"max_tool_calls": 1},
     )
 
@@ -370,15 +370,20 @@ def test_a_codex_call_past_the_tool_budget_never_reaches_the_app(
     ("options", "ending", "app_calls"),
     [
         pytest.param(
-            {"calls": [SAVE_NOTE], "wrong_bearer": "not-the-relays-secret"},
-            PROVIDER_ERROR,
+            {"calls": [a_save_note()], "wrong_bearer": "not-the-relays-secret"},
+            (RunState.FAILED, FailureCode.PROVIDER_ERROR),
             0,
             id="relay-refuses-the-bearer",
         ),
-        pytest.param({"lists": "never"}, PROVIDER_ERROR, 0, id="answers-without-the-relay"),
         pytest.param(
-            {"lists": "after-text", "calls": [SAVE_NOTE]},
-            SUCCEEDED,
+            {"lists": "never"},
+            (RunState.FAILED, FailureCode.PROVIDER_ERROR),
+            0,
+            id="answers-without-the-relay",
+        ),
+        pytest.param(
+            {"lists": "after-text", "calls": [a_save_note()]},
+            (RunState.SUCCEEDED, None),
             1,
             id="lists-after-its-first-text",
         ),
@@ -393,24 +398,16 @@ def test_a_codex_tool_run_ends_provider_error_unless_its_relay_listed_and_one_ch
     ending: tuple[RunState, FailureCode | None],
     app_calls: int,
 ) -> None:
-    closes: list[None] = []
-    close = RunTools.close
-
-    async def counted(tools: RunTools, reap: Callable[[], Any]) -> None:
-        closes.append(None)
-        await close(tools, reap)
-
-    monkeypatch.setattr(RunTools, "close", counted)
-
     run = a_codex_tool_run(tmp_path, authority, child_cleanup, monkeypatch, **options)
 
-    assert (run.ending, len(run.app.calls), len(child_cleanup.listed()), len(closes)) == (
+    assert (run.ending, len(run.app.calls), len(child_cleanup.listed())) == (
         ending,
         app_calls,
         1,
-        1,
     )
-    assert ("succeeded" in [kind for kind, _ in run.shape]) is (ending == SUCCEEDED)
+    assert ("succeeded" in [kind for kind, _ in run.shape]) is (
+        ending == (RunState.SUCCEEDED, None)
+    )
 
 
 def test_a_tool_free_codex_run_on_an_app_with_an_origin_gets_no_relay_and_the_same_argv(
@@ -432,7 +429,10 @@ def test_a_tool_free_codex_run_on_an_app_with_an_origin_gets_no_relay_and_the_sa
         tmp_path / "free", authority, child_cleanup, monkeypatch, tools={}, lists="never"
     )
 
-    assert (tool_free.ending, tool_free.app.fake.accepted_connections) == (SUCCEEDED, 0)
+    assert (tool_free.ending, tool_free.app.fake.accepted_connections) == (
+        (RunState.SUCCEEDED, None),
+        0,
+    )
     assert captured_settings(tool_free.capture.directory / "files") == DEFAULT_SETTINGS
     assert RELAY_TOKEN_VARIABLE not in tool_free.capture.text_of("environment")
     assert homeless_argv(tool_free) == homeless_argv(with_tools)

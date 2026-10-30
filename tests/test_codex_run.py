@@ -227,9 +227,7 @@ def test_the_stdin_is_the_history_as_one_transcript_in_app_order(tmp_path: Path)
     [
         pytest.param({"binary": Path("codex")}, "binary", id="relative-binary"),
         pytest.param({"history": ()}, "history", id="empty-history"),
-        pytest.param(
-            {"login": assess_codex_login(b"not json")}, "login", id="unusable-login"
-        ),
+        pytest.param({"login": assess_codex_login(b"not json")}, "login", id="unusable-login"),
         pytest.param({"login": a_codex_login()}, "login", id="login-of-the-wrong-type"),
     ],
 )
@@ -242,19 +240,12 @@ def test_a_run_with_a_refused_field_is_not_built_and_the_error_names_the_field(
     assert [secret for secret in (SYSTEM_TEXT, HISTORY_TEXT) if secret in str(refused.value)] == []
 
 
-RELAY_SECRET = "relay-secret-canary-0e5b"
-RELAY = RelayAccess(url="http://127.0.0.1:4711/", secret=RELAY_SECRET)
-RELAY_ENTRY_KEYS = {
-    "url",
-    "bearer_token_env_var",
-    "required",
-    "default_tools_approval_mode",
-    "tool_timeout_sec",
-}
+def a_relay() -> RelayAccess:
+    return RelayAccess(url="http://127.0.0.1:4711/", secret="relay-secret-canary-0e5b")
 
 
 def a_relay_run(*settings: CliSettings, tool_timeout_seconds: float = 900.0) -> CodexRun:
-    return a_run(relay=RELAY, tool_timeout_seconds=tool_timeout_seconds, settings=settings)
+    return a_run(relay=a_relay(), tool_timeout_seconds=tool_timeout_seconds, settings=settings)
 
 
 def written_settings(run: CodexRun) -> dict[str, Any]:
@@ -266,26 +257,37 @@ def test_a_relay_run_writes_the_relay_entry_and_the_defaults_beside_it() -> None
     entry = settings["mcp_servers"].pop("relay")
 
     assert settings == DEFAULT_SETTINGS
-    assert (entry.keys(), entry["url"], entry["required"]) == (RELAY_ENTRY_KEYS, RELAY.url, True)
+    assert (entry.keys(), entry["url"], entry["required"]) == (
+        {
+            "url",
+            "bearer_token_env_var",
+            "required",
+            "default_tools_approval_mode",
+            "tool_timeout_sec",
+        },
+        a_relay().url,
+        True,
+    )
     assert entry["default_tools_approval_mode"] == "approve"
 
 
 def test_the_relay_secret_is_only_in_the_variable_the_entry_names(tmp_path: Path) -> None:
+    secret = a_relay().secret
     run = a_relay_run()
     start = run.start(tmp_path / "home", tmp_path / "work")
     variable = written_settings(run)["mcp_servers"]["relay"]["bearer_token_env_var"]
 
     environment = start.child.environment
-    holders = [name for name, value in environment.items() if RELAY_SECRET in value]
+    holders = [name for name, value in environment.items() if secret in value]
     assert (variable, holders, environment[variable]) == (
         RELAY_TOKEN_VARIABLE,
         [variable],
-        RELAY_SECRET,
+        secret,
     )
     assert "TOKEN" in variable
     assert set(environment) == {*closed_environment(tmp_path / "home"), "CODEX_HOME", variable}
     visible = [*start.child.arguments, *run.run_files().values(), repr(run), repr(start)]
-    assert [part for part in visible if RELAY_SECRET in str(part)] == []
+    assert [part for part in visible if secret in str(part)] == []
 
 
 @pytest.mark.parametrize("seconds", [1.0, 2.5, 899.01])
@@ -337,10 +339,12 @@ def test_the_operators_own_servers_and_settings_stay_beside_the_relay() -> None:
 @pytest.mark.parametrize(
     "changes",
     [
-        pytest.param({"relay": RELAY}, id="relay-without-timeout"),
+        pytest.param({"relay": a_relay()}, id="relay-without-timeout"),
         pytest.param({"tool_timeout_seconds": 900.0}, id="timeout-without-relay"),
         *(
-            pytest.param({"relay": RELAY, "tool_timeout_seconds": seconds}, id=f"timeout-{seconds}")
+            pytest.param(
+                {"relay": a_relay(), "tool_timeout_seconds": seconds}, id=f"timeout-{seconds}"
+            )
             for seconds in (math.nan, math.inf, 0.0, -1.0)
         ),
     ],
@@ -351,7 +355,7 @@ def test_a_relay_and_its_tool_timeout_come_together_and_the_timeout_is_finite_an
     with pytest.raises(ChildProcessSpecificationError, match="tool_timeout_seconds") as refused:
         a_run(**changes)
 
-    assert RELAY_SECRET not in str(refused.value)
+    assert a_relay().secret not in str(refused.value)
 
 
 def test_the_happy_stream_is_its_text_events_then_the_last_message() -> None:
@@ -389,9 +393,7 @@ def test_the_final_text_is_the_last_message_stripped() -> None:
 @pytest.mark.parametrize("item_type", TOOL_ITEM_TYPES)
 def test_a_tool_item_is_dropped_without_an_event(event_type: str, item_type: str) -> None:
     stream = (
-        an_item(
-            event_type, item_type, command=CLI_TEXT, text=CLI_TEXT, aggregated_output=CLI_TEXT
-        ),
+        an_item(event_type, item_type, command=CLI_TEXT, text=CLI_TEXT, aggregated_output=CLI_TEXT),
     )
 
     assert decoded(stream) == []
@@ -404,9 +406,10 @@ def test_tool_items_around_the_answer_leave_only_the_answer_and_its_final_text()
     search = an_item("item.completed", "web_search", query=CLI_TEXT)
     change = an_item("item.completed", "file_change", changes=[{"path": CLI_TEXT}])
 
-    assert decoded_and_ended(
-        (TURN, failed_command, search, change, a_message("answer"), DONE)
-    ) == [AssistantTextEvent(text="answer"), FinalEvent(text="answer")]
+    assert decoded_and_ended((TURN, failed_command, search, change, a_message("answer"), DONE)) == [
+        AssistantTextEvent(text="answer"),
+        FinalEvent(text="answer"),
+    ]
 
 
 def test_a_tool_item_after_the_answer_changes_nothing() -> None:

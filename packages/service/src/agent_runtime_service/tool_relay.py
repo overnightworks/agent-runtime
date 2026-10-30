@@ -851,6 +851,8 @@ class CapabilityReflected(Exception):
 class RepeatedToolOffer(Exception):
     """The app offered one allowed tool more than once; the message names no tool."""
 
+    def __init__(self) -> None:
+        super().__init__("an allowed tool was offered more than once")
 
 class UnofferedTool(Exception):
     """A signed tool is missing from the app's list; the message names no tool."""
@@ -862,7 +864,7 @@ def _narrowed_to(
     permitted = frozenset(allowed)
     kept = [tool for tool in offered if tool.name in permitted]
     if len({tool.name for tool in kept}) != len(kept):
-        raise_without_chain(RepeatedToolOffer("an allowed tool was offered more than once"))
+        raise_without_chain(RepeatedToolOffer())
     if len(kept) != len(permitted):
         raise_without_chain(UnofferedTool("a signed tool is not in the app's list"))
     return tuple(kept)
