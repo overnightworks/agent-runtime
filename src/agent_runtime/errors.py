@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
@@ -41,7 +40,6 @@ class SafeRouteReasonCode(StrEnum):
     TOOL_EXECUTION_FAILED = "tool_execution_failed"
     TOOL_PROTOCOL_ERROR = "tool_protocol_error"
     TOOL_LIMIT_EXCEEDED = "tool_limit_exceeded"
-    NO_IMAGE_TOOL = "no_image_tool"
     ROUTE_FAILED = "route_failed"
 
 
@@ -67,7 +65,6 @@ _SAFE_MESSAGES: dict[SafeRouteReasonCode, str] = {
     SafeRouteReasonCode.TOOL_EXECUTION_FAILED: "Tool failed.",
     SafeRouteReasonCode.TOOL_PROTOCOL_ERROR: "Tool response was invalid.",
     SafeRouteReasonCode.TOOL_LIMIT_EXCEEDED: "Tool-call limit was reached.",
-    SafeRouteReasonCode.NO_IMAGE_TOOL: "no image tool",
     SafeRouteReasonCode.ROUTE_FAILED: "Selected route failed.",
 }
 
@@ -153,13 +150,11 @@ class ProviderModelCatalogUnavailableError(ProviderError):
 class CodexProcessPoolSaturatedError(Exception):
     """Codex admission was refused before a CLI process could start."""
 
-    def __init__(self, *, kind: str, scope: str) -> None:
-        self.kind = kind
-        self.scope = scope
-        super().__init__(f"Codex {scope} process capacity is busy")
+    def __init__(self) -> None:
+        super().__init__("Codex process capacity is busy")
 
     def __reduce__(self) -> _Reduction:
-        return (partial(type(self), kind=self.kind, scope=self.scope), (), self.__dict__)
+        return (type(self), (), self.__dict__)
 
 
 @dataclass(frozen=True)

@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from typing import Final
 
 from agent_runtime.codex.pool import (
-    CodexProcessKind,
     CodexProcessReservation,
     get_codex_process_pool,
 )
@@ -254,7 +253,7 @@ class CodexCliToolTransport:
             )
         home_reservation = self._turn_home.home.reserve()
         try:
-            reservation = self._process_pool.reserve(CodexProcessKind.TEXT)
+            reservation = self._process_pool.reserve()
         except CodexProcessPoolSaturatedError as exc:
             home_reservation.release()
             raise ProviderUnavailableError(

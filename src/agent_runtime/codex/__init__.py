@@ -1,1 +1,1 @@
-"""Codex backends: the subscription CLI transport, its image route, and process admission."""
+"""Codex backends: the subscription CLI transport and process admission."""

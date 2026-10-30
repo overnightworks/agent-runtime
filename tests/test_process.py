@@ -84,7 +84,7 @@ from tests.support.provider_test_support import (
 
 import agent_runtime_client
 from agent_runtime import lost_groups, process
-from agent_runtime.codex.pool import CodexProcessKind, CodexProcessPool
+from agent_runtime.codex.pool import CodexProcessPool
 from agent_runtime.codex.protocol import codex_child_process, create_codex_turn_home
 from agent_runtime.codex_login import _blanked_document, assess_codex_login, blanked_copy
 from agent_runtime.config import current_claude_runtime, current_codex_runtime, current_config
@@ -1541,8 +1541,8 @@ def test_bounded_runner_reports_a_failing_release_callback_and_keeps_the_reserva
     monkeypatch, caplog, capfd,
 ) -> None:
     watch = RunnerFailureWatch(monkeypatch, caplog, capfd)
-    process_pool = CodexProcessPool(maximum_processes=2, maximum_image_runs=1)
-    reservation = process_pool.reserve(CodexProcessKind.IMAGE)
+    process_pool = CodexProcessPool(maximum_processes=2)
+    reservation = process_pool.reserve()
     child = fake_cli_process(None)
     process_pool.bind(reservation, child.pid)
 
@@ -1573,8 +1573,8 @@ def test_a_background_reap_ends_at_its_bound_and_keeps_what_it_holds(
     tmp_path: Path, a_background_reap_over_a_group_that_never_dies, caplog,
 ) -> None:
     held = a_background_reap_over_a_group_that_never_dies
-    process_pool = CodexProcessPool(maximum_processes=2, maximum_image_runs=1)
-    pool_reservation = process_pool.reserve(CodexProcessKind.IMAGE)
+    process_pool = CodexProcessPool(maximum_processes=2)
+    pool_reservation = process_pool.reserve()
     home = _build_home(_a_source_login(tmp_path))
     home_reservation = home.reserve()
     child = _a_group_that_never_dies()
@@ -5314,8 +5314,8 @@ def test_the_failure_watch_hands_a_foreign_thread_error_on_to_the_previous_hook(
 
 @pytest.fixture
 def pooled_run() -> tuple[CodexProcessPool, dict]:
-    process_pool = CodexProcessPool(maximum_processes=2, maximum_image_runs=1)
-    reservation = process_pool.reserve(CodexProcessKind.IMAGE)
+    process_pool = CodexProcessPool(maximum_processes=2)
+    reservation = process_pool.reserve()
     return process_pool, pool_callbacks(process_pool, reservation)
 
 

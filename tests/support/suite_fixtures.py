@@ -77,10 +77,7 @@ _SAMPLE_MCP_SERVER = McpServerSpec(
 _SAMPLE_TURNS = TurnRuntimeConfig(
     mcp_server=_SAMPLE_MCP_SERVER,
     codex=CodexTurnRuntime(
-        code_mode_host_binary=_SAMPLE_ROOT / "codex" / "code-mode-host",
-        resources_directory=_SAMPLE_ROOT / "codex" / "resources",
         max_concurrent_processes=4,
-        max_concurrent_image_runs=2,
     ),
     grok=GrokTurnRuntime(
         prompt_file_prefix="notes-cli-prompt-",

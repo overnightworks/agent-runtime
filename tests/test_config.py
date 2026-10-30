@@ -31,6 +31,7 @@ from agent_runtime.catalog import (
 )
 from agent_runtime.claude import provider as claude_provider
 from agent_runtime.config import (
+    CodexTurnRuntime,
     GrokTurnRuntime,
     McpServerSpec,
     PrivateWorkingRoot,
@@ -89,6 +90,24 @@ def test_turn_config_refuses_the_removed_chat_model() -> None:
 
     assert [error["type"] for error in refused.value.errors()] == ["extra_forbidden"]
     assert refused.value.errors()[0]["loc"] == ("claude_chat_model",)
+
+
+@pytest.mark.parametrize(
+    "removed_field",
+    [
+        pytest.param("max_concurrent_image_runs", id="max-concurrent-image-runs"),
+        pytest.param("code_mode_host_binary", id="code-mode-host-binary"),
+        pytest.param("resources_directory", id="resources-directory"),
+    ],
+)
+def test_codex_turn_block_refuses_a_removed_field(removed_field: str) -> None:
+    codex_facts = current_turn_config().codex.model_dump()
+
+    with pytest.raises(ValidationError) as refused:
+        CodexTurnRuntime(**codex_facts, **{removed_field: 1})
+
+    assert [error["type"] for error in refused.value.errors()] == ["extra_forbidden"]
+    assert refused.value.errors()[0]["loc"] == (removed_field,)
 
 
 THE_ROOT_NAME = "canary-root-5d1e"
@@ -572,7 +591,6 @@ def test_a_host_with_a_removed_flat_codex_field_is_refused_naming_the_field(
         pytest.param("codex_code_mode_host_binary", id="code-mode-host-binary"),
         pytest.param("codex_resources_directory", id="resources-directory"),
         pytest.param("codex_max_concurrent_processes", id="max-concurrent-processes"),
-        pytest.param("codex_max_concurrent_image_runs", id="max-concurrent-image-runs"),
     ],
 )
 def test_a_host_with_a_removed_flat_codex_turn_field_is_refused_naming_the_field(
