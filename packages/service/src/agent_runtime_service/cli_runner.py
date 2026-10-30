@@ -87,18 +87,19 @@ def claude_run(launch: ProviderLaunch) -> LoggedInRun:
     return partial(_claude_run, launch, SecretStr(read_token_file(launch.token_file)))
 
 
-def _refused_relay(provider: str, inputs: RunInputs) -> None:
+def _tool_free_run(
+    run_type: type[CodexRun] | type[GrokRun],
+    launch: ProviderLaunch,
+    login: CodexLogin | GrokLogin,
+    inputs: RunInputs,
+) -> CliRunAdapter:
     if inputs.relay is not None:
         raise ValueError(
-            f"a {provider} run has no tool relay; admission refuses tools before this point"
+            f"a {launch.provider} run has no tool relay; admission refuses tools before this point"
         )
-
-
-def _codex_run(launch: ProviderLaunch, login: CodexLogin, inputs: RunInputs) -> CliRunAdapter:
-    _refused_relay("Codex", inputs)
-    return CodexRun(
+    return run_type(
         launch.binary,
-        login,
+        login,  # type: ignore[arg-type]  # each provider's reader returns its own run's login
         inputs.turn.system,
         tuple(inputs.turn.messages),
         model=inputs.model,
@@ -107,22 +108,11 @@ def _codex_run(launch: ProviderLaunch, login: CodexLogin, inputs: RunInputs) -> 
 
 
 def codex_run(launch: ProviderLaunch) -> LoggedInRun:
-    return partial(_codex_run, launch, read_codex_login(launch.token_file))
-
-
-def _grok_run(launch: ProviderLaunch, login: GrokLogin, inputs: RunInputs) -> CliRunAdapter:
-    _refused_relay("Grok", inputs)
-    return GrokRun(
-        launch.binary,
-        login,
-        inputs.turn.system,
-        tuple(inputs.turn.messages),
-        model=inputs.model,
-    )
+    return partial(_tool_free_run, CodexRun, launch, read_codex_login(launch.token_file))
 
 
 def grok_run(launch: ProviderLaunch) -> LoggedInRun:
-    return partial(_grok_run, launch, read_grok_login(launch.token_file))
+    return partial(_tool_free_run, GrokRun, launch, read_grok_login(launch.token_file))
 
 
 RUN_ADAPTERS: Final[Mapping[Provider, AdapterFactory]] = {

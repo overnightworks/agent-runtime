@@ -6,8 +6,9 @@ required, and ``model`` may be set again in ``[apps.<app>]`` and in
 startup refuses one that no ``[cli.<provider>]`` table lists in its ``models``.
 
 ``cli_settings`` may be set at the same three levels. ``cli_settings.openai`` holds Codex's own
-settings in Codex's own shape; ``cli_settings.anthropic`` holds Claude's, a ``tools`` list of
-built-in tool names and a ``settings`` table in Claude's own settings keys. The service passes
+settings in Codex's own shape; ``cli_settings.xai`` holds Grok's, in Grok's own ``config.toml``
+keys; ``cli_settings.anthropic`` holds Claude's, a ``tools`` list of built-in tool names and a
+``settings`` table in Claude's own settings keys. The service passes
 them through without a mapping, lowest level first, and refuses only a key whose fact another
 owner holds, and a value its run files cannot encode faithfully. It governs CLI runs only.
 
@@ -529,7 +530,7 @@ RULES_ON_THE_RAW_DOCUMENT: Final = (
 _CLI_SETTINGS_LEVEL: Final[Mapping[Provider, Callable[[CliSettingsConfig], CliSettings]]] = {
     Provider.ANTHROPIC: lambda table: table.anthropic.as_level(),
     Provider.OPENAI: lambda table: cast("CliSettings", table.openai),
-    Provider.XAI: lambda table: {},
+    Provider.XAI: lambda table: cast("CliSettings", table.xai),
 }
 
 

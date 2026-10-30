@@ -5,8 +5,8 @@ operator's `[defaults]`, app and agent tables (#488 F1). Tables merge per key, r
 any other pair is replaced by the later value. The merge is not associative, so callers pass
 every level to one call instead of merging some levels first.
 
-The merged settings are written as a TOML document (`toml_document`), the form the Codex CLI reads
-its configuration in.
+The merged settings are written as a TOML document (`toml_document`), the form the Codex and
+Grok CLIs read their configuration in.
 """
 
 from __future__ import annotations

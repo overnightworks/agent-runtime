@@ -8,7 +8,6 @@ child, with no installed core configuration; the rows every table has are those 
 
 from __future__ import annotations
 
-import tomllib
 import typing
 from pathlib import Path
 from typing import Any
@@ -52,8 +51,10 @@ from tests.support.service_table_support import (
     a_service_fake,
     a_table_service,
     argv_of,
+    captured_settings,
     codex_document,
     with_claude_beside,
+    with_levels,
 )
 
 import agent_runtime_service.cli_runner as cli_runner
@@ -66,7 +67,6 @@ from agent_runtime_service.capability import Capability
 from agent_runtime_service.config import Provider, ServiceConfig
 from agent_runtime_service.run_events import (
     INVALID_EVENT_MESSAGE,
-    RUNNER_FAILED_MESSAGE,
     TOO_MUCH_DATA_MESSAGE,
 )
 from agent_runtime_service.runners import AdmittedRun
@@ -199,63 +199,6 @@ def test_no_run_adapter_factory_sees_the_admitted_run_or_its_capability() -> Non
 
 # The operator's ``cli_settings`` reach the run as its settings file.
 
-LEVEL_SETTINGS = (
-    {"web_search": "live", "features": False},
-    {"features": {"plugins": False, "hooks": True}},
-    {"features": {"image_generation": True}},
-)
-SETTING_CANARY = "setting-canary-6d02"
-
-
-def with_levels(document: dict[str, Any], agent: str, *levels: dict[str, Any]) -> dict[str, Any]:
-    defaults, app, agent_level = levels
-    document["defaults"]["cli_settings"] = {"openai": defaults}
-    songmaker = document["apps"]["songmaker"]
-    songmaker["cli_settings"] = {"openai": app}
-    songmaker["agents"] = {agent: {"cli_settings": {"openai": agent_level}}}
-    return document
-
-
-def captured_settings(capture: Path) -> dict[str, Any]:
-    return tomllib.loads((capture / "config.toml").read_text())
-
-
-@pytest.mark.parametrize(
-    ("agent", "features"),
-    [
-        pytest.param(
-            COWRITER,
-            {"plugins": False, "hooks": True, "image_generation": True},
-            id="the-agent-with-a-table",
-        ),
-        pytest.param(
-            "another-agent",
-            {"plugins": False, "hooks": True},
-            id="an-agent-without-one",
-        ),
-    ],
-)
-def test_the_three_levels_reach_the_run_as_one_merged_file_only_the_service_wrote(
-    tmp_path: Path,
-    child_cleanup: ChildCleanup,
-    monkeypatch: pytest.MonkeyPatch,
-    agent: str,
-    features: dict[str, bool],
-) -> None:
-    login = a_codex_login_file(tmp_path)
-    capture = tmp_path / "capture"
-    binary = a_service_fake(tmp_path, capture=capture)
-    document = with_levels(codex_document(tmp_path, binary, login), agent, *LEVEL_SETTINGS)
-
-    events = drive_over_http(child_cleanup, monkeypatch, a_codex_config(document), post_a_run)
-
-    assert shown(events)[-1] == ("succeeded", "done")
-    assert captured_settings(capture) == {
-        **DEFAULT_SETTINGS,
-        "web_search": "live",
-        "features": features,
-    }
-
 
 def test_an_operators_sandbox_mode_at_every_level_reaches_the_run_beside_the_services_arguments(
     tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
@@ -268,7 +211,7 @@ def test_an_operators_sandbox_mode_at_every_level_reaches_the_run_beside_the_ser
         {"sandbox_mode": "workspace-write"},
         {"sandbox_mode": "workspace-write", "approval_policy": "on-request"},
     )
-    document = with_levels(codex_document(tmp_path, binary, login), COWRITER, *levels)
+    document = with_levels(codex_document(tmp_path, binary, login), CODEX_TABLE, COWRITER, *levels)
 
     events = drive_over_http(child_cleanup, monkeypatch, a_codex_config(document), post_a_run)
 
@@ -284,45 +227,6 @@ def test_an_operators_sandbox_mode_at_every_level_reaches_the_run_beside_the_ser
         True,
         True,
     )
-
-
-def test_a_run_without_cli_settings_gets_the_defaults_and_answers_as_before(
-    tmp_path: Path, child_cleanup: ChildCleanup, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    config, capture = a_codex_service(tmp_path)
-
-    events = drive_over_http(child_cleanup, monkeypatch, config, post_a_run)
-
-    assert (shown(events), captured_settings(capture)) == (
-        [("assistant_text", "done"), ("succeeded", "done")],
-        DEFAULT_SETTINGS,
-    )
-
-
-def test_a_run_the_program_refuses_ends_closed_and_no_setting_or_program_text_reaches_a_frame(
-    tmp_path: Path,
-    child_cleanup: ChildCleanup,
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    login = a_codex_login_file(tmp_path)
-    binary = a_service_fake(tmp_path, stream=(), then=f"echo {CANARY} >&2; exit 1")
-    document = codex_document(tmp_path, binary, login)
-    document["defaults"]["cli_settings"] = {"openai": {"invented_key": SETTING_CANARY}}
-
-    def scenario(base_url: str) -> Any:
-        events = post_a_run(base_url)
-        return events, status_of(base_url, events)
-
-    events, status = drive_over_http(child_cleanup, monkeypatch, a_codex_config(document), scenario)
-
-    assert (shown(events), status.failure_code) == (
-        [("failed", RUNNER_FAILED_MESSAGE)],
-        FailureCode.PROVIDER_ERROR,
-    )
-    assert [kind for _event, kind, _function in failure_lines(caplog)] == ["CodexAnswerMissing"]
-    seen = f"{[e.model_dump_json() for e in events]} {status.model_dump_json()} {caplog.text}"
-    assert (CANARY in seen, SETTING_CANARY in seen) == (False, False)
 
 
 def claude_argv_of_a_run(

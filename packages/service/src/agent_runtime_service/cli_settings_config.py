@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Final, Self, cast
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator, model_validator
 
 from agent_runtime.claude.run import check_tool_name, settings_document
 from agent_runtime.cli_settings import CliSettings
@@ -14,15 +15,18 @@ class _CliSettingsSection(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
-_CODEX_KEYS_THE_SERVICE_OWNS: Final = {
-    "model": "model",
-    "model_provider": "model",
-    "model_instructions_file": "the run request's system text",
-    "cli_auth_credentials_store": "[cli.openai] token_file",
+_ANY_ID: Final = "<id>"
+_OwnedPaths = Mapping[tuple[str, ...], str]
+
+_CODEX_SETTINGS_THE_SERVICE_OWNS: Final[_OwnedPaths] = {
+    ("model",): "set model instead",
+    ("model_provider",): "set model instead",
+    ("model_instructions_file",): "set the run request's system text instead",
+    ("cli_auth_credentials_store",): "set [cli.openai] token_file instead",
 }
 
 
-_CLAUDE_SETTINGS_THE_SERVICE_OWNS: Final = {
+_CLAUDE_SETTINGS_THE_SERVICE_OWNS: Final[_OwnedPaths] = {
     ("model",): "set model instead",
     ("fallbackModel",): "set model instead",
     ("agent",): "set the run request's system text and model instead",
@@ -32,13 +36,95 @@ _CLAUDE_SETTINGS_THE_SERVICE_OWNS: Final = {
 }
 _APP_TOOL_PREFIX: Final = "mcp__"
 
+_GROK_TOKEN_OWNER: Final = "set [cli.xai] token_file instead"
+_GROK_PATCH_OWNER: Final = "it can patch keys the service owns"
+_GROK_SYSTEM_TEXT_OWNER: Final = "set the run request's system text instead"
+_GROK_TOOL_FREE_OWNER: Final = "the run is tool-free (--{switch})"
+_GROK_CREDENTIAL_CARRIER_OWNER: Final = (
+    f"they can carry the inference credential; {_GROK_TOKEN_OWNER}"
+)
+# Grok reads the sign-in table under both of its names, so each owned path is written once.
+_GROK_SIGN_IN_TABLES: Final = ("auth", "grok_com_config")
+_GROK_SIGN_IN_KEYS: Final = (
+    "auth_provider_command",
+    "preferred_method",
+    "oidc",
+    "oauth2",
+    "token_header",
+)
 
-def _claude_setting_is_set(settings: object, path: tuple[str, ...]) -> bool:
-    for key in path:
-        if not isinstance(settings, dict) or key not in settings:
-            return False
-        settings = settings[key]
-    return True
+
+def _grok_settings_the_service_owns() -> _OwnedPaths:
+    owned: dict[tuple[str, ...], str] = {
+        ("models", "default"): "set model instead",
+        ("permission", "deny"): _GROK_TOOL_FREE_OWNER.format(switch='deny "*"'),
+        ("subagents", "enabled"): _GROK_TOOL_FREE_OWNER.format(switch="no-subagents"),
+        ("disable_web_search",): _GROK_TOOL_FREE_OWNER.format(switch="disable-web-search"),
+        ("models", "extra_headers"): _GROK_CREDENTIAL_CARRIER_OWNER,
+        ("models", "agent_type"): _GROK_SYSTEM_TEXT_OWNER,
+        ("model", _ANY_ID, "model_provider"): "set model instead",
+        ("model", _ANY_ID, "system_prompt_label"): _GROK_SYSTEM_TEXT_OWNER,
+        ("model", _ANY_ID, "agent_type"): _GROK_SYSTEM_TEXT_OWNER,
+        ("agent",): _GROK_SYSTEM_TEXT_OWNER,
+        ("model_providers",): _GROK_TOKEN_OWNER,
+        ("auth_provider",): _GROK_TOKEN_OWNER,
+    }
+    for table in _GROK_SIGN_IN_TABLES:
+        for key in _GROK_SIGN_IN_KEYS:
+            owned[(table, key)] = _GROK_TOKEN_OWNER
+    for key in ("api_key", "env_key", "auth_provider"):
+        owned[("model", _ANY_ID, key)] = _GROK_TOKEN_OWNER
+    for key in ("extra_headers", "query_params", "mtls_cert_dir"):
+        owned[("model", _ANY_ID, key)] = _GROK_CREDENTIAL_CARRIER_OWNER
+    for path in (
+        ("experiments",),
+        ("version_overrides",),
+        ("campaigns",),
+        ("features", "managed_config"),
+        ("features", "campaigns"),
+        ("endpoints", "managed_config_url"),
+    ):
+        owned[path] = _GROK_PATCH_OWNER
+    return owned
+
+
+_SETTINGS_THE_SERVICE_OWNS_BY_TABLE: Final[Mapping[str, _OwnedPaths]] = {
+    "openai": _CODEX_SETTINGS_THE_SERVICE_OWNS,
+    "xai": _grok_settings_the_service_owns(),
+}
+
+
+def _set_path(settings: object, path: tuple[str, ...]) -> tuple[str, ...] | None:
+    """The concrete path of ``path`` in the parsed table tree, or ``None`` when it is not set.
+
+    An ``<id>`` segment matches any key; a value, even an empty table or array, makes a path set.
+    The walk never descends into an array.
+    """
+    if not isinstance(settings, dict):
+        return None
+    key, *rest = path
+    for found in settings if key == _ANY_ID else [key]:
+        if found not in settings:
+            continue
+        if not rest:
+            return (found,)
+        below = _set_path(settings[found], tuple(rest))
+        if below is not None:
+            return (found, *below)
+    return None
+
+
+def _first_owned_refusal(settings: object, owned: _OwnedPaths, prefix: str = "") -> str | None:
+    for path, owner in owned.items():
+        found = _set_path(settings, path)
+        if found is not None:
+            path_text = ".".join(_dotted_segment(key) for key in found)
+            return f"{prefix}{path_text} is the service's; {owner}"
+    return None
+
+
+def _dotted_segment(key: str) -> str:
+    return f'"{key}"' if "." in key else key
 
 
 class ClaudeCliSettingsConfig(_CliSettingsSection):
@@ -77,9 +163,11 @@ class ClaudeCliSettingsConfig(_CliSettingsSection):
                 raise ValueError(
                     f"tools[{index}] is the service's; set the app's MCP origin instead"
                 )
-        for path, owner in _CLAUDE_SETTINGS_THE_SERVICE_OWNS.items():
-            if _claude_setting_is_set(self.settings or {}, path):
-                raise ValueError(f"settings.{'.'.join(path)} is the service's; {owner}")
+        refusal = _first_owned_refusal(
+            self.settings or {}, _CLAUDE_SETTINGS_THE_SERVICE_OWNS, prefix="settings."
+        )
+        if refusal is not None:
+            raise ValueError(refusal)
         return self
 
     def as_level(self) -> CliSettings:
@@ -101,12 +189,17 @@ class CliSettingsConfig(_CliSettingsSection):
     anthropic: ClaudeCliSettingsConfig = ClaudeCliSettingsConfig()
     openai: dict[str, object] = {}
 
-    @field_validator("openai")
+    xai: dict[str, object] = {}
+
+    @field_validator("openai", "xai")
     @classmethod
     def _keys_the_service_owns_are_not_set_here(
-        cls, settings: dict[str, object]
+        cls, settings: dict[str, object], info: ValidationInfo
     ) -> dict[str, object]:
-        for key, owner in _CODEX_KEYS_THE_SERVICE_OWNS.items():
-            if key in settings:
-                raise ValueError(f"{key} is the service's; set {owner} instead")
+        assert info.field_name is not None  # noqa: S101 - a field validator always runs for a named field
+        refusal = _first_owned_refusal(
+            settings, _SETTINGS_THE_SERVICE_OWNS_BY_TABLE[info.field_name]
+        )
+        if refusal is not None:
+            raise ValueError(refusal)
         return settings

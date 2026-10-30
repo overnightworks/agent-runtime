@@ -129,10 +129,11 @@ and a restart; it revokes nothing already admitted.
 
 A subscription CLI keeps its own settings. `cli_settings` holds them in that CLI's own shape,
 and the service passes them through without a mapping; it governs CLI runs only, and the API
-route ignores it. `cli_settings.openai` (Codex) and `cli_settings.anthropic` (Claude) are
-accepted; any other key stops startup as an unknown field, and `openai` must be a table. The
-Codex table takes the unquoted dotted keys of Codex's own `config.toml`; a quoted key such as
-`"features.image_generation"` stays one literal key. Claude's table is described [below](#claude).
+route ignores it. `cli_settings.openai` (Codex), `cli_settings.xai` (Grok) and
+`cli_settings.anthropic` (Claude) are accepted; any other key stops startup as an unknown field,
+and `openai` and `xai` must be tables. The Codex table takes the unquoted dotted keys of Codex's
+own `config.toml`; a quoted key such as `"features.image_generation"` stays one literal key.
+Grok's table is described [below](#grok) and Claude's [below](#claude).
 
 ```toml
 [defaults.cli_settings.openai]
@@ -247,6 +248,58 @@ One invalid value in `cli-settings.json` (for example `sandbox.enabled = "yes"`)
 that whole file silently, and typos are not caught at startup. The sandbox default stays in force
 in that case, because it lives in the other layer.
 
+### Grok
+
+`cli_settings.xai` takes the keys of Grok's own `config.toml`, unquoted and dotted like Codex's. The
+levels merge in the order above, with no adapter default: the service writes the result as the
+run's `config.toml` (mode 0600, in the run's fresh `$GROK_HOME`, even when empty), which is the
+program's user layer, and no setting value appears in its arguments or environment. The three
+tool-free switches (`--deny "*"`, `--no-subagents`, `--disable-web-search`) stay on the command
+line. Grok's first-run write appends a `[marketplace]` table to that file in the run's own home.
+
+```toml
+[apps.notes.cli_settings.xai]
+ui.max_thoughts_width = 120
+```
+
+These paths stop startup at any level (exit 2, `--check` agrees), naming the level, the path you
+wrote and its owner, never the value:
+
+| Path | Owner |
+|---|---|
+| `models.default`, `model.<id>.model_provider` | set `model` |
+| `permission.deny`, `subagents.enabled`, `disable_web_search` | the run is tool-free |
+| `auth.*` and `grok_com_config.*` for `auth_provider_command`, `preferred_method`, `oidc`, `oauth2`, `token_header`; `model.<id>.{api_key, env_key, auth_provider}`; `model_providers`; `auth_provider` | `[cli.xai] token_file` |
+| `models.extra_headers`, `model.<id>.{extra_headers, query_params, mtls_cert_dir}` (even as `{}`): a header, query or mTLS identity can carry the inference credential | `[cli.xai] token_file` |
+| `agent`, `models.agent_type`, `model.<id>.{agent_type, system_prompt_label}` | the run request's system text |
+| `experiments`, `version_overrides`, `campaigns`, `features.managed_config`, `features.campaigns`, `endpoints.managed_config_url` | they can patch keys the service owns |
+
+`<id>` matches any model name, quoted names with dots included. Whole tables and the three
+self-patching arrays are owned even when empty. Paths are checked on the parsed tables, so
+`[auth]`, `auth.x = …` and `auth = { x = … }` are one path, while a quoted `"auth.preferred_method"`
+is one literal top-level key that Grok ignores like any unknown key, and loads.
+
+Everything else loads and reaches the file unchanged, each class the operator's deliberate setting:
+the other `endpoints.*` keys and `model.<id>.{base_url, api_base_url, model, env_http_headers}`
+(egress, bounded by the host's network allowlist, not here); model choices (`models.allowed_models`
+and the other tuning keys); keys that label, time or narrow the login and replace none
+(`auth.auth_token_ttl`, `auth.force_login_team_uuid`, `grok_com_config.*` twins); rule directories
+(`paths.extra_rule_dirs`, `compat.*.rules`); `hooks.*` and `ui.*`; and the tool surface
+(`permission.allow`, `ask`, `rules`, the other `subagents.*`, `mcp_servers.*`, `tools.*`,
+`sandbox.*`, `skills.*`, `plugins.*` and the like). The run is tool-free by command line and a tool
+event ends it, but that is not effect-free: configured hooks run commands and MCP configuration
+can start processes, which are the operator's trusted choices. The service sets no telemetry or
+auto-update default.
+
+The service cannot see undocumented keys and aliases, the host's `/etc/grok/{managed_config,
+requirements}.toml`, or managed configuration, requirements or campaign patches the program
+downloads into `$GROK_HOME` by its own defaults; requirements outrank the command line. Whether the
+pinned program fetches them under a subscription login is not measured.
+
+A typo is not caught at startup. On `grok 1.0.60` a mistyped value prints `Error: Failed to create
+agent config: …` and the key on stderr only, with an empty stdout and exit 1, so the run ends
+`failed: provider_error` and the log names `GrokAnswerMissing`, not the key.
+
 ## The subscription login
 
 The agent service holds the one login per provider for all apps. Only the
@@ -300,13 +353,13 @@ full document. The document comes from `grok login --device-code`, made in a hom
 never the operator's terminal home, which the host's setup (hal's guided login) does; the
 service installs it with `agent-runtime-service-login --provider xai`. A run serves text only:
 the route's model reaches the program as one `--model=<name>` argument, and a request that names
-tools is refused at admission. The service sets no settings for Grok, and `cli_settings.xai` is
-refused.
+tools is refused at admission. The operator's settings for Grok are `cli_settings.xai` ("CLI
+settings").
 
 **What a CLI run does with tools.** A Codex tool item in the stream does not fail the run; the
 service drops it and no frame shows it. A Grok tool event ends the run `failed: provider_error`,
 because the program starts with `--deny "*"`, `--no-subagents`, `--disable-web-search` and
-`--max-turns 1`. An item or event type the adapter does not know still ends
+`--max-turns 1`; their config keys are the service's too ("CLI settings"). An item or event type the adapter does not know still ends
 the run `failed: provider_error`. The service switches off by default the features its Codex adapter
 names ("CLI settings"), and every other feature follows the pinned CLI. At every pin bump the
 operator compares that list with `codex features list`, run with `HOME` and `CODEX_HOME` set to one

@@ -9,7 +9,8 @@ listed model and its pinned version (Codex: ``gpt-5.5`` and 0.163.0; Grok: ``gro
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+import tomllib
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -18,6 +19,7 @@ from typing import Any
 import pytest
 import uvicorn
 from pydantic import ValidationError
+from tests.support.codex_support import DEFAULT_SETTINGS as CODEX_DEFAULT_SETTINGS
 from tests.support.codex_support import DONE, THREAD, a_fake_codex, a_message, an_item, codex_line
 from tests.support.codex_support import PRECONDITIONS_MARKER as CODEX_PRECONDITIONS_MARKER
 from tests.support.grok_support import END, a_fake_grok, a_text, grok_line
@@ -93,6 +95,10 @@ class ProviderTable:
     foreign_login: bytes
     """A sound login of the other table: no sign-in of this one."""
     failing_runs: tuple[FailingRun, ...]
+    default_settings: Mapping[str, Any]
+    """What the service's run file holds when the operator sets nothing."""
+    refused_run: FailingRun
+    """What the program prints and does when it refuses a mistyped setting."""
 
     @property
     def listed(self) -> str:
@@ -214,6 +220,10 @@ CODEX_TABLE = ProviderTable(
     empty_token_login=a_codex_login(tokens={"id_token": ""}),
     keyless_login=json.dumps({"auth_mode": "chatgpt"}).encode(),
     foreign_login=a_grok_login_with(),
+    default_settings=CODEX_DEFAULT_SETTINGS,
+    refused_run=FailingRun(
+        "refused-setting", (), f"echo {CANARY} >&2; exit 1", "CodexAnswerMissing"
+    ),
     failing_runs=(
         FailingRun(
             "failed-turn-with-a-bare-401",
@@ -274,6 +284,13 @@ GROK_TABLE = ProviderTable(
     empty_token_login=a_grok_login_with(""),
     keyless_login=json.dumps({"xai.example": {"refresh_token": GROK_REFRESH_CANARY}}).encode(),
     foreign_login=a_codex_login(),
+    default_settings={},
+    refused_run=FailingRun(
+        "refused-setting",
+        (),
+        f"echo 'Error: Failed to create agent config: {CANARY}' >&2; echo 'in `ui.x`' >&2; exit 1",
+        "GrokAnswerMissing",
+    ),
     failing_runs=(
         FailingRun(
             "failed-turn-with-a-bare-401",
@@ -388,3 +405,20 @@ def a_table_service(
 
 def argv_of(capture: Path) -> list[str]:
     return (capture / "argv").read_text().splitlines()
+
+
+def with_levels(
+    document: dict[str, Any], table: ProviderTable, agent: str, *levels: dict[str, Any]
+) -> dict[str, Any]:
+    """``document`` with the table's ``cli_settings`` at defaults, the app and ``agent``."""
+    defaults, app, agent_level = levels
+    key = table.provider.value
+    document["defaults"]["cli_settings"] = {key: defaults}
+    songmaker = document["apps"]["songmaker"]
+    songmaker["cli_settings"] = {key: app}
+    songmaker["agents"] = {agent: {"cli_settings": {key: agent_level}}}
+    return document
+
+
+def captured_settings(capture: Path) -> dict[str, Any]:
+    return tomllib.loads((capture / "config.toml").read_text())

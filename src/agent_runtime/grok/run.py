@@ -17,6 +17,7 @@ from agent_runtime.cli_run import (
     parsed_line,
     require_runnable,
 )
+from agent_runtime.cli_settings import CliSettings, merged, toml_document
 from agent_runtime.constants import CLI_GROUP_CONFIRMATION_SECONDS, CLI_TERMINATION_GRACE_SECONDS
 from agent_runtime.errors import CliLoginRefusedError, raise_without_chain
 from agent_runtime.events import AssistantTextEvent, FinalEvent
@@ -40,6 +41,7 @@ _STREAM_BUFFER_LIMIT: Final = 4 * 1024 * 1024
 _AUTH_FILE_NAME: Final = "auth.json"
 _RULES_FILE_NAME: Final = "AGENTS.md"
 _PROMPT_FILE_NAME: Final = "prompt.txt"
+_CONFIG_FILE_NAME: Final = "config.toml"
 _HOME_VARIABLE: Final = "GROK_HOME"
 
 _BASE_ARGUMENTS: Final = (
@@ -142,7 +144,10 @@ class GrokRun:
     """One fresh, tool-free subscription run of the Grok CLI.
 
     It describes the run and starts nothing; the entry makes the directories and the spawn owner
-    starts the child. The system text and the prompt are files in the run's home, never argv.
+    starts the child. The system text and the prompt are files in the run's home, never argv. The
+    run's ``settings`` (the operator's levels, lowest first) are merged and written as the home's
+    ``config.toml``, the CLI's user layer, even when empty; the three tool-free switches stay on
+    argv, and no setting reaches argv or the environment.
     """
 
     binary: Path
@@ -150,6 +155,7 @@ class GrokRun:
     system: str = field(repr=False)
     history: tuple[TurnMessage, ...] = field(repr=False)
     model: str | None = field(default=None, kw_only=True)
+    settings: tuple[CliSettings, ...] = field(kw_only=True, repr=False)
 
     def __post_init__(self) -> None:
         require_runnable("Grok", self, GrokLogin, GrokLoginVerdict.USABLE)
@@ -167,6 +173,7 @@ class GrokRun:
             _AUTH_FILE_NAME: self.login.blanked_document,
             _RULES_FILE_NAME: self.system.encode(),
             _PROMPT_FILE_NAME: self._prompt().encode(),
+            _CONFIG_FILE_NAME: toml_document(merged(*self.settings)),
         }
 
     def start(self, home: Path, working_directory: Path) -> CliRunStart:

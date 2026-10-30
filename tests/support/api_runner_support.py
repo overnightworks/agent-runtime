@@ -29,8 +29,8 @@ def with_default_model(config, model):
 
 
 def with_cli_settings(config, settings):
-    """``config`` with the same ``cli_settings.openai`` table at ``[defaults]`` and every app."""
-    table = CliSettingsConfig(openai=settings)
+    """``config`` with the same ``openai`` and ``xai`` tables at ``[defaults]`` and every app."""
+    table = CliSettingsConfig(openai=settings, xai=settings)
     return config.model_copy(
         update={
             "defaults": config.defaults.model_copy(update={"cli_settings": table}),

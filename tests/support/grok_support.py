@@ -37,8 +37,9 @@ def a_fake_grok(
     """A stand-in for the CLI: a distinct exit code on a wrong run, else a marker file.
 
     A run checks its home, the blanked login, the rules file, the prompt file named by
-    ``--prompt-file`` and its empty stdin before it prints ``stream``; with ``capture`` it
-    first records its arguments, the login it was given and a listing of its home.
+    ``--prompt-file``, its empty stdin and its 0600 ``config.toml`` before it prints ``stream``;
+    with ``capture`` it first records its arguments, the login and settings file it was given and
+    a listing of its home.
     ``version_line`` is what ``--version`` prints.
     """
     (directory / "stream.jsonl").write_bytes(b"".join(stream))
@@ -49,6 +50,7 @@ def a_fake_grok(
         (f'[ "$(cat "$GROK_HOME/AGENTS.md")" = {shlex.quote(system_text)} ]', 13),
         (f'[ "$(cat "$prompt_file")" = {shlex.quote(expected_prompt)} ]', 14),
         ('[ -z "$(cat)" ]', 15),
+        ('[ "$(stat -c %a "$GROK_HOME/config.toml")" = 600 ]', 16),
     )
     lines = [
         "#!/bin/sh",
@@ -66,6 +68,7 @@ def a_fake_grok(
             f"mkdir -p {shlex.quote(str(capture))}",
             f"printf '%s\\n' \"$@\" > {shlex.quote(str(capture / 'argv'))}",
             f'cp "$GROK_HOME/auth.json" {shlex.quote(str(capture / "auth.json"))}',
+            f'cp "$GROK_HOME/config.toml" {shlex.quote(str(capture / "config.toml"))}',
             f'ls -A "$GROK_HOME" > {shlex.quote(str(capture / "home"))}',
         ]
     lines += [
