@@ -483,7 +483,7 @@ class RunRequest(_WireModel):
     model: ModelName | None = None
 
     @model_serializer(mode="wrap")
-    def _omit_the_unnamed_model(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+    def _omit_the_unnamed_model(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
         body = handler(self)
         if body.get("model") is None:
             body.pop("model", None)
