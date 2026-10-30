@@ -1,0 +1,8 @@
+claim_id = "2c5395286f37415cb961fe8e4f56b019"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "4569b874cdd19ced52624cfbbcd56d2b321286a0"
+branch = "claude/issue-640-rel-0-14-0"
+scope = ["docs/MIGRATING.md", "packages/client/pyproject.toml", "packages/service/pyproject.toml", "pyproject.toml", "src/agent_runtime/__init__.py", "uv.lock"]
+opened_commit = "85ebff7b55bd584bb7085864c1761b7429cec51b"
+whole_reason = "The seven version literals must move together (the distribution contract test fails while they disagree), uv.lock follows them, and MIGRATING is the release's own page; splitting would leave main with disagreeing literals."
