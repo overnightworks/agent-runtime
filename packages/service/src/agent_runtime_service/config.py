@@ -555,13 +555,9 @@ class ServiceConfig(_Section):
 
     @model_validator(mode="after")
     def _every_configured_model_is_listed_by_its_cli_table(self) -> Self:
-        listed = {
-            f"{provider}/{model}"
-            for provider, models in self.subscription_models().items()
-            for model in models
-        }
+        offered = self.offered_models()
         for field, name in self._configured_models():
-            if name not in listed:
+            if name not in offered:
                 raise ValueError(
                     f"{field}: {shown_text(name)} is not listed in the models of any"
                     " [cli.<provider>] table"
@@ -661,6 +657,14 @@ class ServiceConfig(_Section):
     def subscription_models(self) -> Mapping[Provider, frozenset[str]]:
         """The model names each provider's subscription program serves."""
         return {provider: pin.models for provider, pin in self.cli.programs().items()}
+
+    def offered_models(self) -> frozenset[ModelName]:
+        """The full names a run may name: every model each ``[cli.<provider>]`` table lists."""
+        return frozenset(
+            f"{provider}/{model}"
+            for provider, models in self.subscription_models().items()
+            for model in models
+        )
 
     def mcp_trust_bundle(self) -> Path | None:
         """The CA bundle for the apps' MCP origins; ``None`` while no app declares an origin."""

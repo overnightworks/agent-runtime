@@ -23,15 +23,16 @@ the operator enabled ([The app's own runs](#the-apps-own-runs)). `POST /runs` an
 `GET /runs/{id}` answer a request carrying an `Agent-Job-Ticket` header, even an empty one, with
 `401` before the body is read; the header's value is never read.
 
-`RunRequest`, wire version 4:
+`RunRequest`, wire version 5:
 
 | Field | Meaning |
 |---|---|
-| `v` | The protocol version, `4`. Any other body answers 400 `unsupported_version`. |
-| `agent` | The agent's name, `[a-z][a-z0-9-]{0,63}`. It labels the run and its capability, and names the agent whose configured model the run uses; the request itself names no model, and a body that carries `model` answers 422 `invalid_request`. |
+| `v` | The protocol version, `5`. Any other body answers 400 `unsupported_version`. |
+| `agent` | The agent's name, `[a-z][a-z0-9-]{0,63}`. It labels the run and its capability, and names the agent whose configured model the run uses unless the request names a model. |
 | `turn` | The system prompt and the messages (`Turn`, `TurnMessage`). |
 | `roles` | The agent's allowed roles, exactly `["admin"]` or `["admin", "user"]`; `AgentDefinition.request` fills it from the agent file. |
 | `tools` | A map from each tool the run may call to its `ToolEffect`; required, possibly `{}`. |
+| `model` | Optional. A full `<provider>/<model>` name (no version) the installation offers: the full names in its `[cli.<provider>] models` lists, the same for every app. A named model wins over the agent's, the app's and the default; absent or `null` runs the configured model as before. A name outside the grammar answers 422 `invalid_request`, a valid name the installation does not offer 422 `model_not_offered`, checked after the `forbidden` refusals and before the route. `AgentDefinition.request(messages, model=...)` writes it. The agent file still refuses a `model:` key. |
 
 `GET /runs/{id}` returns the run's `RunStatus`, readable only by the app and
 user that started it, or for the app's own run by that app with its workload token alone ([What a run keeps](#what-a-run-keeps) says what the record holds).
@@ -66,7 +67,8 @@ A request the service refuses answers a `RunRejection` with one `RejectionCode`:
 | `unauthorized` | 401 | A workload token is required, and a user token unless the app runs one of its own agents; every token sent must be valid and carry a readable `sub` and group claim. An `Agent-Job-Ticket` header on `POST /runs` or `GET /runs/{id}` is refused too. |
 | `forbidden` | 403 | The user is no member of the app, the request's `roles` lack the caller's role, the request names a tool while the app has no MCP origin, the two tokens do not belong together ([webauth's host contract](https://github.com/overnightworks/webauth/blob/v0.26.0/docs/host-contract.md#a-services-callers) lists the causes of both codes in the order they are checked: every 401 and 503 about the tokens comes before any 403), or a run without a user token names an agent the app may not run as itself. |
 | `not_enabled` | 403 | No route is enabled for this caller and model, the run names tools and the chosen subscription provider cannot take tools yet. |
-| `unsupported_version` | 400 | `v` is not the JSON integer 4. |
+| `unsupported_version` | 400 | `v` is not the JSON integer 5. |
+| `model_not_offered` | 422 | The request names a model in the grammar that the installation does not offer. A run that fails keeps the model it named; nothing falls back to another. |
 | `invalid_request` | 422 | The body is not a valid request for the route. |
 | `capability_too_large` | 422 | The run's capability would exceed 8,192 characters. |
 | `busy` | 429 | The subscription route's places are taken; `Retry-After` is set and the run never falls back to the paid route. |
@@ -87,8 +89,8 @@ to the app's own run. The checks run in this order and the first failure answers
    before the body is read.
 4. The body is checked as for a person's run, and its `agent` names such an agent, else 403
    `forbidden`. The body's `roles` must still be a valid list but is not read.
-5. The route is decided by the service from the groups of the workload token and the model the
-   configuration names for the agent, never named on the wire: no route group is 403 `not_enabled`, and a full subscription is
+5. The route is decided by the service from the groups of the workload token and the run's model
+   (the body's `model` if it names one the installation offers, else the configuration's for the agent): no route group is 403 `not_enabled`, and a full subscription is
    429 `busy` without falling back.
 
 The principal is the app's service account, `(iss, workload sub)`, and so is the run's owner with
@@ -124,7 +126,7 @@ tool calls. Calls run sequentially in provider order: a call starts only after
 its event is accepted, and its result reaches the next gateway request only
 after the result event is accepted. The final `succeeded` text concatenates the
 rounds without trimming whitespace. Heartbeats continue while HTTP or tools wait,
-without resetting the idle timeout. The configured model's full
+without resetting the idle timeout. The run's model's full
 `<provider>/<model>` name reaches the gateway unchanged across rounds, without fallback
 or retry. The service's usual time, call and byte limits apply; there is no
 additional eight-round limit.
@@ -202,8 +204,8 @@ protocol version and the status.
 request and none stored nor passed to the CLI. The service hands the CLI nothing
 derived from them either: not the subject, issuer, groups, client id, app name or
 run id, and not the capability, which it sends only to the app's MCP server. From
-the service the CLI receives the app's turn, the model the configuration
-names, the app's tool definitions and tool
+the service the CLI receives the app's turn, the model the run
+selected, the app's tool definitions and tool
 results through the relay, the run's fixed flags and limits, the path of its system
 prompt file and, when the run offers tools, of its relay file with the relay's
 loopback address and per-run secret, and the service's own subscription credential;

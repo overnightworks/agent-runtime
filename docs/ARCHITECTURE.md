@@ -58,7 +58,8 @@ maps it onto the wire.
 ## How a run is routed
 
 The service decides the route from the caller's groups and the model the
-configuration names for the agent (the request's agent picks it), never from the request. Every
+run selects: the model the request names when the installation offers it, else the one the
+configuration names for the agent (the request's agent picks it). Every
 check precedes any child process.
 
 ```mermaid
@@ -73,7 +74,7 @@ flowchart TB
     role -->|no| forbidden
     role -->|yes| tools{"tools named but app<br/>has no MCP origin?"}
     tools -->|yes| forbidden
-    tools -->|no| model["the configured model:<br/>the agent's, else the app's,<br/>else the defaults"]
+    tools -->|no| model["the run's model: the request's,<br/>else the agent's, else the app's,<br/>else the defaults<br/>(a name not offered: 422 model_not_offered)"]
     model --> subscription{"subscription group member,<br/>and a CLI table serves it?<br/>(a [cli.&lt;provider&gt;] table of the<br/>model's provider exists)"}
     subscription -->|yes| relay{"tools named, and the model's<br/>provider has no relay yet?"}
     relay -->|yes| notenabled
@@ -95,8 +96,8 @@ operator configuration ([operations.md](operations.md)). An app's own run is rou
 groups its workload token carries.*
 
 Keycloak decides who may use the subscription and who the paid route, through
-groups of a person, or for an app's own run of its service account; the service holds no user list. The configured model is never replaced by
-another. The independently installed API runner sends the configured full
+groups of a person, or for an app's own run of its service account; the service holds no user list. The selected model is never replaced by
+another. The independently installed API runner sends the selected full
 `<provider>/<model>` name through the core's OpenAI-compatible conversation adapter. Each
 round is checked before releasing text or invoking granted MCP tools. The API route
 uses the same tool-call and result acceptance barrier as the subscription route,
@@ -198,7 +199,8 @@ service's container ([host.md](host.md)).
   the service only as the access token its app forwards. The app gate and the
   caller's role come from the verified tokens. The request, sent by the app under
   its workload token, supplies the agent's allowed roles and its tools; configuration
-  decides the rest, the model included. It carries no MCP URL, MCP
+  decides the rest; the model is the configuration's unless the request names one the
+  installation offers. It carries no MCP URL, MCP
   token, route or user id.
 - *An app runs as itself only for the agents the operator enabled.* The principal of
   an app's own run is its service account, and its route comes from that account's groups.

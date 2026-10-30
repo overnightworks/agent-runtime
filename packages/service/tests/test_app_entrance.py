@@ -361,7 +361,7 @@ def test_a_user_token_outside_the_bearer_scheme_is_unauthorized(service):
 
 @pytest.mark.parametrize(
     "field",
-    ["provider", "route", "user_id", "mcp_url", "mcp_token", "model"],
+    ["provider", "route", "user_id", "mcp_url", "mcp_token"],
 )
 def test_a_body_naming_a_field_reserved_to_the_service_is_invalid(service, field):
     response = post_run(
@@ -400,25 +400,36 @@ def test_h2_a_model_reaches_an_api_only_caller_by_its_full_name(tmp_path):
     assert (runners.api.admitted[-1].route, runners.api.admitted[-1].model) == (Api(), CODEX_NAME)
 
 
-def test_v6_a_model_is_invalid_before_tools_are_forbidden(service):
-    response = post_run(
+def test_v6_a_model_is_not_offered_after_the_tools_are_forbidden_and_before_the_route(service):
+    forbidden = post_run(
         service,
         run_headers(
             MINT.workload(client=PRESENTATOR_CLIENT),
             MINT.user(azp=PRESENTATOR_CLIENT, groups=[SUBSCRIPTION_GROUP, "/apps/presentator"]),
         ),
-        run_body(model=LISTED, tools=SONGMAKER_TOOLS),
+        run_body(model=f"{Provider.ANTHROPIC}/unlisted", tools=SONGMAKER_TOOLS),
+    )
+    not_offered = post_run(
+        service,
+        run_headers(MINT.workload(), MINT.user()),
+        run_body(model=f"{Provider.ANTHROPIC}/unlisted"),
     )
 
-    assert_rejected(response, RejectionCode.INVALID_REQUEST, 422)
+    assert_rejected(forbidden, RejectionCode.FORBIDDEN, 403)
+    assert_rejected(not_offered, RejectionCode.MODEL_NOT_OFFERED, 422)
 
 
-def test_v7_a_model_with_an_unsupported_version_answers_the_version(service):
-    response = post_run(
+@pytest.mark.parametrize("model", [LISTED, None])
+def test_v7_an_offered_or_null_model_is_admitted_and_an_unsupported_version_is_refused(
+    service, model
+):
+    admitted = post_run(service, run_headers(MINT.workload(), MINT.user()), run_body(model=model))
+    unsupported = post_run(
         service, run_headers(MINT.workload(), MINT.user()), run_body(v=1, model=LISTED)
     )
 
-    assert_rejected(response, RejectionCode.UNSUPPORTED_VERSION, 400)
+    assert _admitted_events(admitted) == ["run_started", "assistant_text", "succeeded"]
+    assert_rejected(unsupported, RejectionCode.UNSUPPORTED_VERSION, 400)
 
 
 def _too_large() -> bytes:

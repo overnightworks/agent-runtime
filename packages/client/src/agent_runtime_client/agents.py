@@ -33,6 +33,7 @@ from agent_runtime_client.wire import (
     AgentName,
     AgentRole,
     AgentRoles,
+    ModelName,
     RunRequest,
     Turn,
     TurnMessage,
@@ -93,14 +94,21 @@ class AgentDefinition(BaseModel):
             raise ValueError(f"role must be 'admin' or 'user', not {role!r}") from error
         return checked_role in self.roles
 
-    def request(self, messages: list[TurnMessage]) -> RunRequest:
-        """The body that starts a run of this agent over these messages."""
+    def request(
+        self, messages: list[TurnMessage], *, model: ModelName | None = None
+    ) -> RunRequest:
+        """The body that starts a run of this agent over these messages.
+
+        ``model`` names one model the service offers; without it the service runs its configured
+        one.
+        """
         return RunRequest(
             v=PROTOCOL_VERSION,
             agent=self.name,
             turn=Turn(system=self.prompt, messages=messages),
             roles=self.roles,
             tools={declaration.name: declaration.effect for declaration in self.tools},
+            model=model,
         )
 
 

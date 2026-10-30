@@ -308,6 +308,7 @@ def test_a_rejection_body_round_trips_through_its_json(code: RejectionCode) -> N
     [
         pytest.param({**REJECTION, "v": True}, id="version true"),
         pytest.param({**REJECTION, "v": float(PROTOCOL_VERSION)}, id="version as a float"),
+        pytest.param({**REJECTION, "v": PROTOCOL_VERSION - 1}, id="previous version"),
         pytest.param({"code": "busy", "message": "Another run is active."}, id="no version"),
         pytest.param(
             {**REJECTION, "message": "x" * (MAX_MESSAGE_LENGTH + 1)}, id="message too long"
@@ -385,6 +386,7 @@ def test_a_status_body_names_its_state_and_codes_as_enums() -> None:
         pytest.param({**STATUS, "v": True}, id="version true"),
         pytest.param({**STATUS, "v": float(PROTOCOL_VERSION)}, id="version as a float"),
         pytest.param({**STATUS, "v": 1}, id="version 1"),
+        pytest.param({**STATUS, "v": PROTOCOL_VERSION - 1}, id="previous version"),
         pytest.param({**STATUS, "events": 0}, id="no events"),
         pytest.param({**STATUS, "events": True}, id="events true"),
         pytest.param({**STATUS, "events": 1.0}, id="events as a float"),
@@ -773,7 +775,23 @@ def test_any_other_agent_roles_are_refused(roles: object) -> None:
         AGENT_ROLES.validate_python(roles)
 
 
-@pytest.mark.parametrize("model", ["anthropic/sonnet", None, "", 5])
-def test_a_run_request_that_carries_a_model_is_refused(model: object) -> None:
+def test_a_run_request_may_name_a_model_or_none() -> None:
+    named = RunRequest.model_validate({**REQUEST, "model": "anthropic/sonnet"})
+    null = RunRequest.model_validate({**REQUEST, "model": None})
+    absent = RunRequest.model_validate(REQUEST)
+
+    assert (named.model, null.model, absent.model) == ("anthropic/sonnet", None, None)
+
+
+@pytest.mark.parametrize(
+    "model", ["", "Opus", "anthropic", "anthropic/opus@1", "ANTHROPIC/opus", 5]
+)
+def test_a_run_request_naming_a_model_off_the_grammar_is_refused(model: object) -> None:
     with pytest.raises(ValidationError, match="model"):
         RunRequest.model_validate({**REQUEST, "model": model})
+
+
+@pytest.mark.parametrize("version", [3, 4, 6])
+def test_a_body_of_another_protocol_version_is_refused(version: int) -> None:
+    with pytest.raises(ValidationError):
+        RunRequest.model_validate({**REQUEST, "v": version})

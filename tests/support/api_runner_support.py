@@ -11,9 +11,9 @@ from agent_runtime_service.cli_settings_config import CliSettingsConfig
 from agent_runtime_service.config import AgentConfig, DefaultsConfig, Provider, ServiceConfig
 
 
-def configured(tmp_path, **api):
+def configured(tmp_path, claude_models=(LISTED_MODEL,), **api):
     path = write_api_credentials(tmp_path / "gateway.json", {"shared_key": "synthetic-gateway-key"})
-    base = service_config()
+    base = service_config(claude_models=claude_models)
     return ServiceConfig.model_validate({
         **{name: getattr(base, name) for name in ServiceConfig.model_fields},
         "api": {"completion_url": "http://gateway/v1/chat/completions",
