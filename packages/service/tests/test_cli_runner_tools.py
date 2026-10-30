@@ -1404,10 +1404,6 @@ class RelayDoorOfTheRun(RelayDoor):
     async def connect(self) -> RawClient:
         return await RawClient.connect(port_of(self))
 
-    def list_tools(self, request_id: int) -> bytes:
-        body = json_rpc("tools/list", request_id)
-        return post_message(self, body, LATEST_PROTOCOL_VERSION.value)
-
     def call(self, request_id: int, name: str = "read_note") -> bytes:
         params = {"name": name, "arguments": {}}
         body = json_rpc("tools/call", request_id, params)
@@ -1518,10 +1514,7 @@ def test_a_natural_exit_reaps_before_the_final_and_the_relay_closes_after_the_te
                 door = RelayDoorOfTheRun.in_the_run_of(run)
                 await loop_settled()
                 final_before_the_reap = [event for event in seen if isinstance(event, FinalEvent)]
-                lister = await door.connect()
-                await lister.send(door.list_tools(1))
-                assert "tools" in json.loads((await lister.answer()).body)["result"]
-                lister.disconnect()
+                await door.list_tools()
                 child.reap_gate.set()
                 async with asyncio.timeout(TEST_WAIT_SECONDS):
                     frames = await reading

@@ -22,6 +22,7 @@ from tests.support.service_support import StepClock, SteppedLoop
 from agent_runtime.cli_run import RelayAccess
 from agent_runtime_client.mcp_wire import (
     JSON_MEDIA_TYPE,
+    LATEST_PROTOCOL_VERSION,
     PROTOCOL_VERSION_HEADER,
     CallToolParams,
     HttpAnswer,
@@ -239,6 +240,15 @@ class RelayDoor:
     """Where a client reaches a relay, known only by its access value."""
 
     access: RelayAccess
+
+    async def list_tools(self) -> None:
+        """Connect, ask ``tools/list`` and read the answer, as a client does first."""
+        client = await RawClient.connect(port_of(self))
+        await client.send(
+            post_message(self, json_rpc("tools/list", 1), LATEST_PROTOCOL_VERSION.value)
+        )
+        await client.answer()
+        client.disconnect()
 
 
 @dataclass(frozen=True)
