@@ -45,7 +45,7 @@ _SYSTEM_PROMPT_FILE_NAME: Final = "system-prompt"
 _HOME_VARIABLE: Final = "CODEX_HOME"
 
 _CONFIG_FILE_NAME: Final = "config.toml"
-_RELAY_SERVER_NAME: Final = "relay"
+RELAY_SERVER_NAME: Final = "relay"
 # The relay's secret reaches the child only as this variable, which the relay entry names; a
 # shell's environment filter keyed on `TOKEN` hides it.
 RELAY_TOKEN_VARIABLE: Final = "AGENT_RUNTIME_RELAY_TOKEN"
@@ -269,7 +269,7 @@ class CodexRun:
         servers = settings.get("mcp_servers")
         settings["mcp_servers"] = {
             **(servers if isinstance(servers, dict) else {}),
-            _RELAY_SERVER_NAME: {
+            RELAY_SERVER_NAME: {
                 "url": self.relay.url,
                 "bearer_token_env_var": RELAY_TOKEN_VARIABLE,
                 "required": True,
