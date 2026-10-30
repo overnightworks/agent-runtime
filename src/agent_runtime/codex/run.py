@@ -71,6 +71,10 @@ _FEATURES_OFF: Final = (
     "code_mode_host",
     "code_mode",
     "code_mode_only",
+    # Built-ins the model would otherwise be offered beside the app's tools.
+    "view_image",
+    "goals",
+    "sleep_tool",
 )
 _DEFAULT_SETTINGS: Final[CliSettings] = {
     "sandbox_mode": "read-only",
@@ -78,6 +82,8 @@ _DEFAULT_SETTINGS: Final[CliSettings] = {
     "mcp_servers": {},
     "web_search": "disabled",
     "features": dict.fromkeys(_FEATURES_OFF, False),
+    "tools": {"experimental_request_user_input": {"enabled": False}},
+    "agents": {"enabled": False},
 }
 _READ_PROMPT_FROM_STDIN: Final = "-"
 
@@ -92,7 +98,8 @@ _TOOL_ITEM_TYPES: Final = frozenset(
         "image_gen",
     }
 )
-_SILENT_ITEM_TYPES: Final = frozenset({"reasoning", "todo_list", "error"})
+_ERROR_ITEM: Final = "error"
+_SILENT_ITEM_TYPES: Final = frozenset({"reasoning", "todo_list", _ERROR_ITEM})
 _DROPPED_ITEM_TYPES: Final = _TOOL_ITEM_TYPES | _SILENT_ITEM_TYPES
 _SILENT_EVENT_TYPES: Final = frozenset({"thread.started", "turn.started", "error"})
 _ITEM_EVENT_TYPES: Final = frozenset({"item.started", "item.updated", "item.completed"})
@@ -101,6 +108,17 @@ CODEX_CLI_LOGIN_REFUSED_DETAIL: Final = "Codex CLI login was refused."
 # codex 0.163.0's `turn.failed` carries the HTTP status only inside its message text (ADR A1b-C0a
 # N1); a bare `401` is not enough because the text also holds a request id.
 _LOGIN_REFUSED_STATUS: Final = "401 Unauthorized"
+
+
+# Codex appends version-specific remediation after this stable isolation notice.
+CODE_MODE_HOST_DISABLED_NOTICE_PREFIX: Final = (
+    "Code Mode is unavailable because code-mode host is disabled"
+)
+
+
+def is_code_mode_host_disabled_notice(message: str) -> bool:
+    """Recognize the one Codex notice caused by this adapter's isolation."""
+    return message.startswith(CODE_MODE_HOST_DISABLED_NOTICE_PREFIX)
 
 
 class CodexRunFailure(CliRunFailure):
@@ -123,6 +141,13 @@ class CodexAnswerMissing(CodexRunFailure):
     message = "The Codex run ended without a completed answer."
 
 
+class CodexToolsUnavailable(CodexRunFailure):
+    message = (
+        "The Codex run could not offer the run's tools: its model runs tools only in code mode, "
+        "which the run's settings switch off."
+    )
+
+
 class _Item(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -131,6 +156,10 @@ class _Item(BaseModel):
 
 class _MessageItem(_Item):
     text: str = ""
+
+
+class _ErrorItem(_Item):
+    message: str = ""
 
 
 class _StreamEvent(BaseModel):
@@ -154,6 +183,13 @@ class _MessageEvent(BaseModel):
     item: _MessageItem
 
 
+class _ErrorEvent(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    type: str
+    item: _ErrorItem
+
+
 class _TurnError(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -170,7 +206,8 @@ class _TurnFailedEvent(BaseModel):
 class CodexStreamDecoder:
     """Turns `exec --json` lines into events and fails closed on anything it does not know."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, relay_attached: bool = False) -> None:
+        self._relay_attached = relay_attached
         self._completed = False
         self._answer = ""
 
@@ -202,9 +239,16 @@ class CodexStreamDecoder:
         if item.type == _AGENT_MESSAGE:
             message = parsed_line(line, _MessageEvent, CodexUnreadableLine)
             return self._message_events(event.type, message.item)
-        if item.type not in _DROPPED_ITEM_TYPES:
+        if item.type == _ERROR_ITEM and self._relay_attached:
+            self._require_tools_offered(parsed_line(line, _ErrorEvent, CodexUnreadableLine).item)
+        elif item.type not in _DROPPED_ITEM_TYPES:
             raise_without_chain(CodexUnknownStreamPart())
         return []
+
+    @staticmethod
+    def _require_tools_offered(item: _ErrorItem) -> None:
+        if is_code_mode_host_disabled_notice(item.message):
+            raise_without_chain(CodexToolsUnavailable())
 
     def _message_events(self, event_type: str, item: _MessageItem) -> list[StepEvent]:
         if event_type != "item.completed":
@@ -271,6 +315,8 @@ class CodexRun:
                 "required": True,
                 "default_tools_approval_mode": "approve",
                 "tool_timeout_sec": math.ceil(self.tool_timeout_seconds),
+                # The relay's tools are deferred behind tool_search on every bundled model.
+                "omit_tools_from": ["deferred"],
             },
         }
         return settings
@@ -288,7 +334,10 @@ class CodexRun:
             working_directory=working_directory,
         )
         return CliRunStart(
-            child, self._transcript().encode(), CodexStreamDecoder(), (_PICTURE_FOLDER_NAME,)
+            child,
+            self._transcript().encode(),
+            CodexStreamDecoder(relay_attached=self.relay is not None),
+            (_PICTURE_FOLDER_NAME,),
         )
 
     def _transcript(self) -> str:

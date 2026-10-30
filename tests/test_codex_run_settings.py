@@ -64,6 +64,35 @@ def test_a_codex_run_switches_the_shell_snapshot_off_by_default() -> None:
     assert written_settings(a_run())["features"]["shell_snapshot"] is False
 
 
+REMOVED_BUILTINS: CliSettings = {
+    "features": {"view_image": False, "goals": False, "sleep_tool": False},
+    "tools": {"experimental_request_user_input": {"enabled": False}},
+    "agents": {"enabled": False},
+}
+
+
+def test_a_codex_run_switches_off_the_built_ins_the_run_does_not_allow() -> None:
+    settings = written_settings(a_run())
+
+    assert same(merged(settings, REMOVED_BUILTINS), settings)
+
+
+def test_an_operator_level_switches_a_removed_built_in_back_on_over_the_default() -> None:
+    level: CliSettings = {
+        "features": {"view_image": True},
+        "tools": {"experimental_request_user_input": {"enabled": True}},
+        "agents": {"enabled": True},
+    }
+    settings = written_settings(a_run(level))
+
+    assert (
+        settings["features"]["view_image"],
+        settings["tools"]["experimental_request_user_input"]["enabled"],
+        settings["agents"]["enabled"],
+    ) == (True, True, True)
+    assert settings["features"]["goals"] is False
+
+
 def test_an_operator_level_switches_the_shell_snapshot_on_over_the_default() -> None:
     settings = written_settings(a_run({"features": {"shell_snapshot": True}}))
 

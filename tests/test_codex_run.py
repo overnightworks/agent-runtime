@@ -51,6 +51,7 @@ from agent_runtime.codex.run import (
     CodexRun,
     CodexRunFailure,
     CodexStreamDecoder,
+    CodexToolsUnavailable,
     CodexTurnFailed,
     CodexUnknownStreamPart,
     CodexUnreadableLine,
@@ -268,11 +269,13 @@ def test_a_relay_run_writes_the_relay_entry_and_the_defaults_beside_it() -> None
             "required",
             "default_tools_approval_mode",
             "tool_timeout_sec",
+            "omit_tools_from",
         },
         a_relay().url,
         True,
     )
     assert entry["default_tools_approval_mode"] == "approve"
+    assert entry["omit_tools_from"] == ["deferred"]
 
 
 def test_the_relay_secret_is_only_in_the_variable_the_entry_names(tmp_path: Path) -> None:
@@ -384,6 +387,36 @@ def test_a_reconnect_notice_before_the_turn_completes_still_succeeds() -> None:
         AssistantTextEvent(text="answer"),
         FinalEvent(text="answer"),
     ]
+
+
+CODE_MODE_HOST_NOTICE = an_item(
+    "item.completed",
+    "error",
+    message="Code Mode is unavailable because code-mode host is disabled. Enable it.",
+)
+
+
+def test_a_tool_free_run_still_drops_the_code_mode_host_notice_and_ends_on_its_answer() -> None:
+    assert decoded_and_ended((THREAD, CODE_MODE_HOST_NOTICE, TURN, a_message("answer"), DONE)) == [
+        AssistantTextEvent(text="answer"),
+        FinalEvent(text="answer"),
+    ]
+
+
+def test_a_relay_run_that_meets_the_code_mode_host_notice_ends_without_its_tools() -> None:
+    decoder = a_relay_run().start(Path("/run-home"), Path("/run-home/work")).decoder
+
+    with pytest.raises(CodexToolsUnavailable) as refused:
+        decoder.events_of(CODE_MODE_HOST_NOTICE)
+
+    assert isinstance(refused.value, CodexRunFailure)
+    assert CLI_TEXT not in str(refused.value)
+
+
+def test_a_relay_run_still_ignores_any_other_error_item() -> None:
+    decoder = a_relay_run().start(Path("/run-home"), Path("/run-home/work")).decoder
+
+    assert decoder.events_of(NOTICE) == []
 
 
 def test_reasoning_and_todo_text_never_reaches_the_events() -> None:
@@ -593,6 +626,7 @@ def test_every_failure_class_has_its_own_fixed_message() -> None:
         CodexUnreadableLine(),
         CodexTurnFailed(),
         CodexAnswerMissing(),
+        CodexToolsUnavailable(),
     )
 
     assert len({str(failure) for failure in failures}) == len(failures)

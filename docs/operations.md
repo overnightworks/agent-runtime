@@ -160,7 +160,13 @@ and no setting value appears in the program's arguments. Its Codex defaults are 
 "read-only"`, `approval_policy = "never"`, `mcp_servers = {}`, `web_search = "disabled"` and
 `features` with `shell_tool`, `unified_exec`, `browser_use`, `computer_use`, `multi_agent`,
 `image_generation`, `plugins`, `hooks`, `shell_snapshot`, `code_mode_host`, `code_mode` and
-`code_mode_only` all `false`; every other feature follows the pinned CLI. With `shell_snapshot` on,
+`code_mode_only` all `false`, plus `view_image`, `goals` and `sleep_tool` `false`,
+`tools.experimental_request_user_input.enabled = false` and `agents.enabled = false`, which
+remove the image viewer, the user-input and goal tools, the sleep tool and the sub-agent
+namespace from what the model is offered; every other feature follows the pinned CLI. Three
+built-ins no key removes stay offered: `apply_patch` (its writes are rejected under the read-only
+sandbox), `clock.curr_time` on a code-mode-only model, and the three MCP resource tools (they
+reach only the relay, which serves no resources). With `shell_snapshot` on,
 the pinned CLI writes its exported variables, the relay secret included, into the run home's
 `shell_snapshots/`. The configuration overrides each of them,
 `sandbox_mode` included, and the service neither refuses nor warns about what it sets.
@@ -186,8 +192,11 @@ because another setting already owns their fact: `model` and `model_provider` (s
 
 A run that names tools gets the run's relay as `mcp_servers.relay` in that file, written over the
 levels: `url` (the relay on loopback), `bearer_token_env_var = "AGENT_RUNTIME_RELAY_TOKEN"`,
-`required = true`, `default_tools_approval_mode = "approve"` and `tool_timeout_sec`, the whole
-seconds of `[runs] max_duration_s` rounded up. The relay's per-run secret reaches the program only
+`required = true`, `default_tools_approval_mode = "approve"`, `omit_tools_from = ["deferred"]`
+(the pinned CLI otherwise hides the relay's tools behind `tool_search`) and `tool_timeout_sec`, the
+whole seconds of `[runs] max_duration_s` rounded up. A model that runs tools only in code mode,
+which the defaults switch off, cannot be offered them: the run ends `failed: provider_error`
+until the configuration turns `features.code_mode_host` on. The relay's per-run secret reaches the program only
 in that environment variable, never in its arguments or a file, and the app's capability never
 reaches it. `mcp_servers.relay`, any key below it or an empty table, is the service's and stops
 startup at any level (exit 2, `--check` agrees); the operator's own `mcp_servers.<name>` entries
