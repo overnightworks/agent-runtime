@@ -75,7 +75,7 @@ A request the service refuses answers a `RunRejection` with one `RejectionCode`:
 |---|---|---|
 | `unauthorized` | 401 | On `POST /runs` and `GET /runs/{id}`: a workload token is required, and a user token unless the app runs one of its own agents; every token sent must be valid and carry a readable `sub` and group claim. On `GET /models` only the workload token is read, and a missing or invalid one is refused. An `Agent-Job-Ticket` header on any of these routes is refused too. |
 | `forbidden` | 403 | The user is no member of the app, the request's `roles` lack the caller's role, the request names a tool while the app has no MCP origin, the two tokens do not belong together ([webauth's host contract](https://github.com/overnightworks/webauth/blob/v0.26.0/docs/host-contract.md#a-services-callers) lists the causes of both codes in the order they are checked: every 401 and 503 about the tokens comes before any 403), or a run without a user token names an agent the app may not run as itself. |
-| `not_enabled` | 403 | No route is enabled for this caller and model, the run names tools and the chosen subscription provider cannot take tools yet. |
+| `not_enabled` | 403 | No route is enabled for this caller and model. |
 | `unsupported_version` | 400 | `v` is not the JSON integer 5. |
 | `model_not_offered` | 422 | The request names a model in the grammar that the installation does not offer. A run that fails keeps the model it named; nothing falls back to another. |
 | `invalid_request` | 422 | The body is not a valid request for the route. |
@@ -183,7 +183,7 @@ answer and the files a run returns pass through its memory only. The core attemp
 remove the run's tree, `output/` included, before the frame is built; a removal that fails or
 is refused is logged and does not stop the frame ([host.md](host.md) owns the order and the
 cleanup-failure policy). For subscription runs, the service writes
-the system prompt and, when the run offers tools, the tool relay's connection file
+the system prompt and, when a Claude run offers tools, the tool relay's connection file
 with its per-run secret into the run's private tree ([host.md](host.md), "A subscription run's
 directories", owns the layout, the modes and when the tree is removed). What the
 CLI may write, inside the tree or outside it, is under "What the CLI writes" below.
@@ -217,8 +217,8 @@ the service the CLI receives the app's turn, the model the run
 selected, the app's tool definitions and tool
 results through the relay, the run's fixed flags and limits, the path of its system
 prompt file and, when the run offers tools, the relay's loopback address and
-per-run secret (a Claude run gets both in its relay file; a Codex run gets the
-address in its `config.toml` and the secret only in its environment), and the
+per-run secret (a Claude run gets both in its relay file; a Codex or Grok run gets
+the address in its `config.toml` and the secret only in its environment), and the
 service's own subscription credential;
 [host.md](host.md), "The child environment is closed", lists the rest of its
 environment. What the app writes is the app's: the definitions of the tools it
@@ -240,8 +240,7 @@ it, is not measured yet; issue #115, step 12b, owns that measurement.
 **The provider.** On the subscription route, the turn's text reaches the provider
 (Anthropic for Claude, OpenAI for Codex, xAI for Grok) under the operator's
 subscription, and the app's tool definitions and the results of the app's tools reach
-Anthropic on a Claude run and OpenAI on a Codex run; a tool request for a Grok run is
-refused at admission. On the API route, the turn, the model, granted definitions
+Anthropic on a Claude run, OpenAI on a Codex run and xAI on a Grok run. On the API route, the turn, the model, granted definitions
 and accepted results reach the gateway, which forwards them to the provider the model
 names ([API text results](#api-text-results)). What the gateway and the provider keep
 follows their terms, not this service.
