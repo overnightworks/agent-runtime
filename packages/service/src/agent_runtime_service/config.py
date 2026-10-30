@@ -492,9 +492,6 @@ def _value(table: object, key: str) -> object:
     return getattr(table, key)
 
 
-RELAY_ATTACHED_PROVIDERS: Final = frozenset({Provider.ANTHROPIC, Provider.OPENAI})
-
-
 def _refuse_an_origin_without_signing(document: object) -> None:
     if not isinstance(document, Mapping) or document.get("signing") is not None:
         return

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import tomllib
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -19,11 +19,21 @@ from typing import Any
 import pytest
 import uvicorn
 from pydantic import ValidationError
+from tests.support.anchored_support import ChildCleanup
+from tests.support.cli_tools_support import (
+    ClaudeCall,
+    CodexChildCapture,
+    ToolApp,
+    a_relay_calling_codex,
+    a_relay_calling_grok,
+    a_tool_app,
+)
 from tests.support.codex_support import DEFAULT_SETTINGS as CODEX_DEFAULT_SETTINGS
 from tests.support.codex_support import DONE, THREAD, a_fake_codex, a_message, an_item, codex_line
 from tests.support.codex_support import PRECONDITIONS_MARKER as CODEX_PRECONDITIONS_MARKER
 from tests.support.grok_support import END, a_fake_grok, a_text, grok_line
 from tests.support.grok_support import PRECONDITIONS_MARKER as GROK_PRECONDITIONS_MARKER
+from tests.support.mcp_app_fake import TestAuthority
 from tests.support.provider_test_support import (
     CANARY_ACCESS_TOKEN,
     CANARY_ID_TOKEN,
@@ -32,6 +42,13 @@ from tests.support.provider_test_support import (
     a_fake_claude,
     a_grok_login,
     a_private_root,
+)
+from tests.support.service_cli_runner_support import (
+    drive_over_http,
+    eventually,
+    post_a_run,
+    shown,
+    status_of,
 )
 from tests.support.service_support import (
     LISTED_MODEL,
@@ -46,7 +63,11 @@ from tests.support.service_support import (
 from agent_runtime.anchored_turn import CliProcessPool
 from agent_runtime.codex.run import CODEX_CLI_PROCESS_POOL
 from agent_runtime.grok.run import GROK_CLI_PROCESS_POOL
+from agent_runtime_client.wire import FailureCode, RunEvent, RunState, RunStatus, ToolCall
+from agent_runtime_service.cli_runner import CliRunner, mcp_tls_context
 from agent_runtime_service.config import Provider, ServiceConfig
+from agent_runtime_service.run_liveness import LoopClock
+from agent_runtime_service.runners import Runners
 
 TURN_STDIN = "User: a\n\nAssistant: b\n\nUser: c"
 
@@ -79,6 +100,8 @@ class ProviderTable:
     """The sound login; given an access token, the same login holding that token."""
     stand_in: Callable[..., Path]
     """The service-side stand-in: the CLI's fake with the turn input and version line bound."""
+    relay_stand_in: Callable[..., Path]
+    """The stand-in of a relay run: the CLI's relay-calling fake with its version line bound."""
     answering: Callable[[str, bool], tuple[bytes, ...]]
     """The stand-in's stream for an answer, complete or cut before its end."""
     access_canary: str
@@ -207,6 +230,7 @@ CODEX_TABLE = ProviderTable(
         expected_stdin=TURN_STDIN,
         version_line=CODEX_VERSION_LINE,
     ),
+    relay_stand_in=partial(a_relay_calling_codex, version_line=CODEX_VERSION_LINE),
     answering=a_codex_stream,
     access_canary=CANARY_ACCESS_TOKEN,
     canaries=(CANARY_ACCESS_TOKEN, CANARY_ID_TOKEN),
@@ -271,6 +295,7 @@ GROK_TABLE = ProviderTable(
         expected_prompt=TURN_STDIN,
         version_line=GROK_VERSION_LINE,
     ),
+    relay_stand_in=partial(a_relay_calling_grok, version_line=GROK_VERSION_LINE),
     answering=a_grok_stream,
     access_canary=GROK_KEY,
     canaries=(GROK_KEY, GROK_REFRESH_CANARY),
@@ -424,3 +449,78 @@ def with_levels(
 
 def captured_settings(capture: Path) -> dict[str, Any]:
     return tomllib.loads((capture / "config.toml").read_text())
+
+
+def a_save_note() -> ClaudeCall:
+    return ClaudeCall("save_note", {"text": "la la"})
+
+
+def the_app_tools() -> dict[str, str]:
+    return {"save_note": "side_effecting", "read_note": "read_only"}
+
+
+@dataclass(frozen=True)
+class ToolRun:
+    """One relay run of a table through ``POST /runs``: its frames, status, app and child."""
+
+    events: list[RunEvent]
+    status: RunStatus
+    app: ToolApp
+    capture: CodexChildCapture
+    config: ServiceConfig
+
+    @property
+    def ending(self) -> tuple[RunState, FailureCode | None]:
+        return self.status.state, self.status.failure_code
+
+    @property
+    def shape(self) -> list[tuple[str, str | None]]:
+        return [
+            (event.type, event.name if isinstance(event, ToolCall) else text)
+            for event, (_type, text) in zip(self.events[1:], shown(self.events), strict=True)
+        ]
+
+    @property
+    def everything_the_service_showed(self) -> str:
+        frames = json.dumps([event.model_dump(mode="json") for event in self.events])
+        return frames + self.status.model_dump_json()
+
+
+def a_tool_run(
+    table: ProviderTable,
+    directory: Path,
+    authority: TestAuthority,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    tools: Mapping[str, str] | None = None,
+    runs: dict[str, object] | None = None,
+    with_origin: bool = True,
+    calls: Sequence[ClaudeCall] = (),
+    **stand_in_options: Any,
+) -> ToolRun:
+    """One run of the real runner for an app with an MCP origin, over HTTP, naming ``tools``.
+
+    ``tools`` defaults to ``the_app_tools()``; without ``with_origin`` the app has no origin.
+    """
+    named = the_app_tools() if tools is None else tools
+    directory.mkdir(exist_ok=True)
+    binary = table.relay_stand_in(directory, calls=calls, **stand_in_options)
+    with a_tool_app(authority, list(the_app_tools())) as app:
+        songmaker = {"mcp_origin": app.origin} if with_origin else None
+        config = a_codex_config(
+            table.document(
+                directory, binary, table.login_file(directory), runs=runs, songmaker=songmaker
+            )
+        )
+        runners = Runners(
+            cli=CliRunner(config, tls_context=mcp_tls_context(authority.ca_file), clock=LoopClock())
+        )
+
+        def scenario(base_url: str) -> tuple[list[RunEvent], RunStatus]:
+            events = post_a_run(base_url, named)
+            eventually(lambda: status_of(base_url, events).state is not RunState.RUNNING)
+            return events, status_of(base_url, events)
+
+        events, status = drive_over_http(child_cleanup, monkeypatch, config, scenario, runners)
+    return ToolRun(events, status, app, CodexChildCapture(directory / "capture"), config)

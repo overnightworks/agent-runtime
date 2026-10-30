@@ -26,7 +26,7 @@ from collections.abc import AsyncGenerator, Callable, Mapping
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Final
 
 from pydantic import SecretStr
 
@@ -39,8 +39,9 @@ from agent_runtime.config import PrivateWorkingRoot
 from agent_runtime.errors import raise_without_chain
 from agent_runtime.events import FinalEvent, StreamEvent
 from agent_runtime.grok.run import GrokRun
+from agent_runtime.grok_login import GrokLogin
 from agent_runtime.secret_file import read_token_file
-from agent_runtime_client.wire import Turn, TurnMessage
+from agent_runtime_client.wire import Turn
 from agent_runtime_service.config import Provider, ServiceConfig, read_codex_login, read_grok_login
 from agent_runtime_service.relayed_events import RelayedEvents
 from agent_runtime_service.routing import Cli, split_model
@@ -97,39 +98,6 @@ def claude_run(launch: ProviderLaunch) -> LoggedInRun:
     return partial(_claude_run, launch, SecretStr(read_token_file(launch.token_file)))
 
 
-class _ToolFreeRunType[Login](Protocol):
-    def __call__(
-        self,
-        binary: Path,
-        login: Login,
-        system: str,
-        history: tuple[TurnMessage, ...],
-        *,
-        model: str | None,
-        settings: tuple[CliSettings, ...],
-    ) -> CliRunAdapter: ...
-
-
-def _tool_free_run[Login](
-    run_type: _ToolFreeRunType[Login],
-    launch: ProviderLaunch,
-    login: Login,
-    inputs: RunInputs,
-) -> CliRunAdapter:
-    if inputs.relay is not None:
-        raise ValueError(
-            f"a {launch.provider} run has no tool relay; admission refuses tools before this point"
-        )
-    return run_type(
-        launch.binary,
-        login,
-        inputs.turn.system,
-        tuple(inputs.turn.messages),
-        model=inputs.model,
-        settings=inputs.settings,
-    )
-
-
 def _codex_run(launch: ProviderLaunch, login: CodexLogin, inputs: RunInputs) -> CliRunAdapter:
     return CodexRun(
         launch.binary,
@@ -147,8 +115,23 @@ def codex_run(launch: ProviderLaunch) -> LoggedInRun:
     return partial(_codex_run, launch, read_codex_login(launch.token_file))
 
 
+def _grok_run(launch: ProviderLaunch, login: GrokLogin, inputs: RunInputs) -> CliRunAdapter:
+    attached = inputs.relay is not None
+    return GrokRun(
+        launch.binary,
+        login,
+        inputs.turn.system,
+        tuple(inputs.turn.messages),
+        model=inputs.model,
+        settings=inputs.settings,
+        relay=inputs.relay,
+        tool_timeout_seconds=launch.tool_timeout_seconds if attached else None,
+        max_tool_calls=launch.max_tool_calls if attached else None,
+    )
+
+
 def grok_run(launch: ProviderLaunch) -> LoggedInRun:
-    return partial(_tool_free_run, GrokRun, launch, read_grok_login(launch.token_file))
+    return partial(_grok_run, launch, read_grok_login(launch.token_file))
 
 
 RUN_ADAPTERS: Final[Mapping[Provider, AdapterFactory]] = {

@@ -458,25 +458,16 @@ def test_a_second_run_beyond_the_limit_is_busy_and_never_goes_to_the_api_route(
     assert drive_over_http(child_cleanup, monkeypatch, config, scenario) == (429, "10")
 
 
-# Grok's tools are refused at admission until the relay serves it; Codex's are admitted.
+# A tool request beyond the places answers busy before anything is signed or connected.
 
 
-@pytest.mark.parametrize(
-    ("table", "refusal", "status_code"),
-    [
-        pytest.param(GROK_TABLE, RejectionCode.NOT_ENABLED, 403, id="xai-not-enabled"),
-        pytest.param(CODEX_TABLE, RejectionCode.BUSY, 429, id="openai-busy"),
-    ],
-)
-def test_a_tool_request_the_table_cannot_take_is_refused_before_any_capability_or_child(
+def test_a_tool_request_beyond_the_places_is_busy_before_any_capability_or_child(
     tmp_path: Path,
     authority: TestAuthority,
     child_cleanup: ChildCleanup,
     monkeypatch: pytest.MonkeyPatch,
     held_reap: HeldReap,
     table: ProviderTable,
-    refusal: RejectionCode,
-    status_code: int,
 ) -> None:
     signed = record_signed_tokens(monkeypatch)
     both = run_headers(MINT.workload(), MINT.user((SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP)))
@@ -508,7 +499,7 @@ def test_a_tool_request_the_table_cannot_take_is_refused_before_any_capability_o
             child_cleanup, monkeypatch, config, scenario, runners
         )
 
-        assert_rejected(refused, refusal, status_code)
+        assert_rejected(refused, RejectionCode.BUSY, 429)
         assert (newly_signed, app.fake.accepted_connections) == (0, 0)
 
 
@@ -542,26 +533,30 @@ def test_the_same_request_without_tools_runs_even_for_an_app_with_a_tool_origin(
         )
 
 
-def test_a_grok_run_given_a_relay_is_refused_by_an_exception_not_an_assert(
-    tmp_path: Path,
+@pytest.mark.parametrize(
+    "relay",
+    [RelayAccess(url="http://127.0.0.1:4711/mcp", secret="the-relays-secret"), None],
+    ids=["with-a-relay", "tool-free"],
+)
+def test_a_grok_run_takes_the_launchs_limits_with_a_relay_and_none_without_one(
+    tmp_path: Path, relay: RelayAccess | None
 ) -> None:
     launch = cli_runner.ProviderLaunch(
         GROK_TABLE.provider,
         GROK_TABLE.service_fake(tmp_path),
         GROK_TABLE.login_file(tmp_path),
-        max_tool_calls=1,
-        tool_timeout_seconds=1.0,
+        max_tool_calls=7,
+        tool_timeout_seconds=90.0,
     )
     inputs = cli_runner.RunInputs(
-        Turn.model_validate(THREE_MESSAGE_TURN),
-        GROK_TABLE.model,
-        RelayAccess(url="https://relay.test", secret="secret"),
-        (),
+        Turn.model_validate(THREE_MESSAGE_TURN), GROK_TABLE.model, relay, ()
     )
 
-    build = cli_runner.RUN_ADAPTERS[GROK_TABLE.provider](launch)
-    with pytest.raises(ValueError, match=f"a {GROK_TABLE.provider} run has no tool relay"):
-        build(inputs)
+    run = cli_runner.RUN_ADAPTERS[GROK_TABLE.provider](launch)(inputs)
+
+    assert isinstance(run, GrokRun)
+    limits = (launch.tool_timeout_seconds, launch.max_tool_calls) if relay else (None, None)
+    assert (run.relay, run.tool_timeout_seconds, run.max_tool_calls) == (relay, *limits)
 
 
 ROTATIONS = [
