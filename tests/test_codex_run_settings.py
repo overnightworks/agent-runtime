@@ -60,7 +60,17 @@ def test_without_settings_the_file_holds_the_defaults_alone() -> None:
     assert same(written_settings(a_run()), DEFAULTS)
 
 
-def test_one_level_switches_a_feature_on_and_leaves_the_other_ten_off() -> None:
+def test_a_codex_run_switches_the_shell_snapshot_off_by_default() -> None:
+    assert written_settings(a_run())["features"]["shell_snapshot"] is False
+
+
+def test_an_operator_level_switches_the_shell_snapshot_on_over_the_default() -> None:
+    settings = written_settings(a_run({"features": {"shell_snapshot": True}}))
+
+    assert settings["features"]["shell_snapshot"] is True
+
+
+def test_one_level_switches_a_feature_on_and_leaves_the_others_off() -> None:
     settings = written_settings(a_run({"features": {"image_generation": True}}))
 
     assert same(settings["features"], {**DEFAULTS["features"], "image_generation": True})

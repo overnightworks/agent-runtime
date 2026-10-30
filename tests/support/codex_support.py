@@ -19,6 +19,7 @@ FEATURES_OFF = (
     "image_generation",
     "plugins",
     "hooks",
+    "shell_snapshot",
     "code_mode_host",
     "code_mode",
     "code_mode_only",

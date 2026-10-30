@@ -10,6 +10,7 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | `GrokStreamDecoder()` | `GrokStreamDecoder(*, relay_attached)`, a required keyword. With `relay_attached=False` it ends on every tool event as before. |
 | `GrokToolCalled` ended a run that called any tool. | It ends a run that called a tool outside the run's relay: every tool event in a tool-free run, and in a relay run every tool event except a relay call and its running or completed updates. A relay call with any other status ends the run with the new `GrokRelayCallRefused`. |
 | `max_turns_reached` ended a Grok run with `GrokUnknownStreamPart`. | It ends the run with the new `GrokTurnLimitReached`. |
+| A Codex run left `features.shell_snapshot` to the pinned CLI, which wrote the run's exported variables, the relay secret included, into the run home's `shell_snapshots/`. | The service's Codex defaults switch `shell_snapshot` off; an operator level that sets `features.shell_snapshot = true` still wins. |
 
 ## Migrating to 0.14.0
 
