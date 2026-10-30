@@ -161,8 +161,10 @@ The service writes the result as the run's `config.toml` (mode 0600, in the run'
 and no setting value appears in the program's arguments. Its Codex defaults are `sandbox_mode =
 "read-only"`, `approval_policy = "never"`, `mcp_servers = {}`, `web_search = "disabled"` and
 `features` with `shell_tool`, `unified_exec`, `browser_use`, `computer_use`, `multi_agent`,
-`image_generation`, `plugins`, `hooks`, `code_mode_host`, `code_mode` and `code_mode_only` all
-`false`; every other feature follows the pinned CLI. The configuration overrides each of them,
+`image_generation`, `plugins`, `hooks`, `shell_snapshot`, `code_mode_host`, `code_mode` and
+`code_mode_only` all `false`; every other feature follows the pinned CLI. With `shell_snapshot` on,
+the pinned CLI writes its exported variables, the relay secret included, into the run home's
+`shell_snapshots/`. The configuration overrides each of them,
 `sandbox_mode` included, and the service neither refuses nor warns about what it sets.
 
 Codex also reads further layers, and the service owns three. The file above is the user layer.
