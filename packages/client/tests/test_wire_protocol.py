@@ -308,6 +308,7 @@ def test_a_rejection_body_round_trips_through_its_json(code: RejectionCode) -> N
     [
         pytest.param({**REJECTION, "v": True}, id="version true"),
         pytest.param({**REJECTION, "v": float(PROTOCOL_VERSION)}, id="version as a float"),
+        pytest.param({**REJECTION, "v": PROTOCOL_VERSION - 1}, id="previous version"),
         pytest.param({"code": "busy", "message": "Another run is active."}, id="no version"),
         pytest.param(
             {**REJECTION, "message": "x" * (MAX_MESSAGE_LENGTH + 1)}, id="message too long"
@@ -385,6 +386,7 @@ def test_a_status_body_names_its_state_and_codes_as_enums() -> None:
         pytest.param({**STATUS, "v": True}, id="version true"),
         pytest.param({**STATUS, "v": float(PROTOCOL_VERSION)}, id="version as a float"),
         pytest.param({**STATUS, "v": 1}, id="version 1"),
+        pytest.param({**STATUS, "v": PROTOCOL_VERSION - 1}, id="previous version"),
         pytest.param({**STATUS, "events": 0}, id="no events"),
         pytest.param({**STATUS, "events": True}, id="events true"),
         pytest.param({**STATUS, "events": 1.0}, id="events as a float"),
