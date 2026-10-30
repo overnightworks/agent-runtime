@@ -373,9 +373,11 @@ def a_codex_config(document: dict[str, Any]) -> ServiceConfig:
     return ServiceConfig.model_validate(document)
 
 
-def a_config_with_both_providers(tmp_path: Path) -> ServiceConfig:
-    """``service_config`` plus a listed ``[cli.openai]`` table."""
-    document = CODEX_TABLE.document_with_both(tmp_path)
+def a_config_with_both_providers(
+    tmp_path: Path, table: ProviderTable = CODEX_TABLE
+) -> ServiceConfig:
+    """``service_config`` plus a listed table of ``table`` (Codex unless named)."""
+    document = table.document_with_both(tmp_path)
     document["defaults"] = {"model": f"{Provider.ANTHROPIC}/{LISTED_MODEL}"}
     document["apps"]["songmaker"]["mcp_origin"] = SONGMAKER_ORIGIN
     return a_codex_config(document)

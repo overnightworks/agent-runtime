@@ -53,6 +53,7 @@ from tests.support.service_table_support import (
     CODEX_MODEL,
     CODEX_NAME,
     CODEX_TABLE,
+    GROK_TABLE,
     a_codex_config,
     a_codex_login_file,
     a_config_with_both_providers,
@@ -320,9 +321,17 @@ def test_m17_a_caller_in_no_route_group_is_not_enabled_though_the_model_is_offer
     assert service.started == 0
 
 
-def test_m18_tools_on_a_codex_model_are_not_enabled(tmp_path):
+def test_m18_tools_on_a_codex_model_are_admitted(tmp_path):
     with _serving(a_config_with_both_providers(tmp_path)) as serving:
         response = serving.person_run(model=CODEX_NAME, tools=SONGMAKER_TOOLS)
+
+    assert response.status_code == 200, response.text
+    assert serving.started == 1
+
+
+def test_m18_tools_on_a_grok_model_are_not_enabled(tmp_path):
+    with _serving(a_config_with_both_providers(tmp_path, GROK_TABLE)) as serving:
+        response = serving.person_run(model=GROK_TABLE.listed, tools=SONGMAKER_TOOLS)
 
     assert_rejected(response, RejectionCode.NOT_ENABLED, 403)
     assert serving.started == 0
