@@ -6,9 +6,8 @@ import tomllib
 from pathlib import Path
 
 import pytest
-from tests.support.codex_support import DEFAULT_SETTINGS
+from tests.support.codex_support import DEFAULT_SETTINGS, a_tool_free_codex_run
 from tests.support.grok_support import a_grok_run
-from tests.support.provider_test_support import a_codex_login
 from tests.support.service_config_support import (
     VALID_CONFIG,
     assert_startup_refuses,
@@ -17,7 +16,6 @@ from tests.support.service_config_support import (
 from tests.support.service_support import everything_a_refusal_holds, reaches_text
 
 from agent_runtime.codex.run import CodexRun
-from agent_runtime.codex_login import assess_codex_login
 from agent_runtime_client.wire import TurnMessage
 from agent_runtime_service.cli import EXIT_BAD_CONFIG, main
 from agent_runtime_service.config import ConfigError, Provider, ServiceConfig, load_config
@@ -524,13 +522,10 @@ THE_EXAMPLES_APP = f'\n[apps.{DOCUMENTED_APP}]\nworkload_client = "{DOCUMENTED_A
 
 
 def a_codex_run_of(config: ServiceConfig, app: str, agent: str) -> CodexRun:
-    return CodexRun(
-        Path("/opt/codex/bin/codex"),
-        assess_codex_login(a_codex_login()),
-        "system",
-        (TurnMessage(role="user", text="question"),),
-        model=None,
-        settings=config.cli_settings_levels(app, agent, Provider.OPENAI),
+    return a_tool_free_codex_run(
+        *config.cli_settings_levels(app, agent, Provider.OPENAI),
+        system="system",
+        history=(TurnMessage(role="user", text="question"),),
     )
 
 
