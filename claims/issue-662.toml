@@ -1,0 +1,7 @@
+claim_id = "3f39b3155b2a47a89319cc7ea4c0a66c"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "7a0323f8e3bbc819e4fd6076ecdc1e8c7b6326a7"
+branch = "claude/issue-662-codex-run-builders"
+scope = ["tests/support/codex_support.py", "tests/test_codex_run.py", "tests/test_codex_run_settings.py"]
+opened_commit = "701b3125ca5e80cf84fdbb216b34bc74b81fc6a1"
