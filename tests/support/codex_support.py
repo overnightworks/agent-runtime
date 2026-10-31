@@ -1,4 +1,7 @@
-"""A stand-in for the pinned Codex CLI, shared by the adapter's and the service's test modules."""
+"""Test support for the pinned Codex CLI: a stand-in for it and the shared ``CodexRun`` builders.
+
+The adapter's and the service's test modules share both.
+"""
 
 from __future__ import annotations
 
