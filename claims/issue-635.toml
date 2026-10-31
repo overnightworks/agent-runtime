@@ -1,8 +1,0 @@
-claim_id = "3cf015e1d32d44c89c6956674d3175e5"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "e0cd0b939b185477704d4a0c62fcf909079e0de6"
-branch = "claude/issue-635-b1-0-the-neutral-renewal-contract"
-scope = [".importlinter", "docs/MIGRATING.md", "docs/operations.md", "packages/service/src/agent_runtime_service/login.py", "packages/service/src/agent_runtime_service/login_standing.py", "packages/service/src/agent_runtime_service/renewal.py", "packages/service/tests/test_renewal.py", "quality/config.toml", "src/agent_runtime/codex/renewal.py", "src/agent_runtime/codex_login.py", "src/agent_runtime/login_renewal.py", "tests/support/service_renewal_support.py", "tests/test_codex_login.py", "tests/test_codex_renewal.py"]
-opened_commit = "dee020c73373ce18560d5cf0e3ea02c041cafaf4"
-whole_reason = "Six production files, about 45 added and 25 deleted lines: one move that every importer must follow in the same commit, as B0 did."
