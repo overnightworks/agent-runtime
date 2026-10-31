@@ -143,18 +143,10 @@ body rules be fixed before the build.
   | The user token is missing or not `Authorization: Bearer <token>`, or fails verification as the workload token above; or it has no `sub`, a `sub` that is not valid Unicode text (A1a4 O7), or a malformed group claim | 401 `unauthorized`, one body, `WWW-Authenticate: Bearer` |
   | The workload binding above fails (among others: an absent workload `sub`, an absent or empty `azp` or `client_id`); the user's `azp` differs from the workload's; the user's `sub` equals the workload's | 403 `forbidden` |
   | The body, at most 256 KiB enforced before buffering, parsed as strict JSON (no `NaN`, no member twice): its `v` is absent, not an integer, or not 1 | 400 `unsupported_version` |
-  | The body is over 256 KiB, declared or streamed (amended by #667) | 413 `too_large` |
-  | The body is not strict JSON or not UTF-8 (UTF-16 and UTF-32, with or without a BOM, are refused; a UTF-8 BOM is accepted), or not exactly a `RunRequest` (a malformed purpose included) | 422 `invalid_request` |
+  | The body is not strict JSON or not UTF-8 (UTF-16 and UTF-32, with or without a BOM, are refused; a UTF-8 BOM is accepted), too large, or not exactly a `RunRequest` (a malformed purpose included) | 422 `invalid_request` |
   | H5 routing answers `not_enabled`; no run starts | 403 `not_enabled` |
   | The run's capability would exceed 8,192 characters (A1a4 item 12): a subject wider than the preflight's reserve, or a wall clock past 2286 | 422 `capability_too_large` |
   | Admitted | 200 `text/event-stream` |
-
-  Amended by #667 (slice S1 of #634; hal `docs/architecture.md` §10 rule 9,
-  ruled 30.10.2026, "413 for an oversized request"): a body over 256 KiB,
-  declared or streamed, no longer answers 422 `invalid_request` but 413
-  `too_large`, at the same place in the order (after the tokens, before the
-  body is parsed). A `Content-Length` that is not a number stays 422
-  `invalid_request`.
 
   *Amendment (21.10.2026, #389).* The table stands as ruled, with three changes: the
   version row reads "not 2" (the A1a1 amendment below, #382, #389); after the 422 `invalid_request`
@@ -252,6 +244,13 @@ body rules be fixed before the build.
   the webauth head's input of 21.10.2026 (`admin` from `/apps/<app>/admin` or below, else
   `user`); the two-role shape is the operator's own: „admin => hat alles => user hat halt
   nur bestimmte auswahl … so 2 rollen … kein fan von 100 rollen … vorbelegen“.
+
+  *Amendment (31.10.2026, #667; slice S1 of #634; hal `docs/architecture.md` §10 rule 9,
+  ruled 30.10.2026, "413 for an oversized request").* The table stands as ruled, with one
+  change: a body over 256 KiB, declared or streamed, answers 413 `too_large` instead of
+  422 `invalid_request`. The size check is the first body check, before the 400
+  `unsupported_version` row and the 422 rows, because the body is not read further than the
+  limit. A `Content-Length` that is not a number stays 422 `invalid_request`.
 
   Every rejection is a `RunRejection` with `Cache-Control: no-store`, and no
   answer or log line carries token text.
