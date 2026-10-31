@@ -9,7 +9,10 @@ provider's factory takes the launch and reads the login; the run it returns take
 the run's model and the relay's access, so no factory sees the admitted run or its capability.
 When the run's capability grants tools it then opens the run's tool set (``RunTools``), hands
 the adapter only the relay's address and secret, and merges the relay's tool events with the
-core's text and ending (``RelayedEvents``); the CLI's own tool lines are dropped. Its one exit
+core's text and ending (``RelayedEvents``); the CLI's own tool lines are dropped. A relay run
+whose core yields its final before the relay answered a ``tools/list`` ends with
+``RelayNeverListed``: the CLI answered without the app's tools, which no run may do silently,
+whatever kept it from the relay. Its one exit
 path closes the tool set once, with the core's reap, so a login refusal, a failed exit, a
 barrier refusal or a lost containment reaches the service's run supervision as it was raised. It
 reads no installed core configuration: each fact arrives as an argument.
@@ -23,7 +26,7 @@ from collections.abc import AsyncGenerator, Callable, Mapping
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Final, Protocol
+from typing import Final
 
 from pydantic import SecretStr
 
@@ -31,17 +34,27 @@ from agent_runtime.claude.run import ClaudeRun
 from agent_runtime.cli_run import CliRunAdapter, RelayAccess, astream_cli_run
 from agent_runtime.cli_settings import CliSettings
 from agent_runtime.codex.run import CodexRun
+from agent_runtime.codex_login import CodexLogin
 from agent_runtime.config import PrivateWorkingRoot
-from agent_runtime.events import StreamEvent
+from agent_runtime.errors import raise_without_chain
+from agent_runtime.events import FinalEvent, StreamEvent
 from agent_runtime.grok.run import GrokRun
+from agent_runtime.grok_login import GrokLogin
 from agent_runtime.secret_file import read_token_file
-from agent_runtime_client.wire import Turn, TurnMessage
+from agent_runtime_client.wire import Turn
 from agent_runtime_service.config import Provider, ServiceConfig, read_codex_login, read_grok_login
 from agent_runtime_service.relayed_events import RelayedEvents
 from agent_runtime_service.routing import Cli, split_model
 from agent_runtime_service.run_liveness import RunClock
 from agent_runtime_service.run_tools import RunTools
 from agent_runtime_service.runners import AdmittedRun
+
+
+class RelayNeverListed(Exception):
+    """A relay run's CLI ended its answer before the relay answered its tool listing."""
+
+    def __init__(self) -> None:
+        super().__init__("the run's CLI answered before it listed the relay's tools")
 
 
 @dataclass(frozen=True)
@@ -85,45 +98,40 @@ def claude_run(launch: ProviderLaunch) -> LoggedInRun:
     return partial(_claude_run, launch, SecretStr(read_token_file(launch.token_file)))
 
 
-class _ToolFreeRunType[Login](Protocol):
-    def __call__(
-        self,
-        binary: Path,
-        login: Login,
-        system: str,
-        history: tuple[TurnMessage, ...],
-        *,
-        model: str | None,
-        settings: tuple[CliSettings, ...],
-    ) -> CliRunAdapter: ...
-
-
-def _tool_free_run[Login](
-    run_type: _ToolFreeRunType[Login],
-    launch: ProviderLaunch,
-    login: Login,
-    inputs: RunInputs,
-) -> CliRunAdapter:
-    if inputs.relay is not None:
-        raise ValueError(
-            f"a {launch.provider} run has no tool relay; admission refuses tools before this point"
-        )
-    return run_type(
+def _codex_run(launch: ProviderLaunch, login: CodexLogin, inputs: RunInputs) -> CliRunAdapter:
+    return CodexRun(
         launch.binary,
         login,
         inputs.turn.system,
         tuple(inputs.turn.messages),
         model=inputs.model,
         settings=inputs.settings,
+        relay=inputs.relay,
+        tool_timeout_seconds=None if inputs.relay is None else launch.tool_timeout_seconds,
     )
 
 
 def codex_run(launch: ProviderLaunch) -> LoggedInRun:
-    return partial(_tool_free_run, CodexRun, launch, read_codex_login(launch.token_file))
+    return partial(_codex_run, launch, read_codex_login(launch.token_file))
+
+
+def _grok_run(launch: ProviderLaunch, login: GrokLogin, inputs: RunInputs) -> CliRunAdapter:
+    attached = inputs.relay is not None
+    return GrokRun(
+        launch.binary,
+        login,
+        inputs.turn.system,
+        tuple(inputs.turn.messages),
+        model=inputs.model,
+        settings=inputs.settings,
+        relay=inputs.relay,
+        tool_timeout_seconds=launch.tool_timeout_seconds if attached else None,
+        max_tool_calls=launch.max_tool_calls if attached else None,
+    )
 
 
 def grok_run(launch: ProviderLaunch) -> LoggedInRun:
-    return partial(_tool_free_run, GrokRun, launch, read_grok_login(launch.token_file))
+    return partial(_grok_run, launch, read_grok_login(launch.token_file))
 
 
 RUN_ADAPTERS: Final[Mapping[Provider, AdapterFactory]] = {
@@ -193,6 +201,8 @@ class CliRunner:
                 None if tools is None else tools.calls,
             )
             async for event in events:
+                if isinstance(event, FinalEvent) and tools is not None and not tools.listed:
+                    raise_without_chain(RelayNeverListed())
                 yield event
         finally:
             await self._finish(tools, events)

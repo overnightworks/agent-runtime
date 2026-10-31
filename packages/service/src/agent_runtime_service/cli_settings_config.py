@@ -8,6 +8,7 @@ from typing import Final, Self, cast
 from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator, model_validator
 
 from agent_runtime.claude.run import check_tool_name, settings_document
+from agent_runtime.cli_run import RELAY_SERVER_NAME
 from agent_runtime.cli_settings import CliSettings, toml_key
 
 
@@ -17,6 +18,7 @@ class _CliSettingsSection(BaseModel):
 
 _ANY_ID: Final = "<id>"
 _SET_MODEL_INSTEAD: Final = "set model instead"
+_RELAY_OWNER: Final = "the service attaches the run's tool relay"
 _OwnedPaths = Mapping[tuple[str, ...], str]
 
 _CODEX_SETTINGS_THE_SERVICE_OWNS: Final[_OwnedPaths] = {
@@ -24,6 +26,7 @@ _CODEX_SETTINGS_THE_SERVICE_OWNS: Final[_OwnedPaths] = {
     ("model_provider",): _SET_MODEL_INSTEAD,
     ("model_instructions_file",): "set the run request's system text instead",
     ("cli_auth_credentials_store",): "set [cli.openai] token_file instead",
+    ("mcp_servers", RELAY_SERVER_NAME): _RELAY_OWNER,
 }
 
 
@@ -40,7 +43,7 @@ _APP_TOOL_PREFIX: Final = "mcp__"
 _GROK_LOGIN_FILE_OWNER: Final = "set [cli.xai] token_file instead"
 _GROK_PATCH_OWNER: Final = "it can patch keys the service owns"
 _GROK_SYSTEM_TEXT_OWNER: Final = "set the run request's system text instead"
-_GROK_TOOL_FREE_OWNER: Final = "the run is tool-free (--{switch})"
+_GROK_SWITCH_OWNER: Final = "the service sets --{switch}"
 _GROK_CREDENTIAL_CARRIER_OWNER: Final = (
     f"they can carry the inference credential; {_GROK_LOGIN_FILE_OWNER}"
 )
@@ -57,10 +60,12 @@ _GROK_SIGN_IN_KEYS: Final = (
 
 def _grok_settings_the_service_owns() -> _OwnedPaths:
     owned: dict[tuple[str, ...], str] = {
+        ("mcp_servers", RELAY_SERVER_NAME): _RELAY_OWNER,
+        ("mcp_servers", _ANY_ID): "a Grok run takes no MCP server beside the run's tool relay",
         ("models", "default"): _SET_MODEL_INSTEAD,
-        ("permission", "deny"): _GROK_TOOL_FREE_OWNER.format(switch='deny "*"'),
-        ("subagents", "enabled"): _GROK_TOOL_FREE_OWNER.format(switch="no-subagents"),
-        ("disable_web_search",): _GROK_TOOL_FREE_OWNER.format(switch="disable-web-search"),
+        ("permission", "deny"): _GROK_SWITCH_OWNER.format(switch="deny"),
+        ("subagents", "enabled"): _GROK_SWITCH_OWNER.format(switch="no-subagents"),
+        ("disable_web_search",): _GROK_SWITCH_OWNER.format(switch="disable-web-search"),
         ("models", "extra_headers"): _GROK_CREDENTIAL_CARRIER_OWNER,
         ("models", "agent_type"): _GROK_SYSTEM_TEXT_OWNER,
         ("model", _ANY_ID, "model_provider"): _SET_MODEL_INSTEAD,

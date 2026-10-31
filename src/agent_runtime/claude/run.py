@@ -24,6 +24,7 @@ from agent_runtime.claude.provider import (
     _mcp_tool_prefix,
 )
 from agent_runtime.cli_run import (
+    RELAY_SERVER_NAME,
     CliRunStart,
     RelayAccess,
     RelayState,
@@ -33,6 +34,7 @@ from agent_runtime.cli_run import (
     examine_announcement,
     refuse_announcement,
     relay_authorization,
+    require_tool_timeout,
 )
 from agent_runtime.cli_settings import CliSettings, TomlValue, merged
 from agent_runtime.constants import (
@@ -46,7 +48,6 @@ from agent_runtime_client.wire import TurnMessage
 
 log = logging.getLogger(__name__)
 
-RELAY_SERVER_NAME: Final = "relay"
 _TOOL_TIMEOUT_VARIABLE: Final = "MCP_TOOL_TIMEOUT"
 _MILLISECONDS_PER_SECOND: Final = 1000
 # The CLI counts one turn per tool-using response and checks its limit after
@@ -215,10 +216,7 @@ class ClaudeRun:
             raise ChildProcessSpecificationError("A Claude run needs max_tool_calls of at least 1")
         if not self.history:
             raise ChildProcessSpecificationError("A Claude run needs a non-empty history")
-        if not (math.isfinite(self.tool_timeout_seconds) and self.tool_timeout_seconds > 0):
-            raise ChildProcessSpecificationError(
-                "A Claude run needs a finite, positive tool_timeout_seconds"
-            )
+        require_tool_timeout("Claude", self.tool_timeout_seconds)
         for level in self.settings:
             _checked_level(level)
 

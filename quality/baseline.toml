@@ -11,7 +11,7 @@
 "packages/service/src/agent_runtime_service/tool_relay.py" = 928
 "packages/service/tests/test_app_tools.py" = 1087
 "packages/service/tests/test_capability.py" = 869
-"packages/service/tests/test_cli_runner_tools.py" = 1717
+"packages/service/tests/test_cli_runner_tools.py" = 1709
 "packages/service/tests/test_config.py" = 1445
 "packages/service/tests/test_quarantine.py" = 870
 "packages/service/tests/test_run_records_recording.py" = 2034

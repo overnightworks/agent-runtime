@@ -2,7 +2,8 @@
 
 Rows serve the real app on a loopback socket and run a stand-in for the pinned CLI as a real
 child, with no installed core configuration; the rows every table has are those of
-``test_cli_runner_tables``. Test values: the Codex table with its login, the listed model
+``test_cli_runner_tables``. The tool rows run a stand-in that talks to the run's relay and a TLS
+fake app signed by a test CA. Test values: the Codex table with its login, the listed model
 ``gpt-5.5`` and the pinned version 0.163.0.
 """
 
@@ -24,6 +25,7 @@ from tests.support.codex_support import (
 from tests.support.core_runtime_support import (
     no_installed_core_runtime,  # noqa: F401 - an autouse fixture
 )
+from tests.support.mcp_app_fake import TestAuthority
 from tests.support.provider_test_support import (
     a_fake_claude,
 )
@@ -50,6 +52,7 @@ from tests.support.service_table_support import (
     a_codex_login_file,
     a_service_fake,
     a_table_service,
+    a_tool_run,
     argv_of,
     captured_settings,
     codex_document,
@@ -61,6 +64,7 @@ import agent_runtime_service.cli_runner as cli_runner
 from agent_runtime_client.wire import (
     FailureCode,
     RunFile,
+    RunState,
     Succeeded,
 )
 from agent_runtime_service.capability import Capability
@@ -184,7 +188,25 @@ def test_codex_tool_items_reach_no_frame_status_or_log_and_the_answer_succeeds(
     assert CANARY not in seen
 
 
-# Tools are refused at admission until the relay serves Codex.
+# A Codex tool run attaches the relay only through its settings file.
+
+
+def test_a_tool_free_codex_run_on_an_app_with_an_origin_gets_the_argv_of_a_tool_run(
+    tmp_path: Path,
+    authority: TestAuthority,
+    child_cleanup: ChildCleanup,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with_tools, tool_free = (
+        a_tool_run(CODEX_TABLE, tmp_path / name, authority, child_cleanup, monkeypatch, **options)
+        for name, options in (("tools", {}), ("free", {"tools": {}, "lists": "never"}))
+    )
+
+    assert tool_free.ending == (RunState.SUCCEEDED, None)
+    assert tool_free.capture.homeless_argv == with_tools.capture.homeless_argv
+
+
+# No run adapter factory sees the admitted run.
 
 
 def test_no_run_adapter_factory_sees_the_admitted_run_or_its_capability() -> None:

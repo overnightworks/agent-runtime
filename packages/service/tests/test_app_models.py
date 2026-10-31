@@ -8,10 +8,12 @@ token checks, on the person's path and on the app's own path.
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
+from logging import DEBUG
 
 import httpx
 import pytest
@@ -32,11 +34,13 @@ from tests.support.service_cli_runner_support import (
 from tests.support.service_support import (
     API_GROUP,
     COWRITER,
+    PRESENTATOR_CLIENT,
     SONGMAKER_GROUP,
     SONGMAKER_TOOLS,
     SUBSCRIPTION_GROUP,
     ScriptedRunner,
     TokenMint,
+    answer_of,
     assert_rejected,
     decoded_events,
     post_run,
@@ -56,6 +60,7 @@ from tests.support.service_table_support import (
     argv_of,
     captured_settings,
     codex_document,
+    the_table,  # noqa: F401 - the fixture is named in its signature
     with_claude_beside,
     with_levels,
 )
@@ -63,7 +68,7 @@ from webauth.https_client import KeySetFetchError
 
 from agent_runtime.config import reset_config
 from agent_runtime.events import AssistantTextEvent, FinalEvent, StreamEvent
-from agent_runtime_client.wire import RejectionCode, RunEvent, RunStarted
+from agent_runtime_client.wire import ModelList, RejectionCode, RunEvent, RunStarted
 from agent_runtime_service.app import create_app
 from agent_runtime_service.cli import installed_runners
 from agent_runtime_service.config import ServiceConfig
@@ -316,12 +321,22 @@ def test_m17_a_caller_in_no_route_group_is_not_enabled_though_the_model_is_offer
     assert service.started == 0
 
 
-def test_m18_tools_on_a_codex_model_are_not_enabled(tmp_path):
-    with _serving(a_config_with_both_providers(tmp_path)) as serving:
-        response = serving.person_run(model=CODEX_NAME, tools=SONGMAKER_TOOLS)
+def test_m17_a_caller_in_no_route_group_is_not_enabled_for_a_tool_run_on_a_subscription_model(
+    tmp_path, table
+):
+    with _serving(a_config_with_both_providers(tmp_path, table)) as serving:
+        response = serving.person_run([SONGMAKER_GROUP], model=table.listed, tools=SONGMAKER_TOOLS)
 
     assert_rejected(response, RejectionCode.NOT_ENABLED, 403)
     assert serving.started == 0
+
+
+def test_m18_tools_on_a_subscription_model_are_admitted(tmp_path, table):
+    with _serving(a_config_with_both_providers(tmp_path, table)) as serving:
+        response = serving.person_run(model=table.listed, tools=SONGMAKER_TOOLS)
+
+    assert response.status_code == 200, response.text
+    assert serving.started == 1
 
 
 def test_m19_a_full_subscription_answers_busy_and_never_falls_back_to_the_api_route(models):
@@ -360,3 +375,133 @@ def test_m25_a_model_whose_run_fails_falls_back_to_no_other_model(models):
     assert events[-1].type != "succeeded"
     assert [run.model for run in serving.cli.admitted] == [models.opus]
     assert serving.api.admitted == []
+
+
+def _get_models(service: _Service, headers: Mapping[str, str] | None = None) -> httpx.Response:
+    return httpx.get(f"{service.base_url}/models", headers=dict(headers or {}), timeout=10)
+
+
+def _workload(service: _Service, **overrides: object) -> dict[str, str]:
+    return run_headers(service.mint.workload(**overrides), None)
+
+
+def test_n1_n8_the_workload_token_alone_of_an_app_with_no_own_agent_reads_the_sorted_offer(
+    tmp_path,
+):
+    config = a_config_with_both_providers(tmp_path)
+    with _serving(config) as serving:
+        response = _get_models(serving, _workload(serving))
+
+    listed = ModelList.model_validate_json(response.content)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    assert response.headers["cache-control"] == "no-store"
+    assert [entry.id for entry in listed.data] == sorted(config.offered_models())
+    assert len(listed.data) > 1
+    assert {entry.object for entry in listed.data} == {"model"}
+
+
+def test_n2_an_invalid_authorization_header_is_ignored():
+    with _serving() as serving:
+        plain = _get_models(serving, _workload(serving))
+        with_user = _get_models(
+            serving, {**_workload(serving), "Authorization": "Bearer not.a.token"}
+        )
+
+    assert (with_user.status_code, with_user.content) == (200, plain.content)
+
+
+def test_n3_a_job_ticket_header_is_unauthorized_before_any_token_is_read():
+    with _serving() as serving:
+        response = _get_models(serving, {"Agent-Job-Ticket": "anything"})
+        with_valid_token = _get_models(serving, {**_workload(serving), "Agent-Job-Ticket": "x"})
+
+    assert_rejected(response, RejectionCode.UNAUTHORIZED, 401)
+    assert_rejected(with_valid_token, RejectionCode.UNAUTHORIZED, 401)
+    assert serving.mint.key_set_fetches == 0
+
+
+def test_n4_n5_a_missing_or_unusable_workload_token_is_unauthorized():
+    other_key = TokenMint()
+    with _serving() as serving:
+        now = int(time.time())
+        refused = [
+            _get_models(serving),
+            _get_models(serving, run_headers("not.a.jwt", None)),
+            _get_models(serving, run_headers(other_key.workload(), None)),
+            _get_models(serving, _workload(serving, iat=now - 400, exp=now - 100)),
+        ]
+
+    for response in refused:
+        assert_rejected(response, RejectionCode.UNAUTHORIZED, 401)
+
+
+def test_n6_an_unreachable_key_set_is_unavailable_with_retry_after():
+    def unreachable_issuer(_url: str) -> bytes:
+        raise KeySetFetchError("the issuer cannot be reached")
+
+    with _serving(fetch_key_set=unreachable_issuer) as serving:
+        response = _get_models(serving, _workload(serving))
+
+    assert_rejected(response, RejectionCode.UNAVAILABLE, 503)
+
+
+def test_n7_a_workload_token_bound_to_no_registered_app_is_forbidden():
+    with _serving() as serving:
+        response = _get_models(serving, _workload(serving, client="unregistered-client"))
+
+    assert_rejected(response, RejectionCode.FORBIDDEN, 403)
+
+
+def test_n9_every_registered_app_reads_the_same_bytes():
+    with _serving() as serving:
+        songmaker = _get_models(serving, _workload(serving))
+        presentator = _get_models(
+            serving, run_headers(serving.mint.workload(PRESENTATOR_CLIENT), None)
+        )
+
+    assert songmaker.status_code == presentator.status_code == 200
+    assert answer_of(songmaker) == answer_of(presentator)
+
+
+def test_n10_two_instances_of_one_configuration_answer_alike_while_one_has_every_place_taken():
+    held = HeldRunner()
+    config = _config(runs={"max_parallel_cli_runs": 1})
+    with ThreadPoolExecutor() as pool, _serving(config, cli=held) as busy, _serving(config) as idle:
+        try:
+            pending = pool.submit(busy.person_run, None)
+            assert held.entered.wait(TEST_WAIT_SECONDS), "the run was not admitted"
+            assert_rejected(busy.person_run(), RejectionCode.BUSY, 429)
+
+            from_busy = _get_models(busy, _workload(busy))
+            from_idle = _get_models(idle, _workload(idle))
+        finally:
+            held.proceed_all()
+            pending.result(timeout=TEST_WAIT_SECONDS)
+
+    assert from_busy.status_code == from_idle.status_code == 200
+    assert answer_of(from_busy) == answer_of(from_idle)
+
+
+def test_n11_every_listed_name_is_admitted_as_a_runs_model(tmp_path):
+    with _serving(a_config_with_both_providers(tmp_path)) as serving:
+        listed = ModelList.model_validate_json(_get_models(serving, _workload(serving)).content)
+        started = [_started(serving.person_run(model=entry.id)).model for entry in listed.data]
+
+    assert started == [entry.id for entry in listed.data]
+
+
+def test_no_token_reaches_a_models_refusal_or_log(caplog):
+    with _serving() as serving:
+        workload, user = serving.mint.workload(), serving.mint.user()
+        with caplog.at_level(DEBUG):
+            refusals = [
+                _get_models(serving, {"Agent-Workload-Token": workload, "Agent-Job-Ticket": "t"}),
+                _get_models(serving, {"Agent-Workload-Token": workload[:-4] + "AAAA"}),
+                _get_models(serving, run_headers(workload, user)),
+            ]
+
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    for token in (workload, user):
+        assert token not in logged
+        assert all(token.encode() not in refusal.content for refusal in refusals)

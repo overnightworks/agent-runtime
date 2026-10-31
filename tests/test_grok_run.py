@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import tomllib
 from functools import partial
 from pathlib import Path
@@ -23,7 +24,13 @@ from tests.support.grok_support import a_fake_grok as a_fake_grok_expecting
 from tests.support.provider_test_support import a_grok_login
 
 from agent_runtime.anchored_turn import CliProcessPool
-from agent_runtime.cli_run import CliStreamLineTooLong, astream_cli_run
+from agent_runtime.cli_run import (
+    RELAY_TOKEN_VARIABLE,
+    CliStreamLineTooLong,
+    RelayAccess,
+    astream_cli_run,
+)
+from agent_runtime.cli_settings import CliSettings
 from agent_runtime.config import PrivateWorkingRoot, reset_config
 from agent_runtime.errors import CliLoginRefusedError
 from agent_runtime.events import AssistantTextEvent, FinalEvent, StreamEvent
@@ -31,11 +38,13 @@ from agent_runtime.grok.run import (
     GROK_CLI_LOGIN_REFUSED_DETAIL,
     GROK_CLI_PROCESS_POOL,
     GrokAnswerMissing,
+    GrokRelayCallRefused,
     GrokRun,
     GrokRunFailure,
     GrokStreamDecoder,
     GrokToolCalled,
     GrokTurnFailed,
+    GrokTurnLimitReached,
     GrokUnknownStreamPart,
     GrokUnreadableLine,
 )
@@ -93,9 +102,11 @@ a_fake_grok = partial(
 )
 
 
-def decoded(lines: tuple[bytes, ...], returncode: int | None = None) -> list[StreamEvent]:
+def decoded(
+    lines: tuple[bytes, ...], returncode: int | None = None, *, relay_attached: bool = False
+) -> list[StreamEvent]:
     """The events of ``lines``, and the ending when the process is taken to have exited."""
-    decoder = GrokStreamDecoder()
+    decoder = GrokStreamDecoder(relay_attached=relay_attached)
     events: list[StreamEvent] = [event for line in lines for event in decoder.events_of(line)]
     return events if returncode is None else [*events, decoder.ending(returncode)]
 
@@ -201,6 +212,236 @@ def test_a_run_with_a_refused_field_is_not_built_and_the_error_names_the_field(
     ] == []
 
 
+def a_relay() -> RelayAccess:
+    return RelayAccess(url="http://127.0.0.1:4711/mcp", secret="relay-secret-canary-0e5b")
+
+
+def relay_fields(**changes: Any) -> dict[str, Any]:
+    return {"relay": a_relay(), "tool_timeout_seconds": 900.0, "max_tool_calls": 30, **changes}
+
+
+def a_relay_run(*settings: CliSettings, **changes: Any) -> GrokRun:
+    return a_run(settings=settings, **relay_fields(**changes))
+
+
+def written_settings(run: GrokRun) -> dict[str, Any]:
+    return tomllib.loads(run.run_files()["config.toml"].decode())
+
+
+@pytest.mark.parametrize(
+    ("max_tool_calls", "model", "model_option"),
+    [
+        pytest.param(1, None, (), id="one-call"),
+        pytest.param(30, "listed-model", ("--model=listed-model",), id="thirty-calls-named-model"),
+        pytest.param(4294967294, None, (), id="the-largest-call-limit"),
+    ],
+)
+def test_a_relay_runs_argv_is_the_pinned_hypothesis_with_one_turn_beyond_its_call_limit(
+    tmp_path: Path, max_tool_calls: int, model: str | None, model_option: tuple[str, ...]
+) -> None:
+    home = tmp_path / "home"
+    run = a_relay_run(max_tool_calls=max_tool_calls, model=model)
+    arguments = run.start(home, tmp_path / "work").child.arguments
+
+    assert arguments == (
+        "--prompt-file",
+        str(home / "prompt.txt"),
+        "--output-format",
+        "streaming-json",
+        "--tools",
+        "",
+        "--permission-mode",
+        "dontAsk",
+        "--allow",
+        "MCPTool(relay__*)",
+        *("--deny", "Bash", "--deny", "Read", "--deny", "Edit", "--deny", "Write"),
+        *("--deny", "Grep", "--deny", "Glob", "--deny", "WebFetch", "--deny", "WebSearch"),
+        "--max-turns",
+        str(max_tool_calls + 1),
+        "--no-subagents",
+        "--disable-web-search",
+        *model_option,
+    )
+    assert "*" not in arguments
+
+
+def test_the_allow_rule_opens_exactly_the_server_the_config_entry_names(tmp_path: Path) -> None:
+    run = a_relay_run()
+    arguments = run.start(tmp_path / "home", tmp_path / "work").child.arguments
+
+    [server] = written_settings(run)["mcp_servers"]
+    assert arguments[arguments.index("--allow") + 1] == f"MCPTool({server}__*)"
+
+
+@pytest.mark.parametrize(
+    ("seconds", "whole_seconds"), [(1.0, 1), (2.5, 3), (899.01, 900), (900.0, 900)]
+)
+def test_a_relay_run_writes_the_relay_entry_over_the_merged_levels_beside_their_keys(
+    seconds: float, whole_seconds: int
+) -> None:
+    levels: tuple[CliSettings, ...] = (
+        {"invented": {"first": 1, "kept": SETTING_VALUE}, "permission": {"allow": ["Read"]}},
+        {"invented": {"first": 2}},
+    )
+    settings = written_settings(a_relay_run(*levels, tool_timeout_seconds=seconds))
+    servers = settings.pop("mcp_servers")
+
+    assert settings == {
+        "invented": {"first": 2, "kept": SETTING_VALUE},
+        "permission": {"allow": ["Read"]},
+    }
+    assert servers == {
+        "relay": {
+            "url": a_relay().url,
+            "bearer_token_env_var": RELAY_TOKEN_VARIABLE,
+            "tool_timeout_sec": whole_seconds,
+        }
+    }
+
+
+@pytest.mark.parametrize(
+    "level",
+    [
+        pytest.param({"mcp_servers": {"relay": {"url": "https://elsewhere.test/"}}}, id="url"),
+        pytest.param(
+            {"mcp_servers": {"relay": {"bearer_token_env_var": "OTHER_VARIABLE"}}},
+            id="bearer-variable",
+        ),
+        pytest.param({"mcp_servers": {"relay": {"invented": 1}}}, id="invented-key"),
+        pytest.param({"mcp_servers": {}}, id="empty-servers"),
+        pytest.param({"mcp_servers": "not-a-table"}, id="scalar-servers"),
+    ],
+)
+def test_the_relay_entry_replaces_whatever_a_level_set_for_it(level: CliSettings) -> None:
+    assert (
+        written_settings(a_relay_run(level))["mcp_servers"]
+        == written_settings(a_relay_run())["mcp_servers"]
+    )
+
+
+def another_server() -> CliSettings:
+    return {"url": f"https://{SETTING_VALUE}.test/mcp"}
+
+
+@pytest.mark.parametrize(
+    "levels",
+    [
+        pytest.param(({"mcp_servers": {"other": another_server()}},), id="another-server"),
+        pytest.param(
+            ({"mcp_servers": {"relay": {}, "other": another_server()}},), id="beside-a-relay-entry"
+        ),
+        pytest.param(
+            ({"mcp_servers": {"other": another_server()}}, {"mcp_servers": "not-a-table"}),
+            id="in-a-lower-level",
+        ),
+        pytest.param(
+            (
+                {"permission": {"allow": ["MCPTool(other__*)"]}},
+                {"mcp_servers": {"other": another_server()}},
+            ),
+            id="with-a-compact-allow-rule",
+        ),
+        pytest.param(
+            (
+                {
+                    "permission": {"rules": [{"tool": "MCPTool(other__*)", "action": "allow"}]},
+                    "mcp_servers": {"other": another_server()},
+                },
+            ),
+            id="with-a-structured-allow-rule",
+        ),
+    ],
+)
+def test_a_relay_run_refuses_a_level_naming_another_mcp_server_by_its_path_alone(
+    levels: tuple[CliSettings, ...],
+) -> None:
+    with pytest.raises(ChildProcessSpecificationError, match=r"mcp_servers\.other") as refused:
+        a_relay_run(*levels)
+
+    assert [
+        secret
+        for secret in (SETTING_VALUE, a_relay().secret, SYSTEM_TEXT, HISTORY_TEXT)
+        if secret in str(refused.value)
+    ] == []
+
+
+def test_a_run_without_a_relay_writes_another_mcp_server_as_it_was_set() -> None:
+    level: CliSettings = {"mcp_servers": {"other": another_server()}}
+
+    assert written_settings(a_run(settings=(level,))) == level
+
+
+def test_the_relay_secret_is_only_in_the_variable_the_entry_names(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    run = a_relay_run()
+    start = run.start(home, tmp_path / "work")
+    variable = written_settings(run)["mcp_servers"]["relay"]["bearer_token_env_var"]
+
+    environment = start.child.environment
+    holders = [name for name, value in environment.items() if a_relay().secret in value]
+    assert (variable, holders, environment[variable]) == (
+        RELAY_TOKEN_VARIABLE,
+        [variable],
+        a_relay().secret,
+    )
+    assert set(environment) == {*closed_environment(home), "GROK_HOME", variable}
+    visible = [*start.child.arguments, *run.run_files().values(), repr(run), repr(start)]
+    assert [part for part in visible if a_relay().secret in str(part)] == []
+
+
+@pytest.mark.parametrize(
+    ("changes", "field_name"),
+    [
+        pytest.param({"relay": a_relay()}, "tool_timeout_seconds", id="relay-alone"),
+        pytest.param({"tool_timeout_seconds": 900.0}, "relay", id="timeout-alone"),
+        pytest.param({"max_tool_calls": 30}, "relay", id="call-limit-alone"),
+        pytest.param(
+            {"relay": a_relay(), "tool_timeout_seconds": 900.0},
+            "max_tool_calls",
+            id="without-call-limit",
+        ),
+        pytest.param(
+            {"relay": a_relay(), "max_tool_calls": 30}, "tool_timeout_seconds", id="without-timeout"
+        ),
+        pytest.param(
+            {"tool_timeout_seconds": 900.0, "max_tool_calls": 30}, "relay", id="without-relay"
+        ),
+        *(
+            pytest.param(
+                relay_fields(tool_timeout_seconds=seconds),
+                "tool_timeout_seconds",
+                id=f"timeout-{seconds}",
+            )
+            for seconds in (math.nan, math.inf, 0.0, -1.0, True, "5")
+        ),
+        *(
+            pytest.param(
+                relay_fields(max_tool_calls=calls), "max_tool_calls", id=f"calls-{calls!r}"
+            )
+            for calls in (True, 1.0, "30", 0, -1, 4294967295)
+        ),
+    ],
+)
+def test_a_relay_its_timeout_and_its_call_limit_come_together_and_in_range(
+    changes: dict[str, Any], field_name: str
+) -> None:
+    with pytest.raises(ChildProcessSpecificationError, match=field_name) as refused:
+        a_run(**changes)
+
+    assert [
+        secret
+        for secret in (a_relay().secret, SYSTEM_TEXT, HISTORY_TEXT)
+        if secret in str(refused.value) or secret in str(refused.value.args)
+    ] == []
+
+
+@pytest.mark.parametrize("seconds", [5, 0.5])
+def test_a_whole_or_fractional_positive_tool_timeout_is_accepted_with_a_relay(
+    seconds: float,
+) -> None:
+    assert a_relay_run(tool_timeout_seconds=seconds).tool_timeout_seconds == seconds
+
+
 def test_the_streamed_text_is_its_text_events_then_the_whole_answer_stripped() -> None:
     events = decoded(HAPPY_STREAM, 0)
 
@@ -228,6 +469,37 @@ def test_thought_usage_and_command_lists_never_reach_the_events(silent: bytes) -
 
 def test_a_completed_turn_without_words_ends_with_empty_text_for_the_wire_to_decide() -> None:
     assert decoded((END,), 0)[-1] == FinalEvent(text="")
+
+
+def a_tool_call(name: str, *, call_id: object = "call-1", **fields: Any) -> bytes:
+    return grok_line(
+        type="tool_call", toolCallId=call_id, toolName=name, status="pending", **fields
+    )
+
+
+def a_use_tool(tool_name: object) -> bytes:
+    return a_tool_call("use_tool", rawInput={"tool_name": tool_name, "arguments": {"t": CLI_TEXT}})
+
+
+def an_update(status: object, *, call_id: object = "call-1") -> bytes:
+    return grok_line(type="tool_call_update", toolCallId=call_id, status=status, rawOutput=CLI_TEXT)
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        pytest.param(a_use_tool("relay__save_note"), id="use-tool-naming-a-relay-tool"),
+        pytest.param(a_tool_call("relay__save_note"), id="a-relay-tool-by-name"),
+        pytest.param(a_tool_call("search_tool", rawInput={"query": CLI_TEXT}), id="search-tool"),
+    ],
+)
+def test_a_relay_call_and_its_running_or_completed_updates_are_dropped(call: bytes) -> None:
+    updates = tuple(an_update(status) for status in ("pending", "in_progress", "completed", None))
+
+    assert decoded((call, *updates, a_text("answer"), END), 0, relay_attached=True) == [
+        AssistantTextEvent(text="answer"),
+        FinalEvent(text="answer"),
+    ]
 
 
 def test_a_refused_login_is_the_cores_error_with_its_fixed_detail() -> None:
@@ -285,6 +557,28 @@ def test_the_child_sees_the_private_blanked_login_and_no_secret_on_argv(
     )
 
 
+def test_a_relay_run_hands_its_secret_only_to_the_childs_environment_and_answers(
+    drive, tmp_path: Path, private_root: Path
+) -> None:
+    reset_config()
+    capture = tmp_path / "capture"
+    stream = (COMMANDS, a_use_tool("relay__save_note"), an_update("completed"), a_text("ok"), END)
+    run = a_relay_run(binary=a_fake_grok(tmp_path, stream, capture=capture))
+
+    events = drive(collected(PrivateWorkingRoot(private_root), run))
+
+    assert events == [AssistantTextEvent(text="ok"), FinalEvent(text="ok")]
+    environment = (capture / "environment").read_text().splitlines()
+    assert [line for line in environment if a_relay().secret in line] == [
+        f"{RELAY_TOKEN_VARIABLE}={a_relay().secret}"
+    ]
+    config = tomllib.loads((capture / "config.toml").read_text())
+    assert config["mcp_servers"]["relay"]["bearer_token_env_var"] == RELAY_TOKEN_VARIABLE
+    given = [(capture / name).read_text() for name in ("argv", "config.toml", "auth.json", "home")]
+    assert [part for part in given if a_relay().secret in part] == []
+    assert not list(private_root.iterdir())
+
+
 def a_tool_event(kind: str) -> bytes:
     return grok_line(type=kind, rawInput=CLI_TEXT)
 
@@ -310,10 +604,23 @@ def a_tool_event(kind: str) -> bytes:
             id="tool-call-update-after-the-answer",
         ),
         pytest.param(
-            (grok_line(type="max_turns_reached", x=CLI_TEXT),),
+            (a_use_tool("relay__save_note"),), "exit 0", GrokToolCalled, id="use-tool-naming-relay"
+        ),
+        pytest.param(
+            (a_tool_call("relay__save_note"),), "exit 0", GrokToolCalled, id="relay-tool-by-name"
+        ),
+        pytest.param((a_tool_call("search_tool"),), "exit 0", GrokToolCalled, id="search-tool"),
+        pytest.param(
+            (grok_line(type="surprise", x=CLI_TEXT),),
             "exit 0",
             GrokUnknownStreamPart,
             id="unknown-type",
+        ),
+        pytest.param(
+            (grok_line(type="max_turns_reached", x=CLI_TEXT),),
+            "exit 1",
+            GrokTurnLimitReached,
+            id="turn-limit",
         ),
         pytest.param(
             (f"not json {CLI_TEXT}\n".encode(),), "exit 0", GrokUnreadableLine, id="not-json"
@@ -354,9 +661,106 @@ def test_a_failed_run_raises_its_closed_class_without_cli_text_and_removes_the_t
     then: str,
     failure: type[Exception],
 ) -> None:
+    run = a_run(binary=a_fake_grok(tmp_path, stream, then))
+
+    ends_closed(drive, tmp_path, private_root, caplog, run, failure)
+
+
+@pytest.mark.parametrize(
+    ("stream", "then", "failure"),
+    [
+        *(
+            pytest.param((a_tool_call(name),), "exit 0", GrokToolCalled, id=name)
+            for name in ("read_file", "run_terminal_cmd", "todo_write", "other__lookup")
+        ),
+        *(
+            pytest.param((a_use_tool(name),), "exit 0", GrokToolCalled, id=f"use-tool-{name}")
+            for name in ("other__lookup", "relay_save_note", "relay__", None, 7)
+        ),
+        pytest.param(
+            (a_tool_call("use_tool", rawInput=CLI_TEXT),),
+            "exit 0",
+            GrokToolCalled,
+            id="use-tool-without-an-object",
+        ),
+        pytest.param(
+            (a_use_tool("relay__save_note"), an_update("completed", call_id="call-2")),
+            "exit 0",
+            GrokToolCalled,
+            id="update-of-a-call-not-admitted",
+        ),
+        pytest.param(
+            (an_update("completed", call_id=None),), "exit 0", GrokToolCalled, id="update-no-id"
+        ),
+        pytest.param(
+            (a_text("answer"), a_tool_call("read_file"), END),
+            "exit 0",
+            GrokToolCalled,
+            id="native-tool-after-the-answer",
+        ),
+        *(
+            pytest.param(
+                (a_use_tool("relay__save_note"), an_update(status), a_text("answer"), END),
+                "exit 0",
+                GrokRelayCallRefused,
+                id=f"relay-call-{status}",
+            )
+            for status in ("failed", "refused", "surprise", 3)
+        ),
+        *(
+            pytest.param(
+                (grok_line(type="tool_call", status="pending", **fields),),
+                "exit 0",
+                GrokUnreadableLine,
+                id=f"tool-call-{name}",
+            )
+            for name, fields in (
+                ("without-id", {"toolName": "relay__save_note"}),
+                ("id-not-a-string", {"toolCallId": 1, "toolName": "relay__save_note"}),
+                ("without-name", {"toolCallId": "call-1"}),
+                ("name-not-a-string", {"toolCallId": "call-1", "toolName": ["relay__x"]}),
+            )
+        ),
+        pytest.param(
+            (a_use_tool("relay__save_note"), grok_line(type="max_turns_reached", x=CLI_TEXT)),
+            "exit 1",
+            GrokTurnLimitReached,
+            id="turn-limit",
+        ),
+        pytest.param(
+            (a_use_tool("relay__save_note"), an_update("completed"), a_text("answer"), END),
+            "exit 3",
+            GrokAnswerMissing,
+            id="bad-exit-after-relay-calls",
+        ),
+        pytest.param((NOT_SIGNED_IN,), "exit 1", CliLoginRefusedError, id="login-refused"),
+    ],
+)
+def test_a_failed_relay_run_raises_its_closed_class_without_cli_text_and_removes_the_tree(
+    drive,
+    tmp_path: Path,
+    private_root: Path,
+    caplog: pytest.LogCaptureFixture,
+    stream: tuple[bytes, ...],
+    then: str,
+    failure: type[Exception],
+) -> None:
+    run = a_relay_run(binary=a_fake_grok(tmp_path, stream, then))
+
+    ends_closed(drive, tmp_path, private_root, caplog, run, failure)
+
+
+def ends_closed(
+    drive,
+    tmp_path: Path,
+    private_root: Path,
+    caplog: pytest.LogCaptureFixture,
+    run: GrokRun,
+    failure: type[Exception],
+) -> None:
+    """Drive ``run`` and check it ended with ``failure``, no ending, no CLI text and no tree."""
     caplog.set_level(logging.DEBUG)
     seen: list[StreamEvent] = []
-    run = a_run(binary=a_fake_grok(tmp_path, stream, then))
     scenario = collected(PrivateWorkingRoot(private_root), run, seen)
 
     with pytest.raises(failure) as ended:

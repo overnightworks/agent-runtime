@@ -5,7 +5,8 @@ service (decision record 0001, H6): the request that starts a run, the run's
 event stream as a closed union discriminated on ``type`` with every event
 carrying the protocol version, the run id and its sequence number, and the
 typed body the service answers with when it refuses a request, the status
-body it answers ``GET /runs/{id}`` with.
+body it answers ``GET /runs/{id}`` with and the list of offered models it
+answers ``GET /models`` with.
 A new variant or a new field is a new ``PROTOCOL_VERSION``.
 
 Validation is strict, so the wire's JSON types are the contract: a sequence
@@ -408,6 +409,20 @@ class RunRejection(_WireModel):
 
     code: Annotated[RejectionCode, Field(strict=False)]
     message: Annotated[UnicodeText, Field(max_length=MAX_MESSAGE_LENGTH)]
+
+
+class ModelListEntry(_StrictModel):
+    """One model the service offers."""
+
+    id: ModelName
+    object: Literal["model"] = "model"
+
+
+class ModelList(_WireModel):
+    """The HTTP body of ``GET /models``: the models a run may name, sorted by id."""
+
+    object: Literal["list"] = "list"
+    data: list[ModelListEntry]
 
 
 def _refuse_non_utc_instant(instant: AwareDatetime) -> AwareDatetime:

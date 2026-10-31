@@ -621,8 +621,7 @@ class ToolCallBarrier:
     The bound reserves no connection, because idle keep-alive connections count toward the
     listener's cap too.
 
-    The listener cancels the task running ``call()`` when the CLI closes the connection of a
-    pending call, in the step it sees the close.
+    The listener cancels a pending call's ``call()`` task in the step it sees its connection close.
     """
 
     def __init__(self, run_id: str, app: AppTools, capability: Capability) -> None:
@@ -874,11 +873,10 @@ def _narrowed_to(
 class McpRelayOwner:
     """Answers the CLI's MCP messages and lets no body carrying the capability out.
 
-    Every answer leaves through ``_cleared_for_cli``. A hit refuses the owner for good and is
-    reported once to ``ToolCalls.reflected()``, which ends the run like a reflected result. A
-    ``notifications/cancelled`` with a well-formed ``requestId`` is routed to
-    ``ToolCalls.cancel``; every notification is still acknowledged. An ``Unanswered`` call
-    passes through untouched: it carries no body, and the CLI no longer waits for it.
+    Every answer leaves through ``_cleared_for_cli``; a hit refuses the owner for good and is
+    reported once to ``ToolCalls.reflected()``. A well-formed ``notifications/cancelled`` goes to
+    ``ToolCalls.cancel``; every notification is acknowledged; ``Unanswered`` passes untouched;
+    ``listed`` tells whether a ``tools/list`` was answered.
     """
 
     def __init__(
@@ -889,6 +887,7 @@ class McpRelayOwner:
         self._narrowed_names = frozenset(tool.name for tool in self._narrowed)
         self._calls = calls
         self._refused = False
+        self.listed = False
 
     async def answer(self, request: RelayRequest) -> HttpAnswer | Unanswered:
         self._require_not_refused()
@@ -919,6 +918,7 @@ class McpRelayOwner:
                     self._calls.cancel(cancelled)
                 return ACKNOWLEDGEMENT
             case Listing(request_id):
+                self.listed = True
                 return answer_for(tools_list_response(request_id, self._narrowed))
             case Unoffered(request_id):
                 self._calls.unoffered()

@@ -2,11 +2,35 @@
 
 Read by a host bumping its pin; each release that breaks a host has one section, newest first.
 
+## Migrating to 0.16.0
+
+| Before (0.15.0) | Now |
+| --- | --- |
+| A Grok subscription run that named tools answered 403 `not_enabled`. | It is admitted and takes the app's tools through the run's relay; with every CLI place taken it answers 429 `busy`. `not_enabled` now means only that no route serves the caller and model. |
+| No tool data reached xAI. | On a Grok tool run the app's tool definitions, the calls and their results reach xAI. |
+| A Grok run ended on any tool event. | A Grok tool run ends `failed: provider_error` on a native tool event, a relay call Grok shows as failed (even when the app answered it with an error), `max_turns_reached`, a non-zero exit or an answer before the relay listed its tools, and `limit_exceeded` on a call past `[runs] max_tool_calls`. |
+| `cli_settings.xai` passed `mcp_servers.*` through. | `mcp_servers.relay` and every other `mcp_servers.<id>`, any key below or an empty table, stop startup at any level (exit 2, `--check` agrees); `mcp_servers = {}` loads. The refusal of `permission.deny`, `subagents.enabled` and `disable_web_search` now names the service's switch as their owner. |
+| `[runs] max_tool_calls` had no upper bound. | A value above 4294967294 stops startup. |
+| `ClaudeRun`, `CodexRun` and `GrokRun` took `tool_timeout_seconds=True` as 1 second, and a string raised a bare `TypeError`. | Both raise `ChildProcessSpecificationError` naming `tool_timeout_seconds`; an `int` or `float` that is finite and positive is still accepted. |
+| `CodexRun`'s defaults left the image viewer, the user-input and goal tools, the sleep tool and the sub-agent namespace to the pinned CLI, so the model was offered them. | The defaults add `features.view_image`, `features.goals` and `features.sleep_tool` `false`, `tools.experimental_request_user_input.enabled = false` and `agents.enabled = false`, for every Codex run; an operator level still overrides each. |
+| A relay run's `mcp_servers.relay` held five keys, and on a bundled model the CLI hid its tools behind `tool_search`. | It holds a sixth, `omit_tools_from = ["deferred"]`, so the CLI offers the relay's tools directly. |
+| A relay run on a model that runs tools only in code mode (`gpt-6-astra`) ended `succeeded` without a call, because the CLI's code-mode-host notice was dropped. | It ends with the new `CodexToolsUnavailable` (a `CodexRunFailure`), `failed: provider_error` through the service, until the configuration turns `features.code_mode_host` on. A tool-free run still drops the notice. `CodexStreamDecoder(*, relay_attached=False)` takes the keyword; `CodexRun` sets it. |
+
+## Migrating to 0.15.0
+
+| Before (0.14.0) | Now |
+| --- | --- |
+| `GrokRun(binary, login, system, history, *, model, settings)` was always tool-free. | Three more keywords, `relay` (`RelayAccess` or `None`), `tool_timeout_seconds` (`float` or `None`) and `max_tool_calls` (`int` or `None`), all `None` by default and given all three or none. A subset, a timeout that is not finite and positive, or a `max_tool_calls` that is not an integer from 1 to 4294967294 raises `ChildProcessSpecificationError`, and so does a relay run whose settings name any `mcp_servers` entry other than `relay` (the error names the path). With a relay the run writes `mcp_servers.relay` into its `config.toml`, gives the child the relay's secret in its environment and opens only the relay's tools. A host that builds a tool-free `GrokRun` needs nothing. |
+| `GrokStreamDecoder()` | `GrokStreamDecoder(*, relay_attached)`, a required keyword. With `relay_attached=False` it ends on every tool event as before. |
+| `GrokToolCalled` ended a run that called any tool. | It ends a run that called a tool outside the run's relay: every tool event in a tool-free run, and in a relay run every tool event except a relay call and its running or completed updates. An update of a relay call with any other status ends the run with the new `GrokRelayCallRefused`. |
+| `max_turns_reached` ended a Grok run with `GrokUnknownStreamPart`. | It ends the run with the new `GrokTurnLimitReached`. |
+| A Codex run left `features.shell_snapshot` to the pinned CLI, which wrote the run's exported variables, the relay secret included, into the run home's `shell_snapshots/`. | `CodexRun`'s feature defaults switch `shell_snapshot` off, so the service's Codex runs get it too; an operator level that sets `features.shell_snapshot = true` still wins. |
+
 ## Migrating to 0.14.0
 
 | Before (0.13.0) | Now |
 | --- | --- |
-| Wire protocol 4: `PROTOCOL_VERSION = 4`, a `v: 4` body was admitted. | Protocol 5: `PROTOCOL_VERSION = 5`. The service answers a `v: 4` body 400 `unsupported_version`, and a protocol 4 client refuses the service's `v: 5` events, rejections and status. The service, every app and the hal pin move together on one day. |
+| Wire protocol 4: `PROTOCOL_VERSION = 4`, a `v: 4` body was admitted. | Protocol 5: `PROTOCOL_VERSION = 5`. The service answers a `v: 4` body 400 `unsupported_version`, and a protocol 4 client refuses the service's `v: 5` events, rejections and status. There is no coexistence: one switch day, on which the service is deployed and each app's protocol 5 deploy follows within minutes. Between the two, runs fail visibly (400 `unsupported_version` or the client's decode refusal), never silently. |
 | A request named no model: the configuration chose it, and a body carrying `model` answered 422 `invalid_request`. | `RunRequest.model` is optional: absent or `null` runs the configured model as before; a name the installation offers (the full names in its `[cli.<provider>] models`) runs exactly that model and `run_started` names it. |
 | A run refused a model only by its grammar. | `RejectionCode.MODEL_NOT_OFFERED` (`model_not_offered`, 422): a valid name the installation does not offer, answered after the `forbidden` checks and before the route. Handle the new member where a client switches over `RejectionCode`. |
 | `AgentDefinition.request(messages)` | `AgentDefinition.request(messages, *, model=None)`; without `model` the field is absent from the body. The agent file still refuses a `model:` key. |
@@ -14,6 +38,11 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | `agent_runtime.codex_login.CodexRenewalRefusal` (its `NOT_USABLE` read "the document is not a usable Codex login") | `agent_runtime.login_renewal.RenewalRefusal`, with no alias; `NOT_USABLE` reads "the document is not a usable login". |
 | `agent_runtime.codex.renewal.CopyUnchanged` | `agent_runtime.login_renewal.CopyUnchanged`, with no alias. |
 | `agent_runtime.codex_login.UnreadableTiming` and `agent_runtime.codex_login.CodexTiming` | `agent_runtime.login_timing.UnreadableTiming` and `agent_runtime.login_timing.AccessTokenTiming`, with no alias. |
+| An app learned the installation's models only from its operator. | `GET /models` answers the workload token of any registered app, with no `runs_as_app` agent needed and `Authorization` never read, 200 `application/json` with `agent_runtime_client.wire.ModelList` (`{v: 5, object: "list", data: [{id, object: "model"}]}`): `ServiceConfig.offered_models()` sorted by id, `Cache-Control: no-store`, the same bytes for every app and instance. Refusals are `RunRejection` bodies: 401 (an `Agent-Job-Ticket` header first), 503 with `Retry-After`, 403 for a token bound to no registered app. ([wire.md](wire.md)) |
+| A Codex run that named tools answered 403 `not_enabled`. | It is admitted, and the run's relay serves it the app's tools as for Claude; a Grok tool run still answers 403 `not_enabled`. The tool definitions and results of a Codex run reach OpenAI. A tool run whose program exits non-zero or answers before the relay listed its tools ends `failed: provider_error`. |
+| `cli_settings.openai` passed `mcp_servers.relay` through. | `mcp_servers.relay`, any key below it or an empty table, stops startup at any level (exit 2, `--check` agrees): the service writes that entry. Rename an own server of that name; other `mcp_servers.<name>` entries still load and stay beside the relay. |
+| `CodexRun(binary, login, system, history, *, model, settings)` | Two more keywords, `relay` (`RelayAccess` or `None`) and `tool_timeout_seconds` (`float` or `None`), both `None` by default; one without the other, or a timeout that is not finite and positive, raises `ChildProcessSpecificationError`. A host that builds a tool-free `CodexRun` needs nothing. |
+| `agent_runtime.codex_login.UnreadableTiming` and `CodexTiming`; `read_codex_timing` returned `CodexTiming`. | `UnreadableTiming` and `AccessTokenTiming` (the renamed `CodexTiming`, same fields and `is_due`) live in `agent_runtime.login_timing`, with no re-export from `codex_login`; `read_codex_timing` returns `AccessTokenTiming`. Import them from the new module. |
 
 ## Migrating to 0.13.0
 

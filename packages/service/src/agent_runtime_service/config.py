@@ -64,6 +64,7 @@ from webauth.oidc_login import AdmissionConfig
 from agent_runtime.cli_settings import CliSettings
 from agent_runtime.codex_login import CodexLoginVerdict, assess_codex_login
 from agent_runtime.config import PrivateWorkingRoot, WorkingRootNotPrivateError
+from agent_runtime.grok.run import GROK_MAX_TOOL_CALLS
 from agent_runtime.grok_login import GrokLoginVerdict, assess_grok_login
 from agent_runtime.secret_file import (
     UnsoundSecretFile,
@@ -414,7 +415,7 @@ class RunConfig(_Section):
     max_duration_s: StrictFloat = Field(
         default=600.0, gt=0, le=MAX_TOOL_TIMEOUT_MS // 1000, allow_inf_nan=False
     )
-    max_tool_calls: StrictInt = Field(default=30, ge=1)
+    max_tool_calls: StrictInt = Field(default=30, ge=1, le=GROK_MAX_TOOL_CALLS)
     max_bytes: StrictInt = Field(default=4 * MAX_EVENT_BYTES, ge=1)
     max_files_bytes: StrictInt = Field(default=8 * 1024 * 1024, ge=1, le=MAX_RUN_FILES_BYTES)
     max_parallel_cli_runs: StrictInt = Field(default=5, ge=1)
@@ -489,9 +490,6 @@ def _value(table: object, key: str) -> object:
     if isinstance(table, Mapping):
         return table.get(key)
     return getattr(table, key)
-
-
-RELAY_ATTACHED_PROVIDERS: Final = frozenset({Provider.ANTHROPIC})
 
 
 def _refuse_an_origin_without_signing(document: object) -> None:

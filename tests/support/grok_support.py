@@ -55,8 +55,8 @@ def a_fake_grok(
 
     A run checks its home, the blanked login, the rules file, the prompt file named by
     ``--prompt-file``, its empty stdin and its 0600 ``config.toml`` before it prints ``stream``;
-    with ``capture`` it first records its arguments, the login and settings file it was given and
-    a listing of its home.
+    with ``capture`` it first records its arguments, its environment, the login and settings file
+    it was given and a listing of its home.
     ``version_line`` is what ``--version`` prints.
     """
     (directory / "stream.jsonl").write_bytes(b"".join(stream))
@@ -84,6 +84,7 @@ def a_fake_grok(
         lines += [
             f"mkdir -p {shlex.quote(str(capture))}",
             f"printf '%s\\n' \"$@\" > {shlex.quote(str(capture / 'argv'))}",
+            f"env > {shlex.quote(str(capture / 'environment'))}",
             f'cp "$GROK_HOME/auth.json" {shlex.quote(str(capture / "auth.json"))}',
             f'cp "$GROK_HOME/config.toml" {shlex.quote(str(capture / "config.toml"))}',
             f'ls -A "$GROK_HOME" > {shlex.quote(str(capture / "home"))}',

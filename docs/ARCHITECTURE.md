@@ -76,9 +76,7 @@ flowchart TB
     tools -->|yes| forbidden
     tools -->|no| model["the run's model: the request's,<br/>else the agent's, else the app's,<br/>else the defaults<br/>(a name not offered: 422 model_not_offered)"]
     model --> subscription{"subscription group member,<br/>and a CLI table serves it?<br/>(a [cli.&lt;provider&gt;] table of the<br/>model's provider exists)"}
-    subscription -->|yes| relay{"tools named, and the model's<br/>provider has no relay yet?"}
-    relay -->|yes| notenabled
-    relay -->|no| slot{"CLI place free?"}
+    subscription -->|yes| slot{"CLI place free?"}
     slot -->|yes| cli["CLI route<br/>the model's provider program"]
     slot -->|no| busy["429 busy"]
     subscription -->|no| api{"API group member?"}
