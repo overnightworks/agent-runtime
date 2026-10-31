@@ -19,6 +19,7 @@ from agent_runtime import process
 from agent_runtime.errors import ProviderUnavailableError, SafeRouteReasonCode
 from agent_runtime.grok.transport import GrokCliToolTransport
 from agent_runtime.grok_login import (
+    _RENEWAL_NAMES,
     GrokLoginVerdict,
     RenewableGrokLogin,
     assess_grok_login,
@@ -86,7 +87,9 @@ def test_a_member_whose_name_only_resembles_a_renewal_name_is_kept() -> None:
     [
         pytest.param(b'{"a": {"key": "k"}}', GrokLoginVerdict.USABLE, id="one-realm-with-key"),
         pytest.param(
-            b'{"a": {}, "b": {"key": "k"}}', GrokLoginVerdict.USABLE, id="second-realm-has-key",
+            b'{"a": {}, "b": {"key": "k"}}',
+            GrokLoginVerdict.USABLE,
+            id="second-realm-has-key",
         ),
         pytest.param(b"{}", GrokLoginVerdict.INCOMPLETE, id="no-realm"),
         pytest.param(b'{"a": {}}', GrokLoginVerdict.INCOMPLETE, id="realm-without-key"),
@@ -96,10 +99,13 @@ def test_a_member_whose_name_only_resembles_a_renewal_name_is_kept() -> None:
         pytest.param(b'{"realm": []}', GrokLoginVerdict.INCOMPLETE, id="realm-is-an-array"),
         pytest.param(b'{"realm": "x"}', GrokLoginVerdict.INCOMPLETE, id="realm-is-a-string"),
         pytest.param(
-            b'{"a": {"key": "k"}, "b": 1}', GrokLoginVerdict.USABLE, id="usable-then-non-realm",
+            b'{"a": {"key": "k"}, "b": 1}',
+            GrokLoginVerdict.USABLE,
+            id="usable-then-non-realm",
         ),
         pytest.param(
-            b'{"a": {"key": "k"}, "b": {"key": 1}}', GrokLoginVerdict.MALFORMED,
+            b'{"a": {"key": "k"}, "b": {"key": 1}}',
+            GrokLoginVerdict.MALFORMED,
             id="usable-then-bad-key",
         ),
         pytest.param(b"not json", GrokLoginVerdict.MALFORMED, id="not-json"),
@@ -108,25 +114,31 @@ def test_a_member_whose_name_only_resembles_a_renewal_name_is_kept() -> None:
         pytest.param(b"null", GrokLoginVerdict.MALFORMED, id="null"),
         pytest.param(b'{"a": "\xff"}', GrokLoginVerdict.MALFORMED, id="invalid-utf8"),
         pytest.param(
-            '{"a": {"key": "k"}}'.encode("utf-16"), GrokLoginVerdict.MALFORMED, id="utf-16",
+            '{"a": {"key": "k"}}'.encode("utf-16"),
+            GrokLoginVerdict.MALFORMED,
+            id="utf-16",
         ),
         pytest.param(
-            b'\xef\xbb\xbf{"a": {"key": "k"}}', GrokLoginVerdict.MALFORMED,
+            b'\xef\xbb\xbf{"a": {"key": "k"}}',
+            GrokLoginVerdict.MALFORMED,
             id="utf-8-byte-order-mark",
         ),
         pytest.param(b"[" * 100_000, GrokLoginVerdict.MALFORMED, id="excessive-nesting"),
         pytest.param(
             b'{"a": {"key": "k", "x": ' + b"[" * 100_000 + b"}}",
-            GrokLoginVerdict.MALFORMED, id="excessive-nesting-in-a-realm",
+            GrokLoginVerdict.MALFORMED,
+            id="excessive-nesting-in-a-realm",
         ),
         pytest.param(
             b'{"a": {"key": "k", "x": ' + b"[" * 3000 + b"]" * 3000 + b"}}",
-            GrokLoginVerdict.MALFORMED, id="balanced-nesting-beyond-the-recursion-limit",
+            GrokLoginVerdict.MALFORMED,
+            id="balanced-nesting-beyond-the-recursion-limit",
         ),
     ],
 )
 def test_a_login_document_has_one_verdict_and_only_a_usable_one_has_a_copy(
-    document: bytes, verdict: GrokLoginVerdict,
+    document: bytes,
+    verdict: GrokLoginVerdict,
 ) -> None:
     login = assess_grok_login(document)
 
@@ -152,7 +164,9 @@ def test_a_login_neither_shows_nor_pickles_its_document() -> None:
     ],
 )
 def test_readiness_and_copy_agree_on_a_usable_or_incomplete_login(
-    tmp_path: Path, document: bytes, readiness: bool,
+    tmp_path: Path,
+    document: bytes,
+    readiness: bool,
 ) -> None:
     source = tmp_path / "source"
     source.write_bytes(document)
@@ -168,7 +182,8 @@ def test_readiness_and_copy_agree_on_a_usable_or_incomplete_login(
     ids=["array", "not-json", "key-not-a-string"],
 )
 def test_a_malformed_login_is_refused_by_readiness_and_gets_no_copy(
-    tmp_path: Path, document: bytes,
+    tmp_path: Path,
+    document: bytes,
 ) -> None:
     source = tmp_path / "source"
     source.write_bytes(document)
@@ -181,7 +196,8 @@ def test_a_malformed_login_is_refused_by_readiness_and_gets_no_copy(
 
 @pytest.mark.parametrize("document", [b"[]", b"not json"], ids=["array", "not-json"])
 def test_grok_turn_whose_login_is_not_a_json_object_is_logged_out(
-    tmp_path: Path, document: bytes,
+    tmp_path: Path,
+    document: bytes,
 ) -> None:
     source = tmp_path / "source"
     source.write_bytes(document)
@@ -195,7 +211,9 @@ def test_grok_turn_whose_login_is_not_a_json_object_is_logged_out(
 
 @pytest.mark.parametrize("document", [b"[]", b"not json"], ids=["array", "not-json"])
 def test_the_grok_probe_hands_its_child_no_login_when_the_source_is_not_a_json_object(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, document: bytes,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    document: bytes,
 ) -> None:
     auth_file = tmp_path / "grok-auth.json"
     auth_file.write_bytes(document)
@@ -207,9 +225,14 @@ def test_the_grok_probe_hands_its_child_no_login_when_the_source_is_not_a_json_o
         homes_with_a_login.append(has_login)
         kwargs["on_reaped"](0, False)
         return CliRunOutcome(
-            started=True, spawn_error=None, returncode=0,
-            stdout=GROK_LOGGED_IN if has_login else "You are not authenticated.\n", stderr="",
-            complete=True, became_zombie=False, reason=CliRunReason.COMPLETE,
+            started=True,
+            spawn_error=None,
+            returncode=0,
+            stdout=GROK_LOGGED_IN if has_login else "You are not authenticated.\n",
+            stderr="",
+            complete=True,
+            became_zombie=False,
+            reason=CliRunReason.COMPLETE,
         )
 
     monkeypatch.setattr(process, "run_cli_bounded", run_cli_bounded)
@@ -233,13 +256,17 @@ def a_login_with(*keys: str, **realm: object) -> bytes:
 
 
 def test_a_usable_login_with_a_refresh_member_is_renewable_and_shows_nothing() -> None:
-    login = renewable_grok_login(a_login_with(a_key()))
+    access_token = a_key()
+    login = renewable_grok_login(a_login_with(access_token))
 
     assert isinstance(login, RenewableGrokLogin)
-    assert A_REFRESH_TOKEN not in repr(login) + str(login)
+    for canary in (A_REFRESH_TOKEN, access_token):
+        assert canary not in repr(login) + str(login)
     for disclose in (pickle.dumps, copying.copy, copying.deepcopy):
-        with pytest.raises(TypeError):
+        with pytest.raises(TypeError) as refusal:
             disclose(login)
+        for canary in (A_REFRESH_TOKEN, access_token):
+            assert canary not in str(refusal.value) + repr(refusal.value)
 
 
 @pytest.mark.parametrize(
@@ -338,6 +365,18 @@ def test_logins_share_a_refresh_token_when_every_renewal_member_is_equal(
     assert isinstance(newer, RenewableGrokLogin)
 
     assert login.shares_refresh_token_with(newer) is shares
+
+
+def test_logins_do_not_share_a_refresh_token_when_one_of_several_members_rotates() -> None:
+    kept, rotated = sorted(_RENEWAL_NAMES)[:2]
+
+    def login_with(rotated_value: str) -> RenewableGrokLogin:
+        members = {kept: "a", rotated: rotated_value}
+        login = renewable_grok_login(json.dumps({"realm-0": {"key": "k", **members}}).encode())
+        assert isinstance(login, RenewableGrokLogin)
+        return login
+
+    assert not login_with("old").shares_refresh_token_with(login_with("new"))
 
 
 def test_logins_with_the_same_renewal_members_in_another_order_share_a_refresh_token() -> None:

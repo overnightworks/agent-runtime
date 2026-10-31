@@ -22,7 +22,7 @@ from tests.support.provider_test_support import a_private_root
 
 from agent_runtime.config import PrivateWorkingRoot, reset_config
 from agent_runtime.grok.renewal import GrokRenewal
-from agent_runtime.grok.run import GROK_CLI_PROCESS_POOL
+from agent_runtime.grok.run import AUTH_FILE_NAME, GROK_CLI_PROCESS_POOL, GROK_HOME_VARIABLE
 from agent_runtime.grok_login import RenewableGrokLogin, renewable_grok_login
 from agent_runtime.login_renewal import CopyUnchanged
 from agent_runtime.process import run_cli_bounded, run_directories
@@ -56,7 +56,7 @@ def a_renewal(
 def a_home_holding(directory: Path, document: bytes) -> Path:
     home = directory / "home"
     home.mkdir()
-    (home / "auth.json").write_bytes(document)
+    (home / AUTH_FILE_NAME).write_bytes(document)
     return home
 
 
@@ -69,8 +69,8 @@ def test_the_run_files_are_exactly_the_unaltered_full_login() -> None:
     canary = "canary-renewal-refresh-member"
     renewal = a_renewal(login=a_login(a_document(a_key(), refresh_token=canary)))
 
-    assert renewal.run_files() == {"auth.json": renewal.login.document}
-    assert canary.encode() in renewal.run_files()["auth.json"]
+    assert renewal.run_files() == {AUTH_FILE_NAME: renewal.login.document}
+    assert canary.encode() in renewal.run_files()[AUTH_FILE_NAME]
 
 
 def test_the_run_is_grok_models_with_the_home_variables_and_the_threshold(tmp_path: Path) -> None:
@@ -84,7 +84,7 @@ def test_the_run_is_grok_models_with_the_home_variables_and_the_threshold(tmp_pa
     assert start.child.arguments == ("models",)
     assert start.child.environment == {
         **closed_environment(home),
-        "GROK_HOME": str(home),
+        GROK_HOME_VARIABLE: str(home),
         "GROK_AUTH_EARLY_INVALIDATION_SECS": str(remaining + 3600),
     }
     assert (start.child.binary, start.child.working_directory, start.stdin) == (binary, work, b"")
@@ -156,26 +156,26 @@ def test_a_missing_login_is_a_fault(tmp_path: Path) -> None:
 
 def test_a_linked_login_is_refused_and_its_target_is_not_read(tmp_path: Path) -> None:
     (tmp_path / "target").write_bytes(a_document(a_key()))
-    (tmp_path / "auth.json").symlink_to(tmp_path / "target")
+    (tmp_path / AUTH_FILE_NAME).symlink_to(tmp_path / "target")
 
     assert a_renewal().renewed_document(tmp_path) is SecretFileFault.LINK
 
 
 def test_an_oversized_login_is_a_fault(tmp_path: Path) -> None:
-    (tmp_path / "auth.json").write_bytes(b"x" * (1024 * 1024))
+    (tmp_path / AUTH_FILE_NAME).write_bytes(b"x" * (1024 * 1024))
 
     assert isinstance(a_renewal().renewed_document(tmp_path), SecretFileFault)
 
 
 def test_a_fifo_login_is_a_fault_and_does_not_block(tmp_path: Path) -> None:
-    os.mkfifo(tmp_path / "auth.json")
+    os.mkfifo(tmp_path / AUTH_FILE_NAME)
 
     assert isinstance(a_renewal().renewed_document(tmp_path), SecretFileFault)
 
 
 def test_nothing_secret_is_in_any_shown_form_of_the_renewal_or_its_start(tmp_path: Path) -> None:
-    canary = "canary-renewal-refresh-member"
-    renewal = a_renewal(login=a_login(a_document(a_key(), refresh_token=canary)))
+    access_token, refresh_token = a_key(), "canary-renewal-refresh-member"
+    renewal = a_renewal(login=a_login(a_document(access_token, refresh_token=refresh_token)))
     start = renewal.start(tmp_path / "home", tmp_path / "work")
 
     visible = " ".join(
@@ -187,16 +187,21 @@ def test_nothing_secret_is_in_any_shown_form_of_the_renewal_or_its_start(tmp_pat
             repr(start),
         ]
     )
-    assert canary not in visible
+    assert access_token not in visible
+    assert refresh_token not in visible
 
 
 @pytest.mark.parametrize("disclose", [pickle.dumps, copy.copy, copy.deepcopy])
 @pytest.mark.parametrize("subject", ["renewal", "login"])
 def test_a_renewal_and_its_login_refuse_pickling_and_copying(disclose, subject: str) -> None:
-    renewal = a_renewal()
+    access_token, refresh_token = a_key(), "canary-renewal-refresh-member"
+    renewal = a_renewal(login=a_login(a_document(access_token, refresh_token=refresh_token)))
 
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError) as refusal:
         disclose(renewal if subject == "renewal" else renewal.login)
+
+    for canary in (access_token, refresh_token):
+        assert canary not in str(refusal.value) + repr(refusal.value)
 
 
 def test_a_fake_grok_renews_through_the_real_directories_and_runner_after_reset_config(
@@ -219,7 +224,7 @@ def test_a_fake_grok_renews_through_the_real_directories_and_runner_after_reset_
         )
         read_back = renewal.renewed_document(directories.home)
 
-    assert (modes, outcome.returncode) == ({"auth.json": 0o600}, 0)
+    assert (modes, outcome.returncode) == ({AUTH_FILE_NAME: 0o600}, 0)
     assert read_back == renewed
 
 
