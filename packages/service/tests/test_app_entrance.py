@@ -455,6 +455,7 @@ BODY_REJECTIONS = [
     _invalid_request(
         json.dumps(run_body())[:-1].encode() + b', "agent": "cowriter"}', "a-member-named-twice"
     ),
+    pytest.param(_too_large(), RejectionCode.TOO_LARGE, 413, id="over-256-kib"),
     _invalid_request(b"[1]", "not-an-object"),
     _invalid_request(b'{"agent":', "not-json"),
     *(
@@ -534,12 +535,6 @@ def test_a_body_that_is_not_an_allowed_run_request_is_refused(service, content, 
     response = post_run(service, run_headers(MINT.workload(), MINT.user()), content=content)
 
     assert_rejected(response, code, status)
-
-
-def test_a_body_over_the_limit_is_refused_as_too_large(service):
-    response = post_run(service, run_headers(MINT.workload(), MINT.user()), content=_too_large())
-
-    assert_rejected(response, RejectionCode.TOO_LARGE, 413)
 
 
 def test_a_body_of_exactly_the_limit_is_admitted(service):
