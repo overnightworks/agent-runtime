@@ -43,11 +43,11 @@ GROK_CLI_PROCESS_POOL: Final = CliProcessPool(
 )
 
 _STREAM_BUFFER_LIMIT: Final = 4 * 1024 * 1024
-_AUTH_FILE_NAME: Final = "auth.json"
+AUTH_FILE_NAME: Final = "auth.json"
 _RULES_FILE_NAME: Final = "AGENTS.md"
 _PROMPT_FILE_NAME: Final = "prompt.txt"
 _CONFIG_FILE_NAME: Final = "config.toml"
-_HOME_VARIABLE: Final = "GROK_HOME"
+HOME_VARIABLE: Final = "GROK_HOME"
 
 _OUTPUT_ARGUMENTS: Final = ("--output-format", "streaming-json")
 _TOOL_FREE_ARGUMENTS: Final = ("--deny", "*", "--max-turns", "1")
@@ -307,7 +307,7 @@ class GrokRun:
 
     def run_files(self) -> Mapping[str, bytes]:
         return {
-            _AUTH_FILE_NAME: self.login.blanked_document,
+            AUTH_FILE_NAME: self.login.blanked_document,
             _RULES_FILE_NAME: self.system.encode(),
             _PROMPT_FILE_NAME: self._prompt().encode(),
             _CONFIG_FILE_NAME: toml_document(self._settings()),
@@ -334,7 +334,7 @@ class GrokRun:
             binary=self.binary,
             arguments=self._arguments(home),
             environment=closed_environment(
-                home, **{_HOME_VARIABLE: str(home)}, **self._relay_environment()
+                home, **{HOME_VARIABLE: str(home)}, **self._relay_environment()
             ),
             working_directory=working_directory,
         )
