@@ -1,8 +1,0 @@
-claim_id = "db6a2207602c4160bec0a99b7529106a"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "bf673e37823d63356d05f47a7f1a1a26aa00d6c9"
-branch = "claude/issue-667-too-large-413"
-scope = ["README.md", "docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/wire.md", "packages/client/src/agent_runtime_client/wire.py", "packages/client/tests/test_wire_protocol.py", "packages/service/src/agent_runtime_service/app.py", "packages/service/tests/test_admission.py", "packages/service/tests/test_app_entrance.py", "packages/service/tests/test_app_gate.py", "packages/service/tests/test_app_models.py", "packages/service/tests/test_app_ticket_refusal.py", "tests/support/recorded_returns.py", "tests/support/service_support.py", "tests/test_claude_provider.py"]
-opened_commit = "e67e6efb689b12779cffc8f56a589c48e1635898"
-whole_reason = "Two production files, about 15 lines: the code, its status and the protocol switch it forces are one wire change, and its three documents state the same contract."
