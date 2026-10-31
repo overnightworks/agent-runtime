@@ -33,7 +33,7 @@ from tests.support.service_support import (
     ScriptedRunner,
     StepClock,
     TokenMint,
-    asgi_post_status,
+    asgi_post_answer,
     assert_rejected,
     decoded_events,
     get_run,
@@ -580,13 +580,18 @@ def test_an_oversized_body_without_a_declared_length_is_refused_while_read(servi
     assert_rejected(response, RejectionCode.TOO_LARGE, 413)
 
 
-async def _asgi_status(app: FastAPI, headers: dict[str, str], body: bytes) -> int:
+async def _asgi_answer(app: FastAPI, headers: dict[str, str], body: bytes) -> tuple[int, bytes]:
     pending = [{"type": "http.request", "body": body, "more_body": False}]
 
     async def receive() -> dict[str, object]:
         return pending.pop(0) if pending else {"type": "http.disconnect"}
 
-    return await asgi_post_status(app, headers, receive)
+    return await asgi_post_answer(app, headers, receive)
+
+
+async def _asgi_status(app: FastAPI, headers: dict[str, str], body: bytes) -> int:
+    status, _ = await _asgi_answer(app, headers, body)
+    return status
 
 
 @pytest.mark.parametrize("declared", ["not-a-number", "-1", "1.5"])
@@ -595,7 +600,10 @@ def test_a_malformed_content_length_is_an_invalid_request_not_too_large(declared
     app = create_app(service_config(), runners=unused_runners(), fetch_key_set=MINT.fetch_key_set)
     headers = {**run_headers(MINT.workload(), MINT.user()), "Content-Length": declared}
 
-    assert anyio.run(_asgi_status, app, headers, b"{}") == 422
+    status, body = anyio.run(_asgi_answer, app, headers, b"{}")
+
+    assert status == 422
+    assert RunRejection.model_validate_json(body).code is RejectionCode.INVALID_REQUEST
 
 
 def test_a_single_chunk_over_the_limit_is_refused_without_being_buffered():
