@@ -18,13 +18,13 @@ from tests.support.provider_test_support import (
 from agent_runtime.codex_login import (
     CodexLogin,
     CodexLoginVerdict,
-    CodexRenewalRefusal,
     RenewableCodexLogin,
     assess_codex_login,
     made_due_copy,
     read_codex_timing,
     renewable_codex_login,
 )
+from agent_runtime.login_renewal import RenewalRefusal
 from agent_runtime.login_timing import UnreadableTiming
 
 A_DEEPLY_NESTED_DOCUMENT = b"[" * 100_000
@@ -158,12 +158,12 @@ def test_an_opaque_access_token_still_gives_a_usable_login_but_no_timing() -> No
     [
         pytest.param(
             a_codex_login(tokens={"refresh_token": ""}),
-            CodexRenewalRefusal.NO_REFRESH_TOKEN,
+            RenewalRefusal.NO_REFRESH_TOKEN,
             id="empty",
         ),
         pytest.param(
             a_codex_login(tokens={"refresh_token": 7}),
-            CodexRenewalRefusal.NO_REFRESH_TOKEN,
+            RenewalRefusal.NO_REFRESH_TOKEN,
             id="numeric",
         ),
         pytest.param(
@@ -174,15 +174,15 @@ def test_an_opaque_access_token_still_gives_a_usable_login_but_no_timing() -> No
                     "tokens": {"access_token": "a", "id_token": "i", "account_id": "c"},
                 }
             ).encode(),
-            CodexRenewalRefusal.NO_REFRESH_TOKEN,
+            RenewalRefusal.NO_REFRESH_TOKEN,
             id="missing",
         ),
-        pytest.param(b"not json", CodexRenewalRefusal.NOT_USABLE, id="malformed"),
-        pytest.param(b'{"tokens":{}}', CodexRenewalRefusal.NOT_USABLE, id="incomplete"),
+        pytest.param(b"not json", RenewalRefusal.NOT_USABLE, id="malformed"),
+        pytest.param(b'{"tokens":{}}', RenewalRefusal.NOT_USABLE, id="incomplete"),
     ],
 )
 def test_a_document_without_a_refresh_token_or_not_usable_is_refused(
-    document: bytes, refusal: CodexRenewalRefusal
+    document: bytes, refusal: RenewalRefusal
 ) -> None:
     assert renewable_codex_login(document) is refusal
 

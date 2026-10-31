@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
-from agent_runtime.codex_login import CodexRenewalRefusal
+from agent_runtime.login_renewal import RenewalRefusal
 from agent_runtime.login_timing import UnreadableTiming
 from agent_runtime_service.renewal import RenewalEntry
 from agent_runtime_service.renewal_schedule import (
@@ -57,10 +57,10 @@ class Standing:
 def login_standing(document: bytes, now: int, entry: RenewalEntry) -> Standing:
     """The standing of ``document`` at ``now``; never raises."""
     renewable = entry.renewable(document)
-    if isinstance(renewable, CodexRenewalRefusal):
+    if isinstance(renewable, RenewalRefusal):
         refused = (
             LoginStanding.NOT_USABLE
-            if renewable is CodexRenewalRefusal.NOT_USABLE
+            if renewable is RenewalRefusal.NOT_USABLE
             else LoginStanding.NOT_RENEWABLE
         )
         return Standing(refused)

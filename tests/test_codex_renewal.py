@@ -23,7 +23,7 @@ from tests.support.provider_test_support import (
     a_private_root,
 )
 
-from agent_runtime.codex.renewal import CodexRenewal, CopyUnchanged
+from agent_runtime.codex.renewal import CodexRenewal
 from agent_runtime.codex.run import (
     CODEX_CLI_PROCESS_POOL,
     CodexRun,
@@ -36,6 +36,7 @@ from agent_runtime.codex_login import (
     renewable_codex_login,
 )
 from agent_runtime.config import PrivateWorkingRoot, reset_config
+from agent_runtime.login_renewal import CopyUnchanged
 from agent_runtime.process import run_directories
 from agent_runtime.secret_file import SecretFileFault
 from agent_runtime.spawn import ChildProcessSpecificationError, closed_environment

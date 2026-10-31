@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Final, NoReturn
 
+from agent_runtime.login_renewal import RenewableLogin, RenewalRefusal
 from agent_runtime.login_timing import AccessTokenTiming, UnreadableTiming, read_access_token_timing
 
 _TOP_LEVEL_FIELDS: Final = ("auth_mode", "last_refresh")
@@ -111,11 +112,6 @@ def _access_token(document: bytes) -> str | None:
     return access_token if isinstance(access_token, str) and access_token else None
 
 
-class CodexRenewalRefusal(StrEnum):
-    NOT_USABLE = "the document is not a usable Codex login"
-    NO_REFRESH_TOKEN = "the login holds no refresh token"  # noqa: S105 - closed cause text names no secret
-
-
 @dataclass(frozen=True)
 class RenewableCodexLogin:
     """A usable login that still holds its refresh token; built only by ``renewable_codex_login``.
@@ -137,16 +133,16 @@ def _refresh_token(document: bytes) -> str | None:
     return refresh_token if isinstance(refresh_token, str) and refresh_token else None
 
 
-def renewable_codex_login(document: bytes) -> RenewableCodexLogin | CodexRenewalRefusal:
+def renewable_codex_login(document: bytes) -> RenewableCodexLogin | RenewalRefusal:
     """The login when it is usable and holds a non-empty refresh token, else the refusal."""
     if assess_codex_login(document).verdict is not CodexLoginVerdict.USABLE:
-        return CodexRenewalRefusal.NOT_USABLE
+        return RenewalRefusal.NOT_USABLE
     if _refresh_token(document) is None:
-        return CodexRenewalRefusal.NO_REFRESH_TOKEN
+        return RenewalRefusal.NO_REFRESH_TOKEN
     return RenewableCodexLogin(document)
 
 
-def made_due_copy(login: RenewableCodexLogin, now: int) -> bytes:
+def made_due_copy(login: RenewableLogin, now: int) -> bytes:
     """The login with an empty access token and a ``last_refresh`` 30 days before ``now``.
 
     A CLI given this copy finds its access token due and renews it with the refresh token.

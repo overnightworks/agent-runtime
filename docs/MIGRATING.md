@@ -15,6 +15,8 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | `CodexRun`'s defaults left the image viewer, the user-input and goal tools, the sleep tool and the sub-agent namespace to the pinned CLI, so the model was offered them. | The defaults add `features.view_image`, `features.goals` and `features.sleep_tool` `false`, `tools.experimental_request_user_input.enabled = false` and `agents.enabled = false`, for every Codex run; an operator level still overrides each. |
 | A relay run's `mcp_servers.relay` held five keys, and on a bundled model the CLI hid its tools behind `tool_search`. | It holds a sixth, `omit_tools_from = ["deferred"]`, so the CLI offers the relay's tools directly. |
 | A relay run on a model that runs tools only in code mode (`gpt-6-astra`) ended `succeeded` without a call, because the CLI's code-mode-host notice was dropped. | It ends with the new `CodexToolsUnavailable` (a `CodexRunFailure`), `failed: provider_error` through the service, until the configuration turns `features.code_mode_host` on. A tool-free run still drops the notice. `CodexStreamDecoder(*, relay_attached=False)` takes the keyword; `CodexRun` sets it. |
+| `agent_runtime.codex_login.CodexRenewalRefusal` (its `NOT_USABLE` read "the document is not a usable Codex login") | `agent_runtime.login_renewal.RenewalRefusal`, with no alias; `NOT_USABLE` reads "the document is not a usable login". |
+| `agent_runtime.codex.renewal.CopyUnchanged` | `agent_runtime.login_renewal.CopyUnchanged`, with no alias. |
 
 ## Migrating to 0.15.0
 

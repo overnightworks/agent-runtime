@@ -56,8 +56,9 @@ from tests.support.service_table_support import write_login
 
 from agent_runtime.codex.renewal import CodexRenewal
 from agent_runtime.codex.run import AUTH_FILE_NAME
-from agent_runtime.codex_login import CodexRenewalRefusal, blanked_copy
+from agent_runtime.codex_login import blanked_copy
 from agent_runtime.config import reset_config
+from agent_runtime.login_renewal import RenewalRefusal
 from agent_runtime.login_timing import UnreadableTiming
 from agent_runtime.process import CliRunReason
 from agent_runtime.secret_file import SecretFileFault
@@ -436,7 +437,7 @@ def test_a_source_the_reader_refuses_starts_nothing_and_names_a_closed_reason(
     assert str(arrangement.token_file) in report.refusal
     assert "{not json" not in report.refusal
     if spoil is _malformed:
-        assert CodexRenewalRefusal.NOT_USABLE.value in report.refusal
+        assert RenewalRefusal.NOT_USABLE.value in report.refusal
     assert arrangement.directory_holds() == ([] if spoil is _missing else [LOGIN_NAME])
 
 

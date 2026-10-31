@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from enum import StrEnum
 from pathlib import Path
 from typing import Final, NoReturn
 
@@ -12,17 +11,14 @@ from agent_runtime.anchored_turn import CliProcessPool
 from agent_runtime.cli_run import CliRunStart
 from agent_runtime.cli_settings import CliSettings
 from agent_runtime.codex.run import AUTH_FILE_NAME, CodexRun
-from agent_runtime.codex_login import RenewableCodexLogin, assess_codex_login, made_due_copy
+from agent_runtime.codex_login import assess_codex_login, made_due_copy
+from agent_runtime.login_renewal import CopyUnchanged, RenewableLogin
 from agent_runtime.secret_file import SecretFileFault, read_secret_file_without_following_links
 from agent_runtime_client.wire import TurnMessage, TurnRole
 
 _RENEWAL_SYSTEM_TEXT: Final = "You answer in one word. You have no tools."
 _RENEWAL_REQUEST: Final = (TurnMessage(role=TurnRole.USER, text="Say ok."),)
 _FILE_CREDENTIAL_STORE: Final[CliSettings] = {"cli_auth_credentials_store": "file"}
-
-
-class CopyUnchanged(StrEnum):
-    UNCHANGED = "the CLI left the made-due copy as it was"
 
 
 @dataclass(frozen=True)
@@ -34,7 +30,7 @@ class CodexRenewal:
     """
 
     binary: Path
-    login: RenewableCodexLogin = field(repr=False)
+    login: RenewableLogin = field(repr=False)
     now: int = field(kw_only=True)
     _run: CodexRun = field(init=False, repr=False, compare=False)
 
