@@ -1,8 +1,0 @@
-claim_id = "c486448f69394823915754457f48e4cc"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "7a0323f8e3bbc819e4fd6076ecdc1e8c7b6326a7"
-branch = "claude/issue-664-grok-renewal-run"
-scope = ["AGENTS.md", "src/agent_runtime/grok/renewal.py", "src/agent_runtime/grok/run.py", "src/agent_runtime/grok_login.py", "src/agent_runtime/login_timing.py", "tests/support/grok_support.py", "tests/support/provider_test_support.py", "tests/test_grok_login.py", "tests/test_grok_renewal.py"]
-opened_commit = "a2f250b1264f7c6c70bb0ddff1776b558fddb2bc"
-whole_reason = "Four production files, about 120 lines: the renewable login, its timing and the run that uses them are one decision judged against one measurement (G6-0); the fourth file is a two-name visibility change."
