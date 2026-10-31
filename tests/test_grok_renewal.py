@@ -50,9 +50,8 @@ def a_login(document: bytes | None = None) -> RenewableGrokLogin:
     return login
 
 
-def a_renewal(**changes: Any) -> GrokRenewal:
-    fields: dict[str, Any] = {"binary": BINARY, "login": a_login(), "now": NOW}
-    return GrokRenewal(**{**fields, **changes})
+def a_renewal(binary: Path = BINARY, login: Any = None, now: int = NOW) -> GrokRenewal:
+    return GrokRenewal(binary, a_login() if login is None else login, now=now)
 
 
 def a_home_holding(directory: Path, document: bytes) -> Path:
