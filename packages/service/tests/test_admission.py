@@ -21,6 +21,7 @@ import pytest
 from starlette.requests import ClientDisconnect
 from tests.support.bounds import TEST_WAIT_SECONDS, within_the_bound
 from tests.support.held_runner_support import HeldRunner
+from tests.support.recorded_returns import record_returns
 from tests.support.request_limits_support import QUOTATION_MARKS_256, TUNED_AT_THE_LIMIT
 from tests.support.service_support import (
     API_GROUP,
@@ -123,15 +124,16 @@ def service(request, monkeypatch) -> Iterator[_Service]:
 
 @pytest.fixture
 def run_ids(monkeypatch) -> list[uuid.UUID]:
-    minted: list[uuid.UUID] = []
-    mint_run_id = uuid.uuid4
+    return record_returns(monkeypatch, uuid, "uuid4")
 
-    def counting_run_id() -> uuid.UUID:
-        minted.append(mint_run_id())
-        return minted[-1]
 
-    monkeypatch.setattr("agent_runtime_service.app.uuid.uuid4", counting_run_id)
-    return minted
+def _admission_state(service: _Service, run_ids: list[uuid.UUID]) -> tuple[int, int, int, int]:
+    return (
+        len(run_ids),
+        len(service.signed),
+        len(service.held.gates),
+        len(service.api.admitted),
+    )
 
 
 def _assert_streamed_to_a_terminal(response: httpx.Response) -> None:
@@ -150,34 +152,25 @@ def test_a_cli_request_with_every_place_taken_answers_busy_before_a_run_id_or_a_
     service, run_ids
 ):
     held = service.fill_the_places()
-    state_before = admission_state(service, run_ids)
+    state_before = _admission_state(service, run_ids)
 
     busy = service.run()
 
     assert_rejected(busy, RejectionCode.BUSY, 429)
-    assert admission_state(service, run_ids) == state_before
+    assert _admission_state(service, run_ids) == state_before
     service.let_all_go(held)
-
-
-def admission_state(service, run_ids):
-    return (
-        len(run_ids),
-        len(service.signed),
-        len(service.held.gates),
-        len(service.api.admitted),
-    )
 
 
 def test_an_oversized_body_with_every_place_taken_is_too_large_not_busy_and_creates_nothing(
     service, run_ids
 ):
     held = service.fill_the_places()
-    state_before = admission_state(service, run_ids)
+    state_before = _admission_state(service, run_ids)
 
     refused = service.run(turn={"system": "x" * MAX_REQUEST_BYTES, "messages": []})
 
     assert_rejected(refused, RejectionCode.TOO_LARGE, 413)
-    assert admission_state(service, run_ids) == state_before
+    assert _admission_state(service, run_ids) == state_before
     service.let_all_go(held)
 
 
