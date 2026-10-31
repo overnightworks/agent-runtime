@@ -119,6 +119,10 @@ def test_a_member_whose_name_only_resembles_a_renewal_name_is_kept() -> None:
             b'{"a": {"key": "k", "x": ' + b"[" * 100_000 + b"}}",
             GrokLoginVerdict.MALFORMED, id="excessive-nesting-in-a-realm",
         ),
+        pytest.param(
+            b'{"a": {"key": "k", "x": ' + b"[" * 3000 + b"]" * 3000 + b"}}",
+            GrokLoginVerdict.MALFORMED, id="balanced-nesting-beyond-the-recursion-limit",
+        ),
     ],
 )
 def test_a_login_document_has_one_verdict_and_only_a_usable_one_has_a_copy(
@@ -306,6 +310,12 @@ def test_a_timing_that_cannot_be_read_names_its_cause_and_never_raises(
     document: bytes, cause: str
 ) -> None:
     assert read_grok_timing(document, 1_800_000_000) is UnreadableTiming[cause]
+
+
+def test_a_renewal_member_held_only_in_a_list_makes_a_login_renewable() -> None:
+    document = json.dumps({"realm": {"key": "k", "nested": [{"refresh": "r"}]}}).encode()
+
+    assert isinstance(renewable_grok_login(document), RenewableGrokLogin)
 
 
 @pytest.mark.parametrize(

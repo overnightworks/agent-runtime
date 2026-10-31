@@ -50,7 +50,11 @@ def assess_grok_login(document: bytes) -> GrokLogin:
         return GrokLogin(GrokLoginVerdict.MALFORMED)
     if not any(keys):
         return GrokLogin(GrokLoginVerdict.INCOMPLETE)
-    return GrokLogin(GrokLoginVerdict.USABLE, json.dumps(_blanked(parsed)).encode())
+    try:
+        copy = json.dumps(_blanked(parsed)).encode()
+    except RecursionError:
+        return GrokLogin(GrokLoginVerdict.MALFORMED)
+    return GrokLogin(GrokLoginVerdict.USABLE, copy)
 
 
 def blanked_copy(document: bytes) -> bytes | None:
