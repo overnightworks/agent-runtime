@@ -51,12 +51,6 @@ path = "tests/test_async_claude_spawn_seam.py"
 rule = "test-layout"
 reason = "tests the async Claude child seam in tests/support/provider_test_support.py and guards that it stays the only door"
 
-[[gate.loosened]]
-what = 'import contract "inside the core, only the routers import a provider package; the machinery below them never does" changes source_modules'
-item = "#635"
-date = 2026-10-30
-reason = "agent_runtime.login_renewal joins the forbidden contract's source_modules, which only forbids more; the pinned gate v0.9.0 predates overnightworks/quality#252, which exempts such a tightening, and holds one entry per what, so this replaces #612's entry, whose loosening landed with #612"
-
 [[python.allow]]
 path = "pyproject.toml"
 reason = "songmaker and presentator install these wheels on Python 3.12 (their .python-version files read 3.12 on 29.10.2026); raising requires-python to 3.14 would break them"
