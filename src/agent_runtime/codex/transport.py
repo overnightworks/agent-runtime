@@ -36,6 +36,7 @@ from agent_runtime.codex.protocol import (
     run_reserved_codex_cli,
     top_level_error_message,
 )
+from agent_runtime.codex.run import is_code_mode_host_disabled_notice
 from agent_runtime.constants import TURN_TIMEOUT_SECONDS
 from agent_runtime.errors import (
     CodexProcessPoolSaturatedError,
@@ -93,10 +94,6 @@ _CODEX_TOOL_ISOLATION_CONFIGS: Final = (
     "features.code_mode_host=false",
     "features.code_mode=false",
     "features.code_mode_only=false",
-)
-# Codex appends version-specific remediation after this stable isolation notice.
-_CODE_MODE_HOST_DISABLED_ISOLATION_NOTICE_PREFIX: Final = (
-    "Code Mode is unavailable because code-mode host is disabled"
 )
 log = logging.getLogger(__name__)
 
@@ -407,7 +404,7 @@ def _consume_codex_item_event(
         raise CodexCliStreamFailure("codex_cli_tool_call_blocked")
     if event_type == CODEX_ITEM_COMPLETED_EVENT and item_type == "error":
         completed_error = error_item_message(event)
-        if _is_code_mode_host_disabled_isolation_notice(completed_error):
+        if is_code_mode_host_disabled_notice(completed_error):
             log.info("Codex CLI ignored its code-mode-host isolation notice")
             return None
         state.error_message = completed_error
@@ -477,11 +474,6 @@ def _completed_agent_message(event: dict[str, object]) -> str:
     return text
 
 
-def _is_code_mode_host_disabled_isolation_notice(message: str) -> bool:
-    """Recognize the one Codex notice caused by this adapter's isolation."""
-    return message.startswith(_CODE_MODE_HOST_DISABLED_ISOLATION_NOTICE_PREFIX)
-
-
 def _completed_turn(event: dict[str, object]) -> None:
     if not isinstance(event.get("usage"), dict):
         raise CodexCliStreamFailure("codex_cli_stream_protocol_error")
@@ -521,5 +513,3 @@ def _raise_codex_cli_failure(outcome: CliRunOutcome, error_message: str | None) 
         "cli",
         normalize_route_failure(codex_cli_failure_reason(error_message, outcome.stderr)),
     )
-
-

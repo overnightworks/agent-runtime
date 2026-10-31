@@ -64,6 +64,22 @@ def test_a_codex_run_switches_the_shell_snapshot_off_by_default() -> None:
     assert written_settings(a_run())["features"]["shell_snapshot"] is False
 
 
+def test_an_operator_level_switches_a_removed_built_in_back_on_over_the_default() -> None:
+    level: CliSettings = {
+        "features": {"view_image": True},
+        "tools": {"experimental_request_user_input": {"enabled": True}},
+        "agents": {"enabled": True},
+    }
+    settings = written_settings(a_run(level))
+
+    assert (
+        settings["features"]["view_image"],
+        settings["tools"]["experimental_request_user_input"]["enabled"],
+        settings["agents"]["enabled"],
+    ) == (True, True, True)
+    assert settings["features"]["goals"] is False
+
+
 def test_an_operator_level_switches_the_shell_snapshot_on_over_the_default() -> None:
     settings = written_settings(a_run({"features": {"shell_snapshot": True}}))
 
@@ -83,6 +99,8 @@ def test_a_level_overrides_every_default_so_the_operator_wins_over_the_service()
         "web_search": "live",
         "mcp_servers": {"x": {"url": "https://x.test"}},
         "features": dict.fromkeys(FEATURES_OFF, True),
+        "tools": {"experimental_request_user_input": {"enabled": True}},
+        "agents": {"enabled": True},
     }
 
     assert same(written_settings(a_run(level)), level)

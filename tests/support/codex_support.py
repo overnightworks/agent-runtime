@@ -23,6 +23,9 @@ FEATURES_OFF = (
     "code_mode_host",
     "code_mode",
     "code_mode_only",
+    "view_image",
+    "goals",
+    "sleep_tool",
 )
 DEFAULT_SETTINGS: dict[str, Any] = {
     "sandbox_mode": "read-only",
@@ -30,6 +33,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "mcp_servers": {},
     "web_search": "disabled",
     "features": dict.fromkeys(FEATURES_OFF, False),
+    "tools": {"experimental_request_user_input": {"enabled": False}},
+    "agents": {"enabled": False},
 }
 
 
