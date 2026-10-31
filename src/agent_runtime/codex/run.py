@@ -85,6 +85,8 @@ _DEFAULT_SETTINGS: Final[CliSettings] = {
     "tools": {"experimental_request_user_input": {"enabled": False}},
     "agents": {"enabled": False},
 }
+# The model of a tool run reaches the relay's tools only through code mode's host.
+_RELAY_RUN_SETTINGS: Final[CliSettings] = {"features": {"code_mode_host": True}}
 _READ_PROMPT_FROM_STDIN: Final = "-"
 
 _TOOL_ITEM_TYPES: Final = frozenset(
@@ -303,7 +305,8 @@ class CodexRun:
         }
 
     def _settings(self) -> CliSettings:
-        settings = merged(_DEFAULT_SETTINGS, *self.settings)
+        run_defaults = () if self.relay is None else (_RELAY_RUN_SETTINGS,)
+        settings = merged(_DEFAULT_SETTINGS, *run_defaults, *self.settings)
         if self.relay is None or self.tool_timeout_seconds is None:
             return settings
         servers = settings.get("mcp_servers")

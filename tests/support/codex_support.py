@@ -36,6 +36,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "tools": {"experimental_request_user_input": {"enabled": False}},
     "agents": {"enabled": False},
 }
+RELAY_RUN_DEFAULT_SETTINGS: dict[str, Any] = {
+    **DEFAULT_SETTINGS,
+    "features": {**DEFAULT_SETTINGS["features"], "code_mode_host": True},
+}
 
 
 def codex_line(**fields: Any) -> bytes:

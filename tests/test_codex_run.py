@@ -19,9 +19,9 @@ import pytest
 from tests.support.anchored_leaders import spawn_warnings
 from tests.support.anchored_support import GONE, ChildCleanup
 from tests.support.codex_support import (
-    DEFAULT_SETTINGS,
     DONE,
     PRECONDITIONS_MARKER,
+    RELAY_RUN_DEFAULT_SETTINGS,
     THREAD,
     a_message,
     an_item,
@@ -261,7 +261,7 @@ def test_a_relay_run_writes_the_relay_entry_and_the_defaults_beside_it() -> None
     settings = written_settings(a_relay_run())
     entry = settings["mcp_servers"].pop("relay")
 
-    assert settings == DEFAULT_SETTINGS
+    assert settings == RELAY_RUN_DEFAULT_SETTINGS
     assert (entry.keys(), entry["url"], entry["required"]) == (
         {
             "url",
