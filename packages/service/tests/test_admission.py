@@ -145,13 +145,22 @@ def test_a_cli_request_with_every_place_taken_answers_busy_before_a_run_id_or_a_
 
     monkeypatch.setattr("agent_runtime_service.app.uuid.uuid4", counting_run_id)
     held = service.fill_the_places()
-    run_ids_before, signed_before = len(run_ids), len(service.signed)
+    state_before = admission_state(service, run_ids)
 
     busy = service.run()
 
     assert_rejected(busy, RejectionCode.BUSY, 429)
-    assert (len(run_ids), len(service.signed)) == (run_ids_before, signed_before)
+    assert admission_state(service, run_ids) == state_before
     service.let_all_go(held)
+
+
+def admission_state(service, run_ids):
+    return (
+        len(run_ids),
+        len(service.signed),
+        len(service.held.gates),
+        len(service.api.admitted),
+    )
 
 
 def test_an_oversized_body_with_every_place_taken_is_too_large_not_busy_and_creates_nothing(
@@ -166,14 +175,12 @@ def test_an_oversized_body_with_every_place_taken_is_too_large_not_busy_and_crea
 
     monkeypatch.setattr("agent_runtime_service.app.uuid.uuid4", counting_run_id)
     held = service.fill_the_places()
-    run_ids_before, signed_before = len(run_ids), len(service.signed)
-    admitted_before = (len(service.held.gates), len(service.api.admitted))
+    state_before = admission_state(service, run_ids)
 
     refused = service.run(turn={"system": "x" * MAX_REQUEST_BYTES, "messages": []})
 
     assert_rejected(refused, RejectionCode.TOO_LARGE, 413)
-    assert (len(run_ids), len(service.signed)) == (run_ids_before, signed_before)
-    assert (len(service.held.gates), len(service.api.admitted)) == admitted_before
+    assert admission_state(service, run_ids) == state_before
     service.let_all_go(held)
 
 
