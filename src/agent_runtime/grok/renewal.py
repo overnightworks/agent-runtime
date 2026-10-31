@@ -12,7 +12,7 @@ from agent_runtime.cli_run import CliRunStart
 from agent_runtime.grok.run import (
     AUTH_FILE_NAME,
     GROK_CLI_PROCESS_POOL,
-    HOME_VARIABLE,
+    GROK_HOME_VARIABLE,
     GrokStreamDecoder,
 )
 from agent_runtime.grok_login import RenewableGrokLogin, read_grok_timing, renewable_grok_login
@@ -62,7 +62,7 @@ class GrokRenewal:
             environment=closed_environment(
                 home,
                 **{
-                    HOME_VARIABLE: str(home),
+                    GROK_HOME_VARIABLE: str(home),
                     _EARLY_INVALIDATION_VARIABLE: str(self._early_invalidation_seconds()),
                 },
             ),

@@ -199,15 +199,13 @@ def test_a_renewal_and_its_login_refuse_pickling_and_copying(disclose, subject: 
         disclose(renewal if subject == "renewal" else renewal.login)
 
 
-def test_a_fake_grok_renews_the_login_through_the_real_directories_and_runner(
+def test_a_fake_grok_renews_through_the_real_directories_and_runner_after_reset_config(
     tmp_path: Path,
 ) -> None:
     reset_config()
     login = a_login()
     renewed = a_document(a_key(issued_at=1_800_000_005), refresh_token="rotated")
-    binary = a_renewing_fake_grok(
-        tmp_path, login.document, renewed, threshold_at_least=6 * 3600 + 1
-    )
+    binary = a_renewing_fake_grok(tmp_path, login.document, renewed, 6 * 3600 + 1)
     renewal = a_renewal(binary=binary, login=login)
     root = PrivateWorkingRoot(a_private_root(tmp_path))
 

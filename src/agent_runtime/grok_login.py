@@ -42,18 +42,15 @@ def assess_grok_login(document: bytes) -> GrokLogin:
     A realm's ``key`` is absent, null (counts as absent) or a string, and the
     login is usable once some realm has a non-empty one.
     """
-    try:
-        parsed = json.loads(document.decode("utf-8"))
-        if not isinstance(parsed, dict):
-            return GrokLogin(GrokLoginVerdict.MALFORMED)
-        keys = [member.get("key") for member in parsed.values() if isinstance(member, dict)]
-        if not all(key is None or isinstance(key, str) for key in keys):
-            return GrokLogin(GrokLoginVerdict.MALFORMED)
-        if not any(keys):
-            return GrokLogin(GrokLoginVerdict.INCOMPLETE)
-        return GrokLogin(GrokLoginVerdict.USABLE, json.dumps(_blanked(parsed)).encode())
-    except (ValueError, RecursionError):
+    parsed = _parsed_login(document)
+    if parsed is None:
         return GrokLogin(GrokLoginVerdict.MALFORMED)
+    keys = _realm_keys(parsed)
+    if not all(key is None or isinstance(key, str) for key in keys):
+        return GrokLogin(GrokLoginVerdict.MALFORMED)
+    if not any(keys):
+        return GrokLogin(GrokLoginVerdict.INCOMPLETE)
+    return GrokLogin(GrokLoginVerdict.USABLE, json.dumps(_blanked(parsed)).encode())
 
 
 def blanked_copy(document: bytes) -> bytes | None:
@@ -83,6 +80,11 @@ def _parsed_login(document: bytes) -> dict[str, object] | None:
     except (ValueError, RecursionError):
         return None
     return parsed if isinstance(parsed, dict) else None
+
+
+def _realm_keys(parsed: dict[str, object]) -> list[object]:
+    """The ``key`` of every realm: the object members of the document."""
+    return [member.get("key") for member in parsed.values() if isinstance(member, dict)]
 
 
 def _renewal_members(value: object) -> list[str]:
@@ -136,9 +138,7 @@ def read_grok_timing(document: bytes, now: int) -> AccessTokenTiming | Unreadabl
     ``expires_at`` is not read: its unit is not known, so only the key's own claims count.
     """
     realms = [
-        member["key"]
-        for member in (_parsed_login(document) or {}).values()
-        if isinstance(member, dict) and isinstance(member.get("key"), str) and member["key"]
+        key for key in _realm_keys(_parsed_login(document) or {}) if isinstance(key, str) and key
     ]
     if not realms:
         return UnreadableTiming.NO_ACCESS_TOKEN

@@ -47,7 +47,7 @@ AUTH_FILE_NAME: Final = "auth.json"
 _RULES_FILE_NAME: Final = "AGENTS.md"
 _PROMPT_FILE_NAME: Final = "prompt.txt"
 _CONFIG_FILE_NAME: Final = "config.toml"
-HOME_VARIABLE: Final = "GROK_HOME"
+GROK_HOME_VARIABLE: Final = "GROK_HOME"
 
 _OUTPUT_ARGUMENTS: Final = ("--output-format", "streaming-json")
 _TOOL_FREE_ARGUMENTS: Final = ("--deny", "*", "--max-turns", "1")
@@ -334,7 +334,7 @@ class GrokRun:
             binary=self.binary,
             arguments=self._arguments(home),
             environment=closed_environment(
-                home, **{HOME_VARIABLE: str(home)}, **self._relay_environment()
+                home, **{GROK_HOME_VARIABLE: str(home)}, **self._relay_environment()
             ),
             working_directory=working_directory,
         )

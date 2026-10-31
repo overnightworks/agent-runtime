@@ -251,6 +251,21 @@ def test_a_usable_login_with_a_refresh_member_is_renewable_and_shows_nothing() -
             RenewalRefusal.NO_REFRESH_TOKEN,
             id="no-renewal-member",
         ),
+        pytest.param(
+            blanked_copy(
+                json.dumps(
+                    {
+                        "realm": {
+                            "key": "k",
+                            "refresh_token": "a",
+                            "nested": [{"refreshToken": "b"}, {"inner": [{"refresh": "c"}]}],
+                        }
+                    }
+                ).encode()
+            ),
+            RenewalRefusal.NO_REFRESH_TOKEN,
+            id="blanked-copy-of-a-nested-list",
+        ),
         pytest.param(b"not json", RenewalRefusal.NOT_USABLE, id="malformed"),
         pytest.param(
             json.dumps({"realm": {"refresh_token": "r"}}).encode(),
