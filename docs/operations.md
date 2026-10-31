@@ -147,8 +147,9 @@ features.image_generation = true
 ```
 
 A Codex picture reaches the run's files only when the agent's `cli_settings.openai` turns on both
-`features.image_generation` and `features.code_mode_host`. `code_mode_host` lets the model run
-code inside the run's sandbox; that exposure is accepted for the picture.
+`features.image_generation` and `features.code_mode_host`. A run that names tools has
+`code_mode_host` on by default (see the relay paragraph below), so a picture needs it from the
+configuration only on a run without tools. The exposure it brings is accepted for the picture.
 
 The levels apply in this order, each over the one before: the adapter's defaults, `[defaults]`,
 `[apps.<app>]`, then `[apps.<app>.agents.<agent>]`. Tables merge per key, recursively; any other
@@ -160,7 +161,7 @@ and no setting value appears in the program's arguments. Its Codex defaults are 
 "read-only"`, `approval_policy = "never"`, `mcp_servers = {}`, `web_search = "disabled"` and
 `features` with `shell_tool`, `unified_exec`, `browser_use`, `computer_use`, `multi_agent`,
 `image_generation`, `plugins`, `hooks`, `shell_snapshot`, `code_mode_host`, `code_mode` and
-`code_mode_only` all `false`, plus `view_image`, `goals` and `sleep_tool` `false`,
+`code_mode_only` all `false` (a run that names tools turns `code_mode_host` on, below), plus `view_image`, `goals` and `sleep_tool` `false`,
 `tools.experimental_request_user_input.enabled = false` and `agents.enabled = false`, which
 remove the image viewer, the user-input and goal tools, the sleep tool and the sub-agent
 namespace from what the model is offered; every other feature follows the pinned CLI. Three
@@ -194,9 +195,14 @@ A run that names tools gets the run's relay as `mcp_servers.relay` in that file,
 levels: `url` (the relay on loopback), `bearer_token_env_var = "AGENT_RUNTIME_RELAY_TOKEN"`,
 `required = true`, `default_tools_approval_mode = "approve"`, `omit_tools_from = ["deferred"]`
 (the pinned CLI otherwise hides the relay's tools behind `tool_search`) and `tool_timeout_sec`, the
-whole seconds of `[runs] max_duration_s` rounded up. A model that runs tools only in code mode,
-which the defaults switch off, cannot be offered them: the run ends `failed: provider_error`
-until the configuration turns `features.code_mode_host` on. The relay's per-run secret reaches the program only
+whole seconds of `[runs] max_duration_s` rounded up. Such a run also defaults `features.code_mode_host`
+to `true` (`code_mode` and `code_mode_only` stay `false`), because a model that runs tools only in
+code mode (`gpt-6-astra`) reaches the relay's tools through that host alone. The host is a separate
+process outside Codex's own sandbox and holds the run's relay secret, since it inherits Codex's
+environment; the model's program runs in an isolate with no file system, network, process or
+environment API and reaches only the tools offered to code mode, each through Codex's ordinary
+tool path and approval mode. A configuration that sets `code_mode_host` to `false` on a tool run
+ends it `failed: provider_error` on a code-mode-only model. The relay's per-run secret reaches the program only
 in that environment variable, never in its arguments or a file, and the app's capability never
 reaches it. `mcp_servers.relay`, any key below it or an empty table, is the service's and stops
 startup at any level (exit 2, `--check` agrees); the operator's own `mcp_servers.<name>` entries
