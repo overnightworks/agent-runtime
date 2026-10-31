@@ -1,8 +1,0 @@
-claim_id = "cb88e7fcce5943a8a93072868ea4e140"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "7fe0d16828d4428a983f01ddc43ff541097d5ad4"
-branch = "claude/issue-656-a1d-a-codex-tool-run-turns-on-code-mode"
-scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "packages/service/tests/test_cli_runner_relay_tables.py", "src/agent_runtime/codex/run.py", "tests/support/codex_support.py", "tests/support/service_table_support.py", "tests/test_codex_run.py", "tests/test_codex_run_settings.py"]
-opened_commit = "0a9db4a6c85b9154cdd6a406b238b8c8b60086f4"
-whole_reason = "One production file, about 10 lines: the relay-attached default, its settings rows and the test support's defaults, operations.md, MIGRATING.md's 0.16.0 section and decision 0001's A1b-5r change together, because each states the same default."
