@@ -31,6 +31,9 @@ from tests.support.cli_tools_support import (
 from tests.support.codex_support import DEFAULT_SETTINGS as CODEX_DEFAULT_SETTINGS
 from tests.support.codex_support import DONE, THREAD, a_fake_codex, a_message, an_item, codex_line
 from tests.support.codex_support import PRECONDITIONS_MARKER as CODEX_PRECONDITIONS_MARKER
+from tests.support.codex_support import (
+    RELAY_RUN_DEFAULT_SETTINGS as CODEX_RELAY_RUN_DEFAULT_SETTINGS,
+)
 from tests.support.grok_support import END, a_fake_grok, a_text, grok_line
 from tests.support.grok_support import PRECONDITIONS_MARKER as GROK_PRECONDITIONS_MARKER
 from tests.support.mcp_app_fake import TestAuthority
@@ -120,6 +123,8 @@ class ProviderTable:
     failing_runs: tuple[FailingRun, ...]
     default_settings: Mapping[str, Any]
     """What the service's run file holds when the operator sets nothing."""
+    relay_run_default_settings: Mapping[str, Any]
+    """The same file for a run attached to a relay."""
     refused_run: FailingRun
     """What the program prints and does when it refuses a mistyped setting."""
 
@@ -245,6 +250,7 @@ CODEX_TABLE = ProviderTable(
     keyless_login=json.dumps({"auth_mode": "chatgpt"}).encode(),
     foreign_login=a_grok_login_with(),
     default_settings=CODEX_DEFAULT_SETTINGS,
+    relay_run_default_settings=CODEX_RELAY_RUN_DEFAULT_SETTINGS,
     refused_run=FailingRun(
         "refused-setting", (), f"echo {CANARY} >&2; exit 1", "CodexAnswerMissing"
     ),
@@ -275,6 +281,7 @@ CODEX_TABLE = ProviderTable(
         ),
     ),
 )
+
 
 def a_grok_stream(text: str, finished: bool) -> tuple[bytes, ...]:
     return (a_text(text), *((END,) if finished else ()))
@@ -310,6 +317,7 @@ GROK_TABLE = ProviderTable(
     keyless_login=json.dumps({"xai.example": {"refresh_token": GROK_REFRESH_CANARY}}).encode(),
     foreign_login=a_codex_login(),
     default_settings={},
+    relay_run_default_settings={},
     refused_run=FailingRun(
         "refused-setting",
         (),

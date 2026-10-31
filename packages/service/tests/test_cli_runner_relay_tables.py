@@ -86,7 +86,7 @@ def test_a_tool_runs_settings_file_holds_the_relay_it_was_given_over_the_default
 
     settings = captured_settings(run.capture.directory / "files")
     entry = run.capture.relay
-    assert settings == {**table.default_settings, "mcp_servers": {"relay": entry}}
+    assert settings == {**table.relay_run_default_settings, "mcp_servers": {"relay": entry}}
     assert (entry["tool_timeout_sec"], entry["bearer_token_env_var"]) == (
         math.ceil(run.config.runs.max_duration_s),
         RELAY_TOKEN_VARIABLE,
