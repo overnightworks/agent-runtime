@@ -154,12 +154,26 @@ def test_a_cli_request_with_every_place_taken_answers_busy_before_a_run_id_or_a_
     service.let_all_go(held)
 
 
-def test_an_oversized_body_with_every_place_taken_is_too_large_not_busy(service):
+def test_an_oversized_body_with_every_place_taken_is_too_large_not_busy_and_creates_nothing(
+    service, monkeypatch
+):
+    run_ids: list[uuid.UUID] = []
+    mint_run_id = uuid.uuid4
+
+    def counting_run_id() -> uuid.UUID:
+        run_ids.append(mint_run_id())
+        return run_ids[-1]
+
+    monkeypatch.setattr("agent_runtime_service.app.uuid.uuid4", counting_run_id)
     held = service.fill_the_places()
+    run_ids_before, signed_before = len(run_ids), len(service.signed)
+    admitted_before = (len(service.held.gates), len(service.api.admitted))
 
     refused = service.run(turn={"system": "x" * MAX_REQUEST_BYTES, "messages": []})
 
     assert_rejected(refused, RejectionCode.TOO_LARGE, 413)
+    assert (len(run_ids), len(service.signed)) == (run_ids_before, signed_before)
+    assert (len(service.held.gates), len(service.api.admitted)) == admitted_before
     service.let_all_go(held)
 
 
