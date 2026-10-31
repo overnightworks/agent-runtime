@@ -121,6 +121,19 @@ def service(request, monkeypatch) -> Iterator[_Service]:
     yield from _serving(monkeypatch, runs)
 
 
+@pytest.fixture
+def run_ids(monkeypatch) -> list[uuid.UUID]:
+    minted: list[uuid.UUID] = []
+    mint_run_id = uuid.uuid4
+
+    def counting_run_id() -> uuid.UUID:
+        minted.append(mint_run_id())
+        return minted[-1]
+
+    monkeypatch.setattr("agent_runtime_service.app.uuid.uuid4", counting_run_id)
+    return minted
+
+
 def _assert_streamed_to_a_terminal(response: httpx.Response) -> None:
     assert response.status_code == 200
     assert isinstance(decoded_events(response.content)[0], RunStarted)
@@ -134,16 +147,8 @@ def test_a_cli_route_with_a_free_place_is_admitted_and_holds_one_lease(service):
 
 
 def test_a_cli_request_with_every_place_taken_answers_busy_before_a_run_id_or_a_signature(
-    service, monkeypatch
+    service, run_ids
 ):
-    run_ids: list[uuid.UUID] = []
-    mint_run_id = uuid.uuid4
-
-    def counting_run_id() -> uuid.UUID:
-        run_ids.append(mint_run_id())
-        return run_ids[-1]
-
-    monkeypatch.setattr("agent_runtime_service.app.uuid.uuid4", counting_run_id)
     held = service.fill_the_places()
     state_before = admission_state(service, run_ids)
 
@@ -164,16 +169,8 @@ def admission_state(service, run_ids):
 
 
 def test_an_oversized_body_with_every_place_taken_is_too_large_not_busy_and_creates_nothing(
-    service, monkeypatch
+    service, run_ids
 ):
-    run_ids: list[uuid.UUID] = []
-    mint_run_id = uuid.uuid4
-
-    def counting_run_id() -> uuid.UUID:
-        run_ids.append(mint_run_id())
-        return run_ids[-1]
-
-    monkeypatch.setattr("agent_runtime_service.app.uuid.uuid4", counting_run_id)
     held = service.fill_the_places()
     state_before = admission_state(service, run_ids)
 
