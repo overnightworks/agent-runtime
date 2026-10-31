@@ -29,18 +29,14 @@ from agent_runtime.process import run_cli_bounded, run_directories
 from agent_runtime.secret_file import SecretFileFault
 from agent_runtime.spawn import ChildProcessSpecificationError, closed_environment
 
-BINARY = Path("/opt/grok/bin/grok")
-NOW = 1_800_000_000
-KEY_LIFETIME_SECONDS = 6 * 3600
-UNREADABLE_CEILING_SECONDS = 24 * 3600
-REFRESH_CANARY = "canary-renewal-refresh-member"
 
-
-def a_document(key: str, *, refresh_token: str = REFRESH_CANARY, **realm: object) -> bytes:
+def a_document(
+    key: str, *, refresh_token: str = "an-original-refresh-member", **realm: object
+) -> bytes:
     return json.dumps({"xai": {"key": key, "refresh_token": refresh_token, **realm}}).encode()
 
 
-def a_key(*, issued_at: int = NOW, lifetime: int = KEY_LIFETIME_SECONDS) -> str:
+def a_key(*, issued_at: int = 1_800_000_000, lifetime: int = 6 * 3600) -> str:
     return a_codex_access_token({"iat": issued_at, "exp": issued_at + lifetime})
 
 
@@ -50,8 +46,11 @@ def a_login(document: bytes | None = None) -> RenewableGrokLogin:
     return login
 
 
-def a_renewal(binary: Path = BINARY, login: Any = None, now: int = NOW) -> GrokRenewal:
-    return GrokRenewal(binary, a_login() if login is None else login, now=now)
+def a_renewal(
+    binary: Path = Path("/opt/grok/bin/grok"), login: Any = None, *, elapsed: int = 0
+) -> GrokRenewal:
+    """A renewal ``elapsed`` seconds after the default key was issued."""
+    return GrokRenewal(binary, a_login() if login is None else login, now=1_800_000_000 + elapsed)
 
 
 def a_home_holding(directory: Path, document: bytes) -> Path:
@@ -67,26 +66,28 @@ def threshold_of(renewal: GrokRenewal, directory: Path) -> int:
 
 
 def test_the_run_files_are_exactly_the_unaltered_full_login() -> None:
-    renewal = a_renewal()
+    canary = "canary-renewal-refresh-member"
+    renewal = a_renewal(login=a_login(a_document(a_key(), refresh_token=canary)))
 
     assert renewal.run_files() == {"auth.json": renewal.login.document}
-    assert REFRESH_CANARY.encode() in renewal.run_files()["auth.json"]
+    assert canary.encode() in renewal.run_files()["auth.json"]
 
 
 def test_the_run_is_grok_models_with_the_home_variables_and_the_threshold(tmp_path: Path) -> None:
     home, work = tmp_path / "home", tmp_path / "work"
-    renewal = a_renewal(now=NOW + 2 * 3600)
+    lifetime, binary = 6 * 3600, Path("/opt/grok/bin/grok")
+    renewal = a_renewal(binary, a_login(a_document(a_key(lifetime=lifetime))), elapsed=2 * 3600)
 
     start = renewal.start(home, work)
 
-    remaining = KEY_LIFETIME_SECONDS - 2 * 3600
+    remaining = lifetime - 2 * 3600
     assert start.child.arguments == ("models",)
     assert start.child.environment == {
         **closed_environment(home),
         "GROK_HOME": str(home),
         "GROK_AUTH_EARLY_INVALIDATION_SECS": str(remaining + 3600),
     }
-    assert (start.child.binary, start.child.working_directory, start.stdin) == (BINARY, work, b"")
+    assert (start.child.binary, start.child.working_directory, start.stdin) == (binary, work, b"")
     assert renewal.pool is GROK_CLI_PROCESS_POOL
     assert int(start.child.environment["GROK_AUTH_EARLY_INVALIDATION_SECS"]) > remaining
 
@@ -94,13 +95,16 @@ def test_the_run_is_grok_models_with_the_home_variables_and_the_threshold(tmp_pa
 def test_the_threshold_at_the_half_life_of_the_key_is_below_its_whole_lifetime(
     tmp_path: Path,
 ) -> None:
-    renewal = a_renewal(now=NOW + KEY_LIFETIME_SECONDS // 2)
+    lifetime = 6 * 3600
+    renewal = a_renewal(login=a_login(a_document(a_key(lifetime=lifetime))), elapsed=lifetime // 2)
 
-    assert threshold_of(renewal, tmp_path) < KEY_LIFETIME_SECONDS
+    assert threshold_of(renewal, tmp_path) < lifetime
 
 
 def test_an_expired_key_still_gets_a_threshold_past_now(tmp_path: Path) -> None:
-    assert threshold_of(a_renewal(now=NOW + 2 * KEY_LIFETIME_SECONDS), tmp_path) > 0
+    expired = a_renewal(elapsed=2 * 6 * 3600)
+
+    assert threshold_of(expired, tmp_path) > 0
 
 
 @pytest.mark.parametrize(
@@ -113,7 +117,7 @@ def test_an_unreadable_key_gets_the_fixed_ceiling_and_the_run_still_starts(
 ) -> None:
     renewal = a_renewal(login=a_login(a_document(key)))
 
-    assert threshold_of(renewal, tmp_path) == UNREADABLE_CEILING_SECONDS
+    assert threshold_of(renewal, tmp_path) == 24 * 3600
 
 
 @pytest.mark.parametrize(
@@ -170,7 +174,8 @@ def test_a_fifo_login_is_a_fault_and_does_not_block(tmp_path: Path) -> None:
 
 
 def test_nothing_secret_is_in_any_shown_form_of_the_renewal_or_its_start(tmp_path: Path) -> None:
-    renewal = a_renewal()
+    canary = "canary-renewal-refresh-member"
+    renewal = a_renewal(login=a_login(a_document(a_key(), refresh_token=canary)))
     start = renewal.start(tmp_path / "home", tmp_path / "work")
 
     visible = " ".join(
@@ -182,7 +187,7 @@ def test_nothing_secret_is_in_any_shown_form_of_the_renewal_or_its_start(tmp_pat
             repr(start),
         ]
     )
-    assert REFRESH_CANARY not in visible
+    assert canary not in visible
 
 
 @pytest.mark.parametrize("disclose", [pickle.dumps, copy.copy, copy.deepcopy])
@@ -198,9 +203,12 @@ def test_a_fake_grok_renews_the_login_through_the_real_directories_and_runner(
     tmp_path: Path,
 ) -> None:
     reset_config()
-    renewed = a_document(a_key(issued_at=NOW + 5), refresh_token="rotated")
-    binary = a_renewing_fake_grok(tmp_path, renewed, threshold_at_least=KEY_LIFETIME_SECONDS + 1)
-    renewal = a_renewal(binary=binary, now=NOW)
+    login = a_login()
+    renewed = a_document(a_key(issued_at=1_800_000_005), refresh_token="rotated")
+    binary = a_renewing_fake_grok(
+        tmp_path, login.document, renewed, threshold_at_least=6 * 3600 + 1
+    )
+    renewal = a_renewal(binary=binary, login=login)
     root = PrivateWorkingRoot(a_private_root(tmp_path))
 
     with run_directories(root, renewal.run_files()) as directories:
