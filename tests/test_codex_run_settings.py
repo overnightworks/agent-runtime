@@ -19,6 +19,7 @@ from tests.support.provider_test_support import (
     a_codex_login,
 )
 
+from agent_runtime.cli_run import RelayAccess
 from agent_runtime.cli_settings import CliSettings, merged
 from agent_runtime.codex.run import CodexRun
 from agent_runtime.codex_login import assess_codex_login
@@ -37,6 +38,24 @@ def a_run(*settings: CliSettings) -> CodexRun:
         model=None,
         settings=settings,
     )
+
+
+def a_relay_run(*settings: CliSettings) -> CodexRun:
+    return CodexRun(
+        Path("/opt/codex/bin/codex"),
+        assess_codex_login(a_codex_login()),
+        "system",
+        (TurnMessage(role="user", text="question"),),
+        model=None,
+        settings=settings,
+        relay=RelayAccess(url="http://127.0.0.1:4711/", secret="relay-secret"),
+        tool_timeout_seconds=900.0,
+    )
+
+
+def code_mode_levels(run: CodexRun) -> dict[str, bool]:
+    features = written_settings(run)["features"]
+    return {name: features[name] for name in ("code_mode_host", "code_mode", "code_mode_only")}
 
 
 def written_settings(run: CodexRun | GrokRun) -> dict[str, Any]:
@@ -58,6 +77,33 @@ def same(left: object, right: object) -> bool:
 
 def test_without_settings_the_file_holds_the_defaults_alone() -> None:
     assert same(written_settings(a_run()), DEFAULTS)
+
+
+def test_a_relay_run_turns_the_code_mode_host_on_and_leaves_code_mode_off() -> None:
+    assert code_mode_levels(a_relay_run()) == {
+        "code_mode_host": True,
+        "code_mode": False,
+        "code_mode_only": False,
+    }
+
+
+def test_a_tool_free_run_keeps_all_three_code_mode_switches_off() -> None:
+    assert set(code_mode_levels(a_run()).values()) == {False}
+
+
+@pytest.mark.parametrize(
+    ("run", "level", "expected"),
+    [
+        pytest.param(a_relay_run, {"code_mode_host": False}, False, id="relay-host-off"),
+        pytest.param(a_run, {"code_mode_host": True}, True, id="tool-free-host-on"),
+        pytest.param(a_relay_run, {"code_mode": True}, True, id="relay-code-mode-on"),
+    ],
+)
+def test_an_operator_level_overrides_the_code_mode_default_of_either_run_kind(
+    run: Callable[..., CodexRun], level: dict[str, bool], expected: bool
+) -> None:
+    (name,) = level
+    assert code_mode_levels(run({"features": level}))[name] is expected
 
 
 def test_a_codex_run_switches_the_shell_snapshot_off_by_default() -> None:

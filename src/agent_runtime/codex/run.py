@@ -85,6 +85,8 @@ _DEFAULT_SETTINGS: Final[CliSettings] = {
     "tools": {"experimental_request_user_input": {"enabled": False}},
     "agents": {"enabled": False},
 }
+# The model of a tool run reaches the relay's tools only through code mode's host.
+_RELAY_RUN_SETTINGS: Final[CliSettings] = {"features": {"code_mode_host": True}}
 _READ_PROMPT_FROM_STDIN: Final = "-"
 
 _TOOL_ITEM_TYPES: Final = frozenset(
@@ -261,12 +263,13 @@ class CodexStreamDecoder:
 class CodexRun:
     """One fresh subscription run of the pinned CLI.
 
-    Its defaults switch off the features this adapter names and set the read-only sandbox; every
-    other feature follows the pinned CLI, and the run's ``settings`` (the operator's levels,
-    lowest first) may change any of them. With a ``relay``, its settings file gets the service's
-    ``mcp_servers.relay`` entry over those levels, and the relay's secret reaches the child only
-    in its environment, under the variable that entry names. It describes the run and starts
-    nothing; the entry makes the directories and the spawn owner starts the child.
+    Its defaults switch off the features this adapter names and set the read-only sandbox; a relay
+    run turns the code-mode host on over those defaults. Every other feature follows the pinned
+    CLI, and the run's ``settings`` (the operator's levels, lowest first) may change any of them.
+    With a ``relay``, its settings file gets the service's ``mcp_servers.relay`` entry over those
+    levels, and the relay's secret reaches the child only in its environment, under the variable
+    that entry names. It describes the run and starts nothing; the entry makes the directories and
+    the spawn owner starts the child.
     """
 
     binary: Path
@@ -303,7 +306,8 @@ class CodexRun:
         }
 
     def _settings(self) -> CliSettings:
-        settings = merged(_DEFAULT_SETTINGS, *self.settings)
+        run_defaults = () if self.relay is None else (_RELAY_RUN_SETTINGS,)
+        settings = merged(_DEFAULT_SETTINGS, *run_defaults, *self.settings)
         if self.relay is None or self.tool_timeout_seconds is None:
             return settings
         servers = settings.get("mcp_servers")
