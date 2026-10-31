@@ -19,7 +19,6 @@ from agent_runtime import process
 from agent_runtime.errors import ProviderUnavailableError, SafeRouteReasonCode
 from agent_runtime.grok.transport import GrokCliToolTransport
 from agent_runtime.grok_login import (
-    _RENEWAL_NAMES,
     GrokLoginVerdict,
     RenewableGrokLogin,
     assess_grok_login,
@@ -368,10 +367,8 @@ def test_logins_share_a_refresh_token_when_every_renewal_member_is_equal(
 
 
 def test_logins_do_not_share_a_refresh_token_when_one_of_several_members_rotates() -> None:
-    kept, rotated = sorted(_RENEWAL_NAMES)[:2]
-
     def login_with(rotated_value: str) -> RenewableGrokLogin:
-        members = {kept: "a", rotated: rotated_value}
+        members = {"refresh_token": "a", "refresh": rotated_value}
         login = renewable_grok_login(json.dumps({"realm-0": {"key": "k", **members}}).encode())
         assert isinstance(login, RenewableGrokLogin)
         return login
