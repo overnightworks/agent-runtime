@@ -6,51 +6,37 @@ import math
 import tomllib
 from collections.abc import Callable
 from datetime import UTC, date, datetime, time, timedelta, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 import pytest
 from tests.support.codex_support import DEFAULT_SETTINGS as DEFAULTS
-from tests.support.codex_support import FEATURES_OFF
-from tests.support.grok_support import a_grok_run
-from tests.support.provider_test_support import (
-    CANARY_ACCESS_TOKEN,
-    CANARY_ID_TOKEN,
-    a_codex_login,
+from tests.support.codex_support import (
+    FEATURES_OFF,
+    a_relay_codex_run,
+    a_tool_free_codex_run,
 )
+from tests.support.grok_support import a_grok_run
+from tests.support.provider_test_support import CANARY_ACCESS_TOKEN, CANARY_ID_TOKEN
 
 from agent_runtime.cli_run import RelayAccess
 from agent_runtime.cli_settings import CliSettings, merged
 from agent_runtime.codex.run import CodexRun
-from agent_runtime.codex_login import assess_codex_login
 from agent_runtime.grok.run import GrokRun
 from agent_runtime_client.wire import TurnMessage
 
 VALUE_CANARY = "setting-value-canary-3f9a"
 
 
-def a_run(*settings: CliSettings) -> CodexRun:
-    return CodexRun(
-        Path("/opt/codex/bin/codex"),
-        assess_codex_login(a_codex_login()),
-        "system",
-        (TurnMessage(role="user", text="question"),),
-        model=None,
-        settings=settings,
-    )
-
-
-def a_relay_run(*settings: CliSettings) -> CodexRun:
-    return CodexRun(
-        Path("/opt/codex/bin/codex"),
-        assess_codex_login(a_codex_login()),
-        "system",
-        (TurnMessage(role="user", text="question"),),
-        model=None,
-        settings=settings,
-        relay=RelayAccess(url="http://127.0.0.1:4711/", secret="relay-secret"),
-        tool_timeout_seconds=900.0,
-    )
+QUESTION = (TurnMessage(role="user", text="question"),)
+a_run = partial(a_tool_free_codex_run, system="system", history=QUESTION)
+a_relay_run = partial(
+    a_relay_codex_run,
+    system="system",
+    history=QUESTION,
+    relay=RelayAccess(url="http://127.0.0.1:4711/", secret="relay-secret"),
+)
 
 
 def code_mode_levels(run: CodexRun) -> dict[str, bool]:

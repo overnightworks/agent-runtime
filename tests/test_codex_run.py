@@ -24,6 +24,8 @@ from tests.support.codex_support import (
     RELAY_RUN_DEFAULT_SETTINGS,
     THREAD,
     a_message,
+    a_relay_codex_run,
+    a_tool_free_codex_run,
     an_item,
     codex_line,
 )
@@ -63,7 +65,6 @@ from agent_runtime.events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime.spawn import ChildProcessSpecificationError, closed_environment
 from agent_runtime_client.wire import TurnMessage
 
-BINARY = Path("/opt/codex/bin/codex")
 SYSTEM_TEXT = "system-canary-7d2e"
 HISTORY_TEXT = "history-canary-91ab"
 CLI_TEXT = "cli-text-canary-5c30"
@@ -88,16 +89,7 @@ def a_history() -> tuple[TurnMessage, ...]:
     )
 
 
-def a_run(**changes: Any) -> CodexRun:
-    fields: dict[str, Any] = {
-        "binary": BINARY,
-        "login": assess_codex_login(a_codex_login()),
-        "system": SYSTEM_TEXT,
-        "history": a_history(),
-        "model": None,
-        "settings": (),
-    }
-    return CodexRun(**{**fields, **changes})
+a_run = partial(a_tool_free_codex_run, system=SYSTEM_TEXT, history=a_history())
 
 
 TURN = codex_line(type="turn.started")
@@ -249,8 +241,7 @@ def a_relay() -> RelayAccess:
     return RelayAccess(url="http://127.0.0.1:4711/", secret="relay-secret-canary-0e5b")
 
 
-def a_relay_run(*settings: CliSettings, tool_timeout_seconds: float = 900.0) -> CodexRun:
-    return a_run(relay=a_relay(), tool_timeout_seconds=tool_timeout_seconds, settings=settings)
+a_relay_run = partial(a_relay_codex_run, system=SYSTEM_TEXT, history=a_history(), relay=a_relay())
 
 
 def written_settings(run: CodexRun) -> dict[str, Any]:
