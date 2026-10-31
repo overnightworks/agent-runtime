@@ -165,8 +165,8 @@ and no setting value appears in the program's arguments. Its Codex defaults are 
 remove the image viewer, the user-input and goal tools, the sleep tool and the sub-agent
 namespace from what the model is offered; every other feature follows the pinned CLI. Three
 built-ins no key removes stay offered: `apply_patch` (its writes are rejected under the read-only
-sandbox), `clock.curr_time` on a code-mode-only model, and the three MCP resource tools (they
-reach only the relay, which serves no resources). With `shell_snapshot` on,
+sandbox), `clock.curr_time` on a code-mode-only model, and the three MCP resource tools (with no operator-added MCP
+servers configured they reach only the relay, which serves no resources). With `shell_snapshot` on,
 the pinned CLI writes its exported variables, the relay secret included, into the run home's
 `shell_snapshots/`. The configuration overrides each of them,
 `sandbox_mode` included, and the service neither refuses nor warns about what it sets.
