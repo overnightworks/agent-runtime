@@ -313,3 +313,15 @@ def test_logins_share_a_refresh_token_when_every_renewal_member_is_equal(
     assert isinstance(newer, RenewableGrokLogin)
 
     assert login.shares_refresh_token_with(newer) is shares
+
+
+def test_logins_with_the_same_renewal_members_in_another_order_share_a_refresh_token() -> None:
+    def login_with(**members: str) -> RenewableGrokLogin:
+        login = renewable_grok_login(json.dumps({"realm-0": {"key": "k", **members}}).encode())
+        assert isinstance(login, RenewableGrokLogin)
+        return login
+
+    first = login_with(refresh_token="a", refresh="b")
+    reordered = login_with(refresh="b", refresh_token="a")
+
+    assert first.shares_refresh_token_with(reordered)

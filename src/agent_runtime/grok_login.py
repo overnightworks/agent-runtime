@@ -86,7 +86,7 @@ def _parsed_login(document: bytes) -> dict[str, object] | None:
 
 
 def _renewal_members(value: object) -> list[str]:
-    """Every non-empty renewal member at any depth, in document order."""
+    """Every non-empty renewal member at any depth, in no fixed order."""
     if isinstance(value, dict):
         members = [
             member
@@ -114,8 +114,8 @@ class RenewableGrokLogin:
 
     def shares_refresh_token_with(self, other: RenewableGrokLogin) -> bool:
         """Whether both hold the same non-empty renewal members."""
-        members = _renewal_members(_parsed_login(self._document))
-        return bool(members) and members == _renewal_members(_parsed_login(other.document))
+        members = sorted(_renewal_members(_parsed_login(self._document)))
+        return bool(members) and members == sorted(_renewal_members(_parsed_login(other.document)))
 
     def __reduce__(self) -> NoReturn:
         raise TypeError("a Grok login holds credentials and cannot be serialised")
