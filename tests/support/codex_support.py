@@ -1,4 +1,7 @@
-"""A stand-in for the pinned Codex CLI, shared by the adapter's and the service's test modules."""
+"""Test support for the pinned Codex CLI: a stand-in for it and the shared ``CodexRun`` builders.
+
+The adapter's and the service's test modules share both.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +12,15 @@ import stat
 from pathlib import Path
 from typing import Any
 
+from tests.support.provider_test_support import a_codex_login
+
+from agent_runtime.cli_run import RelayAccess
+from agent_runtime.cli_settings import CliSettings
+from agent_runtime.codex.run import CodexRun
+from agent_runtime.codex_login import assess_codex_login
+from agent_runtime_client.wire import TurnMessage
+
+CODEX_BINARY = Path("/opt/codex/bin/codex")
 PRECONDITIONS_MARKER = "preconditions-passed"
 FEATURES_OFF = (
     "shell_tool",
@@ -158,3 +170,35 @@ def a_renewing_fake_codex(
     )
     binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
     return binary
+
+
+def a_tool_free_codex_run(
+    *settings: CliSettings, system: str, history: tuple[TurnMessage, ...], **changes: Any
+) -> CodexRun:
+    """A ``CodexRun`` with no relay; ``changes`` replace any field the run is built with."""
+    fields: dict[str, Any] = {
+        "binary": CODEX_BINARY,
+        "login": assess_codex_login(a_codex_login()),
+        "system": system,
+        "history": history,
+        "model": None,
+        "settings": settings,
+    }
+    return CodexRun(**{**fields, **changes})
+
+
+def a_relay_codex_run(
+    *settings: CliSettings,
+    system: str,
+    history: tuple[TurnMessage, ...],
+    relay: RelayAccess,
+    tool_timeout_seconds: float = 900.0,
+) -> CodexRun:
+    """A ``CodexRun`` attached to ``relay``, waiting ``tool_timeout_seconds`` for a tool."""
+    return a_tool_free_codex_run(
+        *settings,
+        system=system,
+        history=history,
+        relay=relay,
+        tool_timeout_seconds=tool_timeout_seconds,
+    )
