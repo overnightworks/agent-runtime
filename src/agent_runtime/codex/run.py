@@ -263,12 +263,13 @@ class CodexStreamDecoder:
 class CodexRun:
     """One fresh subscription run of the pinned CLI.
 
-    Its defaults switch off the features this adapter names and set the read-only sandbox; every
-    other feature follows the pinned CLI, and the run's ``settings`` (the operator's levels,
-    lowest first) may change any of them. With a ``relay``, its settings file gets the service's
-    ``mcp_servers.relay`` entry over those levels, and the relay's secret reaches the child only
-    in its environment, under the variable that entry names. It describes the run and starts
-    nothing; the entry makes the directories and the spawn owner starts the child.
+    Its defaults switch off the features this adapter names and set the read-only sandbox; a relay
+    run turns the code-mode host on over those defaults. Every other feature follows the pinned
+    CLI, and the run's ``settings`` (the operator's levels, lowest first) may change any of them.
+    With a ``relay``, its settings file gets the service's ``mcp_servers.relay`` entry over those
+    levels, and the relay's secret reaches the child only in its environment, under the variable
+    that entry names. It describes the run and starts nothing; the entry makes the directories and
+    the spawn owner starts the child.
     """
 
     binary: Path
