@@ -17,6 +17,7 @@ _TOKEN_SEGMENTS: Final = 3
 
 class UnreadableTiming(StrEnum):
     NO_ACCESS_TOKEN = "the document holds no access token"  # noqa: S105 - closed cause text names no secret
+    SEVERAL_ACCESS_TOKENS = "the document holds more than one access token"  # noqa: S105 - closed cause text names no secret
     NOT_A_TOKEN = "the access token's claims cannot be read"  # noqa: S105 - closed cause text names no secret
     CLAIM_MISSING = "iat or exp is missing"
     WRONG_TYPE = "iat or exp is not a JSON integer"

@@ -98,3 +98,32 @@ def a_fake_grok(
     binary.write_text("\n".join(lines) + "\n")
     binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
     return binary
+
+
+def a_renewing_fake_grok(
+    directory: Path, login: bytes, renewed: bytes, threshold_at_least: int
+) -> Path:
+    """A stand-in for the pinned CLI on a renewal run: it renews the login it was given.
+
+    A run checks that ``grok models`` is its whole argv, its home, a 0600 login byte-equal to
+    ``login``, an early-invalidation threshold of at least ``threshold_at_least``
+    and its empty stdin, with a distinct exit code for each wrong one. Then it copies ``renewed``
+    over the home's login.
+    """
+    expected = directory / "expected-login.json"
+    expected.write_bytes(login)
+    document = directory / "renewed-login.json"
+    document.write_bytes(renewed)
+    binary = directory / "grok"
+    binary.write_text(
+        "#!/bin/sh\n"
+        '[ "$*" = models ] || exit 10\n'
+        '[ "$GROK_HOME" = "$HOME" ] || exit 11\n'
+        '[ "$(stat -c %a "$GROK_HOME/auth.json")" = 600 ] || exit 12\n'
+        f'cmp -s {shlex.quote(str(expected))} "$GROK_HOME/auth.json" || exit 13\n'
+        f'[ "${{GROK_AUTH_EARLY_INVALIDATION_SECS:-0}}" -ge {threshold_at_least} ] || exit 14\n'
+        '[ -z "$(cat)" ] || exit 15\n'
+        f'cat {shlex.quote(str(document))} > "$GROK_HOME/auth.json"\n'
+    )
+    binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
+    return binary
