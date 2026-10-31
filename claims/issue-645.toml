@@ -1,0 +1,7 @@
+claim_id = "da2b83b744244058a0334d076692e063"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "bf673e37823d63356d05f47a7f1a1a26aa00d6c9"
+branch = "claude/issue-645-a2-launch2"
+scope = ["docs/decisions/0001-agent-service.md"]
+opened_commit = "e9541bfa5f2eb460c635b5437841680173627460"
