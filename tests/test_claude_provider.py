@@ -70,6 +70,7 @@ from tests.support.provider_test_support import (
     traceback_frames_hold,
     write_claude_token_file,
 )
+from tests.support.recorded_returns import record_returns
 
 from agent_runtime import anchored_turn, lost_groups, process, spawn
 from agent_runtime.claude import provider
@@ -3824,18 +3825,8 @@ def test_zombie_reap_reservation_has_no_toctou_window_under_real_concurrency(
                 provider.CLAUDE_CLI_PROCESS_POOL.release(reservation)
 
 
-def _record_the_homes_the_provider_opens(
-    monkeypatch,
-) -> list[process.PrivateHome]:
-    homes: list[process.PrivateHome] = []
-    real_private_home = provider._claude_private_home
-
-    def record_home() -> process.PrivateHome:
-        homes.append(real_private_home())
-        return homes[-1]
-
-    monkeypatch.setattr(provider, "_claude_private_home", record_home)
-    return homes
+def _record_the_homes_the_provider_opens(monkeypatch) -> list[process.PrivateHome]:
+    return record_returns(monkeypatch, provider, "_claude_private_home")
 
 
 def test_a_tool_surface_probe_refused_by_a_full_pool_leaves_no_home_behind(monkeypatch) -> None:

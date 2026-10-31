@@ -820,13 +820,13 @@ def post_run(
     )
 
 
-async def asgi_post_status(
+async def asgi_post_answer(
     app: Any,
     headers: Mapping[str, str],
     receive: Callable[[], Awaitable[dict[str, object]]],
     request_line: tuple[str, str] = ("POST", "/runs"),
-) -> int:
-    """The status ``app`` answers a request driven in-process, body read from ``receive``."""
+) -> tuple[int, bytes]:
+    """The status and body ``app`` answers a request driven in-process, read from ``receive``."""
     scope = {
         "type": "http",
         "asgi": {"version": "3.0"},
@@ -844,7 +844,7 @@ async def asgi_post_status(
         sent.append(message)
 
     await app(scope, receive, send)
-    return sent[0]["status"]
+    return sent[0]["status"], b"".join(message.get("body", b"") for message in sent[1:])
 
 
 def get_run(base_url: str, headers: Mapping[str, str], segment: str) -> httpx.Response:

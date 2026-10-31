@@ -23,11 +23,11 @@ the operator enabled ([The app's own runs](#the-apps-own-runs)). `POST /runs` an
 `GET /runs/{id}` answer a request carrying an `Agent-Job-Ticket` header, even an empty one, with
 `401` before the body is read; the header's value is never read.
 
-`RunRequest`, wire version 5:
+`RunRequest`, wire version 6:
 
 | Field | Meaning |
 |---|---|
-| `v` | The protocol version, `5`. Any other body answers 400 `unsupported_version`. |
+| `v` | The protocol version, `6`. Any other body answers 400 `unsupported_version`. |
 | `agent` | The agent's name, `[a-z][a-z0-9-]{0,63}`. It labels the run and its capability, and names the agent whose configured model the run uses unless the request names a model. |
 | `turn` | The system prompt and the messages (`Turn`, `TurnMessage`). |
 | `roles` | The agent's allowed roles, exactly `["admin"]` or `["admin", "user"]`; `AgentDefinition.request` fills it from the agent file. |
@@ -37,7 +37,7 @@ the operator enabled ([The app's own runs](#the-apps-own-runs)). `POST /runs` an
 `GET /runs/{id}` returns the run's `RunStatus`, readable only by the app and
 user that started it, or for the app's own run by that app with its workload token alone ([What a run keeps](#what-a-run-keeps) says what the record holds).
 
-`GET /models` returns the `ModelList` `{"v": 5, "object": "list", "data": [{"id": "<provider>/<model>", "object": "model"}]}`:
+`GET /models` returns the `ModelList` `{"v": 6, "object": "list", "data": [{"id": "<provider>/<model>", "object": "model"}]}`:
 exactly the models a run may name (`ServiceConfig.offered_models()`), sorted by id, `Cache-Control:
 no-store`. The workload token of any registered app reads it alone, whether or not it runs an
 agent as itself; `Authorization` is never read. It derives from the configuration only, so every app
@@ -76,9 +76,10 @@ A request the service refuses answers a `RunRejection` with one `RejectionCode`:
 | `unauthorized` | 401 | On `POST /runs` and `GET /runs/{id}`: a workload token is required, and a user token unless the app runs one of its own agents; every token sent must be valid and carry a readable `sub` and group claim. On `GET /models` only the workload token is read, and a missing or invalid one is refused. An `Agent-Job-Ticket` header on any of these routes is refused too. |
 | `forbidden` | 403 | The user is no member of the app, the request's `roles` lack the caller's role, the request names a tool while the app has no MCP origin, the two tokens do not belong together ([webauth's host contract](https://github.com/overnightworks/webauth/blob/v0.26.0/docs/host-contract.md#a-services-callers) lists the causes of both codes in the order they are checked: every 401 and 503 about the tokens comes before any 403), or a run without a user token names an agent the app may not run as itself. |
 | `not_enabled` | 403 | No route is enabled for this caller and model. |
-| `unsupported_version` | 400 | `v` is not the JSON integer 5. |
+| `unsupported_version` | 400 | `v` is not the JSON integer 6. |
 | `model_not_offered` | 422 | The request names a model in the grammar that the installation does not offer. A run that fails keeps the model it named; nothing falls back to another. |
 | `invalid_request` | 422 | The body is not a valid request for the route. |
+| `too_large` | 413 | The body is over 262,144 bytes (`MAX_REQUEST_BYTES`), whether its length is declared or streamed. Checked after the tokens and the caller check, before the body is parsed; a declared length over the limit is not read. A `Content-Length` that is not a number answers `invalid_request`. |
 | `capability_too_large` | 422 | The run's capability would exceed 8,192 characters. |
 | `busy` | 429 | The subscription route's places are taken; `Retry-After` is set and the run never falls back to the paid route. |
 | `unavailable` | 503 | The service cannot check tokens right now. |

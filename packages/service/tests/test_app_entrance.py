@@ -33,7 +33,7 @@ from tests.support.service_support import (
     ScriptedRunner,
     StepClock,
     TokenMint,
-    asgi_post_status,
+    asgi_post_answer,
     assert_rejected,
     decoded_events,
     get_run,
@@ -432,8 +432,19 @@ def test_v7_an_offered_or_null_model_is_admitted_and_an_unsupported_version_is_r
     assert_rejected(unsupported, RejectionCode.UNSUPPORTED_VERSION, 400)
 
 
+def _body_of_bytes(size: int) -> bytes:
+    """A valid run request whose encoded length is exactly ``size`` bytes."""
+    unpadded = json.dumps(
+        run_body(turn={"system": "", "messages": [{"role": "user", "text": "Hi"}]})
+    )
+    padding = "x" * (size - len(unpadded))
+    return json.dumps(
+        run_body(turn={"system": padding, "messages": [{"role": "user", "text": "Hi"}]})
+    ).encode()
+
+
 def _too_large() -> bytes:
-    return json.dumps(run_body(turn={"system": "x" * MAX_REQUEST_BYTES, "messages": []})).encode()
+    return _body_of_bytes(MAX_REQUEST_BYTES + 1)
 
 
 def _invalid_request(content: bytes, id: str):
@@ -444,9 +455,9 @@ BODY_REJECTIONS = [
     _invalid_request(
         json.dumps(run_body())[:-1].encode() + b', "agent": "cowriter"}', "a-member-named-twice"
     ),
+    pytest.param(_too_large(), RejectionCode.TOO_LARGE, 413, id="over-256-kib"),
     _invalid_request(b"[1]", "not-an-object"),
     _invalid_request(b'{"agent":', "not-json"),
-    _invalid_request(_too_large(), "over-256-kib"),
     *(
         _invalid_request(json.dumps(run_body()).encode(encoding), encoding)
         for encoding in ("utf-16", "utf-16-le", "utf-32", "utf-32-be")
@@ -526,6 +537,31 @@ def test_a_body_that_is_not_an_allowed_run_request_is_refused(service, content, 
     assert_rejected(response, code, status)
 
 
+def test_a_body_of_exactly_the_limit_is_admitted(service):
+    response = post_run(
+        service,
+        run_headers(MINT.workload(), MINT.user()),
+        content=_body_of_bytes(MAX_REQUEST_BYTES),
+    )
+
+    assert _admitted_events(response)[-1] == "succeeded"
+
+
+@pytest.mark.parametrize(
+    ("workload_token", "user_token", "code", "status"),
+    [
+        pytest.param(lambda: None, MINT.user, UNAUTHORIZED, 401, id="no-workload-token"),
+        pytest.param(MINT.user, MINT.user, FORBIDDEN, 403, id="user-token-as-workload"),
+    ],
+)
+def test_the_token_checks_come_before_the_size_check(
+    service, workload_token, user_token, code, status
+):
+    headers = run_headers(workload_token(), user_token())
+
+    assert_rejected(post_run(service, headers, content=_too_large()), code, status)
+
+
 def test_an_oversized_body_without_a_declared_length_is_refused_while_read(service):
     def chunks() -> Iterator[bytes]:
         yield b'{"agent": "'
@@ -541,16 +577,33 @@ def test_an_oversized_body_without_a_declared_length_is_refused_while_read(servi
     )
 
     assert "content-length" not in response.request.headers
-    assert_rejected(response, RejectionCode.INVALID_REQUEST, 422)
+    assert_rejected(response, RejectionCode.TOO_LARGE, 413)
 
 
-async def _asgi_status(app: FastAPI, headers: dict[str, str], body: bytes) -> int:
+async def _asgi_answer(app: FastAPI, headers: dict[str, str], body: bytes) -> tuple[int, bytes]:
     pending = [{"type": "http.request", "body": body, "more_body": False}]
 
     async def receive() -> dict[str, object]:
         return pending.pop(0) if pending else {"type": "http.disconnect"}
 
-    return await asgi_post_status(app, headers, receive)
+    return await asgi_post_answer(app, headers, receive)
+
+
+async def _asgi_status(app: FastAPI, headers: dict[str, str], body: bytes) -> int:
+    status, _ = await _asgi_answer(app, headers, body)
+    return status
+
+
+@pytest.mark.parametrize("declared", ["not-a-number", "-1", "1.5"])
+def test_a_malformed_content_length_is_an_invalid_request_not_too_large(declared):
+    """Driven in-process: an HTTP client refuses to send a malformed length."""
+    app = create_app(service_config(), runners=unused_runners(), fetch_key_set=MINT.fetch_key_set)
+    headers = {**run_headers(MINT.workload(), MINT.user()), "Content-Length": declared}
+
+    status, body = anyio.run(_asgi_answer, app, headers, b"{}")
+
+    assert status == 422
+    assert RunRejection.model_validate_json(body).code is RejectionCode.INVALID_REQUEST
 
 
 def test_a_single_chunk_over_the_limit_is_refused_without_being_buffered():
@@ -568,7 +621,7 @@ def test_a_single_chunk_over_the_limit_is_refused_without_being_buffered():
     finally:
         tracemalloc.stop()
 
-    assert status == 422
+    assert status == 413
     assert peak < chunk_size // 2
 
 

@@ -245,6 +245,13 @@ body rules be fixed before the build.
   `user`); the two-role shape is the operator's own: „admin => hat alles => user hat halt
   nur bestimmte auswahl … so 2 rollen … kein fan von 100 rollen … vorbelegen“.
 
+  *Amendment (31.10.2026, #667; slice S1 of #634; hal `docs/architecture.md` §10 rule 9,
+  ruled 30.10.2026, "413 for an oversized request").* The table stands as ruled, with one
+  change: a body over 256 KiB, declared or streamed, answers 413 `too_large` instead of
+  422 `invalid_request`. The size check is the first body check, before the 400
+  `unsupported_version` row and the 422 rows, because the body is not read further than the
+  limit. A `Content-Length` that is not a number stays 422 `invalid_request`.
+
   Every rejection is a `RunRejection` with `Cache-Control: no-store`, and no
   answer or log line carries token text.
   A token whose `kid` is missing from a still-current key set answers 503
@@ -1185,6 +1192,7 @@ existing `agent_providers.events` is that contract.
   | `unavailable` | 503 with `Retry-After` |
   | `not_found` | 404 |
   | `capability_too_large` | 422 |
+  | `too_large` | 413 |
 
   Amended by A1a0 (head rulings U3 and U4, 15.10.2026): `unavailable` means
   the service could not fetch the key set it checks tokens against, and a
@@ -1194,6 +1202,11 @@ existing `agent_providers.events` is that contract.
   Amended by A1a4 (O6, 16.10.2026): `capability_too_large` means the run's
   capability would exceed 8,192 characters; it is refused before any runner,
   stream or record, and a client does not retry it.
+
+  Amended by #667 (#634, rule 9): `too_large` means the request body exceeds
+  `MAX_REQUEST_BYTES` (256 KiB); it is refused before the body is parsed and
+  before any place, run id or signature, and a client does not retry it
+  unchanged.
 
 - (c) A `failed` event with any other code does not say separately whether a
   side effect happened. The client sees the `tool_call` events, and after a
@@ -1222,6 +1235,10 @@ existing `agent_providers.events` is that contract.
 
 **Consequence.** A client validates a stream against one contract, and a
 second wire owner cannot appear without contradicting this ruling.
+
+Amended by #667 (#634, rule 9): a new `RejectionCode` is a new variant of the
+closed wire enum, so it is a new protocol version; `too_large` moved the wire
+to protocol 6.
 
 ### A1a3 liveness ruling (head, 16.10.2026)
 

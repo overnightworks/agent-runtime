@@ -791,7 +791,9 @@ def test_a_run_request_naming_a_model_off_the_grammar_is_refused(model: object) 
         RunRequest.model_validate({**REQUEST, "model": model})
 
 
-@pytest.mark.parametrize("version", [3, 4, 6])
+@pytest.mark.parametrize(
+    "version", [PROTOCOL_VERSION - 3, PROTOCOL_VERSION - 1, PROTOCOL_VERSION + 1]
+)
 def test_a_body_of_another_protocol_version_is_refused(version: int) -> None:
     with pytest.raises(ValidationError):
         RunRequest.model_validate({**REQUEST, "v": version})

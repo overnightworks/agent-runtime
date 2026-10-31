@@ -16,7 +16,7 @@ import pytest
 from tests.support.service_support import (
     ScriptedRunner,
     TokenMint,
-    asgi_post_status,
+    asgi_post_answer,
     assert_rejected,
     get_run,
     post_run,
@@ -135,7 +135,7 @@ def test_the_header_is_refused_without_reading_the_request_body(
         service_config(), runners=unused_runners(), fetch_key_set=MINT.fetch_key_set
     )
 
-    status = asyncio.run(asgi_post_status(app, headers, receive, (method, path)))
+    status, _ = asyncio.run(asgi_post_answer(app, headers, receive, (method, path)))
 
     assert status == 401
 

@@ -30,7 +30,7 @@ from tests.support.service_support import (
     TokenMint,
     WallClock,
     answer_of,
-    asgi_post_status,
+    asgi_post_answer,
     assert_rejected,
     capable_service_config,
     get_run,
@@ -228,7 +228,7 @@ def test_a_non_member_is_refused_before_the_request_body_is_read(gate):
     )
     headers = run_headers(MINT.workload(), MINT.user(groups=[SUBSCRIPTION_GROUP]))
 
-    assert asyncio.run(asgi_post_status(app, headers, receive)) == 403
+    assert asyncio.run(asgi_post_answer(app, headers, receive))[0] == 403
 
 
 def test_a_dual_entitled_non_member_reaches_no_route_and_takes_no_place(gate):

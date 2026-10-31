@@ -21,6 +21,7 @@ import pytest
 from starlette.requests import ClientDisconnect
 from tests.support.bounds import TEST_WAIT_SECONDS, within_the_bound
 from tests.support.held_runner_support import HeldRunner
+from tests.support.recorded_returns import record_returns
 from tests.support.request_limits_support import QUOTATION_MARKS_256, TUNED_AT_THE_LIMIT
 from tests.support.service_support import (
     API_GROUP,
@@ -56,6 +57,7 @@ from agent_runtime_service.config import RunConfig
 from agent_runtime_service.run_events import run_frames
 from agent_runtime_service.run_liveness import LoopClock
 from agent_runtime_service.run_records import RunRecords
+from agent_runtime_service.run_request import MAX_REQUEST_BYTES
 from agent_runtime_service.runners import Runner, Runners
 
 PLACES: Final = 2
@@ -120,6 +122,20 @@ def service(request, monkeypatch) -> Iterator[_Service]:
     yield from _serving(monkeypatch, runs)
 
 
+@pytest.fixture
+def run_ids(monkeypatch) -> list[uuid.UUID]:
+    return record_returns(monkeypatch, uuid, "uuid4")
+
+
+def _admission_state(service: _Service, run_ids: list[uuid.UUID]) -> tuple[int, int, int, int]:
+    return (
+        len(run_ids),
+        len(service.signed),
+        len(service.held.gates),
+        len(service.api.admitted),
+    )
+
+
 def _assert_streamed_to_a_terminal(response: httpx.Response) -> None:
     assert response.status_code == 200
     assert isinstance(decoded_events(response.content)[0], RunStarted)
@@ -133,23 +149,28 @@ def test_a_cli_route_with_a_free_place_is_admitted_and_holds_one_lease(service):
 
 
 def test_a_cli_request_with_every_place_taken_answers_busy_before_a_run_id_or_a_signature(
-    service, monkeypatch
+    service, run_ids
 ):
-    run_ids: list[uuid.UUID] = []
-    mint_run_id = uuid.uuid4
-
-    def counting_run_id() -> uuid.UUID:
-        run_ids.append(mint_run_id())
-        return run_ids[-1]
-
-    monkeypatch.setattr("agent_runtime_service.app.uuid.uuid4", counting_run_id)
     held = service.fill_the_places()
-    run_ids_before, signed_before = len(run_ids), len(service.signed)
+    state_before = _admission_state(service, run_ids)
 
     busy = service.run()
 
     assert_rejected(busy, RejectionCode.BUSY, 429)
-    assert (len(run_ids), len(service.signed)) == (run_ids_before, signed_before)
+    assert _admission_state(service, run_ids) == state_before
+    service.let_all_go(held)
+
+
+def test_an_oversized_body_with_every_place_taken_is_too_large_not_busy_and_creates_nothing(
+    service, run_ids
+):
+    held = service.fill_the_places()
+    state_before = _admission_state(service, run_ids)
+
+    refused = service.run(turn={"system": "x" * MAX_REQUEST_BYTES, "messages": []})
+
+    assert_rejected(refused, RejectionCode.TOO_LARGE, 413)
+    assert _admission_state(service, run_ids) == state_before
     service.let_all_go(held)
 
 
