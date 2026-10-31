@@ -10,7 +10,8 @@ before any token is verified or the body is read; the header's value is never re
    before the body is read or anything else is decided: both tokens verified, their subjects
    and group claims read (``unauthorized`` or ``unavailable``), then the workload binding, the
    user's client binding and membership of the app (``/apps/<app>`` or a path below it);
-2. the body's framing, then its protocol version, then its shape
+2. the body's framing (a body over ``MAX_REQUEST_BYTES`` answers ``too_large``, a malformed
+   ``Content-Length`` ``invalid_request``), then its protocol version, then its shape
    (``agent_runtime_service.run_request``);
 3. the person's role in the app (``admin`` in ``/apps/<app>/admin`` or below, else ``user``)
    must be one of the body's ``roles``, else ``forbidden``;
@@ -112,6 +113,7 @@ _STATUS: Final[Mapping[RejectionCode, HTTPStatus]] = {
     RejectionCode.UNAUTHORIZED: HTTPStatus.UNAUTHORIZED,
     RejectionCode.FORBIDDEN: HTTPStatus.FORBIDDEN,
     RejectionCode.INVALID_REQUEST: HTTPStatus.UNPROCESSABLE_ENTITY,
+    RejectionCode.TOO_LARGE: HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
     RejectionCode.UNAVAILABLE: HTTPStatus.SERVICE_UNAVAILABLE,
     RejectionCode.NOT_FOUND: HTTPStatus.NOT_FOUND,
     RejectionCode.CAPABILITY_TOO_LARGE: HTTPStatus.UNPROCESSABLE_ENTITY,
@@ -127,6 +129,7 @@ _MESSAGE: Final[Mapping[RejectionCode, str]] = {
     f" An {JOB_TICKET_HEADER} header is refused.",
     RejectionCode.FORBIDDEN: "The tokens do not permit this request.",
     RejectionCode.INVALID_REQUEST: "The body is not a valid request for the route.",
+    RejectionCode.TOO_LARGE: f"The body exceeds {MAX_REQUEST_BYTES} bytes.",
     RejectionCode.UNAVAILABLE: "The service cannot check tokens right now; retry later.",
     RejectionCode.NOT_FOUND: "No such run.",
     RejectionCode.CAPABILITY_TOO_LARGE: "This run's capability would exceed"
@@ -171,7 +174,7 @@ def create_app(
         if isinstance(caller, RejectionCode):
             return rejection(caller)
         body = await _limited_body(request)
-        run_request = RejectionCode.INVALID_REQUEST if body is None else parse_run_request(body)
+        run_request = parse_run_request(body) if isinstance(body, bytes) else body
         if isinstance(run_request, RejectionCode):
             return rejection(run_request)
         return _admitted(
@@ -471,19 +474,23 @@ def _bearer_token(authorization: str | None) -> str | None:
     return token
 
 
-async def _limited_body(request: Request) -> bytes | None:
-    """The body, or ``None`` once it is known to exceed ``MAX_REQUEST_BYTES``.
+async def _limited_body(request: Request) -> bytes | RejectionCode:
+    """The body, ``TOO_LARGE`` once it is known to exceed ``MAX_REQUEST_BYTES``, or
+    ``INVALID_REQUEST`` for a ``Content-Length`` that is not a number.
 
     A declared length over the limit is refused unread, and a body without
     one is refused at the first chunk that would pass the limit, before that
     chunk is buffered.
     """
     declared = request.headers.get("Content-Length")
-    if declared is not None and (not declared.isdigit() or int(declared) > MAX_REQUEST_BYTES):
-        return None
+    if declared is not None:
+        if not declared.isdigit():
+            return RejectionCode.INVALID_REQUEST
+        if int(declared) > MAX_REQUEST_BYTES:
+            return RejectionCode.TOO_LARGE
     body = bytearray()
     async for chunk in request.stream():
         if len(body) + len(chunk) > MAX_REQUEST_BYTES:
-            return None
+            return RejectionCode.TOO_LARGE
         body += chunk
     return bytes(body)

@@ -47,7 +47,7 @@ def base64_length(size: int) -> int:
     return 4 * -(-size // 3)
 
 
-PROTOCOL_VERSION: Final = 5
+PROTOCOL_VERSION: Final = 6
 MAX_EVENT_BYTES: Final = 1_048_576
 MAX_RUN_FILES_BYTES: Final = 33_554_432
 MAX_RUN_FILE_NAME_BYTES: Final = 255
@@ -105,6 +105,7 @@ class RejectionCode(StrEnum):
     UNAUTHORIZED = "unauthorized"
     FORBIDDEN = "forbidden"
     INVALID_REQUEST = "invalid_request"
+    TOO_LARGE = "too_large"
     UNAVAILABLE = "unavailable"
     NOT_FOUND = "not_found"
     CAPABILITY_TOO_LARGE = "capability_too_large"
@@ -119,7 +120,7 @@ def _json_integer(value: object) -> object:
     return value
 
 
-ProtocolVersion = Annotated[Literal[5], BeforeValidator(_json_integer)]
+ProtocolVersion = Annotated[Literal[6], BeforeValidator(_json_integer)]
 """The one decider of whether a ``v`` is the version this package speaks."""
 
 

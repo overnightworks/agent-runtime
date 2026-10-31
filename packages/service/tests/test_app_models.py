@@ -1,4 +1,4 @@
-"""A run may name a model (decision record 0001, the model-per-run ruling, protocol 5).
+"""A run may name a model (decision record 0001, the model-per-run ruling, protocol 6).
 
 The configuration owns what is offered (``ServiceConfig.offered_models()``) and the default; a
 request names an offered model or none. Every test goes through the HTTP entrance with real

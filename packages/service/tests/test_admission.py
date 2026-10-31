@@ -56,6 +56,7 @@ from agent_runtime_service.config import RunConfig
 from agent_runtime_service.run_events import run_frames
 from agent_runtime_service.run_liveness import LoopClock
 from agent_runtime_service.run_records import RunRecords
+from agent_runtime_service.run_request import MAX_REQUEST_BYTES
 from agent_runtime_service.runners import Runner, Runners
 
 PLACES: Final = 2
@@ -150,6 +151,15 @@ def test_a_cli_request_with_every_place_taken_answers_busy_before_a_run_id_or_a_
 
     assert_rejected(busy, RejectionCode.BUSY, 429)
     assert (len(run_ids), len(service.signed)) == (run_ids_before, signed_before)
+    service.let_all_go(held)
+
+
+def test_an_oversized_body_with_every_place_taken_is_too_large_not_busy(service):
+    held = service.fill_the_places()
+
+    refused = service.run(turn={"system": "x" * MAX_REQUEST_BYTES, "messages": []})
+
+    assert_rejected(refused, RejectionCode.TOO_LARGE, 413)
     service.let_all_go(held)
 
 
