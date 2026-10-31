@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from tests.support.codex_support import a_codex_access_token
+from tests.support.codex_support import CODEX_BINARY, a_codex_access_token, a_tool_free_codex_run
 from tests.support.provider_test_support import (
     CANARY_ACCESS_TOKEN,
     CANARY_ID_TOKEN,
@@ -26,7 +26,6 @@ from tests.support.provider_test_support import (
 from agent_runtime.codex.renewal import CodexRenewal
 from agent_runtime.codex.run import (
     CODEX_CLI_PROCESS_POOL,
-    CodexRun,
     CodexStreamDecoder,
 )
 from agent_runtime.codex_login import (
@@ -42,7 +41,6 @@ from agent_runtime.secret_file import SecretFileFault
 from agent_runtime.spawn import ChildProcessSpecificationError, closed_environment
 from agent_runtime_client.wire import TurnMessage, TurnRole
 
-BINARY = Path("/opt/codex/bin/codex")
 NOW = 1_800_000_000
 REFRESH_CANARY = json.loads(a_codex_login())["tokens"]["refresh_token"]
 CANARIES = (CANARY_ACCESS_TOKEN, CANARY_ID_TOKEN, REFRESH_CANARY)
@@ -55,7 +53,7 @@ def a_login(document: bytes | None = None) -> RenewableCodexLogin:
 
 
 def a_renewal(**changes: Any) -> CodexRenewal:
-    fields: dict[str, Any] = {"binary": BINARY, "login": a_login(), "now": NOW}
+    fields: dict[str, Any] = {"binary": CODEX_BINARY, "login": a_login(), "now": NOW}
     return CodexRenewal(**{**fields, **changes})
 
 
@@ -79,13 +77,10 @@ def test_the_run_files_are_the_made_due_copy_the_fixed_system_text_and_the_file_
 
 def test_the_settings_are_the_adapter_defaults_plus_the_file_credential_store() -> None:
     renewal = a_renewal()
-    ordinary = CodexRun(
-        BINARY,
-        assess_codex_login(renewal.login.document),
-        "",
-        (_message(),),
-        model=None,
-        settings=(),
+    ordinary = a_tool_free_codex_run(
+        system="",
+        history=(_message(),),
+        login=assess_codex_login(renewal.login.document),
     )
 
     renewal_settings = tomllib.loads(renewal.run_files()["config.toml"].decode())
@@ -117,7 +112,7 @@ def test_the_environment_is_the_closed_one_plus_the_codex_home(tmp_path: Path) -
     start = a_renewal().start(home, tmp_path / "work")
 
     assert start.child.environment == {**closed_environment(home), "CODEX_HOME": str(home)}
-    assert (start.child.binary, start.child.working_directory) == (BINARY, tmp_path / "work")
+    assert (start.child.binary, start.child.working_directory) == (CODEX_BINARY, tmp_path / "work")
 
 
 def test_the_request_is_one_fixed_user_message_read_from_stdin(tmp_path: Path) -> None:
@@ -227,13 +222,10 @@ def test_every_entry_works_after_the_installed_configuration_is_reset(tmp_path: 
 
 def test_an_ordinary_run_of_the_same_login_still_holds_the_blanked_copy() -> None:
     login = a_login()
-    ordinary = CodexRun(
-        BINARY,
-        assess_codex_login(login.document),
-        "system",
-        (_message(),),
-        model=None,
-        settings=(),
+    ordinary = a_tool_free_codex_run(
+        system="system",
+        history=(_message(),),
+        login=assess_codex_login(login.document),
     )
 
     document = json.loads(ordinary.run_files()["auth.json"])

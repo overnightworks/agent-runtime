@@ -20,7 +20,7 @@ from typing import Any
 
 import pytest
 from tests.support.bounds import TEST_WAIT_SECONDS
-from tests.support.codex_support import a_codex_access_token, a_renewing_fake_codex
+from tests.support.codex_support import CODEX_BINARY, a_codex_access_token, a_renewing_fake_codex
 from tests.support.provider_test_support import a_codex_login, a_private_root
 from tests.support.service_support import _toml_lines
 from tests.support.service_table_support import CODEX_TABLE, write_login
@@ -45,7 +45,6 @@ HALF_LIFE = LIFETIME // 2
 ORIGINAL_REFRESH = "original-refresh-token"
 ROTATED_REFRESH = "rotated-refresh-token"
 LOGIN_NAME = "codex-login.json"
-UNUSED_BINARY = Path("/opt/codex/bin/codex")
 
 
 def a_login_issued_at(
@@ -130,7 +129,7 @@ def an_arrangement(
     tmp_path: Path,
     source: bytes = DUE_ORIGINAL,
     *,
-    binary: Path = UNUSED_BINARY,
+    binary: Path = CODEX_BINARY,
     entry: RenewalEntry = CODEX_RENEWAL,
     token_file: Path | None = None,
 ) -> Arrangement:
