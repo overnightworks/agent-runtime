@@ -112,6 +112,8 @@ def test_a_level_overrides_every_default_so_the_operator_wins_over_the_service()
         "web_search": "live",
         "mcp_servers": {"x": {"url": "https://x.test"}},
         "features": dict.fromkeys(FEATURES_OFF, True),
+        "tools": {"experimental_request_user_input": {"enabled": True}},
+        "agents": {"enabled": True},
     }
 
     assert same(written_settings(a_run(level)), level)
