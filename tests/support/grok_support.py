@@ -116,6 +116,7 @@ def a_renewing_fake_grok(
     threshold_at_least: int,
     *,
     source_rewritten_to: tuple[Path, bytes] | None = None,
+    held_until: Path | None = None,
 ) -> Path:
     """A stand-in for the pinned CLI on a renewal run: it renews the login it was given.
 
@@ -124,7 +125,8 @@ def a_renewing_fake_grok(
     and its empty stdin, with a distinct exit code for each wrong one. Then it copies ``renewed``
     over the home's login. Each start is logged for ``children_started``; with
     ``source_rewritten_to`` (a file and its new document) it first writes that document to the file,
-    as another writer would while the child runs.
+    as another writer would while the child runs. With ``held_until`` (a file) it waits for the
+    file to exist before it renews.
     """
     expected = directory / "expected-login.json"
     expected.write_bytes(login)
@@ -136,6 +138,11 @@ def a_renewing_fake_grok(
         newer_document = directory / "newer-login.json"
         newer_document.write_bytes(newer)
         rewriting = f"cat {shlex.quote(str(newer_document))} > {shlex.quote(str(file))}\n"
+    holding = (
+        ""
+        if held_until is None
+        else f"while [ ! -e {shlex.quote(str(held_until))} ]; do sleep 0.05; done\n"
+    )
     binary = directory / "grok"
     binary.write_text(
         "#!/bin/sh\n"
@@ -147,6 +154,7 @@ def a_renewing_fake_grok(
         f'[ "${{GROK_AUTH_EARLY_INVALIDATION_SECS:-0}}" -ge {threshold_at_least} ] || exit 14\n'
         '[ -z "$(cat)" ] || exit 15\n'
         f"{rewriting}"
+        f"{holding}"
         f'cat {shlex.quote(str(document))} > "$GROK_HOME/auth.json"\n'
     )
     binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
