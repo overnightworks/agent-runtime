@@ -148,6 +148,14 @@ def test_a_cli_route_with_a_free_place_is_admitted_and_holds_one_lease(service):
     service.let_all_go([first, second])
 
 
+def test_an_admitted_run_records_exactly_one_run_id(service, run_ids):
+    held = service.begin_held_cli_run()
+
+    service.let_all_go([held])
+
+    assert len(run_ids) == 1
+
+
 def test_a_cli_request_with_every_place_taken_answers_busy_before_a_run_id_or_a_signature(
     service, run_ids
 ):
