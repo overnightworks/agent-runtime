@@ -3836,6 +3836,55 @@ idle; whether a renewal while a run holds a copy disturbs that run; repeatabilit
 measured in the service's real run shape; the write-back was done by the harness, not
 by the service's one login writer.
 
+#### A1b-G6 the service renews the Grok login
+
+**Decision.** The service renews the dedicated Grok login in the same place and by the same
+rules as the Codex login (A1b-R1), with the pinned `grok`. Once the key has less than half its
+lifetime left, `grok models` runs on a full copy in a private renewal home under `[cli]
+working_root`, with `GROK_AUTH_EARLY_INVALIDATION_SECS` above the key's remaining lifetime, and
+the result is swapped in through the one login writer only over the document it renewed. The
+basis is the measurement A1b-G6-0 and the operator's rulings HQ2 (a) and Q-A (a), 26. and
+29.10.2026; the description of the run is `GrokRenewal` in core, built in #664 (B1). Runs keep
+their blanked copies. Built in #678 under #627.
+
+**Changes to R1.** Every other sentence of A1b-R1 stays.
+- **D4.** The due moment is the same rule over the key's own claims. An unreadable source still
+  renews, but the interval is the entry's own: at most once per 24 h for Codex, at every round
+  for Grok. A key that lives 6 h cannot wait a day.
+- **D5.** The 30 s deadline, the hourly backoff and the exclusion of an earlier unconfirmed
+  child are unchanged and apply to both entries. A Grok renewal costs no turn, so the 24-a-day
+  cost cap names Codex only.
+- **D6.** A Grok renewal runs `grok models` with the closed environment, the home variables and
+  the early-invalidation threshold, and no `cli_settings` level.
+
+**Alternatives weighed.**
+- Waiting for the Grok runs in flight before a renewal commits: it would couple the renewer to
+  the run admission and hold the sibling for as long as a run lasts. Not built. The renewal
+  waits for no Grok run; this is an accepted tradeoff, not proven harmless (see below).
+- Keeping the 24 h hold for an unreadable Grok timing: with a 6 h key a login whose timing
+  stays unreadable would expire between two attempts. The hold is a field of the entry, so
+  each provider names its own.
+- A constant renewal threshold for both providers (half the lifetime is already the rule): a
+  fixed number of hours suits one lifetime only.
+
+**Scheduling, stated as nominal.**
+- Three attempts before the key expires is an estimate, not a promise: a 6 h key is due after
+  3 h, and the schedule makes one attempt per round, 15 minutes apart nominally and an hour
+  apart after a failure.
+- The schedule waits after the whole round, and a failure of either provider selects the hourly
+  backoff. A preceding Codex failure can therefore delay Grok's first due attempt by nearly an
+  hour.
+- Execution time (the 30 s deadline, the settling, the read-back) can push the third attempt
+  past the expiry.
+- The standing window of `--check` is unchanged at 90 minutes, so a Grok login can be reported
+  "not renewed in time" before the first retry of an hourly backoff.
+
+**What it does not prove.** What G6-0 left unmeasured stays unmeasured: the refresh token's own
+lifetime, and whether a renewal disturbs a run that holds an older copy. Because the renewer
+waits for no Grok run, a run that began before a commit keeps the copy it was given, and
+whether the provider keeps accepting that copy's key after the rotation is a live question of
+B4 (hal's service renews and a Grok run answers), after the release that carries this record.
+
 #### A1b-C6-0 the Codex login renewed headless by the pinned CLI
 
 **What ran.** Slice C6-0 of #578, measured on 29.10.2026. Pinned `codex-cli 0.163.0`

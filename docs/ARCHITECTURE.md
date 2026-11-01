@@ -109,7 +109,7 @@ either alone stops startup. Credential selection and rotation are described in
 
 The operator signs in once per provider; the service keeps that login in one file
 and gives every run only a copy that can use it, never renew it. Exactly one
-holder keeps a refresh token, and it is never a run. For a Codex login the service
+holder keeps a refresh token, and it is never a run. For a Codex or a Grok login the service
 renews that file itself, on a full copy that lives for the turn, and longer when the end is
 unconfirmed or the result could not be swapped in.
 
@@ -139,8 +139,10 @@ flowchart LR
     grokfile -->|"read at every run start, copy for each run"| grokcopy
     codexfile -->|"copy for each run"| codexcopy
     codexfile -->|"full copy once past half its lifetime"| renewalhome
-    renewer -->|"one tool-free turn of the pinned codex"| renewalhome
+    grokfile -->|"full copy once past half its lifetime"| renewalhome
+    renewer -->|"one tool-free turn of the pinned codex,<br/>or grok models"| renewalhome
     renewalhome -->|"swapped in through the one writer,<br/>only over the document it read"| codexfile
+    renewalhome -->|"the same writer, the Grok file"| grokfile
     renewalhome -.->|"the renewing turn refreshes the tokens"| provider
     codexcopy -.->|"may use the access token,<br/>cannot renew it"| provider(["provider"])
     grokcopy -.->|"may use the key,<br/>cannot renew it"| provider
@@ -153,7 +155,7 @@ hold? Source: [operations.md](operations.md) (the login file and the login
 command), `agent_runtime.codex_login.blanked_copy`, `agent_runtime.grok_login.blanked_copy`,
 `agent_runtime.claude.run`,
 `agent_runtime_service.renewal` and `agent_runtime_service.renewal_schedule`, and the decision
-record [0001](decisions/0001-agent-service.md) (A1b-K0, the measured lifetime; A1b-R1, the renewal).*
+record [0001](decisions/0001-agent-service.md) (A1b-K0, the measured lifetime; A1b-R1, the Codex renewal; A1b-G6, the Grok renewal).*
 
 - **Claude.** `claude setup-token` prints a one-year token that has no refresh
   token; the operator swaps it by hand. The service reads the file at every run
@@ -165,14 +167,14 @@ record [0001](decisions/0001-agent-service.md) (A1b-K0, the measured lifetime; A
 - **Grok.** A dedicated service login too, made by `grok login --device-code` in a home of
   its own and installed with the login command. The service reads it at startup and at every
   run start, and a run gets a `0600` copy in its private run home with `refresh_token` blanked.
-- **Who renews.** The service renews a Codex login itself, from its own lifespan: at start
-  and then about every 15 minutes, hourly after a failed attempt. Once the access token has
-  less than half its lifetime left, one tool-free turn of the pinned `codex` runs on a full
-  copy in a private renewal home, and the result is swapped in through the one login writer
-  only over the document it renewed. Runs keep their blanked copies and never renew. The
-  operator signs in again only when a renewal fails for good; no lifetime is promised
-  beyond what was measured. A Claude login has no refresh token and is the operator's to
-  swap; a Grok login is not renewed by the service yet.
+- **Who renews.** The service renews a Codex and a Grok login itself, from its own lifespan: at
+  start and then about every 15 minutes, hourly after a round in which an attempt failed. Once
+  the access token has less than half its lifetime left, the pinned CLI runs on a full copy in a
+  private renewal home (one tool-free turn of `codex`, or `grok models`), and the result is
+  swapped in through the one login writer only over the document it renewed. Runs keep their
+  blanked copies and never renew, and the renewal waits for no Grok run. The operator signs in
+  again only when a renewal fails for good; no lifetime is promised beyond what was measured. A
+  Claude login has no refresh token and is the operator's to swap.
 
 ## Crosscutting concepts
 
