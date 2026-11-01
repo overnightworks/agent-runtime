@@ -1,0 +1,8 @@
+claim_id = "778484b5951043fc987fa03c7c91987d"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "48a50fc4291cccf3862b079a9ac845c4a6f0ef31"
+branch = "claude/issue-678-service-renews-grok"
+scope = ["docs/ARCHITECTURE.md", "docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "docs/operations.md", "packages/service/src/agent_runtime_service/login.py", "packages/service/src/agent_runtime_service/renewal.py", "packages/service/tests/test_cli_renews.py", "packages/service/tests/test_login.py", "packages/service/tests/test_login_standing.py", "packages/service/tests/test_renewal.py", "packages/service/tests/test_renewal_grok.py", "tests/support/service_login_support.py", "tests/support/service_renewal_support.py"]
+opened_commit = "577002611c99d2b1e785733c249c224a3c633833"
+whole_reason = "Two production files, about 20 lines; the rest is the pinned tests and the four documents that must change with the entry."
