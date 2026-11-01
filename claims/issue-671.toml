@@ -1,7 +1,0 @@
-claim_id = "6cc0c496f39d4c7ca66c6493e01f0fb2"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "48a50fc4291cccf3862b079a9ac845c4a6f0ef31"
-branch = "claude/issue-671-run-id-positive-control-uvicorn-400"
-scope = ["docs/wire.md", "packages/service/tests/test_admission.py"]
-opened_commit = "894b2f87228bde8d97a6b210097974ac471ab49e"
