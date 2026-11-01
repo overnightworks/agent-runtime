@@ -105,13 +105,13 @@ import agent_runtime_service.cli_runner as cli_runner_module
 from agent_runtime import spawn
 from agent_runtime.cli_run import CliRunAdapter, RelayAccess
 from agent_runtime.config import PrivateWorkingRoot
-from agent_runtime.events import FinalEvent, StreamEvent
 from agent_runtime.procfs import GroupCensus
 from agent_runtime_client.mcp_wire import (
     LATEST_PROTOCOL_VERSION,
     JsonRpcErrorCode,
 )
 from agent_runtime_client.sse import RunStreamDecoder
+from agent_runtime_client.turn_events import FinalEvent, StreamEvent
 from agent_runtime_client.wire import (
     MAX_EVENT_BYTES,
     ClientLoss,

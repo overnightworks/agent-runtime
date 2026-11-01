@@ -52,7 +52,7 @@ from webauth.https_client import KeySetFetchError
 from webauth.jwt_verification import KEY_SET_REFRESH_COOLDOWN_SECONDS
 from webauth.service_callers import Principal
 
-from agent_runtime.events import AssistantTextEvent, FinalEvent
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import PROTOCOL_VERSION, RejectionCode, RunState, RunStatus
 from agent_runtime_service.app import create_app
 from agent_runtime_service.config import AgentConfig, Provider

@@ -27,7 +27,7 @@ from tests.support.service_support import (
 )
 from webauth.https_client import KeySetFetchError
 
-from agent_runtime.events import FinalEvent
+from agent_runtime_client.turn_events import FinalEvent
 from agent_runtime_client.wire import RejectionCode
 from agent_runtime_service.app import create_app
 from agent_runtime_service.run_records import RunRecorder, RunRecords

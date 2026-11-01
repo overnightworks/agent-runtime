@@ -62,7 +62,6 @@ source_modules =
     agent_runtime.config
     agent_runtime.constants
     agent_runtime.errors
-    agent_runtime.events
     agent_runtime.tools
     agent_runtime.tool_loop
     agent_runtime.text_tool_protocol

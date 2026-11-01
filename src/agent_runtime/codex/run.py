@@ -26,9 +26,9 @@ from agent_runtime.cli_settings import CliSettings, merged, toml_basic_string, t
 from agent_runtime.codex_login import CodexLogin, CodexLoginVerdict
 from agent_runtime.constants import CLI_GROUP_CONFIRMATION_SECONDS, CLI_TERMINATION_GRACE_SECONDS
 from agent_runtime.errors import CliLoginRefusedError, raise_without_chain
-from agent_runtime.events import AssistantTextEvent, FinalEvent
 from agent_runtime.spawn import ChildProcess, ChildProcessSpecificationError, closed_environment
 from agent_runtime.transcript import flatten_messages
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import TurnMessage
 
 CODEX_CLI_MAX_CONCURRENT_PROCESSES: Final = 8

@@ -37,10 +37,10 @@ from agent_runtime.codex.run import CodexRun
 from agent_runtime.codex_login import CodexLogin
 from agent_runtime.config import PrivateWorkingRoot
 from agent_runtime.errors import raise_without_chain
-from agent_runtime.events import FinalEvent, StreamEvent
 from agent_runtime.grok.run import GrokRun
 from agent_runtime.grok_login import GrokLogin
 from agent_runtime.secret_file import read_token_file
+from agent_runtime_client.turn_events import FinalEvent, StreamEvent
 from agent_runtime_client.wire import Turn
 from agent_runtime_service.config import Provider, ServiceConfig, read_codex_login, read_grok_login
 from agent_runtime_service.relayed_events import RelayedEvents

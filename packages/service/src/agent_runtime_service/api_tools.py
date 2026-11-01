@@ -7,7 +7,6 @@ from collections.abc import AsyncGenerator, Collection, Sequence
 from typing import Any
 
 from agent_runtime.errors import raise_without_chain
-from agent_runtime.events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime.openai_adapter import OpenAIConversation
 from agent_runtime.tool_loop import InitialTurn, ToolCall, ToolResult, ToolResultBatch
 from agent_runtime.tools import openai_tool_schema
@@ -25,6 +24,7 @@ from agent_runtime_client.mcp_wire import (
     read_payload,
     read_tool_outcome,
 )
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime_service.capability import Capability
 from agent_runtime_service.run_tools import RunTools
 from agent_runtime_service.tool_relay import RelayRequest, Unanswered

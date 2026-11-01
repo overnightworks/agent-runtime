@@ -126,7 +126,6 @@ from agent_runtime.errors import (
     RetainedGroup,
     SafeRouteReasonCode,
 )
-from agent_runtime.events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime.grok import transport as grok_transport
 from agent_runtime.process import CliRun, CliRunOutcome, CliRunReason
 from agent_runtime.procfs import GroupCensus
@@ -137,6 +136,7 @@ from agent_runtime.spawn import (
     KillUntilGoneResult,
 )
 from agent_runtime.tool_loop import ToolOutcome, stream_tool_loop
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent, StreamEvent
 
 ROUTE_FAILED = SafeRouteReasonCode.ROUTE_FAILED
 

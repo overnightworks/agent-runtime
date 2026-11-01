@@ -76,7 +76,6 @@ from agent_runtime.errors import (
     ToolProtocolRejectionCode,
     normalize_route_failure,
 )
-from agent_runtime.events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime.process import CliRunOutcome, CliRunReason
 from agent_runtime.procfs import GroupCensus
 from agent_runtime.secret_file import MAX_SECRET_FILE_BYTES
@@ -98,6 +97,7 @@ from agent_runtime.tool_loop import (
 )
 from agent_runtime.tools import ToolCatalog, ToolProtocolMarkup
 from agent_runtime_client.tools import ToolDeclaration
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent, StreamEvent
 
 _fake_cli_processes: list[FakeBlockingChild] = []
 

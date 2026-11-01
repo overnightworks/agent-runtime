@@ -5,7 +5,7 @@ import threading
 
 from tests.support.bounds import TEST_WAIT_SECONDS
 
-from agent_runtime.events import FinalEvent
+from agent_runtime_client.turn_events import FinalEvent
 
 
 class HeldRunner:

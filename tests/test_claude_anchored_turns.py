@@ -45,7 +45,7 @@ from tests.support.provider_test_support import (
 )
 
 from agent_runtime.claude import provider
-from agent_runtime.events import FinalEvent, StreamEvent
+from agent_runtime_client.turn_events import FinalEvent, StreamEvent
 
 ANSWERS_ONCE = "printf '%s' '{\"result\":\"ok\"}'\n"
 STREAMS_A_RESULT = 'printf \'%s\\n\' \'{"type":"result","result":"ok"}\'\n'

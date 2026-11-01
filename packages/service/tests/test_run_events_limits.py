@@ -21,14 +21,14 @@ from tests.support.service_support import (
     service_config,
 )
 
-from agent_runtime.events import (
+from agent_runtime.run_output import RunOutputCause, RunOutputRefused
+from agent_runtime_client.turn_events import (
     AssistantTextEvent,
     FinalEvent,
     StreamEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
-from agent_runtime.run_output import RunOutputCause, RunOutputRefused
 from agent_runtime_client.wire import (
     MAX_EVENT_BYTES,
     Failed,

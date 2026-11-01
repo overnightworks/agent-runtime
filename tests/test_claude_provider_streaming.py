@@ -33,7 +33,7 @@ from agent_runtime.claude.provider import (
     acall_claude_with_mcp_stream,
 )
 from agent_runtime.errors import ProviderUnavailableError, SafeRouteReasonCode
-from agent_runtime.events import (
+from agent_runtime_client.turn_events import (
     AssistantTextEvent,
     FinalEvent,
     StreamEvent,

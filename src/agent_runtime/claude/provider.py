@@ -69,13 +69,6 @@ from agent_runtime.errors import (
     raise_without_chain,
     refuse_empty_model,
 )
-from agent_runtime.events import (
-    AssistantTextEvent,
-    FinalEvent,
-    StreamEvent,
-    ToolCallEvent,
-    ToolResultEvent,
-)
 from agent_runtime.process import (
     CliLogin,
     claude_cli_login,
@@ -91,6 +84,13 @@ from agent_runtime.spawn import (
     run_capturing,
 )
 from agent_runtime.transcript import flatten_messages, stdin_prompt
+from agent_runtime_client.turn_events import (
+    AssistantTextEvent,
+    FinalEvent,
+    StreamEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+)
 
 log = logging.getLogger(__name__)
 

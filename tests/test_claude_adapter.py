@@ -50,9 +50,9 @@ from agent_runtime.errors import (
     ProviderUnavailableError,
     SafeRouteReasonCode,
 )
-from agent_runtime.events import AssistantTextEvent, StreamEvent
 from agent_runtime.process import CliEnvironmentUnavailableError, CliLoginUnusableError
 from agent_runtime.tool_loop import ToolOutcome
+from agent_runtime_client.turn_events import AssistantTextEvent, StreamEvent
 
 
 class _TrackingProviderStream(AsyncIterator[StreamEvent]):

@@ -36,7 +36,6 @@ from agent_runtime.errors import (
     normalize_route_failure,
     refuse_empty_model,
 )
-from agent_runtime.events import StreamEvent
 from agent_runtime.grok.transport import GrokCliToolTransport
 from agent_runtime.openai_adapter import (
     call_openai_compatible_once,
@@ -54,6 +53,7 @@ from agent_runtime.tools import (
     anthropic_tool_schemas,
     openai_tool_schemas,
 )
+from agent_runtime_client.turn_events import StreamEvent
 
 log = logging.getLogger(__name__)
 

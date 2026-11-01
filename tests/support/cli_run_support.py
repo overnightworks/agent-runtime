@@ -25,8 +25,8 @@ from tests.support.provider_test_support import (
 from agent_runtime.anchored_turn import CliProcessPool
 from agent_runtime.cli_run import CliRunStart, StepEvent
 from agent_runtime.config import PrivateWorkingRoot
-from agent_runtime.events import AssistantTextEvent, FinalEvent, ToolCallEvent
 from agent_runtime.spawn import ChildProcess, closed_environment
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent, ToolCallEvent
 
 SHELL = Path("/bin/sh")
 

@@ -19,7 +19,7 @@ from collections.abc import AsyncGenerator
 from typing import Final, Protocol
 
 from agent_runtime.errors import ContainmentLost
-from agent_runtime.events import FinalEvent, StreamEvent, ToolCallEvent, ToolResultEvent
+from agent_runtime_client.turn_events import FinalEvent, StreamEvent, ToolCallEvent, ToolResultEvent
 from agent_runtime_service.run_liveness import log_failure
 from agent_runtime_service.tool_relay import ToolCallsMisused
 

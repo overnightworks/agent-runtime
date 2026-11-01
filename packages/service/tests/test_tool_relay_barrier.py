@@ -52,7 +52,6 @@ from tests.support.service_support import (
     quarantine_on,
 )
 
-from agent_runtime.events import FinalEvent, ToolCallEvent, ToolResultEvent
 from agent_runtime_client.mcp_wire import (
     CallToolParams,
     JsonRpcError,
@@ -63,6 +62,7 @@ from agent_runtime_client.mcp_wire import (
     tool_result_response,
 )
 from agent_runtime_client.tools import ToolEffect
+from agent_runtime_client.turn_events import FinalEvent, ToolCallEvent, ToolResultEvent
 from agent_runtime_client.wire import (
     Failed,
     FailureCode,

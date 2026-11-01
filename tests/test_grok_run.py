@@ -33,7 +33,6 @@ from agent_runtime.cli_run import (
 from agent_runtime.cli_settings import CliSettings
 from agent_runtime.config import PrivateWorkingRoot, reset_config
 from agent_runtime.errors import CliLoginRefusedError
-from agent_runtime.events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime.grok.run import (
     GROK_CLI_LOGIN_REFUSED_DETAIL,
     GROK_CLI_PROCESS_POOL,
@@ -50,6 +49,7 @@ from agent_runtime.grok.run import (
 )
 from agent_runtime.grok_login import assess_grok_login
 from agent_runtime.spawn import ChildProcessSpecificationError, closed_environment
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime_client.wire import TurnMessage
 
 BINARY = Path("/opt/grok/bin/grok")

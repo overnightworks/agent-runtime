@@ -10,9 +10,9 @@ from http.cookiejar import CookieJar, DefaultCookiePolicy
 from httpx import AsyncClient
 
 from agent_runtime.errors import ProviderUnavailableError, SafeRouteReasonCode, raise_without_chain
-from agent_runtime.events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime.openai_adapter import OpenAIConversation, complete_openai_compatible_text
 from agent_runtime.tool_loop import InitialTurn
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime_service.api_credentials import InvalidApiCredentials, read_api_credentials
 from agent_runtime_service.api_tools import offered_schemas, require_unprotected, tool_conversation
 from agent_runtime_service.config import ServiceConfig

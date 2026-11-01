@@ -16,7 +16,6 @@ from agent_runtime.errors import (
     normalize_route_failure,
     raise_without_chain,
 )
-from agent_runtime.events import StreamEvent
 from agent_runtime.tool_loop import (
     FinalText,
     InitialTurn,
@@ -31,6 +30,7 @@ from agent_runtime.tool_loop import (
     stream_tool_loop,
 )
 from agent_runtime_client.mcp_wire import read_strict_json
+from agent_runtime_client.turn_events import StreamEvent
 
 
 async def stream_openai_compatible_turn(

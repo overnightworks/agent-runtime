@@ -19,7 +19,6 @@ import h11
 from agent_runtime.cli_run import RelayAccess as RelayAccess
 from agent_runtime.cli_run import relay_authorization
 from agent_runtime.errors import raise_without_chain
-from agent_runtime.events import ToolCallEvent, ToolResultEvent
 from agent_runtime_client.capability import MCP_ENDPOINT_PATH
 from agent_runtime_client.mcp_wire import (
     ACKNOWLEDGEMENT,
@@ -41,6 +40,7 @@ from agent_runtime_client.mcp_wire import (
     tool_result_response,
     tools_list_response,
 )
+from agent_runtime_client.turn_events import ToolCallEvent, ToolResultEvent
 from agent_runtime_client.wire import MAX_EVENT_BYTES
 from agent_runtime_service.capability import Capability
 from agent_runtime_service.run_liveness import RunClock, log_failure, unfinished_by

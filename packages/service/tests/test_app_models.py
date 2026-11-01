@@ -67,7 +67,7 @@ from tests.support.service_table_support import (
 from webauth.https_client import KeySetFetchError
 
 from agent_runtime.config import reset_config
-from agent_runtime.events import AssistantTextEvent, FinalEvent, StreamEvent
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime_client.wire import ModelList, RejectionCode, RunEvent, RunStarted
 from agent_runtime_service.app import create_app
 from agent_runtime_service.cli import installed_runners

@@ -28,7 +28,7 @@ from tests.support.service_support import (
     service_config,
 )
 
-from agent_runtime.events import AssistantTextEvent, FinalEvent, ToolCallEvent
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent, ToolCallEvent
 from agent_runtime_client.wire import (
     Failed,
     FailureCode,
