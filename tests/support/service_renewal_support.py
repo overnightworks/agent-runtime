@@ -19,14 +19,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.bounds import TEST_WAIT_SECONDS, within_the_bound
 from tests.support.codex_support import CODEX_BINARY, a_codex_access_token, a_renewing_fake_codex
 from tests.support.provider_test_support import a_codex_login, a_private_root
 from tests.support.service_support import _toml_lines
 from tests.support.service_table_support import CODEX_TABLE, write_login
 
-from agent_runtime.codex.run import AUTH_FILE_NAME, CODEX_CLI_PROCESS_POOL
 from agent_runtime.anchored_turn import CliProcessPool
+from agent_runtime.codex.run import AUTH_FILE_NAME, CODEX_CLI_PROCESS_POOL
 from agent_runtime.config import PrivateWorkingRoot
 from agent_runtime.grok.run import GROK_HOME_VARIABLE
 from agent_runtime.process import RUN_HOME_DIRECTORY_NAME, CliRunOutcome, CliRunReason
@@ -40,6 +40,7 @@ from agent_runtime_service.renewal import (
     RenewalEntry,
     RenewalReport,
 )
+from agent_runtime_service.renewal_schedule import RenewalSchedule
 
 NOW = 1_800_000_000
 LIFETIME = 864_000
@@ -84,6 +85,10 @@ RENEWED_LOGIN = a_login_issued_at(NOW, refresh_token=ROTATED_REFRESH, subject="r
 def a_due_login_now() -> bytes:
     """A login that is due for the real clock, as the service's own clock reads it."""
     return a_login_issued_at(int(time.time()) - HALF_LIFE - 60)
+
+
+def a_due_grok_login_now() -> bytes:
+    return a_grok_login_issued_at(int(time.time()) - GROK_HALF_LIFE - 60)
 
 
 def a_renewed_login_now() -> bytes:
@@ -212,7 +217,9 @@ class FakeRunner:
             confirm = _reaping(options["on_reaped"])
         self._held.append(confirm)
         if self.on_home is not None:
-            self.on_home(Path(child.environment.get("CODEX_HOME") or child.environment[GROK_HOME_VARIABLE]))
+            self.on_home(
+                Path(child.environment.get("CODEX_HOME") or child.environment[GROK_HOME_VARIABLE])
+            )
         if self.confirmation is Confirmation.NOW:
             self._held.pop()
             confirm()
@@ -385,6 +392,16 @@ class RecordingPause:
         if len(self.seconds) >= self._stops_after:
             stopping.set()
             self.exhausted.set()
+
+
+def run_rounds(schedule: RenewalSchedule, pause: RecordingPause) -> None:
+    """Run the schedule until its recording pause has stopped it, then leave it."""
+
+    async def scenario() -> None:
+        async with schedule.running():
+            await within_the_bound(pause.exhausted.wait())
+
+    asyncio.run(scenario())
 
 
 @dataclass(frozen=True)

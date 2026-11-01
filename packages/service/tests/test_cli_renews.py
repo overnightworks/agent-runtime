@@ -42,6 +42,7 @@ from tests.support.service_cli_runner_support import (
 from tests.support.service_renewal_support import (  # noqa: F401 - the autouse fixture
     BlockedHook,
     CodexServiceFiles,
+    a_due_grok_login_now,
     a_due_login_now,
     a_fake_runner,
     a_login_issued_at,
@@ -51,12 +52,16 @@ from tests.support.service_renewal_support import (  # noqa: F401 - the autouse 
     writing,
 )
 from tests.support.service_support import (
+    LISTED_MODEL,
+    SONGMAKER_ORIGIN,
     decoded_events,
     run_body,
     service_config,
 )
 from tests.support.service_table_support import (
     CODEX_TABLE,
+    GROK_TABLE,
+    a_codex_config,
     a_config_with_both_providers,
     a_table_service,
     write_login,
@@ -64,7 +69,7 @@ from tests.support.service_table_support import (
 
 from agent_runtime_service.app import create_app
 from agent_runtime_service.cli import installed_runners
-from agent_runtime_service.config import ServiceConfig
+from agent_runtime_service.config import Provider, ServiceConfig
 from agent_runtime_service.login_file import swap_sibling
 from agent_runtime_service.renewal_schedule import renewals_of
 from agent_runtime_service.run_liveness import LoopClock
@@ -190,6 +195,43 @@ def test_the_codex_table_alone_is_renewed_with_its_binary_in_a_home_under_the_wo
     (child,) = runner.children
     assert child.binary == config.cli.openai.binary
     assert Path(child.environment["CODEX_HOME"]).is_relative_to(config.cli.working_root.path)
+
+
+def test_both_subscription_tables_are_renewed_each_with_its_binary_in_a_home_under_the_working_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    codex_directory, grok_directory = tmp_path / "codex", tmp_path / "grok"
+    codex_directory.mkdir()
+    grok_directory.mkdir()
+    document = CODEX_TABLE.document_with_both(codex_directory)
+    document["defaults"] = {"model": f"{Provider.ANTHROPIC}/{LISTED_MODEL}"}
+    document["apps"]["songmaker"]["mcp_origin"] = SONGMAKER_ORIGIN
+    grok_document = GROK_TABLE.document(
+        grok_directory,
+        GROK_TABLE.service_fake(grok_directory),
+        GROK_TABLE.login_file(grok_directory),
+    )
+    document["cli"][Provider.XAI] = grok_document["cli"][Provider.XAI]
+    config = a_codex_config(document)
+    write_login(codex_directory / CODEX_TABLE.login_name, a_due_login_now())
+    write_login(grok_directory / GROK_TABLE.login_name, a_due_grok_login_now())
+    runner = a_fake_runner(monkeypatch)
+    schedule = renewals_of(config.cli)
+
+    async def scenario() -> None:
+        async with schedule.running():
+            while runner.calls < 2:
+                await asyncio.sleep(0)
+
+    asyncio.run(within_the_bound(scenario()))
+
+    homes = {
+        child.binary: Path(child.environment.get("CODEX_HOME") or child.environment["GROK_HOME"])
+        for child in runner.children
+    }
+    assert set(homes) == {config.cli.openai.binary, config.cli.xai.binary}
+    assert all(home.is_relative_to(config.cli.working_root.path) for home in homes.values())
+    assert len({home.parent for home in homes.values()}) == len(homes)
 
 
 @contextmanager

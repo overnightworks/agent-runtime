@@ -38,6 +38,7 @@ from tests.support.service_renewal_support import (  # noqa: F401 - the autouse 
     logged_levels,
     logged_outcomes,
     pool_filled,
+    run_rounds,
     the_held_ends_confirmed,
     the_secrets_of,
     writing,
@@ -71,16 +72,6 @@ def two_arrangements(tmp_path: Path) -> tuple[Arrangement, Arrangement]:
     first.mkdir()
     second.mkdir()
     return an_arrangement(first), an_arrangement(second)
-
-
-def run_rounds(schedule: RenewalSchedule, pause: RecordingPause) -> None:
-    """Run the schedule until its recording pause has stopped it, then leave it."""
-
-    async def scenario() -> None:
-        async with schedule.running():
-            await within_the_bound(pause.exhausted.wait())
-
-    asyncio.run(scenario())
 
 
 async def serving_until(schedule: RenewalSchedule, leave: asyncio.Event) -> None:

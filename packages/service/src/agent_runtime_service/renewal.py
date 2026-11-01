@@ -387,8 +387,8 @@ class ProviderRenewer:
         """The home and the child ready to run, or None when no home can be made.
 
         Until the runner is entered the slot and the home are this method's: whatever fails
-        releases both and propagates. From here a source of unreadable timing is held for its entry's own
-        interval.
+        releases both and propagates. From here a source of unreadable timing is held for its
+        entry's own interval.
         """
         holder: HolderReservation | None = None
         try:
