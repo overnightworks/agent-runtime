@@ -161,7 +161,7 @@ def _standing_exit(subject: str, token_file: Path, sibling: Path, entry: Renewal
             f" it expires at {expiry}"
         ),
         LoginStanding.EXPIRY_UNKNOWN: (
-            f"{standing.state}: {standing.cause}; the service still tries to renew it once a day,"
+            f"{standing.state}: {standing.cause}; the service still tries to renew it,"
             " and an update of agent-runtime is needed to read it"
         ),
         LoginStanding.NOT_USABLE: f"{RenewalRefusal.NOT_USABLE}; sign in again",

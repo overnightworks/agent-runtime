@@ -25,6 +25,8 @@ from agent_runtime.cli_run import CliRunStart
 from agent_runtime.codex.renewal import CodexRenewal
 from agent_runtime.codex_login import read_codex_timing, renewable_codex_login
 from agent_runtime.config import PrivateWorkingRoot
+from agent_runtime.grok.renewal import GrokRenewal
+from agent_runtime.grok_login import read_grok_timing, renewable_grok_login
 from agent_runtime.login_renewal import CopyUnchanged, RenewableLogin, RenewalRefusal, RenewalRun
 from agent_runtime.login_timing import AccessTokenTiming, UnreadableTiming
 from agent_runtime.process import (
@@ -55,8 +57,9 @@ from agent_runtime_service.login_file import (
 
 log = logging.getLogger(__name__)
 
-_UNREADABLE_RENEWAL_INTERVAL_SECONDS: Final = 24 * 60 * 60
 _CODEX_DEADLINE_SECONDS: Final = 30.0
+_CODEX_UNREADABLE_RENEWAL_INTERVAL_SECONDS: Final = 24 * 60 * 60
+_GROK_DEADLINE_SECONDS: Final = 30.0
 
 
 class RenewalOutcome(StrEnum):
@@ -113,9 +116,14 @@ class RenewalReport:
 
 @dataclass(frozen=True)
 class RenewalEntry:
-    """What one provider's renewal is: its deadline, its reader and timing, and its CLI run."""
+    """What one provider's renewal is: its deadline, its reader and timing, and its CLI run.
+
+    A source whose timing cannot be read renews at most once per
+    ``unreadable_renewal_interval_seconds``; 0 renews it at every round.
+    """
 
     deadline_seconds: float
+    unreadable_renewal_interval_seconds: float
     renewable: Callable[[bytes], RenewableLogin | RenewalRefusal]
     timing: Callable[[bytes, int], AccessTokenTiming | UnreadableTiming]
     run: Callable[[Path, RenewableLogin, int], RenewalRun]
@@ -123,11 +131,22 @@ class RenewalEntry:
 
 CODEX_RENEWAL: Final = RenewalEntry(
     _CODEX_DEADLINE_SECONDS,
+    _CODEX_UNREADABLE_RENEWAL_INTERVAL_SECONDS,
     renewable_codex_login,
     read_codex_timing,
     lambda binary, login, now: CodexRenewal(binary, login, now=now),
 )
-RENEWALS: Final[Mapping[Provider, RenewalEntry]] = {Provider.OPENAI: CODEX_RENEWAL}
+GROK_RENEWAL: Final = RenewalEntry(
+    _GROK_DEADLINE_SECONDS,
+    0.0,
+    renewable_grok_login,
+    read_grok_timing,
+    lambda binary, login, now: GrokRenewal(binary, login, now=now),
+)
+RENEWALS: Final[Mapping[Provider, RenewalEntry]] = {
+    Provider.OPENAI: CODEX_RENEWAL,
+    Provider.XAI: GROK_RENEWAL,
+}
 
 
 def _judged(
@@ -323,7 +342,7 @@ class ProviderRenewer:
         started = self._unreadable_renewal_started
         recent = (
             started is not None
-            and self._monotonic_clock() - started < _UNREADABLE_RENEWAL_INTERVAL_SECONDS
+            and self._monotonic_clock() - started < self._entry.unreadable_renewal_interval_seconds
         )
         return not recent
 
@@ -368,7 +387,8 @@ class ProviderRenewer:
         """The home and the child ready to run, or None when no home can be made.
 
         Until the runner is entered the slot and the home are this method's: whatever fails
-        releases both and propagates. From here a source of unreadable timing is held for 24 h.
+        releases both and propagates. From here a source of unreadable timing is held for its entry's own
+        interval.
         """
         holder: HolderReservation | None = None
         try:
