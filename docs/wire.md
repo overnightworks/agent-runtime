@@ -79,7 +79,7 @@ A request the service refuses answers a `RunRejection` with one `RejectionCode`:
 | `unsupported_version` | 400 | `v` is not the JSON integer 6. |
 | `model_not_offered` | 422 | The request names a model in the grammar that the installation does not offer. A run that fails keeps the model it named; nothing falls back to another. |
 | `invalid_request` | 422 | The body is not a valid request for the route. |
-| `too_large` | 413 | The body is over 262,144 bytes (`MAX_REQUEST_BYTES`), whether its length is declared or streamed. Checked after the tokens and the caller check, before the body is parsed; a declared length over the limit is not read. A `Content-Length` that is not a number answers `invalid_request`. |
+| `too_large` | 413 | The body is over 262,144 bytes (`MAX_REQUEST_BYTES`), whether its length is declared or streamed. Checked after the tokens and the caller check, before the body is parsed; a declared length over the limit is not read. A `Content-Length` that is not a number answers `invalid_request`; behind uvicorn, uvicorn itself answers it with a bare 400 before the application sees the request. |
 | `capability_too_large` | 422 | The run's capability would exceed 8,192 characters. |
 | `busy` | 429 | The subscription route's places are taken; `Retry-After` is set and the run never falls back to the paid route. |
 | `unavailable` | 503 | The service cannot check tokens right now. |
