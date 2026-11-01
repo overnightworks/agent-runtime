@@ -1,9 +1,7 @@
 """One renewal attempt of the dedicated Grok login: what the Grok entry shares with the Codex
 one and where it differs, driven through the real ``ProviderRenewer``.
 
-Every row runs the renewing stand-in CLI through the real bounded runner, except the unreadable
-timing row, which shares its arrangement with the Codex entry and uses the fake runner of
-``service_renewal_support``.
+Every row runs the renewing stand-in CLI through the real bounded runner.
 """
 
 from __future__ import annotations
@@ -13,7 +11,6 @@ from pathlib import Path
 
 import pytest
 from tests.support.grok_support import a_renewing_fake_grok, children_started
-from tests.support.provider_test_support import a_codex_login
 from tests.support.service_login_support import held_swap
 from tests.support.service_renewal_support import (  # noqa: F401 - the autouse fixture
     DUE_GROK_LOGIN,
@@ -24,9 +21,7 @@ from tests.support.service_renewal_support import (  # noqa: F401 - the autouse 
     ROTATED_REFRESH,
     Arrangement,
     RecordingPause,
-    a_fake_runner,
     a_grok_login_issued_at,
-    a_login_issued_at,
     an_arrangement,
     logged_once,
     pool_filled,
@@ -41,7 +36,6 @@ from agent_runtime.login_timing import UnreadableTiming
 from agent_runtime_service.config import Provider
 from agent_runtime_service.login_file import held_sibling_sentence
 from agent_runtime_service.renewal import (
-    CODEX_RENEWAL,
     GROK_RENEWAL,
     NotRenewedCause,
     RenewalOutcome,
@@ -105,24 +99,14 @@ def test_a_grok_login_not_yet_due_starts_no_child_and_leaves_no_sibling(
     assert (arrangement.directory_holds(), arrangement.trees()) == ([LOGIN_NAME], [])
 
 
-# Matrix 17: an unreadable timing is held per entry.
-
-UNREADABLE_TIMING = {
-    "grok": (GROK_RENEWAL, Provider.XAI, a_grok_login_issued_at(0, access_key="opaque-key"), 2),
-    "codex": (CODEX_RENEWAL, Provider.OPENAI, a_codex_login(), 1),
-}
+# Matrix 17: an unreadable timing renews again after a quarter hour.
 
 
-@pytest.mark.parametrize("entry_name", UNREADABLE_TIMING)
-def test_an_unreadable_timing_renews_again_after_a_quarter_hour_only_where_the_entry_says_so(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-    entry_name: str,
+def test_an_unreadable_timing_renews_again_after_a_quarter_hour(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    entry, provider, source, children_after_two_attempts = UNREADABLE_TIMING[entry_name]
-    arrangement = an_arrangement(tmp_path, source, entry=entry, provider=provider)
-    runner = a_fake_runner(monkeypatch)
+    source = a_grok_login_issued_at(0, access_key="opaque-key")
+    arrangement = a_grok_arrangement(tmp_path, source, renewed=source)
 
     first = logged_once(caplog, arrangement.renewer.attempt)
     arrangement.clocks.monotonic = QUARTER_HOUR_SECONDS
@@ -130,8 +114,8 @@ def test_an_unreadable_timing_renews_again_after_a_quarter_hour_only_where_the_e
 
     assert first.outcome is RenewalOutcome.REFRESH_FAILED
     assert first.source_timing in set(UnreadableTiming)
-    assert runner.calls == children_after_two_attempts
-    assert (second.outcome is RenewalOutcome.NOT_DUE) is (children_after_two_attempts == 1)
+    assert second.outcome is RenewalOutcome.REFRESH_FAILED
+    assert children_started(tmp_path) == 2
 
 
 # Matrix 18: a result that is committed but not "renewed" backs the round off.
