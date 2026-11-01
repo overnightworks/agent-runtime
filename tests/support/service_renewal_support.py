@@ -93,6 +93,10 @@ def a_due_grok_login_now() -> bytes:
     return a_grok_login_issued_at(int(time.time()) - GROK_HALF_LIFE - 60)
 
 
+def a_renewed_grok_login_now() -> bytes:
+    return a_grok_login_issued_at(int(time.time()), refresh_token=ROTATED_REFRESH)
+
+
 def a_renewed_login_now() -> bytes:
     return a_login_issued_at(int(time.time()), refresh_token=ROTATED_REFRESH, subject="renewed")
 

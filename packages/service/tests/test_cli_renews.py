@@ -46,6 +46,7 @@ from tests.support.service_renewal_support import (  # noqa: F401 - the autouse 
     a_due_login_now,
     a_fake_runner,
     a_login_issued_at,
+    a_renewed_grok_login_now,
     a_renewed_login_now,
     codex_service_files,
     the_held_ends_confirmed,
@@ -61,12 +62,15 @@ from tests.support.service_support import (
 from tests.support.service_table_support import (
     CODEX_TABLE,
     GROK_TABLE,
+    ProviderTable,
     a_codex_config,
     a_config_with_both_providers,
     a_table_service,
     write_login,
 )
 
+from agent_runtime.codex_login import blanked_copy as blanked_codex_copy
+from agent_runtime.grok_login import blanked_copy as blanked_grok_copy
 from agent_runtime_service.app import create_app
 from agent_runtime_service.cli import installed_runners
 from agent_runtime_service.config import Provider, ServiceConfig
@@ -91,9 +95,14 @@ def a_renewing_app(config: ServiceConfig):
 
 def a_due_codex_service(tmp_path: Path, **fake: Any) -> tuple[ServiceConfig, Path, Path]:
     """The Codex table's config, its stand-in capture directory and its login, due for renewal."""
-    config, capture = a_table_service(CODEX_TABLE, tmp_path, **fake)
-    login = write_login(tmp_path / CODEX_TABLE.login_name, a_due_login_now())
-    return config, capture, login
+    return a_due_service(CODEX_TABLE, tmp_path, a_due_login_now(), **fake)
+
+
+def a_due_service(
+    table: ProviderTable, tmp_path: Path, due: bytes, **fake: Any
+) -> tuple[ServiceConfig, Path, Path]:
+    config, capture = a_table_service(table, tmp_path, **fake)
+    return config, capture, write_login(tmp_path / table.login_name, due)
 
 
 def post_run_through(client: TestClient) -> list[Any]:
@@ -123,43 +132,48 @@ def test_serving_starts_at_once_while_the_first_renewal_is_still_running(
     assert login.read_bytes() == renewed
 
 
-def test_a_codex_run_is_served_during_a_renewal_and_reads_the_whole_old_login(
+SERVED_DURING_RENEWAL = {
+    Provider.OPENAI: (CODEX_TABLE, a_due_login_now, a_renewed_login_now, blanked_codex_copy),
+    Provider.XAI: (GROK_TABLE, a_due_grok_login_now, a_renewed_grok_login_now, blanked_grok_copy),
+}
+
+
+@pytest.mark.parametrize("provider", SERVED_DURING_RENEWAL)
+def test_a_run_is_served_during_a_renewal_with_its_own_copy_and_the_next_run_gets_the_new_one(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     child_cleanup: ChildCleanup,
+    provider: Provider,
 ) -> None:
-    config, capture, login = a_due_codex_service(tmp_path)
-    old_document = login.read_bytes()
-    renewed = a_renewed_login_now()
+    table, due, renewed_now, blanked = SERVED_DURING_RENEWAL[provider]
+    old_document = due()
+    config, capture, login = a_due_service(table, tmp_path, old_document)
+    renewed = renewed_now()
     hook = BlockedHook(writing(renewed))
     a_fake_runner(monkeypatch, on_home=hook)
     sibling = swap_sibling(login)
 
-    def scenario() -> tuple[list[Any], bool, str, list[Any], str]:
+    def scenario() -> tuple[list[Any], bool, bytes, list[Any], bytes]:
         with TestClient(a_renewing_app(config)) as client:
             assert hook.entered.wait(TEST_WAIT_SECONDS)
             during = post_run_through(client)
             sibling_held = sibling.exists()
-            login_of_that_run = (capture / "auth.json").read_text()
+            copy_of_that_run = (capture / "auth.json").read_bytes()
             hook.release()
             eventually(lambda: login.read_bytes() == renewed)
             after = post_run_through(client)
-            login_of_the_next_run = (capture / "auth.json").read_text()
-            return during, sibling_held, login_of_that_run, after, login_of_the_next_run
+            copy_of_the_next_run = (capture / "auth.json").read_bytes()
+            return during, sibling_held, copy_of_that_run, after, copy_of_the_next_run
 
-    during, sibling_held, login_during, after, login_after = own_real_children(
+    during, sibling_held, copy_during, after, copy_after = own_real_children(
         child_cleanup, monkeypatch, scenario
     )
 
     assert shown(during)[-1][0] == "succeeded"
     assert sibling_held is True
-    assert _access_token_of(old_document) in login_during
+    assert copy_during == blanked(old_document)
     assert shown(after)[-1][0] == "succeeded"
-    assert _access_token_of(renewed) in login_after
-
-
-def _access_token_of(document: bytes) -> str:
-    return json.loads(document)["tokens"]["access_token"]
+    assert copy_after == blanked(renewed)
 
 
 def test_a_configuration_without_a_codex_table_starts_no_task_and_no_thread() -> None:
