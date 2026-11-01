@@ -13,12 +13,14 @@ import os
 import shlex
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import threading
 import time
 import uuid
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from http import HTTPStatus
 from pathlib import Path
@@ -31,6 +33,7 @@ from tests.support.bounds import TEST_WAIT_SECONDS, within_the_bound
 from tests.support.core_runtime_support import (
     no_installed_core_runtime,  # noqa: F401 - an autouse fixture
 )
+from tests.support.grok_support import a_renewing_fake_grok, children_started
 from tests.support.provider_test_support import own_real_children
 from tests.support.service_cli_runner_support import (
     MINT,
@@ -40,31 +43,40 @@ from tests.support.service_cli_runner_support import (
     shown,
 )
 from tests.support.service_renewal_support import (  # noqa: F401 - the autouse fixture
+    GROK_HALF_LIFE,
     BlockedHook,
     CodexServiceFiles,
+    a_due_grok_login_now,
     a_due_login_now,
     a_fake_runner,
     a_login_issued_at,
+    a_renewed_grok_login_now,
     a_renewed_login_now,
     codex_service_files,
     the_held_ends_confirmed,
     writing,
 )
 from tests.support.service_support import (
+    LISTED_MODEL,
+    SONGMAKER_ORIGIN,
     decoded_events,
     run_body,
     service_config,
 )
 from tests.support.service_table_support import (
     CODEX_TABLE,
+    GROK_TABLE,
+    ProviderTable,
+    a_codex_config,
     a_config_with_both_providers,
     a_table_service,
     write_login,
 )
 
+from agent_runtime.grok_login import blanked_copy as blanked_grok_copy
 from agent_runtime_service.app import create_app
 from agent_runtime_service.cli import installed_runners
-from agent_runtime_service.config import ServiceConfig
+from agent_runtime_service.config import Provider, ServiceConfig
 from agent_runtime_service.login_file import swap_sibling
 from agent_runtime_service.renewal_schedule import renewals_of
 from agent_runtime_service.run_liveness import LoopClock
@@ -86,9 +98,14 @@ def a_renewing_app(config: ServiceConfig):
 
 def a_due_codex_service(tmp_path: Path, **fake: Any) -> tuple[ServiceConfig, Path, Path]:
     """The Codex table's config, its stand-in capture directory and its login, due for renewal."""
-    config, capture = a_table_service(CODEX_TABLE, tmp_path, **fake)
-    login = write_login(tmp_path / CODEX_TABLE.login_name, a_due_login_now())
-    return config, capture, login
+    return a_due_service(CODEX_TABLE, tmp_path, a_due_login_now(), **fake)
+
+
+def a_due_service(
+    table: ProviderTable, tmp_path: Path, due: bytes, **fake: Any
+) -> tuple[ServiceConfig, Path, Path]:
+    config, capture = a_table_service(table, tmp_path, **fake)
+    return config, capture, write_login(tmp_path / table.login_name, due)
 
 
 def post_run_through(client: TestClient) -> list[Any]:
@@ -157,6 +174,79 @@ def _access_token_of(document: bytes) -> str:
     return json.loads(document)["tokens"]["access_token"]
 
 
+def a_dispatching_grok(directory: Path, renewal: Path, run: Path) -> Path:
+    """One program for a service whose renewal and runs are two stand-ins: ``models`` renews."""
+    binary = directory / "grok"
+    binary.write_text(
+        "#!/bin/sh\n"
+        f'[ "$*" = models ] && exec {shlex.quote(str(renewal))} "$@"\n'
+        f'exec {shlex.quote(str(run))} "$@"\n'
+    )
+    binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
+    return binary
+
+
+def test_a_grok_run_held_across_the_renewal_keeps_its_home_and_the_next_run_gets_the_new_login(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, child_cleanup: ChildCleanup
+) -> None:
+    old_document = a_due_grok_login_now()
+    renewed = a_renewed_grok_login_now()
+    login = write_login(tmp_path / GROK_TABLE.login_name, old_document)
+    renewal_directory, run_directory, capture = (
+        tmp_path / name for name in ("renewal", "run", "capture")
+    )
+    renewal_directory.mkdir()
+    run_directory.mkdir()
+    renewal_released, run_in_flight, run_released = (
+        tmp_path / name for name in ("renewal-released", "run-in-flight", "run-released")
+    )
+    renewal = a_renewing_fake_grok(
+        renewal_directory, old_document, renewed, GROK_HALF_LIFE, held_until=renewal_released
+    )
+    run = GROK_TABLE.service_fake(
+        run_directory,
+        capture=capture,
+        then=(
+            f": > {shlex.quote(str(run_in_flight))}\n"
+            f"while [ ! -e {shlex.quote(str(run_released))} ]; do sleep 0.05; done\n"
+            f'cp "$GROK_HOME/auth.json" {shlex.quote(str(capture / "auth-at-end.json"))}'
+        ),
+    )
+    binary = a_dispatching_grok(tmp_path, renewal, run)
+    config = a_codex_config(GROK_TABLE.document(tmp_path, binary, login))
+    sibling = swap_sibling(login)
+
+    def scenario() -> tuple[list[Any], bool, bytes, list[Any], bytes]:
+        with TestClient(a_renewing_app(config)) as client, ThreadPoolExecutor(1) as requests:
+            eventually(lambda: children_started(renewal_directory) == 1)
+            held_run = requests.submit(post_run_through, client)
+            eventually(run_in_flight.exists)
+            sibling_held = sibling.exists()
+            renewal_released.touch()
+            eventually(lambda: login.read_bytes() == renewed)
+            run_released.touch()
+            during = held_run.result(TEST_WAIT_SECONDS)
+            home_login_of_that_run = (capture / "auth-at-end.json").read_bytes()
+            after = post_run_through(client)
+            return (
+                during,
+                sibling_held,
+                home_login_of_that_run,
+                after,
+                (capture / "auth.json").read_bytes(),
+            )
+
+    during, sibling_held, home_during, after, copy_after = own_real_children(
+        child_cleanup, monkeypatch, scenario
+    )
+
+    assert shown(during)[-1][0] == "succeeded"
+    assert sibling_held is True
+    assert home_during == blanked_grok_copy(old_document)
+    assert shown(after)[-1][0] == "succeeded"
+    assert copy_after == blanked_grok_copy(renewed)
+
+
 def test_a_configuration_without_a_codex_table_starts_no_task_and_no_thread() -> None:
     schedule = renewals_of(service_config().cli)
     threads_before = set(threading.enumerate())
@@ -190,6 +280,43 @@ def test_the_codex_table_alone_is_renewed_with_its_binary_in_a_home_under_the_wo
     (child,) = runner.children
     assert child.binary == config.cli.openai.binary
     assert Path(child.environment["CODEX_HOME"]).is_relative_to(config.cli.working_root.path)
+
+
+def test_both_subscription_tables_are_renewed_each_with_its_binary_in_a_home_under_the_working_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    codex_directory, grok_directory = tmp_path / "codex", tmp_path / "grok"
+    codex_directory.mkdir()
+    grok_directory.mkdir()
+    document = CODEX_TABLE.document_with_both(codex_directory)
+    document["defaults"] = {"model": f"{Provider.ANTHROPIC}/{LISTED_MODEL}"}
+    document["apps"]["songmaker"]["mcp_origin"] = SONGMAKER_ORIGIN
+    grok_document = GROK_TABLE.document(
+        grok_directory,
+        GROK_TABLE.service_fake(grok_directory),
+        GROK_TABLE.login_file(grok_directory),
+    )
+    document["cli"][Provider.XAI] = grok_document["cli"][Provider.XAI]
+    config = a_codex_config(document)
+    write_login(codex_directory / CODEX_TABLE.login_name, a_due_login_now())
+    write_login(grok_directory / GROK_TABLE.login_name, a_due_grok_login_now())
+    runner = a_fake_runner(monkeypatch)
+    schedule = renewals_of(config.cli)
+
+    async def scenario() -> None:
+        async with schedule.running():
+            while runner.calls < 2:
+                await asyncio.sleep(0)
+
+    asyncio.run(within_the_bound(scenario()))
+
+    homes = {
+        child.binary: Path(child.environment.get("CODEX_HOME") or child.environment["GROK_HOME"])
+        for child in runner.children
+    }
+    assert set(homes) == {config.cli.openai.binary, config.cli.xai.binary}
+    assert all(home.is_relative_to(config.cli.working_root.path) for home in homes.values())
+    assert len({home.parent for home in homes.values()}) == len(homes)
 
 
 @contextmanager

@@ -29,11 +29,13 @@ from tests.support.service_login_support import (  # noqa: F401 - the fixtures a
     what_was_said,
 )
 from tests.support.service_renewal_support import (  # noqa: F401 - the autouse fixture
+    DUE_GROK_LOGIN,
     DUE_ORIGINAL,
     HALF_LIFE,
     LIFETIME,
     LOGIN_NAME,
     NOW,
+    RENEWED_GROK_LOGIN,
     RENEWED_LOGIN,
     ROTATED_REFRESH,
     Arrangement,
@@ -58,15 +60,22 @@ from agent_runtime.codex.renewal import CodexRenewal
 from agent_runtime.codex.run import AUTH_FILE_NAME
 from agent_runtime.codex_login import blanked_copy
 from agent_runtime.config import reset_config
+from agent_runtime.grok_login import blanked_copy as blanked_grok_copy
 from agent_runtime.login_renewal import RenewalRefusal
 from agent_runtime.login_timing import UnreadableTiming
 from agent_runtime.process import CliRunReason
 from agent_runtime.secret_file import SecretFileFault
 from agent_runtime_service import login_file
-from agent_runtime_service.config import Provider, read_codex_login
+from agent_runtime_service.config import Provider, read_codex_login, read_grok_login
 from agent_runtime_service.login import EXIT_REMAINS
 from agent_runtime_service.login_file import held_sibling_sentence
-from agent_runtime_service.renewal import Cleanup, NotRenewedCause, RenewalOutcome
+from agent_runtime_service.renewal import (
+    CODEX_RENEWAL,
+    GROK_RENEWAL,
+    Cleanup,
+    NotRenewedCause,
+    RenewalOutcome,
+)
 
 
 def test_a_login_at_exactly_half_its_lifetime_is_renewed(
@@ -647,27 +656,44 @@ def test_the_login_command_during_the_hold_is_refused_and_the_renewal_still_comm
     assert report.outcome is RenewalOutcome.RENEWED
 
 
+@pytest.mark.parametrize("provider", [Provider.OPENAI, Provider.XAI])
 def test_an_ordinary_run_reads_the_whole_old_login_during_the_hold_and_the_whole_new_one_after(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    provider: Provider,
 ) -> None:
-    arrangement = an_arrangement(tmp_path)
+    source, renewed, entry, read_login, blanked = {
+        Provider.OPENAI: (
+            DUE_ORIGINAL,
+            RENEWED_LOGIN,
+            CODEX_RENEWAL,
+            read_codex_login,
+            blanked_copy,
+        ),
+        Provider.XAI: (
+            DUE_GROK_LOGIN,
+            RENEWED_GROK_LOGIN,
+            GROK_RENEWAL,
+            read_grok_login,
+            blanked_grok_copy,
+        ),
+    }[provider]
+    arrangement = an_arrangement(tmp_path, source, entry=entry, provider=provider)
     during: list[tuple[bytes | None, list[str]]] = []
 
     def reading(home: Path) -> None:
         during.append(
-            (
-                read_codex_login(arrangement.token_file).blanked_document,
-                arrangement.directory_holds(),
-            )
+            (read_login(arrangement.token_file).blanked_document, arrangement.directory_holds())
         )
-        writing(RENEWED_LOGIN)(home)
+        writing(renewed)(home)
 
     a_fake_runner(monkeypatch, on_home=reading)
 
     logged_once(caplog, arrangement.renewer.attempt)
 
-    assert during == [(blanked_copy(DUE_ORIGINAL), arrangement.directory_holds_login_and_sibling())]
-    assert read_codex_login(arrangement.token_file).blanked_document == blanked_copy(RENEWED_LOGIN)
+    assert during == [(blanked(source), arrangement.directory_holds_login_and_sibling())]
+    assert read_login(arrangement.token_file).blanked_document == blanked(renewed)
 
 
 def test_a_binary_that_cannot_start_is_not_started_and_everything_is_released(

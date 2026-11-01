@@ -353,9 +353,9 @@ else reaches the API route only as a member of `api_groups`; a person in neither
 group is refused `not_enabled` ([ARCHITECTURE.md](ARCHITECTURE.md)).
 The file is named as `cli.<provider>.token_file`; the core library never creates, renews
 or rewrites it, and the service's login command installs a new one. The service renews a
-Codex login itself ("Renewal of a Codex login" below); a Claude token has no renewal and is the
-operator's to keep fresh; a Grok login has no renewal yet, and the copy a run holds had an access
-token that lived 6.0 h in one sample. Claude (`[cli.anthropic]`), Codex (`[cli.openai]`) and Grok
+Codex or Grok login itself ("Renewal of a Codex or Grok login" below); a Claude token has no
+renewal and is the operator's to keep fresh. The copy a Grok run holds had an access token that
+lived 6.0 h in one sample. Claude (`[cli.anthropic]`), Codex (`[cli.openai]`) and Grok
 (`[cli.xai]`) have a table each, and every table needs its `token_file`; the service refuses a
 table for another provider and a leftover `[profiles]` section.
 
@@ -435,23 +435,27 @@ file's directory, so run it as the service's own user: the new file is created 0
 whoever runs the command. A failure before the swap leaves the old file untouched. `--check` runs the
 service's reader on the file as it stands and reads no input; it writes nothing and prints no
 token. Its first line, kept verbatim, says the reader accepts the file, not that the provider does.
-For `openai` it then prints one standing line from the file alone: not due for renewal, due for
+For `openai` and `xai` it then prints one standing line from the file alone: not due for renewal, due for
 renewal (exit 0, a running service renews it), or its expiry cannot be read with the cause (exit 5);
 the line gives the expiry in UTC. A login that holds no refresh token, is not a usable login,
 has expired, or has been due for 90 minutes or more (twice the 15-minute interval plus the one-hour
 backoff) without being renewed exits 4: sign in again. A sign-in verdict while a `.<file>.new` is
 present exits 3 instead, with the held-sibling sentence. A sibling beside a login
 that is not due or only due is not mentioned, because a renewal holds one routinely.
-`anthropic` and `xai` get the reader's verdict alone (0, 4 or 3). A host's setup
+`anthropic` gets the reader's verdict alone (0, 4 or 3). A host's setup
 reads 0 as no action and 4 as sign in; every other code is a problem to show.
 
-**Renewal of a Codex login.** The service renews the `[cli.openai]` login itself, from its own
-lifespan: one round at start, then every 15 minutes, and one hour after a round in which an
-attempt failed. An attempt checks the file and does nothing until the access token has less than
-half its lifetime left, which is about every 120 hours. Then it runs one tool-free turn of the
-pinned `codex` on a full copy in a private home under `[cli] working_root`, which costs one turn on
-the subscription, and swaps the result in through the same writer as the login command, only over
-the document it read. Runs keep their blanked copies and never renew.
+**Renewal of a Codex or Grok login.** The service renews the `[cli.openai]` and the `[cli.xai]`
+login itself, from its own lifespan: one round at start, then every 15 minutes, and one hour after
+a round in which an attempt of either provider failed. An attempt checks the file and does nothing
+until the access token has less than half its lifetime left, which is about every 120 hours for
+Codex and about every 3 hours for Grok, whose key lives 6 hours. Then it runs the pinned CLI on a
+full copy in a private home under `[cli] working_root` and swaps the result in through the same
+writer as the login command, only over the document it read. For Codex that is one tool-free turn
+of `codex`, which costs one turn on the subscription; for Grok it is `grok models`, which costs
+none. A login whose timing cannot be read is tried at most once per 24 hours for Codex and at
+every round for Grok. Runs keep their blanked copies and never renew; the renewal waits for no
+Grok run, so a Grok run that began before a renewal committed keeps the copy it was given.
 
 - **Write access to the directory.** The service needs write access to the directory that holds
   `token_file`, not to the file alone: the swap renames a sibling `.<file>.new` over it, and a
@@ -461,7 +465,7 @@ the document it read. Runs keep their blanked copies and never renew.
   included, and the logged refusal says to bind the directory that holds the file, read-write; the
   login command refuses it too. Bind the directory, never the file alone. A directory reached
   through a symlink does not count as a bind of the file.
-- **Stopping.** A stop waits for a renewal in flight: the 30 s turn deadline, 11.1 s settling and the
+- **Stopping.** A stop waits for a renewal in flight: the 30 s deadline, 11.1 s settling and the
   read-back and write, about 45 s at most. Uvicorn first waits for open requests, with no timeout, so
   this bound comes after they have finished; give the supervisor's stop at least 60 s beyond that. A
   kill sooner, or a forced second SIGINT, can leave `.<file>.new` beside the login file.
@@ -482,10 +486,12 @@ the document it read. Runs keep their blanked copies and never renew.
   - `commit refused` and `renewed login unreadable`: the renewal home stays under `[cli]
     working_root` and still holds a secret; the operator signs in again, then removes that home.
   - `refresh failed`, `written, not renewed` and the other failures: the next attempt is an hour
-    later. If they repeat for days, sign in again.
+    later. If they repeat for days, sign in again; a Grok key lives 6 hours, so a Grok login
+    whose renewals keep failing expires within hours, and `--check` asks for the sign-in 90
+    minutes after it fell due.
   - Cost. A failure before the turn costs none (sibling held, sibling not created, pool full, a
-    refused file), and a failed refresh costs none. A failure after a completed turn costs that
-    turn; the hourly backoff caps it at 24 a day.
+    refused file), and a failed refresh costs none. For Codex a failure after a completed turn
+    costs that turn, and the hourly backoff caps it at 24 a day; a Grok renewal costs no turn.
 - **The login command meanwhile.** The service holds `.<file>.new` for milliseconds every 15
   minutes and up to about 45 s during a renewal. `agent-runtime-service-login` then exits 3
   with the held-sibling sentence; run it again after the renewal.

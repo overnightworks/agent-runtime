@@ -13,20 +13,22 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 import pytest
-from tests.support.bounds import TEST_WAIT_SECONDS
+from tests.support.bounds import TEST_WAIT_SECONDS, within_the_bound
 from tests.support.codex_support import CODEX_BINARY, a_codex_access_token, a_renewing_fake_codex
 from tests.support.provider_test_support import a_codex_login, a_private_root
 from tests.support.service_support import _toml_lines
 from tests.support.service_table_support import CODEX_TABLE, write_login
 
+from agent_runtime.anchored_turn import CliProcessPool
 from agent_runtime.codex.run import AUTH_FILE_NAME, CODEX_CLI_PROCESS_POOL
 from agent_runtime.config import PrivateWorkingRoot
+from agent_runtime.grok.run import GROK_HOME_VARIABLE
 from agent_runtime.process import RUN_HOME_DIRECTORY_NAME, CliRunOutcome, CliRunReason
 from agent_runtime.secret_file import MAX_SECRET_FILE_BYTES
 from agent_runtime_service import renewal
@@ -38,6 +40,7 @@ from agent_runtime_service.renewal import (
     RenewalEntry,
     RenewalReport,
 )
+from agent_runtime_service.renewal_schedule import RenewalSchedule
 
 NOW = 1_800_000_000
 LIFETIME = 864_000
@@ -60,7 +63,24 @@ def a_login_issued_at(
     )
 
 
+GROK_LIFETIME = 6 * 3600
+GROK_HALF_LIFE = GROK_LIFETIME // 2
+
+
+def a_grok_login_issued_at(
+    issued_at: int,
+    *,
+    refresh_token: str = ORIGINAL_REFRESH,
+    access_key: str | None = None,
+) -> bytes:
+    """A Grok login whose key was issued at ``issued_at``; ``access_key`` replaces the key."""
+    key = access_key or a_codex_access_token({"iat": issued_at, "exp": issued_at + GROK_LIFETIME})
+    return json.dumps({"xai": {"key": key, "refresh_token": refresh_token}}).encode()
+
+
 DUE_ORIGINAL = a_login_issued_at(NOW - HALF_LIFE)
+DUE_GROK_LOGIN = a_grok_login_issued_at(NOW - GROK_HALF_LIFE)
+RENEWED_GROK_LOGIN = a_grok_login_issued_at(NOW, refresh_token=ROTATED_REFRESH)
 RENEWED_LOGIN = a_login_issued_at(NOW, refresh_token=ROTATED_REFRESH, subject="renewed")
 
 
@@ -69,14 +89,20 @@ def a_due_login_now() -> bytes:
     return a_login_issued_at(int(time.time()) - HALF_LIFE - 60)
 
 
+def a_due_grok_login_now() -> bytes:
+    return a_grok_login_issued_at(int(time.time()) - GROK_HALF_LIFE - 60)
+
+
+def a_renewed_grok_login_now() -> bytes:
+    return a_grok_login_issued_at(int(time.time()), refresh_token=ROTATED_REFRESH)
+
+
 def a_renewed_login_now() -> bytes:
     return a_login_issued_at(int(time.time()), refresh_token=ROTATED_REFRESH, subject="renewed")
 
 
 def a_codex_entry(deadline_seconds: float) -> RenewalEntry:
-    return RenewalEntry(
-        deadline_seconds, CODEX_RENEWAL.renewable, CODEX_RENEWAL.timing, CODEX_RENEWAL.run
-    )
+    return replace(CODEX_RENEWAL, deadline_seconds=deadline_seconds)
 
 
 class Clocks:
@@ -132,6 +158,7 @@ def an_arrangement(
     binary: Path = CODEX_BINARY,
     entry: RenewalEntry = CODEX_RENEWAL,
     token_file: Path | None = None,
+    provider: Provider = Provider.OPENAI,
 ) -> Arrangement:
     """A login directory holding ``source`` (or the given file as it is) and a private root."""
     if token_file is None:
@@ -141,7 +168,7 @@ def an_arrangement(
     root = a_private_root(tmp_path, "renewal-root")
     clocks = Clocks()
     renewer = ProviderRenewer(
-        Provider.OPENAI,
+        provider,
         entry,
         binary=binary,
         token_file=token_file,
@@ -196,7 +223,9 @@ class FakeRunner:
             confirm = _reaping(options["on_reaped"])
         self._held.append(confirm)
         if self.on_home is not None:
-            self.on_home(Path(child.environment["CODEX_HOME"]))
+            self.on_home(
+                Path(child.environment.get("CODEX_HOME") or child.environment[GROK_HOME_VARIABLE])
+            )
         if self.confirmation is Confirmation.NOW:
             self._held.pop()
             confirm()
@@ -256,18 +285,18 @@ def oversizing_the_login(home: Path) -> None:
     (home / AUTH_FILE_NAME).write_bytes(b"x" * (MAX_SECRET_FILE_BYTES + 1))
 
 
-def _taken_pool_slots() -> list[Any]:
-    """Take every free Codex pool slot."""
+def _taken_pool_slots(pool: CliProcessPool) -> list[Any]:
+    """Take every free slot of ``pool``."""
     slots = []
-    while (slot := CODEX_CLI_PROCESS_POOL.reserve()) is not None:
+    while (slot := pool.reserve()) is not None:
         slots.append(slot)
     return slots
 
 
 @contextmanager
-def pool_filled() -> Iterator[None]:
-    """Every Codex pool slot is held, those already held elsewhere included."""
-    slots = _taken_pool_slots()
+def pool_filled(pool: CliProcessPool = CODEX_CLI_PROCESS_POOL) -> Iterator[None]:
+    """Every slot of ``pool`` is held, those already held elsewhere included."""
+    slots = _taken_pool_slots(pool)
     try:
         yield
     finally:
@@ -277,7 +306,7 @@ def pool_filled() -> Iterator[None]:
 
 def held_pool_slots() -> int:
     """How many Codex pool slots are held now; compare it with the count before an attempt."""
-    slots = _taken_pool_slots()
+    slots = _taken_pool_slots(CODEX_CLI_PROCESS_POOL)
     for slot in slots:
         slot.release()
     return CODEX_CLI_PROCESS_POOL.limit - len(slots)
@@ -369,6 +398,16 @@ class RecordingPause:
         if len(self.seconds) >= self._stops_after:
             stopping.set()
             self.exhausted.set()
+
+
+def run_rounds(schedule: RenewalSchedule, pause: RecordingPause) -> None:
+    """Run the schedule until its recording pause has stopped it, then leave it."""
+
+    async def scenario() -> None:
+        async with schedule.running():
+            await within_the_bound(pause.exhausted.wait())
+
+    asyncio.run(scenario())
 
 
 @dataclass(frozen=True)

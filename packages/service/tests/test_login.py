@@ -289,9 +289,8 @@ def a_current_codex_login(last_refresh: str | None = None) -> bytes:
         (Provider.OPENAI, None),
         (Provider.OPENAI, "2001-01-01T00:00:00Z"),
         (Provider.ANTHROPIC, None),
-        (Provider.XAI, None),
     ],
-    ids=["codex", "codex-long-since-refreshed", "claude", "grok"],
+    ids=["codex", "codex-long-since-refreshed", "claude"],
 )
 def test_check_accepts_a_file_the_reader_accepts_without_reading_input_or_writing(
     tmp_path: Path, said: Said, provider: Provider, last_refresh: str | None
@@ -594,7 +593,6 @@ def test_interrupts_before_the_read_are_disregarded(
 
     status, _ = run(installation, stream, said, *extra)
 
-    assert status == (
-        EXIT_EXPIRY_UNKNOWN if (where, installation.provider) == ("check", Provider.OPENAI) else 0
-    )
+    renewing = installation.provider in (Provider.OPENAI, Provider.XAI)
+    assert status == (EXIT_EXPIRY_UNKNOWN if where == "check" and renewing else 0)
     assert recorded_signals() == []

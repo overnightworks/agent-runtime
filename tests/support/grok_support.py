@@ -100,29 +100,61 @@ def a_fake_grok(
     return binary
 
 
+STARTED_LOG = "grok-started"
+
+
+def children_started(directory: Path) -> int:
+    """How many times the renewing stand-in of ``directory`` was started."""
+    log = directory / STARTED_LOG
+    return len(log.read_text().splitlines()) if log.exists() else 0
+
+
 def a_renewing_fake_grok(
-    directory: Path, login: bytes, renewed: bytes, threshold_at_least: int
+    directory: Path,
+    login: bytes,
+    renewed: bytes,
+    threshold_at_least: int,
+    *,
+    source_rewritten_to: tuple[Path, bytes] | None = None,
+    held_until: Path | None = None,
 ) -> Path:
     """A stand-in for the pinned CLI on a renewal run: it renews the login it was given.
 
     A run checks that ``grok models`` is its whole argv, its home, a 0600 login byte-equal to
     ``login``, an early-invalidation threshold of at least ``threshold_at_least``
     and its empty stdin, with a distinct exit code for each wrong one. Then it copies ``renewed``
-    over the home's login.
+    over the home's login. Each start is logged for ``children_started``; with
+    ``source_rewritten_to`` (a file and its new document) it first writes that document to the file,
+    as another writer would while the child runs. With ``held_until`` (a file) it waits for the
+    file to exist before it renews.
     """
     expected = directory / "expected-login.json"
     expected.write_bytes(login)
     document = directory / "renewed-login.json"
     document.write_bytes(renewed)
+    rewriting = ""
+    if source_rewritten_to is not None:
+        file, newer = source_rewritten_to
+        newer_document = directory / "newer-login.json"
+        newer_document.write_bytes(newer)
+        rewriting = f"cat {shlex.quote(str(newer_document))} > {shlex.quote(str(file))}\n"
+    holding = (
+        ""
+        if held_until is None
+        else f"while [ ! -e {shlex.quote(str(held_until))} ]; do sleep 0.05; done\n"
+    )
     binary = directory / "grok"
     binary.write_text(
         "#!/bin/sh\n"
+        f"echo started >> {shlex.quote(str(directory / STARTED_LOG))}\n"
         '[ "$*" = models ] || exit 10\n'
         '[ "$GROK_HOME" = "$HOME" ] || exit 11\n'
         '[ "$(stat -c %a "$GROK_HOME/auth.json")" = 600 ] || exit 12\n'
         f'cmp -s {shlex.quote(str(expected))} "$GROK_HOME/auth.json" || exit 13\n'
         f'[ "${{GROK_AUTH_EARLY_INVALIDATION_SECS:-0}}" -ge {threshold_at_least} ] || exit 14\n'
         '[ -z "$(cat)" ] || exit 15\n'
+        f"{rewriting}"
+        f"{holding}"
         f'cat {shlex.quote(str(document))} > "$GROK_HOME/auth.json"\n'
     )
     binary.chmod(binary.stat().st_mode | stat.S_IXUSR)

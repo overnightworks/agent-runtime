@@ -38,10 +38,13 @@ from tests.support.service_login_support import (  # noqa: F401 - the fixtures a
     what_was_said,
 )
 from tests.support.service_renewal_support import (
+    GROK_HALF_LIFE,
+    GROK_LIFETIME,
     HALF_LIFE,
     LIFETIME,
     NOW,
     a_fake_runner,
+    a_grok_login_issued_at,
     a_renewed_login_now,
     an_arrangement,
     the_secrets_of,
@@ -331,7 +334,8 @@ def test_an_opaque_access_token_gives_the_expiry_exit_and_its_cause(
 
     assert status == EXIT_EXPIRY_UNKNOWN
     assert f"{LoginStanding.EXPIRY_UNKNOWN}: {UnreadableTiming.NOT_A_TOKEN}" in heard
-    assert "once a day" in heard
+    assert "once a day" not in heard
+    assert "the service still tries to renew it" in heard
 
 
 def test_a_login_without_a_refresh_token_asks_for_a_sign_in_before_it_is_due(
@@ -343,6 +347,55 @@ def test_a_login_without_a_refresh_token_asks_for_a_sign_in_before_it_is_due(
 
     assert status == EXIT_SIGN_IN_AGAIN
     assert f"{LoginStanding.NOT_RENEWABLE}, so the service cannot renew it" in heard
+
+
+# The Grok login stands like the Codex one: the service renews it, so ``--check`` shows its
+# standing with the same exits.
+
+
+def issued_by_grok_ago(seconds: int, **keywords: Any) -> bytes:
+    return a_grok_login_issued_at(int(time.time()) - seconds, **keywords)
+
+
+GROK_STANDINGS = {
+    "not-due": (issued_by_grok_ago(MARGIN_SECONDS), 0, LoginStanding.USABLE),
+    "due": (issued_by_grok_ago(GROK_HALF_LIFE + MARGIN_SECONDS), 0, LoginStanding.DUE),
+    "expired": (
+        issued_by_grok_ago(GROK_LIFETIME + MARGIN_SECONDS),
+        EXIT_SIGN_IN_AGAIN,
+        LoginStanding.EXPIRED,
+    ),
+    "not-renewed-in-time": (
+        issued_by_grok_ago(GROK_HALF_LIFE + RENEWAL_WINDOW_SECONDS + MARGIN_SECONDS),
+        EXIT_SIGN_IN_AGAIN,
+        "not renewed",
+    ),
+    "no-refresh-token": (
+        issued_by_grok_ago(MARGIN_SECONDS, refresh_token=""),
+        EXIT_SIGN_IN_AGAIN,
+        LoginStanding.NOT_RENEWABLE,
+    ),
+    "unreadable": (
+        a_grok_login_issued_at(0, access_key="opaque-key"),
+        EXIT_EXPIRY_UNKNOWN,
+        LoginStanding.EXPIRY_UNKNOWN,
+    ),
+}
+
+
+@pytest.mark.parametrize("case", GROK_STANDINGS)
+def test_a_grok_login_stands_with_the_exits_of_a_codex_login(
+    tmp_path: Path, said: Said, case: str
+) -> None:
+    document, expected_status, expected_text = GROK_STANDINGS[case]
+    installation = an_installation(tmp_path, Provider.XAI)
+    write_login(installation.login, document)
+
+    status, heard = checked(installation, said)
+
+    assert status == expected_status
+    assert str(expected_text) in heard
+    assert "once a day" not in heard
 
 
 # A sibling beside the login: only a sign-in verdict is turned into exit 3.
