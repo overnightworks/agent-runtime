@@ -114,6 +114,7 @@ source_modules =
     agent_runtime_client.run_stream
     agent_runtime_client.sse
     agent_runtime_client.tools
+    agent_runtime_client.turn_events
     agent_runtime_client.wire
 forbidden_modules =
     agent_runtime_client.mcp_server

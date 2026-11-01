@@ -1,7 +1,7 @@
 """The port through which an admitted run reaches a provider.
 
-A runner turns one admitted run into the provider core's in-process turn
-events (``agent_runtime_client.turn_events``); the service maps those onto the wire.
+A runner turns one admitted run into the client's in-process turn events
+(``agent_runtime_client.turn_events``); the service maps those onto the wire.
 Each route has at most one runner. Production always installs the CLI runner and installs
 the API runner when ``[api]`` is set; an admitted run always has its route's runner.
 
