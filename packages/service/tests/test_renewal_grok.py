@@ -1,8 +1,9 @@
 """One renewal attempt of the dedicated Grok login: what the Grok entry shares with the Codex
 one and where it differs, driven through the real ``ProviderRenewer``.
 
-"Real child" rows run the renewing stand-in CLI through the real bounded runner; the others use
-the fake runner of ``service_renewal_support``.
+Every row runs the renewing stand-in CLI through the real bounded runner, except the unreadable
+timing row, which shares its arrangement with the Codex entry and uses the fake runner of
+``service_renewal_support``.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import os
 from pathlib import Path
 
 import pytest
-from tests.support.grok_support import a_renewing_fake_grok
+from tests.support.grok_support import a_renewing_fake_grok, children_started
 from tests.support.provider_test_support import a_codex_login
 from tests.support.service_login_support import held_swap
 from tests.support.service_renewal_support import (  # noqa: F401 - the autouse fixture
@@ -33,7 +34,6 @@ from tests.support.service_renewal_support import (  # noqa: F401 - the autouse 
     the_held_ends_confirmed,
     writing,
 )
-from tests.support.service_table_support import write_login
 
 from agent_runtime.grok.run import GROK_CLI_PROCESS_POOL
 from agent_runtime.grok_login import blanked_copy
@@ -52,12 +52,24 @@ QUARTER_HOUR_SECONDS = 15 * 60
 
 
 def a_grok_arrangement(
-    tmp_path: Path, source: bytes = DUE_GROK_LOGIN, *, renewed: bytes | None = None
+    tmp_path: Path,
+    source: bytes = DUE_GROK_LOGIN,
+    *,
+    renewed: bytes = RENEWED_GROK_LOGIN,
+    rewritten_to: bytes | None = None,
 ) -> Arrangement:
-    """A Grok login under a renewer; with ``renewed`` the CLI is the stand-in that writes it."""
-    if renewed is None:
-        return an_arrangement(tmp_path, source, entry=GROK_RENEWAL, provider=Provider.XAI)
-    binary = a_renewing_fake_grok(tmp_path, source, renewed, GROK_HALF_LIFE)
+    """A Grok login under a renewer whose CLI is the stand-in that writes ``renewed``.
+
+    With ``rewritten_to`` the stand-in first writes that document to the login, as another writer.
+    """
+    login = tmp_path / "login" / LOGIN_NAME
+    binary = a_renewing_fake_grok(
+        tmp_path,
+        source,
+        renewed,
+        GROK_HALF_LIFE,
+        source_rewritten_to=None if rewritten_to is None else (login, rewritten_to),
+    )
     return an_arrangement(
         tmp_path, source, binary=binary, entry=GROK_RENEWAL, provider=Provider.XAI
     )
@@ -82,14 +94,13 @@ def test_a_due_grok_login_is_renewed_over_the_document_read_and_its_home_is_remo
 
 
 def test_a_grok_login_not_yet_due_starts_no_child_and_leaves_no_sibling(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     arrangement = a_grok_arrangement(tmp_path, a_grok_login_issued_at(NOW))
-    runner = a_fake_runner(monkeypatch)
 
     report = logged_once(caplog, arrangement.renewer.attempt)
 
-    assert (report.outcome, runner.calls) == (RenewalOutcome.NOT_DUE, 0)
+    assert (report.outcome, children_started(tmp_path)) == (RenewalOutcome.NOT_DUE, 0)
     assert arrangement.source_is_intact()
     assert (arrangement.directory_holds(), arrangement.trees()) == ([LOGIN_NAME], [])
 
@@ -180,16 +191,10 @@ def test_a_copy_the_cli_left_or_blanked_leaves_the_source_intact(
 
 
 def test_a_source_rewritten_while_the_child_runs_keeps_its_newer_document(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    arrangement = a_grok_arrangement(tmp_path)
     newer = a_grok_login_issued_at(NOW - 5, refresh_token="newer-refresh")
-
-    def rewriting(home: Path) -> None:
-        writing(RENEWED_GROK_LOGIN)(home)
-        write_login(arrangement.token_file, newer)
-
-    a_fake_runner(monkeypatch, on_home=rewriting)
+    arrangement = a_grok_arrangement(tmp_path, rewritten_to=newer)
 
     report = logged_once(caplog, arrangement.renewer.attempt)
 
@@ -199,34 +204,32 @@ def test_a_source_rewritten_while_the_child_runs_keeps_its_newer_document(
 
 
 def test_a_sibling_held_by_another_writer_blocks_a_grok_attempt_and_is_left_as_it_was(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     arrangement = a_grok_arrangement(tmp_path)
     holder = held_swap(arrangement.token_file)
     held = os.lstat(arrangement.sibling)
-    runner = a_fake_runner(monkeypatch)
 
     report = logged_once(caplog, arrangement.renewer.attempt)
 
     assert report.outcome is RenewalOutcome.SIBLING_HELD
     assert report.refusal == held_sibling_sentence(arrangement.sibling)
-    assert (os.lstat(arrangement.sibling), runner.calls) == (held, 0)
+    assert (os.lstat(arrangement.sibling), children_started(tmp_path)) == (held, 0)
     holder.abandon()
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root writes into any directory")
 def test_a_directory_that_cannot_hold_a_sibling_leaves_the_grok_source_intact(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     arrangement = a_grok_arrangement(tmp_path)
-    runner = a_fake_runner(monkeypatch)
     arrangement.token_file.parent.chmod(0o500)
     try:
         report = logged_once(caplog, arrangement.renewer.attempt)
     finally:
         arrangement.token_file.parent.chmod(0o700)
 
-    assert (report.outcome, runner.calls) == (RenewalOutcome.RESERVE_REFUSED, 0)
+    assert (report.outcome, children_started(tmp_path)) == (RenewalOutcome.RESERVE_REFUSED, 0)
     assert arrangement.source_is_intact()
 
 
@@ -234,13 +237,12 @@ def test_a_directory_that_cannot_hold_a_sibling_leaves_the_grok_source_intact(
 
 
 def test_a_full_grok_pool_fails_the_attempt_without_a_child(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     arrangement = a_grok_arrangement(tmp_path)
-    runner = a_fake_runner(monkeypatch)
 
     with pool_filled(GROK_CLI_PROCESS_POOL):
         report = logged_once(caplog, arrangement.renewer.attempt)
 
-    assert (report.outcome, runner.calls) == (RenewalOutcome.POOL_FULL, 0)
+    assert (report.outcome, children_started(tmp_path)) == (RenewalOutcome.POOL_FULL, 0)
     assert (arrangement.source_is_intact(), arrangement.trees()) == (True, [])
