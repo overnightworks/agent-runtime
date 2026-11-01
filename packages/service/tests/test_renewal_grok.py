@@ -15,9 +15,11 @@ from tests.support.grok_support import a_renewing_fake_grok
 from tests.support.provider_test_support import a_codex_login
 from tests.support.service_login_support import held_swap
 from tests.support.service_renewal_support import (  # noqa: F401 - the autouse fixture
+    DUE_GROK_LOGIN,
     GROK_HALF_LIFE,
     LOGIN_NAME,
     NOW,
+    RENEWED_GROK_LOGIN,
     ROTATED_REFRESH,
     Arrangement,
     RecordingPause,
@@ -36,7 +38,7 @@ from tests.support.service_table_support import write_login
 from agent_runtime.grok.run import GROK_CLI_PROCESS_POOL
 from agent_runtime.grok_login import blanked_copy
 from agent_runtime.login_timing import UnreadableTiming
-from agent_runtime_service.config import Provider, read_grok_login
+from agent_runtime_service.config import Provider
 from agent_runtime_service.login_file import held_sibling_sentence
 from agent_runtime_service.renewal import (
     CODEX_RENEWAL,
@@ -46,13 +48,11 @@ from agent_runtime_service.renewal import (
 )
 from agent_runtime_service.renewal_schedule import RENEWAL_BACKOFF_SECONDS, RenewalSchedule
 
-DUE_GROK = a_grok_login_issued_at(NOW - GROK_HALF_LIFE)
-RENEWED_GROK = a_grok_login_issued_at(NOW, refresh_token=ROTATED_REFRESH)
 QUARTER_HOUR_SECONDS = 15 * 60
 
 
 def a_grok_arrangement(
-    tmp_path: Path, source: bytes = DUE_GROK, *, renewed: bytes | None = None
+    tmp_path: Path, source: bytes = DUE_GROK_LOGIN, *, renewed: bytes | None = None
 ) -> Arrangement:
     """A Grok login under a renewer; with ``renewed`` the CLI is the stand-in that writes it."""
     if renewed is None:
@@ -69,12 +69,12 @@ def a_grok_arrangement(
 def test_a_due_grok_login_is_renewed_over_the_document_read_and_its_home_is_removed(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    arrangement = a_grok_arrangement(tmp_path, renewed=RENEWED_GROK)
+    arrangement = a_grok_arrangement(tmp_path, renewed=RENEWED_GROK_LOGIN)
 
     report = logged_once(caplog, arrangement.renewer.attempt)
 
     assert report.outcome is RenewalOutcome.RENEWED
-    assert arrangement.token_file.read_bytes() == RENEWED_GROK
+    assert arrangement.token_file.read_bytes() == RENEWED_GROK_LOGIN
     assert (arrangement.directory_holds(), arrangement.trees()) == ([LOGIN_NAME], [])
 
 
@@ -156,8 +156,8 @@ def test_a_result_that_is_written_but_not_renewed_is_committed_and_the_round_bac
 # Matrix 19: a copy the CLI left or blanked is never committed.
 
 NOT_COMMITTED = {
-    "copy-left-as-it-was": (DUE_GROK, RenewalOutcome.REFRESH_FAILED),
-    "blanked-result": (blanked_copy(DUE_GROK), RenewalOutcome.MALFORMED_RESULT),
+    "copy-left-as-it-was": (DUE_GROK_LOGIN, RenewalOutcome.REFRESH_FAILED),
+    "blanked-result": (blanked_copy(DUE_GROK_LOGIN), RenewalOutcome.MALFORMED_RESULT),
 }
 
 
@@ -186,7 +186,7 @@ def test_a_source_rewritten_while_the_child_runs_keeps_its_newer_document(
     newer = a_grok_login_issued_at(NOW - 5, refresh_token="newer-refresh")
 
     def rewriting(home: Path) -> None:
-        writing(RENEWED_GROK)(home)
+        writing(RENEWED_GROK_LOGIN)(home)
         write_login(arrangement.token_file, newer)
 
     a_fake_runner(monkeypatch, on_home=rewriting)
@@ -244,29 +244,3 @@ def test_a_full_grok_pool_fails_the_attempt_without_a_child(
 
     assert (report.outcome, runner.calls) == (RenewalOutcome.POOL_FULL, 0)
     assert (arrangement.source_is_intact(), arrangement.trees()) == (True, [])
-
-
-# Matrix 22: a run reads the whole old copy during the hold and the whole new one after it.
-
-
-def test_a_grok_run_reads_the_old_blanked_copy_during_the_hold_and_the_new_one_after(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
-) -> None:
-    arrangement = a_grok_arrangement(tmp_path)
-    during: list[tuple[bytes | None, list[str]]] = []
-
-    def reading(home: Path) -> None:
-        during.append(
-            (
-                read_grok_login(arrangement.token_file).blanked_document,
-                arrangement.directory_holds(),
-            )
-        )
-        writing(RENEWED_GROK)(home)
-
-    a_fake_runner(monkeypatch, on_home=reading)
-
-    logged_once(caplog, arrangement.renewer.attempt)
-
-    assert during == [(blanked_copy(DUE_GROK), arrangement.directory_holds_login_and_sibling())]
-    assert read_grok_login(arrangement.token_file).blanked_document == blanked_copy(RENEWED_GROK)

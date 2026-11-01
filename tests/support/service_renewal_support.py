@@ -79,6 +79,8 @@ def a_grok_login_issued_at(
 
 
 DUE_ORIGINAL = a_login_issued_at(NOW - HALF_LIFE)
+DUE_GROK_LOGIN = a_grok_login_issued_at(NOW - GROK_HALF_LIFE)
+RENEWED_GROK_LOGIN = a_grok_login_issued_at(NOW, refresh_token=ROTATED_REFRESH)
 RENEWED_LOGIN = a_login_issued_at(NOW, refresh_token=ROTATED_REFRESH, subject="renewed")
 
 
