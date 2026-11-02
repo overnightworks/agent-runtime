@@ -259,6 +259,27 @@ is a named gap, and an app shows that it did not create a picture. Closing the s
 HTTP call, and the vendor may still bill it. Which sizes exist is the gateway's: the client
 checks the size's shape only.
 
+#### The model list
+
+`await list_gateway_models(config.gateway, *, transport=None)` (in `agent_runtime_client.backend.gateway`) answers a `GatewayModels`
+for an admin page, which has no turn. It sends a bare `GET <origin>/v1/models` with a text turn's client rules and
+`Authorization: Bearer <key>` alone: no body, no query and no other header of its own. The key file is read per call.
+The whole call has one deadline of 10 seconds and a reply body bound of `MAX_EVENT_BYTES`.
+
+`GatewayModels.text` and `.image` hold the `data[].id` names of each kind in the gateway's order; an id that is no
+`text/…` or `image/…` model name is not offered and is no error. `for_agent(agent)` answers the names of that
+`AgentDefinition`'s kind, the ones its `request(messages, model=…)` accepts.
+
+Every failure raises the one `ModelListUnavailable`, whose `detail` (`key_unusable`, `gateway_refused`,
+`gateway_failed`, `connection_failed`, `malformed_reply` or `timed_out`) is a closed label; neither the key nor any text
+of the reply is in it. That covers an unusable key file, a 4xx (a 429 too), a 5xx or redirect, a lost connection, the
+deadline, and a body that is over its bound or is not a JSON object whose `data` is a list of objects with a text `id`.
+
+An app sets an agent's model with `agent.request(messages, model=name)`; without `model` the file's model runs. A name
+of the wrong kind (a picture agent needs `image/…`, any other agent `text/…`) raises `ValueError` before any request.
+The gateway may later withdraw a name an app stored: that turn ends `failed: provider_unavailable` and the client does
+not fall back to the file's model.
+
 `GatewayBackend`'s constructor sets the `httpx2` and `httpcore2` loggers to WARNING for the whole process, overriding an app's own DEBUG setting there.
 
 ## Agent files
@@ -267,7 +288,7 @@ An app declares its agents as Claude Code subagent files,
 `src/<pkg>/agents/<name>.md`, that `agent_runtime_client.agents.load_agent` reads into
 an `AgentDefinition`: YAML front matter (`name`, `description`, `tools`, `model`,
 `maxDurationSeconds`, `maxToolCalls`, `picture`, plus the extension `appRoles`, exactly `[admin]`
-or `[admin, user]`) and the Markdown body as the prompt. `model` is a `text/<model>` name
+or `[admin, user]`) and the Markdown body as the prompt. `model` is a `text/<model>` name for a text agent
 (lower-case letters, digits, `.` and `-`) and `maxDurationSeconds` a positive integer; both are
 required. `picture: {size: <width>x<height>}` (positive whole numbers, nothing else in the mapping) makes a picture agent: its `model` must be an `image/<model>` name, and it selects no `tools` and carries no `maxToolCalls`; an agent without `picture` must name a `text/…` model. `maxToolCalls` is a positive integer, required exactly when `tools` is not empty and refused when it is. `AgentFileError` names
 the file and the field. `offered_to(role)` is a display filter, not the

@@ -3,17 +3,17 @@
 An agent file is Claude Code's subagent format (YAML front matter between two
 ``---`` lines, read as YAML 1.2 by ruamel.yaml, then the prompt as Markdown) with one
 extra key, ``appRoles`` (decision record 0001, H9), and two required ones: ``model``, a
-``text/<model>`` name, and ``maxDurationSeconds``. ``maxToolCalls`` is required exactly when
-``tools`` is not empty. ``picture: {size: <width>x<height>}`` makes a picture agent: its
-``model`` is an ``image/<model>`` name and it selects no tools. ``offered_to`` is a display
-filter for the app's own UI; the boundary is the
-gateway's group check.
+``text/<model>`` name for a text agent, and ``maxDurationSeconds``. ``maxToolCalls`` is required
+exactly when ``tools`` is not empty. ``picture: {size: <width>x<height>}`` makes a picture
+agent: its ``model`` is an ``image/<model>`` name and it selects no tools. ``offered_to`` is a
+display filter for the app's own UI; the boundary is the gateway's group check.
 """
 
 from __future__ import annotations
 
 import io
 import re
+from enum import StrEnum
 from importlib.resources.abc import Traversable
 from typing import Annotated, Final, Self
 
@@ -49,6 +49,22 @@ _AGENT_NAME: Final = TypeAdapter(AgentName)
 _YAML: Final = YAML(typ="safe", pure=True)
 _PICTURE_SIZE: Final = re.compile(r"[1-9]\d*x[1-9]\d*", re.ASCII)
 _DUPLICATE_KEY: Final = re.compile(r'found duplicate key "(.*?)" with value')
+
+
+class ModelKind(StrEnum):
+    """What a gateway model makes: the name's prefix, and so the kind of agent that may run it."""
+
+    TEXT = "text"
+    IMAGE = "image"
+
+
+def model_kind_of(name: GatewayModelName) -> ModelKind:
+    """The one reading of a model name's kind; the name is already a ``GatewayModelName``."""
+    return ModelKind(name.partition("/")[0])
+
+
+def _agent_model_kind(*, is_picture: bool) -> ModelKind:
+    return ModelKind.IMAGE if is_picture else ModelKind.TEXT
 
 
 class AgentFileError(ValueError):
@@ -161,14 +177,19 @@ class AgentDefinition(BaseModel):
             raise ValueError(f"role must be 'admin' or 'user', not {role!r}") from error
         return checked_role in self.roles
 
+    @property
+    def model_kind(self) -> ModelKind:
+        return _agent_model_kind(is_picture=self.picture_size is not None)
+
     def request(
         self, messages: list[TurnMessage], *, model: GatewayModelName | None = None
     ) -> TurnRequest:
         """The request that starts a run of this agent over these messages.
 
-        ``model`` overrides the file's model for this run.
+        ``model`` overrides the file's model for this run; it must be of the agent's kind
+        (``image/…`` for a picture agent), else ``ValueError``.
         """
-        return TurnRequest(
+        request = TurnRequest(
             agent=self.name,
             turn=Turn(system=self.prompt, messages=messages),
             roles=self.roles,
@@ -178,6 +199,9 @@ class AgentDefinition(BaseModel):
             max_tool_calls=self.max_tool_calls,
             picture_size=self.picture_size,
         )
+        if model_kind_of(request.model) is not self.model_kind:
+            raise ValueError(f"model: must be a {self.model_kind}/<model> name")
+        return request
 
 
 def load_agent(source: Traversable, declarations: list[ToolDeclaration]) -> AgentDefinition:
@@ -217,8 +241,8 @@ def load_agent(source: Traversable, declarations: list[ToolDeclaration]) -> Agen
 
 
 def _refuse_model_of_the_wrong_kind(file_name: str, front_matter: _FrontMatter) -> None:
-    kind = "text" if front_matter.picture is None else "image"
-    if not front_matter.model.startswith(f"{kind}/"):
+    kind = _agent_model_kind(is_picture=front_matter.picture is not None)
+    if model_kind_of(front_matter.model) is not kind:
         raise AgentFileError(f"{file_name}: model: must be a {kind}/<model> name")
 
 
