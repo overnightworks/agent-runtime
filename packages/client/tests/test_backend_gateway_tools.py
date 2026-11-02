@@ -9,6 +9,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -83,7 +84,7 @@ class Shop:
         *replies: Reply,
         max_tool_calls: int = 5,
         selected: tuple[str, ...] | None = None,
-        max_duration_seconds: float = 30,
+        max_duration_seconds: int = 30,
         consumer_pause_seconds: float = 0,
     ) -> tuple[list, TurnStopped | None, FakeGateway]:
         gateway = FakeGateway(*replies)
@@ -107,18 +108,17 @@ async def _noted() -> ToolOutcome:
 
 
 def a_request(
-    tools: list[HandTool], max_tool_calls: int, max_duration_seconds: float = 30
+    tools: list[HandTool], max_tool_calls: int, max_duration_seconds: int = 30
 ) -> TurnRequest:
-    request = TurnRequest(
+    return TurnRequest(
         agent="helper",
         turn=Turn(system="Answer briefly.", messages=[TurnMessage(role=TurnRole.USER, text="Hi")]),
         roles=["admin", "user"],
         tools=tuple(tool.declaration for tool in tools),
         model="text/standin",
-        max_duration_seconds=30,
+        max_duration_seconds=max_duration_seconds,
         max_tool_calls=max_tool_calls if tools else None,
     )
-    return request.model_copy(update={"max_duration_seconds": max_duration_seconds})
 
 
 def a_person() -> TurnPerson:
@@ -272,7 +272,6 @@ def test_an_error_outcome_reaches_the_model_and_the_turn_goes_on(shop):
 
     assert stopped is None
     assert events[1] == ToolResultEvent(tool_use_id="c1", content="no such note", is_error=True)
-    assert sent(gateway, 1)["messages"][-1]["content"] != "noted"
     assert "no such note" in sent(gateway, 1)["messages"][-1]["content"]
     assert events[-1] == FinalEvent(text="Sorry.")
 
@@ -297,8 +296,14 @@ def test_the_model_reads_an_error_outcome_differently_from_a_success_of_the_same
 
 @pytest.mark.parametrize(
     "unusable",
-    [ToolOutcome("bad \udc80 name", is_error=False), None],
-    ids=["lone-surrogate", "no-outcome"],
+    [
+        ToolOutcome("bad \udc80 name", is_error=False),
+        None,
+        ToolOutcome("ok", is_error=None),
+        ToolOutcome("ok", is_error="maybe"),
+        SimpleNamespace(content="done"),
+    ],
+    ids=["lone-surrogate", "no-outcome", "error-flag-none", "error-flag-text", "no-error-flag"],
 )
 def test_an_unusable_outcome_of_a_side_effecting_handler_is_an_error_and_the_turn_goes_on(
     shop, unusable
@@ -421,6 +426,24 @@ def test_a_deadline_that_passed_while_the_app_took_the_call_event_starts_no_hand
     assert (shop.seen, [type(event) for event in events], len(gateway.requests)) == (
         [],
         [ToolCallEvent],
+        1,
+    )
+
+
+def test_a_deadline_that_passed_while_the_app_took_the_result_event_sends_no_next_request(shop):
+    shop.add_tool("write", effect=ToolEffect.SIDE_EFFECTING)
+
+    events, stopped, gateway = shop.run(
+        tool_round(tool_call("c1", "write", {})),
+        completion("never"),
+        max_duration_seconds=1,
+        consumer_pause_seconds=0.6,
+    )
+
+    assert ending(stopped) == LIMIT_EXCEEDED
+    assert stopped.after_side_effect
+    assert ([type(event) for event in events], len(gateway.requests)) == (
+        [ToolCallEvent, ToolResultEvent],
         1,
     )
 

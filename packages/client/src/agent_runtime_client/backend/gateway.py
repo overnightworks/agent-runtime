@@ -267,6 +267,8 @@ async def _serve(handler: HandToolHandler, person: TurnPerson, call: _Call) -> T
 
 
 def _bounded(outcome: ToolOutcome) -> ToolOutcome:
+    if not isinstance(outcome, ToolOutcome) or not isinstance(outcome.is_error, bool):
+        raise TypeError("a handler returned something other than a ToolOutcome")
     if len(outcome.content.encode("utf-8")) > MAX_EVENT_BYTES:
         return ToolOutcome(_RESULT_TOO_LARGE_TEXT, is_error=True)
     return outcome
