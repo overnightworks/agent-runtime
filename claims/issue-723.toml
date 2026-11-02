@@ -3,6 +3,6 @@ agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
 role = "builder"
 base = "bea5daf5cbfdf3a93eb09b7c8ee64853ebd536af"
 branch = "claude/issue-723-ar-m-an-app-lists-the-gateway-s-models-a"
-scope = ["docs/MIGRATING.md", "docs/wire.md", "packages/client/src/agent_runtime_client/agents.py", "packages/client/src/agent_runtime_client/backend/fake_gateway.py", "packages/client/src/agent_runtime_client/backend/gateway.py", "packages/client/tests/test_agents_file.py", "packages/client/tests/test_backend_gateway_models.py", "quality/baseline.toml", "tests/support/gateway_turn_support.py"]
+scope = ["docs/MIGRATING.md", "docs/wire.md", "packages/client/src/agent_runtime_client/agents.py", "packages/client/src/agent_runtime_client/backend/fake_gateway.py", "packages/client/src/agent_runtime_client/backend/gateway.py", "packages/client/src/agent_runtime_client/turn.py", "packages/client/tests/test_agents_file.py", "packages/client/tests/test_backend_gateway_models.py", "packages/client/tests/test_backend_gateway_pictures.py", "quality/baseline.toml", "tests/support/gateway_turn_support.py"]
 opened_commit = "15c915e379e82b417bb84f1c0e8e993da3dffc53"
 whole_reason = "The list call, its fake and the override's kind check share one contract and have no caller apart."
