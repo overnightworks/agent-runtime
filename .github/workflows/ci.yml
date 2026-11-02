@@ -203,7 +203,7 @@ jobs:
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           enable-cache: true
-          cache-dependency-glob: packages/service/tests/fixtures/keycloak/requirements.txt
+          cache-dependency-glob: packages/service/tests/fixtures/keycloak/*.txt
 
       - name: Start Keycloak with the test realm
         run: |
@@ -214,13 +214,12 @@ jobs:
       - name: Install the job's hash-locked environment
         run: |
           uv venv --python 3.14 "$RUNNER_TEMP/venv"
-          requirements=packages/service/tests/fixtures/keycloak/requirements.txt
-          grep -v '^overnightworks-webauth @ git+' "$requirements" > "$RUNNER_TEMP/hashed-requirements.txt"
           uv pip install --python "$RUNNER_TEMP/venv/bin/python" \
-            --require-hashes --no-build -r "$RUNNER_TEMP/hashed-requirements.txt"
+            --require-hashes --no-build \
+            -r packages/service/tests/fixtures/keycloak/requirements.txt
           # The git commit sha is the integrity pin; hash mode refuses git sources.
           uv pip install --python "$RUNNER_TEMP/venv/bin/python" --no-deps \
-            "$(grep '^overnightworks-webauth @ git+' "$requirements")"
+            -r packages/service/tests/fixtures/keycloak/webauth-pin.txt
 
       - name: Wait until the test realm is served
         run: |
