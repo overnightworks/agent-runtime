@@ -11,16 +11,17 @@ from pathlib import Path
 
 import httpx2
 import pytest
-from packages.client.tests.test_backend_gateway_tools import Shop, SkewedLoop, a_person, ending
 
 from agent_runtime_client.agents import TurnRequest
 from agent_runtime_client.backend import TurnPerson, TurnStopKind, TurnStopped
 from agent_runtime_client.backend.fake_gateway import FakeGateway, Reply, completion, picture
 from agent_runtime_client.backend.gateway import GatewayBackend
+from agent_runtime_client.config import AgentConfig
 from agent_runtime_client.turn import (
     MAX_EVENT_BYTES,
     MAX_RUN_FILES_BYTES,
     FailureCode,
+    Principal,
     RejectionCode,
     RunFile,
     Turn,
@@ -35,6 +36,8 @@ UNAVAILABLE = (TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE)
 LIMIT_EXCEEDED = (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
 BUSY = (TurnStopKind.REFUSED, RejectionCode.BUSY)
 TURN_BUDGET_SECONDS = 30
+API_GROUP = "/apps/example"
+GATEWAY_ORIGIN = "http://gateway.test"
 
 
 def a_picture_request(**changes) -> TurnRequest:
@@ -51,6 +54,27 @@ def a_picture_request(**changes) -> TurnRequest:
     return TurnRequest(**{**fields, **changes})
 
 
+class SkewedLoop(asyncio.SelectorEventLoop):
+    """An event loop whose clock a transport can move on, so a deadline needs no waiting."""
+
+    skew_seconds: float = 0
+
+    def time(self) -> float:
+        return super().time() + self.skew_seconds
+
+
+def ending(stopped: TurnStopped | None):
+    return None if stopped is None else (stopped.kind, stopped.code)
+
+
+def a_person(groups: frozenset[str] = frozenset({API_GROUP}), role: str = "user") -> TurnPerson:
+    async def member_of() -> frozenset[str]:
+        return groups
+
+    principal = Principal(iss="https://issuer.example", sub="s-1")
+    return TurnPerson(principal=principal, role=role, groups=member_of)
+
+
 def a_json_reply(body: object) -> Reply:
     return Reply(body=json.dumps(body).encode())
 
@@ -61,13 +85,23 @@ def an_entry(content: bytes = b"PNG", **extra) -> dict:
 
 @dataclass
 class Studio:
-    """The app side of a picture turn: its configuration, its person and the gateway."""
+    """The app side of a picture turn: its key file, its person and the gateway."""
 
-    shop: Shop
+    directory: Path
+
+    def config(self) -> AgentConfig:
+        (self.directory / "key").write_text("stand-in-key-0001\n")
+        return AgentConfig.model_validate(
+            {
+                "backend": "litellm",
+                "api_group": API_GROUP,
+                "gateway": {"origin": GATEWAY_ORIGIN, "key_file": str(self.directory / "key")},
+            }
+        )
 
     def run(self, *replies: Reply, request: TurnRequest | None = None, person=None, transport=None):
         gateway = FakeGateway(*replies) if transport is None else transport
-        backend = GatewayBackend(self.shop.config(), transport=gateway)
+        backend = GatewayBackend(self.config(), transport=gateway)
         with asyncio.Runner(loop_factory=SkewedLoop) as runner:
             events, stopped = runner.run(
                 _turn(backend, request or a_picture_request(), person or a_person())
@@ -88,7 +122,7 @@ async def _turn(backend: GatewayBackend, request: TurnRequest, person: TurnPerso
 
 @pytest.fixture
 def studio(tmp_path: Path) -> Studio:
-    return Studio(Shop(tmp_path))
+    return Studio(tmp_path)
 
 
 def test_the_call_is_one_post_to_the_images_path_with_the_headers_of_a_text_turn(studio):
@@ -288,7 +322,7 @@ def test_a_call_past_the_deadline_is_limit_exceeded_and_cancelled_with_no_retry(
 
 def test_closing_the_stream_before_it_is_taken_sends_no_request(studio):
     gateway = FakeGateway(picture(b"PNG"))
-    backend = GatewayBackend(studio.shop.config(), transport=gateway)
+    backend = GatewayBackend(studio.config(), transport=gateway)
 
     async def close_untaken() -> None:
         await backend.run(a_picture_request(), a_person()).aclose()
@@ -300,7 +334,7 @@ def test_closing_the_stream_before_it_is_taken_sends_no_request(studio):
 
 def test_closing_the_stream_while_the_call_is_open_cancels_it_and_sends_no_other(studio):
     slow = _Hanging()
-    backend = GatewayBackend(studio.shop.config(), transport=slow)
+    backend = GatewayBackend(studio.config(), transport=slow)
 
     async def close_open_call() -> None:
         stream = backend.run(a_picture_request(), a_person())
@@ -318,18 +352,11 @@ def test_closing_the_stream_while_the_call_is_open_cancels_it_and_sends_no_other
     assert (slow.attempts, slow.cancelled) == (1, True)
 
 
-def a_person_outside(*, groups: frozenset[str], role: str = "user") -> TurnPerson:
-    async def member_of() -> frozenset[str]:
-        return groups
-
-    return TurnPerson(principal=a_person().principal, role=role, groups=member_of)
-
-
 @pytest.mark.parametrize(
     ("person", "expected"),
     [
-        (a_person_outside(groups=frozenset({"/apps/other"})), RejectionCode.NOT_ENABLED),
-        (a_person_outside(groups=frozenset()), RejectionCode.NOT_ENABLED),
+        (a_person(frozenset({"/apps/other"})), RejectionCode.NOT_ENABLED),
+        (a_person(frozenset()), RejectionCode.NOT_ENABLED),
     ],
 )
 def test_a_person_outside_the_api_group_sends_no_request(studio, person, expected):
