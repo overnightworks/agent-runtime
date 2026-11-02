@@ -2,8 +2,8 @@
 
 The proof is webauth's ``ServiceCallerCheck`` (``webauth.service_callers``), built once per
 process from ``[identity]``, the registered apps of ``[apps]`` and the ruled constants of
-decision record 0001 (U1'): the realm role ``agent-workload``. It owns the one verifier and the order of the refusals:
-every refusal about the tokens that is ``unavailable`` or ``unauthorized`` comes before any
+decision record 0001 (U1'): the realm role ``agent-workload``. It owns the one verifier and
+the order of the refusals: every refusal about the tokens that is ``unavailable`` or ``unauthorized`` comes before any
 ``forbidden`` one (decision record 0001, the order of checks). This module maps each refusal
 by its class: a key set that cannot be fetched is ``unavailable``; a missing or unverifiable
 token, or a subject or group claim webauth cannot read, is ``unauthorized``; tokens that do
