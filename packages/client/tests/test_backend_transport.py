@@ -168,6 +168,8 @@ def test_a_rejection_body_past_the_bound_is_unavailable_though_it_decodes():
 @pytest.mark.parametrize("variable", ["HTTP_PROXY", "ALL_PROXY"])
 def test_a_proxy_variable_in_the_environment_does_not_route_the_run(monkeypatch, variable):
     monkeypatch.setenv(variable, "http://127.0.0.1:9")
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
     fake = FakeService(REFUSAL_STATUS, chunks=[_refusal_body("not_found")])
 
     _, stopped = _run(fake)
