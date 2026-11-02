@@ -31,9 +31,9 @@ the operator enabled ([The app's own runs](#the-apps-own-runs)). `POST /runs` an
 | `v` | The protocol version, `6`. Any other body answers 400 `unsupported_version`. |
 | `agent` | The agent's name, `[a-z][a-z0-9-]{0,63}`. It labels the run and its capability, and names the agent whose configured model the run uses unless the request names a model. |
 | `turn` | The system prompt and the messages (`Turn`, `TurnMessage`). |
-| `roles` | The agent's allowed roles, exactly `["admin"]` or `["admin", "user"]`; `AgentDefinition.request` fills it from the agent file. |
+| `roles` | The agent's allowed roles, exactly `["admin"]` or `["admin", "user"]`; a host builds the `RunRequest` and sets it. |
 | `tools` | A map from each tool the run may call to its `ToolEffect`; required, possibly `{}`. |
-| `model` | Optional. A full `<provider>/<model>` name (no version) the installation offers: the full names in its `[cli.<provider>] models` lists, the same for every app. A named model wins over the agent's, the app's and the default; absent or `null` runs the configured model as before. A name outside the grammar answers 422 `invalid_request`, a valid name the installation does not offer 422 `model_not_offered`, checked after the `forbidden` refusals and before the route. `AgentDefinition.request(messages, model=...)` writes it. The agent file still refuses a `model:` key. |
+| `model` | Optional. A full `<provider>/<model>` name (no version) the installation offers: the full names in its `[cli.<provider>] models` lists, the same for every app. A named model wins over the agent's, the app's and the default; absent or `null` runs the configured model as before. A name outside the grammar answers 422 `invalid_request`, a valid name the installation does not offer 422 `model_not_offered`, checked after the `forbidden` refusals and before the route. The host sets it; `AgentDefinition.request()` returns a `TurnRequest`, not a `RunRequest`. |
 
 `GET /runs/{id}` returns the run's `RunStatus`, readable only by the app and
 user that started it, or for the app's own run by that app with its workload token alone ([What a run keeps](#what-a-run-keeps) says what the record holds).
@@ -115,48 +115,40 @@ Keycloak groups of the app's service account ([operations.md](operations.md#who-
 ## The app connector
 
 An app runs a turn through `agent_runtime_client.backend.AgentBackend`, installed as
-`src/<app>/agent/backend.py` with its tools in `src/<app>/agent/tools.py`. Its configuration
-embeds `agent_runtime_client.config.AgentConfig` as the `agent` section: `backend` (`service` or
-`litellm`), `service_url` and `workload_scope`, none with a default. `litellm` stops startup
-until the release that includes the chat-completions backend.
+`src/<app>/agent/backend.py` with its tools in `src/<app>/agent/tools.py`.
+`backend.run(request, person)` is an async generator of `TurnEvent`s that the app consumes inside
+`contextlib.aclosing`; closing it runs the backend's cleanup. The package names no implementation
+yet and imports no HTTP library.
 
-`ServiceBackend` (`agent_runtime_client.backend.service`) is the implementation. It needs the
-`backend` extra, `httpx2`; every other module of the client stays free of an HTTP library.
-`backend.run(request, asker)` is an async generator of `TurnEvent`s that the app consumes inside
-`contextlib.aclosing`: closing it releases the run and closes the response, and a generator never
-iterated opens no request. A consumer that must stop while it awaits the next event cancels its
-task. The client's timeouts are constants: connect 10 s, other 30 s, read 330 s (the largest
-heartbeat interval the wire admits, plus 30 s).
+`request` is a `TurnRequest` (`agent_runtime_client.agents`, frozen): `agent`, `turn`, `roles`,
+`tools` (the agent's selected `ToolDeclaration`s), `model` and `max_duration_seconds`.
+`AgentDefinition.request(messages, *, model=None)` builds it; `model` overrides the file's model
+for that run.
 
-`Asker` carries the verified `(iss, sub)` (none for an app's own run) and `tokens`, an async
-callable called once per run that returns the person's access token (or none) and the app's
-workload token. A refusal it raises reaches the app unchanged.
+`person` is a `TurnPerson` (frozen, always a person): `principal` (the verified `(iss, sub)`),
+`role` (the app role) and `groups`, an async callable returning the person's groups.
 
 A turn ends short of its answer with one exception, `TurnStopped(kind, code, retry_after_s,
-after_side_effect, detail)`:
+after_side_effect, detail)`: `refused` carries a `RejectionCode`, `failed` a `FailureCode`,
+`cancelled` none.
 
-- `refused` carries the service's `RejectionCode`. A body that is not a rejection, or names a code
-  the client does not know, is `unavailable`. `busy` carries `Retry-After` as whole seconds, at most
-  600, or none when the header is missing or malformed.
-- `failed` carries the run's `FailureCode`; `cancelled` carries none.
-- A stream that breaks after `run_started` ends as `RunStream`'s cut-short rule decides:
-  `failed: interrupted` with `after_side_effect` once a side-effecting call was emitted, else
-  `cancelled`. `detail` names the violation. Before `run_started` it is `refused: unavailable`.
-
-`ServiceRunLifecycle` is an optional port. `register(run_id, principal)` runs when `run_started`
-arrives and raises `RunRegistrationRefused` when another turn holds the run; the turn then ends
-`refused: unavailable` and releases nothing. After a successful `register`, `release(run_id)` runs
-on every end: a terminal event, a lost transport, `aclose()` or cancellation.
+The app's configuration embeds `agent_runtime_client.config.AgentConfig` as the `agent` section:
+`backend` (`litellm`, the one value), `gateway` and `api_group`, none with a default.
+`ChatGateway` is `origin` (scheme, host and optional port; no path, query, fragment or userinfo),
+`key_file` and `ca_file`, both absolute paths. `ca_file` is required for HTTPS and forbidden for
+HTTP.
 
 ## Agent files
 
 An app declares its agents as Claude Code subagent files,
 `src/<pkg>/agents/<name>.md`, that `agent_runtime_client.agents.load_agent` reads into
-an `AgentDefinition`: YAML front matter (`name`, `description`, `tools`, plus
-the extension `appRoles`, exactly `[admin]`
-or `[admin, user]`) and the Markdown body as the prompt. `AgentFileError` names
+an `AgentDefinition`: YAML front matter (`name`, `description`, `tools`, `model`,
+`maxDurationSeconds`, plus the extension `appRoles`, exactly `[admin]`
+or `[admin, user]`) and the Markdown body as the prompt. `model` is a `text/<model>` name
+(lower-case letters, digits, `.` and `-`) and `maxDurationSeconds` a positive integer; both are
+required. `AgentFileError` names
 the file and the field. `offered_to(role)` is a display filter, not the
-security boundary: the service checks the role.
+security boundary.
 
 ## The tool contract
 

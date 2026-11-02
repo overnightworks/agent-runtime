@@ -1,9 +1,7 @@
 """How an app runs one agent turn: the port, who asks, and how a turn ends short.
 
 ``AgentBackend`` is the port an app consumes inside ``contextlib.aclosing``:
-closing the generator runs the backend's cleanup. ``ServiceBackend``
-(``agent_runtime_client.backend.service``, the ``backend`` extra) is the one
-implementation, so this package imports no HTTP library.
+closing the generator runs the backend's cleanup. This package imports no HTTP library.
 """
 
 from __future__ import annotations
@@ -12,56 +10,31 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final, Protocol
-from uuid import UUID
 
-from pydantic import SecretStr
-
-from agent_runtime_client.capability import CapabilityPrincipal
-from agent_runtime_client.turn import FailureCode, RejectionCode
+from agent_runtime_client.agents import TurnRequest
+from agent_runtime_client.turn import AgentRole, FailureCode, Principal, RejectionCode
 from agent_runtime_client.turn_events import (
     AssistantTextEvent,
     FinalEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
-from agent_runtime_client.wire import RunRequest
 
 TurnEvent = AssistantTextEvent | ToolCallEvent | ToolResultEvent | FinalEvent
 
 MAX_RETRY_AFTER_S: Final = 600
 
 
-@dataclass(frozen=True)
-class RunTokens:
-    """The tokens one run sends: the person's, or none for an app's own run, and the app's."""
-
-    person: SecretStr | None
-    workload: SecretStr
-
-
-RunTokenSource = Callable[[], Awaitable[RunTokens]]
+GroupSource = Callable[[], Awaitable[frozenset[str]]]
 
 
 @dataclass(frozen=True)
-class Asker:
-    """Who a run is for: the verified person (none for an app's own run) and their tokens."""
+class TurnPerson:
+    """The verified person a turn is for: who they are, their app role and their groups."""
 
-    principal: CapabilityPrincipal | None
-    tokens: RunTokenSource
-
-
-class RunRegistrationRefused(Exception):
-    """The lifecycle already holds this run for another turn."""
-
-
-class ServiceRunLifecycle(Protocol):
-    """What an app keeps for the length of a run, such as the right to answer its tool calls."""
-
-    def register(self, run_id: UUID, principal: CapabilityPrincipal | None) -> None:
-        """Hold the run; raise ``RunRegistrationRefused`` when another turn holds it."""
-
-    def release(self, run_id: UUID) -> None:
-        """Let go of a run this turn registered."""
+    principal: Principal
+    role: AgentRole
+    groups: GroupSource
 
 
 class TurnStopKind(StrEnum):
@@ -95,5 +68,5 @@ class TurnStopped(Exception):
 
 
 class AgentBackend(Protocol):
-    def run(self, request: RunRequest, asker: Asker) -> AsyncGenerator[TurnEvent, None]:
+    def run(self, request: TurnRequest, person: TurnPerson) -> AsyncGenerator[TurnEvent, None]:
         """Stream the turn's events; raise ``TurnStopped`` when it ends short of its answer."""

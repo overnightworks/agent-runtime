@@ -14,7 +14,6 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterator
 from dataclasses import dataclass
-from pathlib import Path
 from uuid import UUID, uuid4
 
 import httpx
@@ -44,9 +43,15 @@ from tests.support.service_support import (
 from tests.support.wire_builders import started
 from webauth.service_callers import Principal
 
-from agent_runtime_client.agents import load_agent
+from agent_runtime_client.turn import AgentRole, Turn
 from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent
-from agent_runtime_client.wire import RejectionCode, TurnMessage, TurnRole
+from agent_runtime_client.wire import (
+    PROTOCOL_VERSION,
+    RejectionCode,
+    RunRequest,
+    TurnMessage,
+    TurnRole,
+)
 from agent_runtime_service.admission import AdmissionSlot
 from agent_runtime_service.app import create_app
 from agent_runtime_service.config import Provider, ServiceConfig
@@ -368,28 +373,29 @@ def test_a_non_member_posting_no_roles_is_forbidden_not_told_the_body_is_invalid
     gate.refuse([SUBSCRIPTION_GROUP], roles=ABSENT)
 
 
-AGENT_FILE = "---\nname: cowriter\ndescription: d\nappRoles: {roles}\n---\nYou help write songs.\n"
-
-
-def _agent_request(tmp_path: Path, roles: str):
-    source = tmp_path / "cowriter.md"
-    source.write_text(AGENT_FILE.format(roles=roles), encoding="utf-8")
-    agent = load_agent(source, [])
-    return agent.request([TurnMessage(role=TurnRole.USER, text="Hi")]).model_dump(mode="json")
+def _agent_request(roles: list[AgentRole]):
+    return RunRequest(
+        v=PROTOCOL_VERSION,
+        agent="cowriter",
+        turn=Turn(
+            system="You help write songs.",
+            messages=[TurnMessage(role=TurnRole.USER, text="Hi")],
+        ),
+        roles=roles,
+        tools={},
+    ).model_dump(mode="json")
 
 
 @pytest.mark.parametrize(
     ("roles", "groups", "admitted"),
     [
-        pytest.param("[admin]", SUBSCRIBER_ROLE_USER, False, id="C1-admin-file-user"),
-        pytest.param("[admin]", SUBSCRIBER_ROLE_ADMIN, True, id="C1-admin-file-admin"),
-        pytest.param("[admin, user]", SUBSCRIBER_ROLE_USER, True, id="C1-everyone-file-user"),
+        pytest.param(["admin"], SUBSCRIBER_ROLE_USER, False, id="C1-admin-file-user"),
+        pytest.param(["admin"], SUBSCRIBER_ROLE_ADMIN, True, id="C1-admin-file-admin"),
+        pytest.param(["admin", "user"], SUBSCRIBER_ROLE_USER, True, id="C1-everyone-file-user"),
     ],
 )
-def test_the_roles_of_an_agent_file_are_what_the_service_enforces(
-    gate, tmp_path, roles, groups, admitted
-):
-    document = _agent_request(tmp_path, roles)
+def test_the_service_enforces_the_roles_a_request_carries(gate, roles, groups, admitted):
+    document = _agent_request(roles)
 
     if admitted:
         _admitted(gate.post_document(groups, document))

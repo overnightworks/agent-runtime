@@ -2,10 +2,10 @@
 
 An agent file is Claude Code's subagent format (YAML front matter between two
 ``---`` lines, read as YAML 1.2 by ruamel.yaml, then the prompt as Markdown) with one
-extra key, ``appRoles`` (decision record 0001, H9); the service configuration names the model,
-so a ``model`` key is refused. ``offered_to`` is a display
+extra key, ``appRoles`` (decision record 0001, H9), and two required ones: ``model``, a
+``text/<model>`` name, and ``maxDurationSeconds``. ``offered_to`` is a display
 filter for the app's own UI; the boundary is the
-service's role check.
+gateway's group check.
 """
 
 from __future__ import annotations
@@ -20,6 +20,8 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    PositiveInt,
+    StrictInt,
     StrictStr,
     TypeAdapter,
     ValidationError,
@@ -28,8 +30,14 @@ from pydantic import (
 from ruamel.yaml import YAML, YAMLError
 
 from agent_runtime_client.tools import ToolDeclaration
-from agent_runtime_client.turn import AgentName, AgentRole, AgentRoles, Turn, TurnMessage
-from agent_runtime_client.wire import PROTOCOL_VERSION, ModelName, RunRequest
+from agent_runtime_client.turn import (
+    AgentName,
+    AgentRole,
+    AgentRoles,
+    GatewayModelName,
+    Turn,
+    TurnMessage,
+)
 
 _AGENT_FILE_SUFFIX: Final = ".md"
 _FRONT_MATTER_FENCE: Final = "---"
@@ -49,6 +57,12 @@ def _refuse_non_single_line(text: str) -> str:
     return text
 
 
+def _refuse_non_text_model(model: str) -> str:
+    if not model.startswith("text/"):
+        raise ValueError("must be a text/<model> name")
+    return model
+
+
 class _FrontMatter(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
@@ -56,6 +70,8 @@ class _FrontMatter(BaseModel):
     description: Annotated[StrictStr, AfterValidator(_refuse_non_single_line)]
     tools: list[StrictStr] = Field(default_factory=list)
     roles: AgentRoles = Field(alias="appRoles")
+    model: Annotated[GatewayModelName, AfterValidator(_refuse_non_text_model)]
+    max_duration_seconds: StrictInt = Field(alias="maxDurationSeconds", gt=0)
 
     @model_validator(mode="before")
     @classmethod
@@ -65,6 +81,19 @@ class _FrontMatter(BaseModel):
                 if value is None:
                     raise ValueError(f"{key}: has no value")
         return data
+
+
+class TurnRequest(BaseModel):
+    """What a backend runs: the agent, its turn, its tools and the model and time bound."""
+
+    model_config = ConfigDict(frozen=True)
+
+    agent: AgentName
+    turn: Turn
+    roles: AgentRoles
+    tools: tuple[ToolDeclaration, ...]
+    model: GatewayModelName
+    max_duration_seconds: PositiveInt
 
 
 class AgentDefinition(BaseModel):
@@ -77,6 +106,8 @@ class AgentDefinition(BaseModel):
     roles: AgentRoles
     tools: tuple[ToolDeclaration, ...]
     prompt: str
+    model: GatewayModelName
+    max_duration_seconds: PositiveInt
 
     def offered_to(self, role: AgentRole) -> bool:
         """Whether a person with this app role is shown the agent (not a security boundary)."""
@@ -86,19 +117,20 @@ class AgentDefinition(BaseModel):
             raise ValueError(f"role must be 'admin' or 'user', not {role!r}") from error
         return checked_role in self.roles
 
-    def request(self, messages: list[TurnMessage], *, model: ModelName | None = None) -> RunRequest:
-        """The body that starts a run of this agent over these messages.
+    def request(
+        self, messages: list[TurnMessage], *, model: GatewayModelName | None = None
+    ) -> TurnRequest:
+        """The request that starts a run of this agent over these messages.
 
-        ``model`` names one model the service offers; without it the service runs its configured
-        one.
+        ``model`` overrides the file's model for this run.
         """
-        return RunRequest(
-            v=PROTOCOL_VERSION,
+        return TurnRequest(
             agent=self.name,
             turn=Turn(system=self.prompt, messages=messages),
             roles=self.roles,
-            tools={declaration.name: declaration.effect for declaration in self.tools},
-            model=model,
+            tools=self.tools,
+            model=self.model if model is None else model,
+            max_duration_seconds=self.max_duration_seconds,
         )
 
 
@@ -123,6 +155,8 @@ def load_agent(source: Traversable, declarations: list[ToolDeclaration]) -> Agen
         roles=front_matter.roles,
         tools=_selected_tools(file_name, front_matter.tools, declarations),
         prompt=prompt,
+        model=front_matter.model,
+        max_duration_seconds=front_matter.max_duration_seconds,
     )
 
 

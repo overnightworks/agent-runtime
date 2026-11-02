@@ -36,6 +36,7 @@ MAX_RUN_FILE_NAME_BYTES: Final = 255
 MAX_TOOL_INPUT_DEPTH: Final = 128
 MAX_AGENT_LENGTH: Final = 64
 MODEL_PART_PATTERN: Final = re.compile(r"[a-z0-9.-]+")
+_GATEWAY_MODEL_NAME: Final = re.compile(rf"(?:text|image)/{MODEL_PART_PATTERN.pattern}")
 _AGENT_PATTERN: Final = re.compile(rf"[a-z][a-z0-9-]{{0,{MAX_AGENT_LENGTH - 1}}}")
 
 
@@ -262,3 +263,13 @@ class Principal(StrictModel):
 
     iss: NonEmptyUnicodeText
     sub: NonEmptyUnicodeText
+
+
+def _refuse_non_gateway_model(text: str) -> str:
+    if _GATEWAY_MODEL_NAME.fullmatch(text) is None:
+        raise ValueError("must be text/<model> or image/<model>, such as text/opus")
+    return text
+
+
+GatewayModelName = Annotated[str, AfterValidator(_refuse_non_gateway_model)]
+"""The one decider of a gateway model: its kind (``text`` or ``image``), a slash, the model part."""

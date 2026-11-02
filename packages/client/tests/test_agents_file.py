@@ -1,17 +1,16 @@
-"""The agent file: Claude Code's subagent format plus ``model`` and ``appRoles`` (#383)."""
+"""The agent file: Claude Code's subagent format plus ``appRoles`` and ``maxDurationSeconds``."""
 
 from __future__ import annotations
 
-import json
 import traceback
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from agent_runtime_client.agents import AgentDefinition, AgentFileError, load_agent
+from agent_runtime_client.agents import AgentDefinition, AgentFileError, TurnRequest, load_agent
 from agent_runtime_client.tools import ToolDeclaration, ToolEffect
-from agent_runtime_client.wire import PROTOCOL_VERSION, RunRequest, TurnMessage, TurnRole
+from agent_runtime_client.turn import TurnMessage, TurnRole
 
 READ_NOTE = ToolDeclaration(
     name="read_note", description="Read a note", parameters={}, effect=ToolEffect.READ_ONLY
@@ -28,6 +27,8 @@ def agent_text(
     description: str | None = "Helps with notes",
     tools: str | None = "[read_note, edit_note]",
     roles: str | None = "[admin, user]",
+    model: str | None = "text/opus",
+    max_duration_seconds: str | None = "300",
     extra: str = "",
     body: str = PROMPT,
 ) -> str:
@@ -38,17 +39,22 @@ def agent_text(
         lines.append(f"tools: {tools}")
     if roles is not None:
         lines.append(f"appRoles: {roles}")
+    if model is not None:
+        lines.append(f"model: {model}")
+    if max_duration_seconds is not None:
+        lines.append(f"maxDurationSeconds: {max_duration_seconds}")
     if extra:
         lines.append(extra)
     return "---\n" + "\n".join(lines) + "\n---\n" + body + "\n"
 
 
 def with_field_replaced(front_matter: str) -> str:
-    base = "name: notes-assistant\ndescription: d\nappRoles: [admin]\n"
-    replaced_key = front_matter.lstrip().split(":")[0]
-    kept = "".join(
-        line + "\n" for line in base.splitlines() if line.split(":")[0] != replaced_key
+    base = (
+        "name: notes-assistant\ndescription: d\nappRoles: [admin]\n"
+        "model: text/opus\nmaxDurationSeconds: 300\n"
     )
+    replaced_key = front_matter.lstrip().split(":")[0]
+    kept = "".join(line + "\n" for line in base.splitlines() if line.split(":")[0] != replaced_key)
     return kept + front_matter
 
 
@@ -97,9 +103,7 @@ def test_minimal_file_has_no_tools(tmp_path: Path) -> None:
     ],
     ids=["blank-lines", "indented-code", "trailing-spaces", "blank-whitespace-lines"],
 )
-def test_prompt_drops_only_surrounding_blank_lines(
-    tmp_path: Path, body: str, prompt: str
-) -> None:
+def test_prompt_drops_only_surrounding_blank_lines(tmp_path: Path, body: str, prompt: str) -> None:
     assert load(tmp_path, agent_text(body=body)).prompt == prompt
 
 
@@ -209,14 +213,54 @@ def test_bytes_that_are_not_utf8_are_refused(tmp_path: Path) -> None:
         load_agent(path, DECLARATIONS)
 
 
-@pytest.mark.parametrize("model", ["claude/sonnet", "null", "''", ""])
-def test_a_model_key_is_refused_and_named_because_the_configuration_owns_the_model(
+def test_the_definition_carries_the_files_model_and_duration(tmp_path: Path) -> None:
+    agent = load(tmp_path, agent_text(model="text/opus", max_duration_seconds="300"))
+
+    assert (agent.model, agent.max_duration_seconds) == ("text/opus", 300)
+
+
+@pytest.mark.parametrize("field", ["model", "maxDurationSeconds"])
+def test_a_file_without_a_required_key_is_refused_and_names_it(tmp_path: Path, field: str) -> None:
+    text = agent_text(
+        model=None if field == "model" else "text/opus",
+        max_duration_seconds=None if field == "maxDurationSeconds" else "300",
+    )
+
+    with pytest.raises(AgentFileError, match=field):
+        load(tmp_path, text)
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "image/x",
+        "anthropic/opus",
+        "claude/sonnet",
+        "text/",
+        "TEXT/opus",
+        "text/A",
+        "5",
+        "null",
+        "''",
+    ],
+)
+def test_a_model_that_is_not_a_text_gateway_name_is_refused_and_named(
     tmp_path: Path, model: str
 ) -> None:
-    path = write(tmp_path, agent_text(extra=f"model: {model}"))
+    text = agent_text(model=model)
 
     with pytest.raises(AgentFileError, match="model"):
-        load_agent(path, DECLARATIONS)
+        load(tmp_path, text)
+
+
+@pytest.mark.parametrize("seconds", ["0", "-1", "true", "'300'", "1.5", "null", "''"])
+def test_a_duration_that_is_not_a_positive_integer_is_refused_and_named(
+    tmp_path: Path, seconds: str
+) -> None:
+    text = agent_text(max_duration_seconds=seconds)
+
+    with pytest.raises(AgentFileError, match="maxDurationSeconds"):
+        load(tmp_path, text)
 
 
 @pytest.mark.parametrize("description", [None, "''", '"two\\nlines"', "|", "|\n  two\n  lines"])
@@ -238,9 +282,7 @@ def test_missing_empty_or_multiline_description_is_refused(
         ("tools:\n  - read_note\ntools: [edit_note]", "tools"),
     ],
 )
-def test_duplicate_key_is_refused_and_named(
-    tmp_path: Path, front_matter: str, key: str
-) -> None:
+def test_duplicate_key_is_refused_and_named(tmp_path: Path, front_matter: str, key: str) -> None:
     path = front_matter_file(tmp_path, with_field_replaced(front_matter))
 
     with pytest.raises(AgentFileError, match=f"{key}: appears twice"):
@@ -325,10 +367,10 @@ def test_control_character_inside_quotes_is_refused_not_normalized(
     [
         {"extra": "description: sentinelvalue"},
         {"extra": "description: 'sentinelvalue"},
-        {"extra": "model: sentinelvalue"},
+        {"model": "sentinelvalue"},
         {"description": "[sentinelvalue]"},
     ],
-    ids=["duplicate-key", "syntax-error", "model-key", "non-string-description"],
+    ids=["duplicate-key", "syntax-error", "model-value", "non-string-description"],
 )
 def test_formatted_traceback_does_not_show_file_values(
     tmp_path: Path, fields: dict[str, str]
@@ -369,9 +411,7 @@ def test_yaml_anchors_and_tags_are_read_as_yaml_reads_them(tmp_path: Path) -> No
         ("a:b", "a:b"),
     ],
 )
-def test_scalars_are_plain_or_quoted_text(
-    tmp_path: Path, description: str, expected: str
-) -> None:
+def test_scalars_are_plain_or_quoted_text(tmp_path: Path, description: str, expected: str) -> None:
     assert load(tmp_path, agent_text(description=description)).description == expected
 
 
@@ -424,9 +464,7 @@ def test_offered_to_refuses_a_role_outside_the_two(tmp_path: Path, role: str) ->
         agent.offered_to(role)  # type: ignore[arg-type]
 
 
-def test_request_is_the_current_protocol_body_with_agent_prompt_and_tool_effects(
-    tmp_path: Path,
-) -> None:
+def test_request_carries_the_files_prompt_model_roles_and_tools(tmp_path: Path) -> None:
     agent = load(tmp_path, agent_text())
 
     request = agent.request([TurnMessage(role=TurnRole.USER, text="hi")])
@@ -434,42 +472,50 @@ def test_request_is_the_current_protocol_body_with_agent_prompt_and_tool_effects
     assert request.agent == "notes-assistant"
     assert request.turn.system == PROMPT
     assert [message.text for message in request.turn.messages] == ["hi"]
-    assert RunRequest.model_validate(request.model_dump(mode="json")) == request
-    assert request.v == PROTOCOL_VERSION
-    assert request.tools == {
-        "read_note": ToolEffect.READ_ONLY,
-        "edit_note": ToolEffect.SIDE_EFFECTING,
-    }
-    assert set(request.model_dump()) == {"v", "agent", "turn", "roles", "tools"}
+    assert request.tools == (READ_NOTE, EDIT_NOTE)
+    assert request.model == "text/opus"
+    assert request.max_duration_seconds == 300
+    assert request.roles == agent.roles
 
 
-def test_request_names_the_model_it_is_given_and_omits_the_field_otherwise(
-    tmp_path: Path,
-) -> None:
+def test_request_is_frozen(tmp_path: Path) -> None:
+    request: TurnRequest = load(tmp_path, agent_text()).request(
+        [TurnMessage(role=TurnRole.USER, text="hi")]
+    )
+
+    with pytest.raises(ValidationError):
+        request.model = "text/haiku"  # type: ignore[misc]
+
+
+def test_request_model_is_the_override_when_given(tmp_path: Path) -> None:
     agent = load(tmp_path, agent_text())
+
+    request = agent.request([TurnMessage(role=TurnRole.USER, text="hi")], model="text/haiku")
+
+    assert request.model == "text/haiku"
+
+
+def test_request_model_override_accepts_an_image_name(tmp_path: Path) -> None:
+    agent = load(tmp_path, agent_text())
+
+    request = agent.request([TurnMessage(role=TurnRole.USER, text="hi")], model="image/draw")
+
+    assert request.model == "image/draw"
+
+
+def test_request_refuses_a_malformed_model_override(tmp_path: Path) -> None:
+    agent = load(tmp_path, agent_text())
+
     messages = [TurnMessage(role=TurnRole.USER, text="hi")]
 
-    named = agent.request(messages, model="anthropic/opus")
-
-    assert named.model == "anthropic/opus"
-    assert named.model_dump(mode="json")["model"] == "anthropic/opus"
-    assert named.v == PROTOCOL_VERSION
-    assert "model" not in json.loads(agent.request(messages).model_dump_json())
-
-
-@pytest.mark.parametrize("roles", ["[admin]", "[admin, user]"])
-def test_request_carries_the_files_roles_unchanged(tmp_path: Path, roles: str) -> None:
-    agent = load(tmp_path, agent_text(roles=roles))
-
-    request = agent.request([TurnMessage(role=TurnRole.USER, text="hi")])
-
-    assert request.roles == agent.roles
+    with pytest.raises(ValueError, match="model"):
+        agent.request(messages, model="Text/Opus")
 
 
 def test_request_of_an_agent_without_tools_names_none(tmp_path: Path) -> None:
     agent = load(tmp_path, agent_text(tools="[]"))
 
-    assert agent.request([TurnMessage(role=TurnRole.USER, text="hi")]).tools == {}
+    assert agent.request([TurnMessage(role=TurnRole.USER, text="hi")]).tools == ()
 
 
 def test_request_without_messages_is_refused(tmp_path: Path) -> None:
