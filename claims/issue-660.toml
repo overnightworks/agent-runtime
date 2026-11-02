@@ -1,0 +1,8 @@
+claim_id = "6e5d2da0de604cfbb034fd187a1a067f"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "26c7ba33d6ba9c4197ae265eb53e05dc047968f4"
+branch = "claude/issue-660-cli-error-class-in-the-log"
+scope = ["docs/operations.md", "src/agent_runtime/claude/provider.py", "src/agent_runtime/codex/run.py", "src/agent_runtime/grok/run.py", "tests/test_claude_provider.py", "tests/test_codex_run.py", "tests/test_grok_run.py"]
+opened_commit = "0724113ae022578b07a35fb17b419848c95cd83b"
+whole_reason = "Three decoders, about 40 production lines: the one logging rule must hold for every provider alike, and each list sits beside its own decoder, so the three move in one commit."
