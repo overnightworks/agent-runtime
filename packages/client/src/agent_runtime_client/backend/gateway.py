@@ -127,8 +127,8 @@ class GatewayBackend(AgentBackend):
                     progress.wrote |= tools[call.name].effect is ToolEffect.SIDE_EFFECTING
                     handler = self._tools[call.name].handler
                     result = await _before(deadline, _serve(handler, person, call))
-                    yield result
                     messages.append(_result_message(result))
+                    yield result
         except TurnStopped as stopped:
             stopped.after_side_effect = stopped.after_side_effect or progress.wrote
             raise
@@ -267,7 +267,7 @@ async def _serve(handler: HandToolHandler, person: TurnPerson, call: _Call) -> T
         is_error = event.is_error
         return event
     finally:
-        _LOGGER.info("tool %s call %r finished, is_error=%s", call.name, call.id, is_error)
+        _LOGGER.info("tool %s call %r ended, is_error=%s", call.name, call.id, is_error)
 
 
 def _result_event(call: _Call, outcome: ToolOutcome) -> ToolResultEvent:

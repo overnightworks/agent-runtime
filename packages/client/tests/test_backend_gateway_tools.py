@@ -159,6 +159,12 @@ def finished_calls(caplog) -> list[logging.LogRecord]:
     return [r for r in caplog.records if r.levelno == logging.INFO and "lookup" in r.getMessage()]
 
 
+def logged_flag(caplog) -> str:
+    """The is_error state the one INFO record of the call states, as printed."""
+    (record,) = finished_calls(caplog)
+    return record.getMessage().rsplit("is_error=", 1)[1]
+
+
 def ending(stopped: TurnStopped | None):
     return None if stopped is None else (stopped.kind, stopped.code)
 
@@ -362,6 +368,7 @@ def test_a_raising_handler_logs_its_class_only_and_the_model_gets_an_error(shop,
 
     assert stopped is None
     assert events[1].is_error
+    assert logged_flag(caplog) == "True"
     assert "secret-note-title" not in events[1].content
     assert "secret-note-title" not in gateway.requests[1].content.decode()
     assert "KeyError" in caplog.text
@@ -414,10 +421,10 @@ def test_crossing_max_tool_calls_fails_with_limit_exceeded(shop, replies, calls_
 def test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state(
     shop, effect, caplog
 ):
-    # One whole second, which the first round and its call event cannot plausibly outlast.
     cancelled = []
 
     async def stuck() -> ToolOutcome:
+        asyncio.get_running_loop().skew_seconds += 2
         try:
             await asyncio.Event().wait()
         except asyncio.CancelledError:
@@ -437,7 +444,7 @@ def test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state(
     assert cancelled == [True]
     assert [type(event) for event in events] == [ToolCallEvent]
     assert len(gateway.requests) == 1
-    assert len(finished_calls(caplog)) == 1
+    assert logged_flag(caplog) == "None"
 
 
 def test_a_deadline_that_passed_while_the_app_took_the_call_event_starts_no_handler(shop):
@@ -553,7 +560,7 @@ def test_cancelling_between_a_call_and_its_result_reaches_the_caller_unchanged(s
 
     assert [type(event) for event in events] == [ToolCallEvent]
     assert len(gateway.requests) == 1
-    assert len(finished_calls(caplog)) == 1
+    assert logged_flag(caplog) == "None"
 
 
 @pytest.mark.parametrize(
