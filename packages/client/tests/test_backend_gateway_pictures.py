@@ -173,6 +173,7 @@ def test_a_null_url_beside_the_picture_passes(studio):
         a_json_reply({"data": [{"b64_json": "UE5="}]}),
         a_json_reply({"data": [{"b64_json": 5}]}),
         a_json_reply({"data": [{"b64_json": None}]}),
+        a_json_reply({"data": [{"b64_json": ""}]}),
         a_json_reply({"data": ["UE5H"]}),
         a_json_reply({}),
         a_json_reply([]),

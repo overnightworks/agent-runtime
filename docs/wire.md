@@ -251,7 +251,7 @@ fetched; `url: null` beside `b64_json` passes. The turn ends with
 | --- | --- | --- |
 | The HTTP body | `base64_length(MAX_RUN_FILES_BYTES)` plus `MAX_EVENT_BYTES` for the JSON around it | `failed: provider_error`, as a text body over its bound |
 | The decoded picture | canonical base64 by `RunFile`'s reader, at most `MAX_RUN_FILES_BYTES` (the client checks it; `RunFile` holds no ceiling) | `failed: provider_error` |
-| Malformed JSON, a non-null `url`, no entry or more than one, bad or non-canonical base64 | | `failed: provider_error` |
+| Malformed JSON, a non-null `url`, no entry or more than one, bad, empty or non-canonical base64 | | `failed: provider_error` |
 | 429, another status, a connection or read failure, the deadline | | as for a text turn: `refused: busy`, `failed: provider_unavailable`, `failed: limit_exceeded` |
 
 A vendor's moderation refusal is a 400 and so reads as `provider_unavailable`; telling it apart

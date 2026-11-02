@@ -450,7 +450,7 @@ async def _judged(response: httpx2.Response, *, offered: frozenset[str]) -> _Rou
 
 
 async def _picture_of(response: httpx2.Response) -> RunFile:
-    """Exactly one entry whose ``b64_json`` is a canonical picture within its bound; no URL."""
+    """Exactly one entry: a canonical, non-empty ``b64_json`` picture within its bound; no URL."""
     body = await _read_body(response, _MAX_PICTURE_BODY_BYTES)
     try:
         entries = json.loads(body)["data"]
@@ -461,7 +461,7 @@ async def _picture_of(response: httpx2.Response) -> RunFile:
         )
     except _UNREADABLE_REPLY:
         raise _malformed_reply() from None
-    if len(file.content) > MAX_RUN_FILES_BYTES:
+    if not file.content or len(file.content) > MAX_RUN_FILES_BYTES:
         raise _malformed_reply()
     return file
 
