@@ -51,6 +51,7 @@ from agent_runtime_client.turn_events import (
 PROVIDER_ERROR = (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
 LIMIT_EXCEEDED = (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
 BUSY = (TurnStopKind.REFUSED, RejectionCode.BUSY)
+DEFAULT_MAX_DURATION_SECONDS = 30
 
 
 class SkewedLoop(asyncio.SelectorEventLoop):
@@ -94,7 +95,7 @@ class Shop:
         *replies: Reply,
         max_tool_calls: int = 5,
         selected: tuple[str, ...] | None = None,
-        max_duration_seconds: int = 30,
+        max_duration_seconds: int = DEFAULT_MAX_DURATION_SECONDS,
         late_after: type | None = None,
     ) -> tuple[list, TurnStopped | None, FakeGateway]:
         gateway = FakeGateway(*replies)
@@ -119,7 +120,9 @@ async def _noted() -> ToolOutcome:
 
 
 def a_request(
-    tools: list[HandTool], max_tool_calls: int, max_duration_seconds: int = 30
+    tools: list[HandTool],
+    max_tool_calls: int,
+    max_duration_seconds: int = DEFAULT_MAX_DURATION_SECONDS,
 ) -> TurnRequest:
     return TurnRequest(
         agent="helper",
@@ -155,13 +158,13 @@ async def _turn(backend: GatewayBackend, request: TurnRequest, late_after: type 
     return events, None
 
 
-def finished_calls(caplog) -> list[logging.LogRecord]:
+def call_records(caplog) -> list[logging.LogRecord]:
     return [r for r in caplog.records if r.levelno == logging.INFO and "lookup" in r.getMessage()]
 
 
 def logged_flag(caplog) -> str:
     """The is_error state the one INFO record of the call states, as printed."""
-    (record,) = finished_calls(caplog)
+    (record,) = call_records(caplog)
     return record.getMessage().rsplit("is_error=", 1)[1]
 
 
@@ -386,7 +389,7 @@ def test_each_call_logs_its_name_id_and_error_flag_never_arguments_or_content(sh
 
     shop.run(tool_round(tool_call("c1", "lookup", {"k": "argument-canary"})), completion("ok"))
 
-    calls = finished_calls(caplog)
+    calls = call_records(caplog)
     assert len(calls) == 1
     assert "c1" in calls[0].getMessage()
     assert "True" in calls[0].getMessage()
@@ -424,7 +427,7 @@ def test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state(
     cancelled = []
 
     async def stuck() -> ToolOutcome:
-        asyncio.get_running_loop().skew_seconds += 2
+        asyncio.get_running_loop().skew_seconds += DEFAULT_MAX_DURATION_SECONDS + 1
         try:
             await asyncio.Event().wait()
         except asyncio.CancelledError:
@@ -436,7 +439,7 @@ def test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state(
     caplog.set_level(logging.INFO)
 
     events, stopped, gateway = shop.run(
-        tool_round(tool_call("c1", "lookup", {})), completion("never"), max_duration_seconds=1
+        tool_round(tool_call("c1", "lookup", {})), completion("never")
     )
 
     assert ending(stopped) == LIMIT_EXCEEDED
@@ -453,7 +456,6 @@ def test_a_deadline_that_passed_while_the_app_took_the_call_event_starts_no_hand
     events, stopped, gateway = shop.run(
         tool_round(tool_call("c1", "write", {})),
         completion("never"),
-        max_duration_seconds=1,
         late_after=ToolCallEvent,
     )
 
@@ -472,7 +474,6 @@ def test_a_deadline_that_passed_while_the_app_took_the_result_event_sends_no_nex
     events, stopped, gateway = shop.run(
         tool_round(tool_call("c1", "write", {})),
         completion("never"),
-        max_duration_seconds=1,
         late_after=ToolResultEvent,
     )
 
