@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from contextlib import aclosing
 from dataclasses import dataclass, field
@@ -93,13 +94,16 @@ class FakeService:
     """An ASGI app that answers ``POST /runs`` with a scripted status, headers and chunks.
 
     ``drops`` ends the connection after the chunks without finishing the response, a fault the
-    real service never causes.
+    real service never causes. ``silent`` never answers and sets ``disconnected`` when the
+    client leaves.
     """
 
     status: int = 200
     headers: Mapping[str, str] = field(default_factory=dict)
     chunks: Sequence[bytes] = ()
     drops: bool = False
+    silent: bool = False
+    disconnected: threading.Event = field(default_factory=threading.Event)
     seen: list[dict[str, str]] = field(default_factory=list)
     bodies: list[bytes] = field(default_factory=list)
 
@@ -108,6 +112,11 @@ class FakeService:
             return
         self.seen.append({k.decode(): v.decode() for k, v in scope["headers"]})
         self.bodies.append(await _whole_body(receive))
+        if self.silent:
+            while (await receive())["type"] != "http.disconnect":
+                pass
+            self.disconnected.set()
+            return
         await send(
             {
                 "type": "http.response.start",

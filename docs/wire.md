@@ -111,6 +111,42 @@ The list of enabled agents is a tripwire for a cooperative app, not a boundary a
 one: the request carries the whole turn and the agent is only a label. The boundary is the
 Keycloak groups of the app's service account ([operations.md](operations.md#who-may-run-what)).
 
+## The app connector
+
+An app runs a turn through `agent_runtime_client.backend.AgentBackend`, installed as
+`src/<app>/agent/backend.py` with its tools in `src/<app>/agent/tools.py`. Its configuration
+embeds `agent_runtime_client.config.AgentConfig` as the `agent` section: `backend` (`service` or
+`litellm`), `service_url` and `workload_scope`, none with a default. `litellm` stops startup
+until the release that includes the chat-completions backend.
+
+`ServiceBackend` (`agent_runtime_client.backend.service`) is the implementation. It needs the
+`backend` extra, `httpx2`; every other module of the client stays free of an HTTP library.
+`backend.run(request, asker)` is an async generator of `TurnEvent`s that the app consumes inside
+`contextlib.aclosing`: closing it releases the run and closes the response, and a generator never
+iterated opens no request. A consumer that must stop while it awaits the next event cancels its
+task. The client's timeouts are constants: connect 10 s, other 30 s, read 330 s (the largest
+heartbeat interval the wire admits, plus 30 s).
+
+`Asker` carries the verified `(iss, sub)` (none for an app's own run) and `tokens`, an async
+callable called once per run that returns the person's access token (or none) and the app's
+workload token. A refusal it raises reaches the app unchanged.
+
+A turn ends short of its answer with one exception, `TurnStopped(kind, code, retry_after_s,
+after_side_effect, detail)`:
+
+- `refused` carries the service's `RejectionCode`. A body that is not a rejection, or names a code
+  the client does not know, is `unavailable`. `busy` carries `Retry-After` as whole seconds, at most
+  600, or none when the header is missing or malformed.
+- `failed` carries the run's `FailureCode`; `cancelled` carries none.
+- A stream that breaks after `run_started` ends as `RunStream`'s cut-short rule decides:
+  `failed: interrupted` with `after_side_effect` once a side-effecting call was emitted, else
+  `cancelled`. `detail` names the violation. Before `run_started` it is `refused: unavailable`.
+
+`ServiceRunLifecycle` is an optional port. `register(run_id, principal)` runs when `run_started`
+arrives and raises `RunRegistrationRefused` when another turn holds the run; the turn then ends
+`refused: unavailable` and releases nothing. After a successful `register`, `release(run_id)` runs
+on every end: a terminal event, a lost transport, `aclose()` or cancellation.
+
 ## Agent files
 
 An app declares its agents as Claude Code subagent files,
