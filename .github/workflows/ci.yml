@@ -50,10 +50,14 @@ jobs:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
 
-      # The workspace's own packages are put on the path rather than built;
-      # every other package is locked, and webauth is built from its pinned git commit.
+      # The workspace's own packages are put on the path rather than built.
+      # The first command installs every locked package without building any;
+      # the second builds only webauth from its pinned git commit, because
+      # everything else is already installed.
       - name: Install dependencies
-        run: uv sync --locked --all-packages --extra dev --no-install-workspace
+        run: |
+          uv sync --locked --all-packages --extra dev --no-install-workspace --no-build --no-install-package overnightworks-webauth
+          uv sync --locked --all-packages --extra dev --no-install-workspace
 
       - name: Ruff
         env:
@@ -237,10 +241,14 @@ jobs:
           "$RUNNER_TEMP/venv/bin/python" -m pytest --noconftest -p no:cacheprovider
           packages/service/tests/test_identity_keycloak_token_shapes.py -m keycloak -q -rP
 
-      # The workspace's own packages are put on the path rather than built;
-      # every other package is locked, and webauth is built from its pinned git commit.
+      # The workspace's own packages are put on the path rather than built.
+      # The first command installs every locked package without building any;
+      # the second builds only webauth from its pinned git commit, because
+      # everything else is already installed.
       - name: Install the workspace's locked wheels for the service's end-to-end proof
-        run: uv sync --locked --all-packages --extra dev --no-install-workspace
+        run: |
+          uv sync --locked --all-packages --extra dev --no-install-workspace --no-build --no-install-package overnightworks-webauth
+          uv sync --locked --all-packages --extra dev --no-install-workspace
 
       - name: The service admits real Keycloak tokens end to end
         env:
@@ -273,8 +281,13 @@ jobs:
           enable-cache: false
           python-version: "3.14"
 
+      # The first command installs every package without building any;
+      # the second builds only webauth from its pinned git commit, because
+      # everything else is already installed.
       - name: Install the lowest declared direct dependencies
-        run: uv sync --all-packages --extra dev --no-install-workspace
+        run: |
+          uv sync --all-packages --extra dev --no-install-workspace --no-build --no-install-package overnightworks-webauth
+          uv sync --all-packages --extra dev --no-install-workspace
 
       - name: Versions the suite runs against
         run: uv pip list
