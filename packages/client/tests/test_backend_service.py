@@ -64,7 +64,8 @@ TOOLS = {"read_note": "read_only", "edit_note": "side_effecting"}
 def _asker(person_token: str | None = None, workload_token: str | None = None) -> Asker:
     async def tokens() -> RunTokens:
         return RunTokens(
-            SecretStr(person_token or MINT.user()), SecretStr(workload_token or MINT.workload())
+            SecretStr(MINT.user() if person_token is None else person_token),
+            SecretStr(MINT.workload() if workload_token is None else workload_token),
         )
 
     return Asker(principal=ALICE, tokens=tokens)
@@ -223,9 +224,11 @@ def test_m22_heartbeats_never_surface():
 
 @pytest.mark.parametrize("field", ["person", "workload"])
 @pytest.mark.parametrize(
-    "token", ["bad\ntoken", "bad\rtoken", "bad\x00token", "bäd", " lead", "trail ", "mid dle"]
+    "token", ["", "bad\ntoken", "bad\rtoken", "bad\x00token", "bäd", " lead", "trail ", "mid dle"]
 )
-def test_a_token_no_header_can_carry_ends_the_turn_refused_without_a_request(token, field, caplog):
+def test_a_token_that_is_not_visible_ascii_ends_the_turn_refused_without_a_request(
+    token, field, caplog
+):
     fake = FakeService()
     lifecycle = RecordingLifecycle()
     asker = _asker(**{f"{field}_token": token})
@@ -236,7 +239,7 @@ def test_a_token_no_header_can_carry_ends_the_turn_refused_without_a_request(tok
     assert (events, fake.seen) == ([], [])
     assert (stopped.kind, stopped.code) == (TurnStopKind.REFUSED, RejectionCode.UNAUTHORIZED)
     assert _lifecycle_events(lifecycle) == (0, 0)
-    assert token not in f"{stopped} {stopped.detail} {caplog.text}"
+    assert not token or token not in f"{stopped} {stopped.detail} {caplog.text}"
 
 
 def test_m23_a_failed_run_keeps_its_code():
@@ -380,6 +383,8 @@ def test_m36_the_token_source_is_asked_once_and_its_refusal_passes_through():
     async def refusing() -> RunTokens:
         raise SignInAgain
 
-    with _service(ScriptedRunner(ANSWER)) as base_url, pytest.raises(SignInAgain):
-        _turn(base_url, asker=Asker(principal=None, tokens=refusing))
+    refusing_asker = Asker(principal=None, tokens=refusing)
+    with _service(ScriptedRunner(ANSWER)) as base_url:
+        with pytest.raises(SignInAgain):
+            _turn(base_url, asker=refusing_asker)
     assert len(asked) == 1
