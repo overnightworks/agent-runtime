@@ -1,8 +1,0 @@
-claim_id = "9606033fd54740c590ea331da154d7ad"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "0a6202564b9eddfe4a30ff26a86cd46d95310f6c"
-branch = "claude/issue-708-gateway-shape"
-scope = [".github/workflows/ci.yml", ".importlinter", "docs/MIGRATING.md", "docs/wire.md", "packages/client/src/agent_runtime_client/agents.py", "packages/client/src/agent_runtime_client/backend/__init__.py", "packages/client/src/agent_runtime_client/backend/service.py", "packages/client/src/agent_runtime_client/config.py", "packages/client/src/agent_runtime_client/turn.py", "packages/client/tests/test_agents_file.py", "packages/client/tests/test_backend_config.py", "packages/client/tests/test_backend_port.py", "packages/client/tests/test_backend_service.py", "packages/client/tests/test_backend_transport.py", "packages/service/tests/test_app_gate.py", "quality/baseline.toml", "tests/support/backend_support.py"]
-opened_commit = "66c03555c11c25c582d1c7a13645aeb833e57f44"
-whole_reason = "One contract cannot change in parts: the agent file, TurnRequest, the port, AgentConfig and the deletion of what they replace stand or fall together."
