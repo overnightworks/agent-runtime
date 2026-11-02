@@ -1,0 +1,8 @@
+claim_id = "d1fbbd38cf60499f857458cb873209bc"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "3eebdf147e6ca44a885e1e166b6795e2ee5551d3"
+branch = "claude/issue-713-hand-tools-loop"
+scope = ["docs/MIGRATING.md", "docs/wire.md", "packages/client/src/agent_runtime_client/agents.py", "packages/client/src/agent_runtime_client/backend/fake_gateway.py", "packages/client/src/agent_runtime_client/backend/gateway.py", "packages/client/src/agent_runtime_client/mcp_wire.py", "packages/client/src/agent_runtime_client/tools.py", "packages/client/tests/test_agents_file.py", "packages/client/tests/test_backend_gateway.py", "packages/client/tests/test_backend_gateway_tools.py", "quality/baseline.toml"]
+opened_commit = "a7c12e4cfbdff16f2fa6a44c1d64a835a2c4a637"
+whole_reason = "The loop, its bounds and its side-effect state have no caller apart, and HandTool arrives beside them."
