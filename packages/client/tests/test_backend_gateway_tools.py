@@ -13,9 +13,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.support.gateway_turn_support import SkewedLoop, a_gateway_config, a_person, ending
 
 from agent_runtime_client.agents import TurnRequest
-from agent_runtime_client.backend import TurnPerson, TurnStopKind, TurnStopped
+from agent_runtime_client.backend import TurnStopKind, TurnStopped
 from agent_runtime_client.backend.fake_gateway import (
     FakeGateway,
     Reply,
@@ -52,15 +53,6 @@ PROVIDER_ERROR = (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
 LIMIT_EXCEEDED = (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
 BUSY = (TurnStopKind.REFUSED, RejectionCode.BUSY)
 TURN_BUDGET_SECONDS = 30
-
-
-class SkewedLoop(asyncio.SelectorEventLoop):
-    """An event loop whose clock the app side can move on, so a late consumer needs no sleep."""
-
-    skew_seconds: float = 0
-
-    def time(self) -> float:
-        return super().time() + self.skew_seconds
 
 
 @dataclass
@@ -106,12 +98,7 @@ class Shop:
         return events, stopped, gateway
 
     def config(self) -> AgentConfig:
-        key_file = self.directory / "key"
-        key_file.write_text("stand-in-key-0001\n")
-        gateway = {"origin": "http://gateway.test", "key_file": str(key_file)}
-        return AgentConfig.model_validate(
-            {"backend": "litellm", "gateway": gateway, "api_group": "/apps/example"}
-        )
+        return a_gateway_config(self.directory)
 
 
 async def _noted() -> ToolOutcome:
@@ -127,15 +114,6 @@ def a_request(tools: list[HandTool], max_tool_calls: int) -> TurnRequest:
         model="text/standin",
         max_duration_seconds=TURN_BUDGET_SECONDS,
         max_tool_calls=max_tool_calls if tools else None,
-    )
-
-
-def a_person() -> TurnPerson:
-    async def groups() -> frozenset[str]:
-        return frozenset({"/apps/example"})
-
-    return TurnPerson(
-        principal=Principal(iss="https://issuer.example", sub="s-1"), role="user", groups=groups
     )
 
 
@@ -163,10 +141,6 @@ def logged_flag(caplog) -> str:
     return record.getMessage().rsplit("is_error=", 1)[1]
 
 
-def ending(stopped: TurnStopped | None):
-    return None if stopped is None else (stopped.kind, stopped.code)
-
-
 def sent(gateway: FakeGateway, index: int) -> dict:
     return json.loads(gateway.requests[index].content)
 
@@ -191,7 +165,7 @@ def test_one_round_runs_the_call_then_the_answer_follows(shop):
         FinalEvent(text="Done."),
     ]
     assert [(name, arguments) for name, _, arguments in shop.seen] == [("lookup", {"topic": "x"})]
-    assert shop.seen[0][1] == Principal(iss="https://issuer.example", sub="s-1")
+    assert shop.seen[0][1] == a_person().principal
     follow_up = sent(gateway, 1)["messages"][-2:]
     assert follow_up[0]["tool_calls"][0]["id"] == "c1"
     assert follow_up[1] == {"role": "tool", "tool_call_id": "c1", "content": "noted"}
@@ -445,7 +419,7 @@ def test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state(
     assert logged_flag(caplog) == "None"
 
 
-def test_a_deadline_that_passed_while_the_app_took_the_call_event_starts_no_handler(shop, caplog):
+def test_a_call_event_taken_past_the_deadline_starts_no_handler_and_leaves_no_record(shop, caplog):
     shop.add_tool("write", effect=ToolEffect.SIDE_EFFECTING)
     caplog.set_level(logging.INFO)
 

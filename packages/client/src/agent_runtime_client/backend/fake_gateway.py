@@ -6,6 +6,7 @@ next reply; the last one repeats. ``requests`` holds what the backend sent.
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -39,6 +40,12 @@ def tool_round(*calls: JsonObject, content: str | None = None) -> Reply:
     message = {"role": "assistant", "content": content, "tool_calls": list(calls)}
     choice = {"finish_reason": "tool_calls", "message": message}
     return Reply(body=json.dumps({"choices": [choice]}).encode())
+
+
+def picture(content: bytes) -> Reply:
+    """A 200 image generation that returns these bytes as the one entry's ``b64_json``."""
+    entry = {"b64_json": base64.b64encode(content).decode("ascii")}
+    return Reply(body=json.dumps({"data": [entry]}).encode())
 
 
 class FakeGateway(httpx2.AsyncBaseTransport):

@@ -163,7 +163,7 @@ scripted transport passed as `transport=`.
 ### The gateway backend
 
 `GatewayBackend(config, *, tools=(), transport=None)` runs a text turn, with the app's
-`HandTool`s when the agent selects any (a tool name given twice raises `ValueError` at construction), and no pictures yet. A selected tool with no handler, or whose request
+`HandTool`s when the agent selects any (a tool name given twice raises `ValueError` at construction), or a picture agent's turn (below). A selected tool with no handler, or whose request
 declaration differs from its `HandTool`'s, raises `ValueError` at `run`, before any request. In order, before any request: a `person.role`
 outside `request.roles` is `refused: forbidden`; `person.groups()` runs once and a refusal it
 raises reaches the app unchanged; an `api_group` the person lacks is `refused: not_enabled`.
@@ -172,7 +172,7 @@ opaque whatever its prefix; any other content is `failed: provider_unavailable`.
 `request.max_duration_seconds` is one deadline around the whole turn, every round and handler
 included; past it the turn `failed: limit_exceeded` and a running handler is cancelled.
 
-What the client sends, and nothing else:
+What the client sends for a text turn, and nothing else:
 
 | Part | Value |
 | --- | --- |
@@ -232,6 +232,33 @@ a tool returns only what that may see.
 | One request of a turn, serialised | 4 × `MAX_EVENT_BYTES` | no request is sent; `failed: limit_exceeded`. It bounds a text turn's first request too: a turn input near that size ends `failed: limit_exceeded` |
 | One response body | as for a text turn | `failed: provider_error` |
 
+#### A picture agent
+
+A request with a `picture_size` (an agent file's `picture: {size: <width>x<height>}`) runs after
+the same admission and under the same one deadline, as one call: `POST <origin>/v1/images/generations`
+with a text turn's headers, client and request bound. The body is exactly `model` (the request's
+`image/<model>` name), `prompt` (the agent's prompt, a blank line, the message), `size` and `user`
+(the fingerprint above, so one person has one budget in text and pictures); `n` and
+`response_format` are never sent. A picture request holds exactly one user message and no tools,
+refused when the `TurnRequest` is built.
+
+The reply holds exactly one `data` entry with `b64_json`. A non-null `url` is refused and never
+fetched; `url: null` beside `b64_json` passes. The turn ends with
+`FinalEvent(text="", files=(RunFile(name="picture", content=<the bytes>),))` and no
+`AssistantTextEvent`. No media type travels: `RunFile` holds none, and the app sniffs the bytes.
+
+| Bound or reply | Value | Over it or otherwise |
+| --- | --- | --- |
+| The HTTP body | `base64_length(MAX_RUN_FILES_BYTES)` plus `MAX_EVENT_BYTES` for the JSON around it | `failed: provider_error`, as a text body over its bound |
+| The decoded picture | canonical base64 by `RunFile`'s reader, at most `MAX_RUN_FILES_BYTES` (the client checks it; `RunFile` holds no ceiling) | `failed: provider_error` |
+| Malformed JSON, a non-null `url`, no entry or more than one, bad, empty or non-canonical base64 | | `failed: provider_error` |
+| 429, another status, a connection or read failure, the deadline | | as for a text turn: `refused: busy`, `failed: provider_unavailable`, `failed: limit_exceeded` |
+
+A vendor's moderation refusal is a 400 and so reads as `provider_unavailable`; telling it apart
+is a named gap, and an app shows that it did not create a picture. Closing the stream cancels the
+HTTP call, and the vendor may still bill it. Which sizes exist is the gateway's: the client
+checks the size's shape only.
+
 `GatewayBackend`'s constructor sets the `httpx2` and `httpcore2` loggers to WARNING for the whole process, overriding an app's own DEBUG setting there.
 
 ## Agent files
@@ -239,10 +266,10 @@ a tool returns only what that may see.
 An app declares its agents as Claude Code subagent files,
 `src/<pkg>/agents/<name>.md`, that `agent_runtime_client.agents.load_agent` reads into
 an `AgentDefinition`: YAML front matter (`name`, `description`, `tools`, `model`,
-`maxDurationSeconds`, `maxToolCalls`, plus the extension `appRoles`, exactly `[admin]`
+`maxDurationSeconds`, `maxToolCalls`, `picture`, plus the extension `appRoles`, exactly `[admin]`
 or `[admin, user]`) and the Markdown body as the prompt. `model` is a `text/<model>` name
 (lower-case letters, digits, `.` and `-`) and `maxDurationSeconds` a positive integer; both are
-required. `maxToolCalls` is a positive integer, required exactly when `tools` is not empty and refused when it is. `AgentFileError` names
+required. `picture: {size: <width>x<height>}` (positive whole numbers, nothing else in the mapping) makes a picture agent: its `model` must be an `image/<model>` name, and it selects no `tools` and carries no `maxToolCalls`; an agent without `picture` must name a `text/…` model. `maxToolCalls` is a positive integer, required exactly when `tools` is not empty and refused when it is. `AgentFileError` names
 the file and the field. `offered_to(role)` is a display filter, not the
 security boundary.
 
