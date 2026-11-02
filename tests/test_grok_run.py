@@ -666,6 +666,16 @@ def test_a_failed_run_raises_its_closed_class_without_cli_text_and_removes_the_t
     ends_closed(drive, tmp_path, private_root, caplog, run, failure)
 
 
+def test_an_errored_run_logs_its_class_and_no_cli_text(
+    drive, tmp_path: Path, private_root: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    stream = (grok_line(type="error", message=f"quota {CLI_TEXT}"),)
+    run = a_run(binary=a_fake_grok(tmp_path, stream, "exit 1"))
+    ends_closed(drive, tmp_path, private_root, caplog, run, GrokTurnFailed)
+    [warning] = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert "error_event" in warning.getMessage()
+
+
 @pytest.mark.parametrize(
     ("stream", "then", "failure"),
     [

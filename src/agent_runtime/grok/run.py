@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -30,6 +31,8 @@ from agent_runtime.spawn import ChildProcess, ChildProcessSpecificationError, cl
 from agent_runtime.transcript import flatten_messages
 from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import TurnMessage
+
+log = logging.getLogger(__name__)
 
 GROK_CLI_MAX_CONCURRENT_PROCESSES: Final = 8
 
@@ -83,6 +86,9 @@ GROK_MAX_TOOL_CALLS: Final = _LARGEST_TURN_LIMIT - _TURNS_BEYOND_TOOL_CALLS
 _TEXT: Final = "text"
 _END: Final = "end"
 _ERROR: Final = "error"
+# Grok's `error` event carries only message text (ADR 0001, A1b-G0a), so the class an errored run
+# logs is the event kind itself; the text never reaches the log.
+_ERROR_EVENT_CLASS: Final = "error_event"
 _TOOL_CALL: Final = "tool_call"
 _TOOL_CALL_UPDATE: Final = "tool_call_update"
 _TURN_LIMIT_REACHED: Final = "max_turns_reached"
@@ -228,6 +234,7 @@ class GrokStreamDecoder:
     def _fail_turn(event: _ErrorEvent) -> NoReturn:
         if event.message.startswith(_LOGIN_REFUSED_TEXT):
             raise_without_chain(CliLoginRefusedError(GROK_CLI_LOGIN_REFUSED_DETAIL))
+        log.warning("Grok run ended on a CLI error (class=%s)", _ERROR_EVENT_CLASS)
         raise_without_chain(GrokTurnFailed())
 
     def ending(self, returncode: int) -> FinalEvent:
