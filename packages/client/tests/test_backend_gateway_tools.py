@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import json
 import logging
+from collections import UserString
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -52,6 +53,15 @@ LIMIT_EXCEEDED = (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
 BUSY = (TurnStopKind.REFUSED, RejectionCode.BUSY)
 
 
+class SkewedLoop(asyncio.SelectorEventLoop):
+    """An event loop whose clock the app side can move on, so a late consumer needs no sleep."""
+
+    skew_seconds: float = 0
+
+    def time(self) -> float:
+        return super().time() + self.skew_seconds
+
+
 @dataclass
 class Shop:
     """The app side of a turn: its hand tools, what they were called with, and the gateway."""
@@ -85,13 +95,14 @@ class Shop:
         max_tool_calls: int = 5,
         selected: tuple[str, ...] | None = None,
         max_duration_seconds: int = 30,
-        consumer_pause_seconds: float = 0,
+        late_after: type | None = None,
     ) -> tuple[list, TurnStopped | None, FakeGateway]:
         gateway = FakeGateway(*replies)
         chosen = [t for t in self.tools if selected is None or t.declaration.name in selected]
         request = a_request(chosen, max_tool_calls, max_duration_seconds)
         backend = GatewayBackend(self.config(), tools=self.tools, transport=gateway)
-        events, stopped = asyncio.run(_turn(backend, request, consumer_pause_seconds))
+        with asyncio.Runner(loop_factory=SkewedLoop) as runner:
+            events, stopped = runner.run(_turn(backend, request, late_after))
         return events, stopped, gateway
 
     def config(self) -> AgentConfig:
@@ -130,16 +141,22 @@ def a_person() -> TurnPerson:
     )
 
 
-async def _turn(backend: GatewayBackend, request: TurnRequest, consumer_pause_seconds: float = 0):
+async def _turn(backend: GatewayBackend, request: TurnRequest, late_after: type | None = None):
+    """Run a turn; the app takes `late_after` events so long that the turn's deadline has passed."""
     events = []
     try:
         async with contextlib.aclosing(backend.run(request, a_person())) as stream:
             async for event in stream:
                 events.append(event)
-                await asyncio.sleep(consumer_pause_seconds)
+                if late_after is not None and isinstance(event, late_after):
+                    asyncio.get_running_loop().skew_seconds += request.max_duration_seconds + 1
     except TurnStopped as stopped:
         return events, stopped
     return events, None
+
+
+def finished_calls(caplog) -> list[logging.LogRecord]:
+    return [r for r in caplog.records if r.levelno == logging.INFO and "lookup" in r.getMessage()]
 
 
 def ending(stopped: TurnStopped | None):
@@ -298,12 +315,20 @@ def test_the_model_reads_an_error_outcome_differently_from_a_success_of_the_same
     "unusable",
     [
         ToolOutcome("bad \udc80 name", is_error=False),
+        ToolOutcome(UserString("ok"), is_error=False),
         None,
         ToolOutcome("ok", is_error=None),
         ToolOutcome("ok", is_error="maybe"),
         SimpleNamespace(content="done"),
     ],
-    ids=["lone-surrogate", "no-outcome", "error-flag-none", "error-flag-text", "no-error-flag"],
+    ids=[
+        "lone-surrogate",
+        "content-not-text",
+        "no-outcome",
+        "error-flag-none",
+        "error-flag-text",
+        "no-error-flag",
+    ],
 )
 def test_an_unusable_outcome_of_a_side_effecting_handler_is_an_error_and_the_turn_goes_on(
     shop, unusable
@@ -354,7 +379,7 @@ def test_each_call_logs_its_name_id_and_error_flag_never_arguments_or_content(sh
 
     shop.run(tool_round(tool_call("c1", "lookup", {"k": "argument-canary"})), completion("ok"))
 
-    calls = [r for r in caplog.records if r.levelno == logging.INFO and "lookup" in r.getMessage()]
+    calls = finished_calls(caplog)
     assert len(calls) == 1
     assert "c1" in calls[0].getMessage()
     assert "True" in calls[0].getMessage()
@@ -386,7 +411,9 @@ def test_crossing_max_tool_calls_fails_with_limit_exceeded(shop, replies, calls_
 
 
 @pytest.mark.parametrize("effect", list(ToolEffect))
-def test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state(shop, effect):
+def test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state(
+    shop, effect, caplog
+):
     # One whole second, which the first round and its call event cannot plausibly outlast.
     cancelled = []
 
@@ -399,6 +426,7 @@ def test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state(
         return ToolOutcome("never", is_error=False)
 
     shop.add_tool("lookup", effect=effect, answer=stuck)
+    caplog.set_level(logging.INFO)
 
     events, stopped, gateway = shop.run(
         tool_round(tool_call("c1", "lookup", {})), completion("never"), max_duration_seconds=1
@@ -409,6 +437,7 @@ def test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state(
     assert cancelled == [True]
     assert [type(event) for event in events] == [ToolCallEvent]
     assert len(gateway.requests) == 1
+    assert len(finished_calls(caplog)) == 1
 
 
 def test_a_deadline_that_passed_while_the_app_took_the_call_event_starts_no_handler(shop):
@@ -418,7 +447,7 @@ def test_a_deadline_that_passed_while_the_app_took_the_call_event_starts_no_hand
         tool_round(tool_call("c1", "write", {})),
         completion("never"),
         max_duration_seconds=1,
-        consumer_pause_seconds=1.2,
+        late_after=ToolCallEvent,
     )
 
     assert ending(stopped) == LIMIT_EXCEEDED
@@ -437,7 +466,7 @@ def test_a_deadline_that_passed_while_the_app_took_the_result_event_sends_no_nex
         tool_round(tool_call("c1", "write", {})),
         completion("never"),
         max_duration_seconds=1,
-        consumer_pause_seconds=0.6,
+        late_after=ToolResultEvent,
     )
 
     assert ending(stopped) == LIMIT_EXCEEDED
@@ -494,7 +523,7 @@ def test_a_busy_gateway_at_round_two_reports_whether_a_call_may_have_written(
     assert stopped.retry_after_s == 7
 
 
-def test_cancelling_between_a_call_and_its_result_reaches_the_caller_unchanged(shop):
+def test_cancelling_between_a_call_and_its_result_reaches_the_caller_unchanged(shop, caplog):
     started = asyncio.Event()
 
     async def stuck() -> ToolOutcome:
@@ -506,6 +535,7 @@ def test_cancelling_between_a_call_and_its_result_reaches_the_caller_unchanged(s
     gateway = FakeGateway(tool_round(tool_call("c1", "lookup", {})), completion("never"))
     backend = GatewayBackend(shop.config(), tools=shop.tools, transport=gateway)
     events: list = []
+    caplog.set_level(logging.INFO)
 
     async def consume() -> None:
         async with contextlib.aclosing(backend.run(a_request(shop.tools, 3), a_person())) as stream:
@@ -523,6 +553,7 @@ def test_cancelling_between_a_call_and_its_result_reaches_the_caller_unchanged(s
 
     assert [type(event) for event in events] == [ToolCallEvent]
     assert len(gateway.requests) == 1
+    assert len(finished_calls(caplog)) == 1
 
 
 @pytest.mark.parametrize(

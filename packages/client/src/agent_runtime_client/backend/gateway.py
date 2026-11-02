@@ -126,11 +126,9 @@ class GatewayBackend(AgentBackend):
                     _refuse_after(deadline)
                     progress.wrote |= tools[call.name].effect is ToolEffect.SIDE_EFFECTING
                     handler = self._tools[call.name].handler
-                    outcome = await _before(deadline, _serve(handler, person, call))
-                    yield ToolResultEvent(
-                        tool_use_id=call.id, content=outcome.content, is_error=outcome.is_error
-                    )
-                    messages.append(_result_message(call, outcome))
+                    result = await _before(deadline, _serve(handler, person, call))
+                    yield result
+                    messages.append(_result_message(result))
         except TurnStopped as stopped:
             stopped.after_side_effect = stopped.after_side_effect or progress.wrote
             raise
@@ -255,23 +253,35 @@ def _limit_exceeded() -> TurnStopped:
     return TurnStopped(TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
 
 
-async def _serve(handler: HandToolHandler, person: TurnPerson, call: _Call) -> ToolOutcome:
-    """Run one handler; whatever it raises or returns that is unusable is a host defect."""
+async def _serve(handler: HandToolHandler, person: TurnPerson, call: _Call) -> ToolResultEvent:
+    """Run one handler; an outcome that is no valid result event is a host defect like a raise."""
+    is_error: bool | None = None  # unset for a call the deadline or a cancellation cut off
     try:
-        outcome = _bounded(await handler(person.principal, call.arguments))
+        event = _result_event(call, await handler(person.principal, call.arguments))
     except Exception as error:  # a handler is the app's code; its failure is a host defect
         _LOGGER.error("tool %s raised %s", call.name, type(error).__qualname__)
-        outcome = ToolOutcome(_HANDLER_FAILED_TEXT, is_error=True)
-    _LOGGER.info("tool %s call %r finished, is_error=%s", call.name, call.id, outcome.is_error)
-    return outcome
+        event = _failed_event(call, _HANDLER_FAILED_TEXT)
+        is_error = True
+        return event
+    else:
+        is_error = event.is_error
+        return event
+    finally:
+        _LOGGER.info("tool %s call %r finished, is_error=%s", call.name, call.id, is_error)
 
 
-def _bounded(outcome: ToolOutcome) -> ToolOutcome:
-    if not isinstance(outcome, ToolOutcome) or not isinstance(outcome.is_error, bool):
-        raise TypeError("a handler returned something other than a ToolOutcome")
-    if len(outcome.content.encode("utf-8")) > MAX_EVENT_BYTES:
-        return ToolOutcome(_RESULT_TOO_LARGE_TEXT, is_error=True)
-    return outcome
+def _result_event(call: _Call, outcome: ToolOutcome) -> ToolResultEvent:
+    event = ToolResultEvent.model_validate(
+        {"tool_use_id": call.id, "content": outcome.content, "is_error": outcome.is_error},
+        strict=True,
+    )
+    if len(event.content.encode("utf-8")) > MAX_EVENT_BYTES:
+        return _failed_event(call, _RESULT_TOO_LARGE_TEXT)
+    return event
+
+
+def _failed_event(call: _Call, text: str) -> ToolResultEvent:
+    return ToolResultEvent(tool_use_id=call.id, content=text, is_error=True)
 
 
 def _fingerprint(principal: Principal) -> str:
@@ -288,9 +298,9 @@ def _opening_messages(request: TurnRequest) -> list[_Message]:
     return messages
 
 
-def _result_message(call: _Call, outcome: ToolOutcome) -> _Message:
-    content = _ERROR_PREFIX + outcome.content if outcome.is_error else outcome.content
-    return {"role": "tool", "tool_call_id": call.id, "content": content}
+def _result_message(result: ToolResultEvent) -> _Message:
+    content = _ERROR_PREFIX + result.content if result.is_error else result.content
+    return {"role": "tool", "tool_call_id": result.tool_use_id, "content": content}
 
 
 def _body(request: TurnRequest, messages: list[_Message], user: str) -> str:
