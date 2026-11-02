@@ -1,0 +1,8 @@
+claim_id = "7b67dd38a9344e70bc1032e8ca98e491"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "c22e1c2f15c892dfddcefb4079787ecd3bf9a6cd"
+branch = "claude/issue-566-agent-runtime-moves-to-python-3-14-quali"
+scope = [".github/workflows/ci.yml", ".python-version", "docs/MIGRATING.md", "packages/client/pyproject.toml", "packages/service/pyproject.toml", "packages/service/tests/fixtures/keycloak/requirements.txt", "pyproject.toml", "quality/config.toml", "sonar-project.properties", "src/agent_runtime/spawn.py", "uv.lock"]
+opened_commit = "fbc4cf8d02ccf872d0ebd7d3f110124acb225ebc"
+whole_reason = "One floor for three distributions that move in lockstep; the lock, CI matrix, the Keycloak fixture's compiled requirements and gate allowances must change with it in one commit."
