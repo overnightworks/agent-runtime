@@ -75,7 +75,7 @@ A request the service refuses answers a `RunRejection` with one `RejectionCode`:
 | Code | Status | Meaning |
 |---|---|---|
 | `unauthorized` | 401 | On `POST /runs` and `GET /runs/{id}`: a workload token is required, and a user token unless the app runs one of its own agents; every token sent must be valid and carry a readable `sub` and group claim. On `GET /models` only the workload token is read, and a missing or invalid one is refused. An `Agent-Job-Ticket` header on any of these routes is refused too. |
-| `forbidden` | 403 | The user is no member of the app, the request's `roles` lack the caller's role, the request names a tool while the app has no MCP origin, the two tokens do not belong together ([webauth's host contract](https://github.com/overnightworks/webauth/blob/v0.26.0/docs/host-contract.md#a-services-callers) lists the causes of both codes in the order they are checked: every 401 and 503 about the tokens comes before any 403), or a run without a user token names an agent the app may not run as itself. |
+| `forbidden` | 403 | The user is no member of the app, the request's `roles` lack the caller's role, the request names a tool while the app has no MCP origin, the two tokens do not belong together ([webauth's host contract](https://github.com/overnightworks/webauth/blob/v0.29.0/docs/host-contract.md#a-services-callers) lists the causes of both codes in the order they are checked: every 401 and 503 about the tokens comes before any 403), or a run without a user token names an agent the app may not run as itself. |
 | `not_enabled` | 403 | No route is enabled for this caller and model. |
 | `unsupported_version` | 400 | `v` is not the JSON integer 6. |
 | `model_not_offered` | 422 | The request names a model in the grammar that the installation does not offer. A run that fails keeps the model it named; nothing falls back to another. |
@@ -257,8 +257,8 @@ state. The core's `ToolCatalog` builds on the same class.
 `HandTool` is a declaration with the async handler `(Principal, JsonObject) -> ToolOutcome`
 that serves it in the app's own process; `ToolOutcome` is `content` and `is_error`. The module
 exports `Principal` and `JsonObject` too, so an app's `agent/tools.py` imports only
-`agent_runtime_client.tools`. It imports neither `wire` nor `mcp_wire`, which re-exports
-`ToolOutcome`.
+`agent_runtime_client.tools`. It imports neither `wire` nor `mcp_wire`, which binds
+`ToolOutcome` for its own use but does not export it to a type checker.
 
 ## API text results
 
