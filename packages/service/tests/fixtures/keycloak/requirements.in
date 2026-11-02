@@ -2,4 +2,7 @@
 # no workspace package, so they run with --noconftest from these pins alone.
 pytest>=7,<10
 httpx>=0.27,<1
-overnightworks-webauth @ https://github.com/overnightworks/webauth/releases/download/v0.26.0/overnightworks_webauth-0.26.0-py3-none-any.whl
+overnightworks-webauth @ git+https://github.com/overnightworks/webauth@v0.27.0
+# requirements.txt leaves webauth out (--no-emit-package): the quality advisory
+# lens reads only hashed lines. webauth-pin.txt holds the commit of this tag, the
+# git source's integrity pin, and CI installs it apart with --no-deps.

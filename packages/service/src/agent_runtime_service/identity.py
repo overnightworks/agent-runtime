@@ -26,7 +26,7 @@ from webauth.jwt_verification import KeySetFetch, MonotonicClock
 from webauth.oidc_login import AppRole
 from webauth.service_callers import (
     CallerRefusal,
-    CallerRefusalReason,
+    CallerRefusalClass,
     PersonCaller,
     RegisteredApp,
     ServiceCallerCheck,
@@ -47,25 +47,16 @@ _AGENT_ROLE_OF: Final[Mapping[AppRole, AgentRole]] = {
     AppRole.USER: "user",
 }
 
-_CODE_OF_REASON: Final[Mapping[CallerRefusalReason, RejectionCode]] = {
-    CallerRefusalReason.KEY_SET_UNAVAILABLE: RejectionCode.UNAVAILABLE,
-    CallerRefusalReason.MISSING_TOKEN: RejectionCode.UNAUTHORIZED,
-    CallerRefusalReason.TOKEN_REJECTED: RejectionCode.UNAUTHORIZED,
-    CallerRefusalReason.INVALID_SUBJECT: RejectionCode.UNAUTHORIZED,
-    CallerRefusalReason.MALFORMED_GROUPS: RejectionCode.UNAUTHORIZED,
-    CallerRefusalReason.NOT_A_WORKLOAD: RejectionCode.FORBIDDEN,
-    CallerRefusalReason.UNBOUND_CLIENT: RejectionCode.FORBIDDEN,
-    CallerRefusalReason.UNREGISTERED_CLIENT: RejectionCode.FORBIDDEN,
-    CallerRefusalReason.WORKLOAD_LIVES_TOO_LONG: RejectionCode.FORBIDDEN,
-    CallerRefusalReason.CLIENT_MISMATCH: RejectionCode.FORBIDDEN,
-    CallerRefusalReason.SAME_SUBJECT: RejectionCode.FORBIDDEN,
-    CallerRefusalReason.NOT_A_MEMBER: RejectionCode.FORBIDDEN,
+_CODE_OF_CLASS: Final[Mapping[CallerRefusalClass, RejectionCode]] = {
+    CallerRefusalClass.UNAVAILABLE: RejectionCode.UNAVAILABLE,
+    CallerRefusalClass.UNAUTHENTICATED: RejectionCode.UNAUTHORIZED,
+    CallerRefusalClass.FORBIDDEN: RejectionCode.FORBIDDEN,
 }
 
 
 def rejection_code(refusal: CallerRefusal) -> RejectionCode:
-    """The wire code of a refusal; a reason this service does not know raises ``KeyError``."""
-    return _CODE_OF_REASON[refusal.reason]
+    """The wire code of a refusal's class."""
+    return _CODE_OF_CLASS[refusal.refusal_class]
 
 
 def agent_role(caller: PersonCaller) -> AgentRole:
