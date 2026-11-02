@@ -4,6 +4,8 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 
 ## Migrating to 0.16.0
 
+This release is a switch day: the wire moved to protocol 6, so a host moves its service and its apps together.
+
 | Before (0.15.0) | Now |
 | --- | --- |
 | `agent_runtime.events` (`StreamEvent`, `AssistantTextEvent`, `ToolCallEvent`, `ToolResultEvent`, `FinalEvent`) | `agent_runtime_client.turn_events`, with the same five classes and no alias; change the import line. |
@@ -24,6 +26,7 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | `agent_runtime.codex.renewal.CopyUnchanged` | `agent_runtime.login_renewal.CopyUnchanged`, with no alias. |
 | The service did not renew a `[cli.xai]` login: the operator signed in again when its key lapsed. | The service renews it from its lifespan with the pinned `grok` (`grok models`, no turn), once the key has less than half its lifetime left, at every round when its timing cannot be read. It swaps the result in through the login writer, so the login directory needs a read-write bind exactly as for `[cli.openai]`; a read-only directory logs `sibling not created` and nothing renews. The renewal waits for no Grok run. |
 | `agent-runtime-service-login --check --provider xai` printed only the reader's verdict (exit 0, 4 or 3). | It prints the standing with the exits of `openai`: 0 (not due, due), 4 (expired, not renewed in time, no refresh token) or 5 (the key's expiry cannot be read, for example a key that is not a JWT). A setup that treated 0 as the only answer for `xai` now handles 4 and 5. |
+| A run the Claude, Codex or Grok CLI ended with an error left the log silent about its class. | It logs one WARNING `<Provider> run ended on a CLI error (class=...)`: Claude names the CLI's error or subtype from a closed list of recorded values or `other`, Codex logs `turn_failed` and Grok `error_event`, never the CLI's text. The wire ending is unchanged. |
 
 ## Migrating to 0.15.0
 
