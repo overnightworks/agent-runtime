@@ -225,9 +225,7 @@ def test_m22_heartbeats_never_surface():
 @pytest.mark.parametrize(
     "token", ["bad\ntoken", "bad\rtoken", "bad\x00token", "bäd", " lead", "trail ", "mid dle"]
 )
-def test_a_token_no_header_can_carry_ends_the_turn_refused_without_a_request(
-    token, field, caplog
-):
+def test_a_token_no_header_can_carry_ends_the_turn_refused_without_a_request(token, field, caplog):
     fake = FakeService()
     lifecycle = RecordingLifecycle()
     asker = _asker(**{f"{field}_token": token})
