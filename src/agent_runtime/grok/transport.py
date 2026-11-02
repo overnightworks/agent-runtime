@@ -213,11 +213,10 @@ class GrokCliToolTransport:
             channel.request_abort()
             await asyncio.shield(runner)
             _log_tool_protocol_rejection(exc.code)
-            reason = (
-                SafeRouteReasonCode.TOOL_PROTOCOL_ERROR
-                if exc.code is ToolProtocolRejectionCode.NATIVE_TOOL_BLOCKED
-                else SafeRouteReasonCode.CLI_PROTOCOL_ERROR
-            )
+            if exc.code is ToolProtocolRejectionCode.NATIVE_TOOL_BLOCKED:
+                reason = SafeRouteReasonCode.TOOL_PROTOCOL_ERROR
+            else:
+                reason = SafeRouteReasonCode.CLI_PROTOCOL_ERROR
             raise ProviderUnavailableError(
                 "grok",
                 "cli",
