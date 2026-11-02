@@ -2,6 +2,12 @@
 
 Read by a host bumping its pin; each release that breaks a host has one section, newest first.
 
+## Migrating to 0.17.0
+
+| Before (0.16.0) | Now |
+| --- | --- |
+| The three wheels declared `requires-python = ">=3.12"`. | They declare `>=3.14`; a host installs them on Python 3.14 or newer, and an install on 3.12 or 3.13 fails. |
+
 ## Migrating to 0.16.0
 
 This release is a switch day: the wire moved to protocol 6, so a host moves its service and its apps together.

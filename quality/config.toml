@@ -1,7 +1,5 @@
 [gate]
 mandatory_jobs = [
-  "test (3.12)",
-  "test (3.13)",
   "test (3.14)",
   "test (3.15)",
   "checks",
@@ -14,6 +12,18 @@ what = 'import contract "inside the core, only the routers import a provider pac
 item = "#674"
 date = 2026-11-01
 reason = "agent_runtime.events moved into agent_runtime_client.turn_events, so it leaves the core contract's source_modules; the module no longer exists in the core"
+
+[[gate.loosened]]
+what = 'mandatory job "test (3.12)" removed'
+item = "#566"
+date = 2026-11-02
+reason = "the operator's ruling „ich will das alles auf 3.14“ (quality#38): the wheels' floor is Python 3.14, so CI no longer tests Python 3.12"
+
+[[gate.loosened]]
+what = 'mandatory job "test (3.13)" removed'
+item = "#566"
+date = 2026-11-02
+reason = "the operator's ruling „ich will das alles auf 3.14“ (quality#38): the wheels' floor is Python 3.14, so CI no longer tests Python 3.13"
 
 [secrets]
 allow = [
@@ -56,15 +66,3 @@ reason = "tests the fake app in tests/support/mcp_app_fake.py"
 path = "tests/test_async_claude_spawn_seam.py"
 rule = "test-layout"
 reason = "tests the async Claude child seam in tests/support/provider_test_support.py and guards that it stays the only door"
-
-[[python.allow]]
-path = "pyproject.toml"
-reason = "songmaker and presentator install these wheels on Python 3.12 (their .python-version files read 3.12 on 29.10.2026); raising requires-python to 3.14 would break them"
-
-[[python.allow]]
-path = "packages/client/pyproject.toml"
-reason = "songmaker and presentator install these wheels on Python 3.12 (their .python-version files read 3.12 on 29.10.2026); raising requires-python to 3.14 would break them"
-
-[[python.allow]]
-path = "packages/service/pyproject.toml"
-reason = "songmaker and presentator install these wheels on Python 3.12 (their .python-version files read 3.12 on 29.10.2026); raising requires-python to 3.14 would break them"

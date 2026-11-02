@@ -27,9 +27,8 @@ signal reach only this run.
 The host obligation: the anchor holds only while nothing else reaps this
 child. Forbidden are ``waitpid(-1)``, ``os.wait()``, ``wait3`` and ``wait4``
 on any child, ``SIGCHLD`` set to ``SIG_IGN`` (which the start refuses),
-``SA_NOCLDWAIT``, the deprecated
-``FastChildWatcher`` of Python 3.12 and 3.13, and any ptrace request of the
-service. Per-pid asyncio watchers do not consume this unregistered child. A
+``SA_NOCLDWAIT`` and any ptrace request of the service. Per-pid asyncio
+watchers do not consume this unregistered child. A
 foreign reap after a successful observation can invalidate the anchor without
 timely detection; :class:`ChildIdentityLost` is a best-effort signal, not a
 guarantee.
