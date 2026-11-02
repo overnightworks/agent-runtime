@@ -281,6 +281,18 @@ def test_a_refusal_the_groups_lookup_raises_reaches_the_app_unchanged(scenario):
     assert (gateway.requests, calls) == ([], [1])
 
 
+def test_a_timeout_the_groups_lookup_raises_itself_reaches_the_app_unchanged(scenario):
+    gateway = FakeGateway(completion("ok"))
+    lookup_timeout = TimeoutError("lookup")
+    person, _ = scenario.person(lookup_timeout)
+    backend = GatewayBackend(scenario.config(), transport=gateway)
+
+    with pytest.raises(TimeoutError) as raised:
+        scenario.outcome(backend, person=person)
+
+    assert (raised.value, gateway.requests) == (lookup_timeout, [])
+
+
 def test_groups_are_asked_once_per_turn(scenario):
     person, calls = scenario.person()
 
@@ -378,8 +390,7 @@ def test_a_refusal_body_is_never_read_and_the_response_is_closed(scenario):
 
     _, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=refusal))
 
-    assert ending(stopped) == UNAVAILABLE
-    assert stopped.detail == "gateway_refused"
+    assert (ending(stopped), stopped.detail) == (UNAVAILABLE, "gateway_refused")
     assert not refusal.read
     assert refusal.closed.is_set()
 
@@ -491,22 +502,11 @@ def test_a_200_body_that_cannot_be_decoded_is_provider_error(scenario):
     assert undecodable.closed.is_set()
 
 
-def test_a_reply_of_exactly_the_event_bound_is_answered(scenario):
-    text = "a" * MAX_EVENT_BYTES
-
-    events, stopped = scenario.outcome(
-        GatewayBackend(scenario.config(), transport=FakeGateway(completion(text)))
-    )
-
-    assert stopped is None
-    assert events[-1] == FinalEvent(text=text)
-
-
-def test_a_reply_of_the_event_bound_in_json_escapes_is_answered(scenario):
-    escaped = "\\u0061" * MAX_EVENT_BYTES
+@pytest.mark.parametrize("unit", ["a", "\\u0061"], ids=["plain", "json_escapes"])
+def test_a_reply_of_the_event_bound_is_answered(scenario, unit):
     body = (
         '{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"'
-        + escaped
+        + unit * MAX_EVENT_BYTES
         + '"}}],"usage":{"total_tokens":1}}'
     ).encode()
 
