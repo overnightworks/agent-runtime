@@ -26,6 +26,7 @@ from tests.support.service_support import served
 from tests.support.wire_builders import RUN_ID, call, started, text
 
 from agent_runtime_client.backend import TurnStopKind
+from agent_runtime_client.backend.service import REJECTION_BODY_LIMIT_BYTES
 from agent_runtime_client.tools import ToolEffect
 from agent_runtime_client.wire import (
     PROTOCOL_VERSION,
@@ -153,3 +154,22 @@ def test_no_token_reaches_the_text_a_stopped_turn_carries():
     shown = f"{stopped!s} {stopped.detail} {stopped.__context__} {stopped.__cause__}"
     assert PERSON_TOKEN not in shown
     assert WORKLOAD_TOKEN not in shown
+
+
+def test_a_rejection_body_past_the_bound_is_unavailable_though_it_decodes():
+    padding = b" " * REJECTION_BODY_LIMIT_BYTES
+    fake = FakeService(REFUSAL_STATUS, chunks=[_refusal_body("busy"), padding])
+
+    _, stopped = _run(fake)
+
+    assert (stopped.kind, stopped.code) == (TurnStopKind.REFUSED, RejectionCode.UNAVAILABLE)
+
+
+@pytest.mark.parametrize("variable", ["HTTP_PROXY", "ALL_PROXY"])
+def test_a_proxy_variable_in_the_environment_does_not_route_the_run(monkeypatch, variable):
+    monkeypatch.setenv(variable, "http://127.0.0.1:9")
+    fake = FakeService(REFUSAL_STATUS, chunks=[_refusal_body("not_found")])
+
+    _, stopped = _run(fake)
+
+    assert (stopped.kind, stopped.code) == (TurnStopKind.REFUSED, RejectionCode.NOT_FOUND)
