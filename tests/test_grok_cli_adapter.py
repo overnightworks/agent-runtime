@@ -62,7 +62,6 @@ from agent_runtime.errors import (
     SafeRouteReasonCode,
     TextToolCallRejectedError,
 )
-from agent_runtime.events import AssistantTextEvent, FinalEvent, ToolCallEvent
 from agent_runtime.grok import transport as grok_cli_adapter
 from agent_runtime.process import CliRunOutcome, CliRunReason
 from agent_runtime.procfs import GroupCensus
@@ -78,6 +77,7 @@ from agent_runtime.tool_loop import (
 )
 from agent_runtime.tools import ToolCatalog, ToolProtocolMarkup
 from agent_runtime_client.tools import ToolDeclaration
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent, ToolCallEvent
 
 failure_watch = provider_test_support.failure_watch
 

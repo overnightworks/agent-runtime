@@ -14,12 +14,6 @@ from tests.support.provider_test_support import A_CANARY, A_TOOL_FAILURE_MESSAGE
 
 from agent_runtime import tool_loop
 from agent_runtime.errors import TextToolCallRejectedError
-from agent_runtime.events import (
-    AssistantTextEvent,
-    FinalEvent,
-    ToolCallEvent,
-    ToolResultEvent,
-)
 from agent_runtime.text_tool_protocol import TextToolRejection, TextToolRejectionRule
 from agent_runtime.tool_loop import (
     FinalText,
@@ -32,6 +26,12 @@ from agent_runtime.tool_loop import (
     ToolResultBatch,
     TransportResponse,
     stream_tool_loop,
+)
+from agent_runtime_client.turn_events import (
+    AssistantTextEvent,
+    FinalEvent,
+    ToolCallEvent,
+    ToolResultEvent,
 )
 
 A_CORRELATION_ID = "job-42"

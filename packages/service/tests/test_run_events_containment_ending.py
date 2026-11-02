@@ -37,8 +37,8 @@ from tests.support.service_support import (
 )
 
 from agent_runtime.errors import ContainmentLost, RetainedGroup
-from agent_runtime.events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime_client.run_stream import ViolationKind
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime_client.wire import (
     ClientLoss,
     Failed,

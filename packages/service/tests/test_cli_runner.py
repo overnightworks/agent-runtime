@@ -88,10 +88,10 @@ from tests.support.service_support import (
     the_app_on,
 )
 
-from agent_runtime.events import AssistantTextEvent
 from agent_runtime.procfs import GroupCensus
 from agent_runtime.spawn import KillUntilGoneResult
 from agent_runtime_client.sse import RunStreamDecoder
+from agent_runtime_client.turn_events import AssistantTextEvent
 from agent_runtime_client.wire import (
     ClientLoss,
     FailureCode,

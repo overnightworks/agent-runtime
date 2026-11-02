@@ -84,7 +84,6 @@ from agent_runtime.errors import (
     TextToolCallRejectedError,
     normalize_route_failure,
 )
-from agent_runtime.events import AssistantTextEvent, FinalEvent, ToolCallEvent
 from agent_runtime.process import (
     AgentCliUnavailableError,
     CliRunOutcome,
@@ -104,6 +103,7 @@ from agent_runtime.tool_loop import (
     ToolResultBatch,
     stream_tool_loop,
 )
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent, ToolCallEvent
 
 
 def _transport() -> codex_transport.CodexCliToolTransport:

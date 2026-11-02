@@ -61,8 +61,8 @@ from agent_runtime.codex.run import (
 from agent_runtime.codex_login import assess_codex_login
 from agent_runtime.config import PrivateWorkingRoot, reset_config
 from agent_runtime.errors import CliLoginRefusedError
-from agent_runtime.events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime.spawn import ChildProcessSpecificationError, closed_environment
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent, StreamEvent
 from agent_runtime_client.wire import TurnMessage
 
 SYSTEM_TEXT = "system-canary-7d2e"

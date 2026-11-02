@@ -35,7 +35,6 @@ import agent_runtime.run_output as run_output
 from agent_runtime.anchored_turn import CliProcessPool
 from agent_runtime.cli_run import astream_cli_run
 from agent_runtime.config import PrivateWorkingRoot, reset_config
-from agent_runtime.events import FinalEvent, StreamEvent
 from agent_runtime.process import (
     CliEnvironmentCause,
     CliEnvironmentUnavailableError,
@@ -43,6 +42,7 @@ from agent_runtime.process import (
     run_directories,
 )
 from agent_runtime.run_output import RunOutputCause, RunOutputRefused, collect_output
+from agent_runtime_client.turn_events import FinalEvent, StreamEvent
 from agent_runtime_client.wire import RunFile
 
 LIMIT = 16

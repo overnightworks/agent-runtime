@@ -26,14 +26,14 @@ from tests.support.service_support import alice_admitted_run, failure_lines, ser
 
 import agent_runtime_service.cli_runner as cli_runner_module
 from agent_runtime.errors import ContainmentLost, RetainedGroup
-from agent_runtime.events import (
+from agent_runtime_client.mcp_wire import CallToolParams, ToolDefinition, ToolOutcome
+from agent_runtime_client.turn_events import (
     AssistantTextEvent,
     FinalEvent,
     StreamEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
-from agent_runtime_client.mcp_wire import CallToolParams, ToolDefinition, ToolOutcome
 from agent_runtime_service.cli_runner import CliRunner
 from agent_runtime_service.relayed_events import RelayedEvents
 from agent_runtime_service.run_liveness import LoopClock

@@ -56,7 +56,7 @@ from tests.support.service_table_support import CODEX_NAME, a_config_with_both_p
 from tests.support.token_rejection_support import UNKNOWN_RUN
 from webauth.https_client import KeySetFetchError
 
-from agent_runtime.events import AssistantTextEvent, FinalEvent
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import RejectionCode, RouteKind, RunStarted
 from agent_runtime_service.app import create_app
 from agent_runtime_service.config import AgentConfig, Provider, ServiceConfig, load_config

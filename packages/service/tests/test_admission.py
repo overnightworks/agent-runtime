@@ -49,7 +49,7 @@ from tests.support.service_support import (
 from webauth.https_client import KeySetFetchError
 
 from agent_runtime.errors import ContainmentLost, RetainedGroup
-from agent_runtime.events import AssistantTextEvent, FinalEvent
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import Failed, FailureCode, RejectionCode, RunStarted
 from agent_runtime_service.admission import AdmissionSlot
 from agent_runtime_service.app import create_app

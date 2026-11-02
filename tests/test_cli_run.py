@@ -57,13 +57,13 @@ from agent_runtime.cli_run import (
 )
 from agent_runtime.config import PrivateWorkingRoot, reset_config
 from agent_runtime.errors import ContainmentLost
-from agent_runtime.events import (
+from agent_runtime.procfs import GroupCensus
+from agent_runtime.spawn import KillUntilGoneResult
+from agent_runtime_client.turn_events import (
     FinalEvent,
     StreamEvent,
     ToolCallEvent,
 )
-from agent_runtime.procfs import GroupCensus
-from agent_runtime.spawn import KillUntilGoneResult
 
 ABSENT_BINARY = Path("/nonexistent/cli-binary")
 LINE_LIMIT_BYTES = 1024

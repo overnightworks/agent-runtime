@@ -1,7 +1,7 @@
 """The port through which an admitted run reaches a provider.
 
-A runner turns one admitted run into the provider core's in-process turn
-events (``agent_runtime.events``); the service maps those onto the wire.
+A runner turns one admitted run into the client's in-process turn events
+(``agent_runtime_client.turn_events``); the service maps those onto the wire.
 Each route has at most one runner. Production always installs the CLI runner and installs
 the API runner when ``[api]`` is set; an admitted run always has its route's runner.
 
@@ -25,7 +25,7 @@ from uuid import UUID
 
 from webauth.service_callers import Principal
 
-from agent_runtime.events import StreamEvent
+from agent_runtime_client.turn_events import StreamEvent
 from agent_runtime_client.wire import ModelName, RunRequest
 from agent_runtime_service.capability import Capability
 from agent_runtime_service.routing import Api, Cli, ServedRoute

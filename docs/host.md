@@ -103,7 +103,7 @@ call; `ToolCatalog` (`agent_runtime.tools`) holds the tool declarations and the
 host-declared `ToolProtocolMarkup`; `McpServerSpec` (`agent_runtime.config`)
 says how the host's MCP server is launched. Their docstrings state what a failure is and what the
 loop logs. A turn emits the in-process `StreamEvent` union
-(`agent_runtime.events`); the service's wire is `agent_runtime_client.wire`, not that
+(`agent_runtime_client.turn_events`); the service's wire is `agent_runtime_client.wire`, not that
 union.
 
 **Rejected tool-call text.** `TextToolCallRejectedError` carries a `rejection`

@@ -51,8 +51,8 @@ flowchart TB
 - The **service** builds on both, runs as `agent-runtime-service --config PATH`, and
   alone depends on a web framework.
 
-The service's wire has one owner, `agent_runtime_client.wire`. The core's in-process
-turn event (`agent_runtime.events`) is never a second wire; `agent_runtime_service.run_events`
+The service's wire has one owner, `agent_runtime_client.wire`. The in-process
+turn event (`agent_runtime_client.turn_events`) is never a second wire; `agent_runtime_service.run_events`
 maps it onto the wire.
 
 ## How a run is routed

@@ -25,7 +25,6 @@ from agent_runtime.errors import (
     SafeRouteReasonCode,
     normalize_route_failure,
 )
-from agent_runtime.events import StreamEvent
 from agent_runtime.tool_loop import (
     FinalText,
     InitialTurn,
@@ -39,6 +38,7 @@ from agent_runtime.tool_loop import (
     TransportResponse,
     stream_tool_loop,
 )
+from agent_runtime_client.turn_events import StreamEvent
 
 log = logging.getLogger(__name__)
 

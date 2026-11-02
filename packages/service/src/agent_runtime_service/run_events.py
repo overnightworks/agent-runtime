@@ -1,7 +1,7 @@
 """One admitted run as the frames of its wire stream.
 
 This module owns the mapping from the provider core's turn events
-(``agent_runtime.events``) onto the run events of ``agent_runtime_client.wire``. A
+(``agent_runtime_client.turn_events``) onto the run events of ``agent_runtime_client.wire``. A
 run opens with ``run_started`` and ends with exactly one terminal event, except
 the cut stream of a dropped client (decision record 0001, H6).
 Nothing reaches the wire that ``encode_event`` cannot write or that the
@@ -41,17 +41,17 @@ from pydantic import ValidationError
 from pydantic_core import PydanticSerializationError
 
 from agent_runtime.errors import RetainedGroup
-from agent_runtime.events import (
+from agent_runtime.run_output import RunOutputCause, RunOutputRefused
+from agent_runtime_client.run_stream import RunStream
+from agent_runtime_client.sse import EventTooLarge, encode_event
+from agent_runtime_client.tools import ToolEffect
+from agent_runtime_client.turn_events import (
     AssistantTextEvent,
     FinalEvent,
     StreamEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
-from agent_runtime.run_output import RunOutputCause, RunOutputRefused
-from agent_runtime_client.run_stream import RunStream
-from agent_runtime_client.sse import EventTooLarge, encode_event
-from agent_runtime_client.tools import ToolEffect
 from agent_runtime_client.wire import (
     PROTOCOL_VERSION,
     AssistantText,

@@ -20,14 +20,14 @@ from agent_runtime.errors import (
     TextToolCallRejectedError,
     ToolProtocolRejectionCode,
 )
-from agent_runtime.events import (
+from agent_runtime.text_tool_protocol import TextToolRejection
+from agent_runtime_client.turn_events import (
     AssistantTextEvent,
     FinalEvent,
     StreamEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
-from agent_runtime.text_tool_protocol import TextToolRejection
 
 log = logging.getLogger(__name__)
 

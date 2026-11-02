@@ -73,8 +73,8 @@ def test_invalid_json_never_leaves_its_document_in_a_failure_chain(status, body)
 
 def test_released_async_tool_rounds_keep_their_permissive_json_contract(monkeypatch):
     from agent_runtime import openai_adapter
-    from agent_runtime.events import FinalEvent, ToolResultEvent
     from agent_runtime.tool_loop import ToolOutcome
+    from agent_runtime_client.turn_events import FinalEvent, ToolResultEvent
 
     original = httpx.AsyncClient
     requests = []

@@ -47,14 +47,14 @@ from agent_runtime.cli_run import (
     relay_authorization,
 )
 from agent_runtime.config import PrivateWorkingRoot, reset_config
-from agent_runtime.events import (
+from agent_runtime.spawn import INHERITED_MACHINE_VARIABLES, ChildProcessSpecificationError
+from agent_runtime_client.turn_events import (
     AssistantTextEvent,
     FinalEvent,
     StreamEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
-from agent_runtime.spawn import INHERITED_MACHINE_VARIABLES, ChildProcessSpecificationError
 from agent_runtime_client.wire import TurnMessage, TurnRole
 
 CANARY_MARKER = "canary-" + uuid.uuid4().hex

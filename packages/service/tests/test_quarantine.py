@@ -47,11 +47,11 @@ from tests.support.service_support import (
 )
 
 from agent_runtime.errors import ContainmentLost, RetainedGroup
-from agent_runtime.events import AssistantTextEvent, FinalEvent
 from agent_runtime.lost_groups import confirm_group_gone, retain_lost_group
 from agent_runtime.procfs import GroupCensus
 from agent_runtime.spawn import ChildIdentityLost
 from agent_runtime_client.run_stream import ViolationKind
+from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import FailureCode, RunState, RunStatus
 from agent_runtime_service.admission import AdmissionSlot, Lease
 from agent_runtime_service.config import RunConfig

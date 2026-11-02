@@ -41,16 +41,16 @@ from tests.support.service_support import (
 from webauth.service_callers import Principal
 
 from agent_runtime.errors import TextToolCallRejectedError
-from agent_runtime.events import (
+from agent_runtime.grok import transport as grok_cli_adapter
+from agent_runtime.run_output import RunOutputCause, RunOutputRefused
+from agent_runtime_client.tools import ToolEffect
+from agent_runtime_client.turn_events import (
     AssistantTextEvent,
     FinalEvent,
     StreamEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
-from agent_runtime.grok import transport as grok_cli_adapter
-from agent_runtime.run_output import RunOutputCause, RunOutputRefused
-from agent_runtime_client.tools import ToolEffect
 from agent_runtime_client.wire import (
     MAX_EVENT_BYTES,
     MAX_TOOL_INPUT_DEPTH,

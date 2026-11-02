@@ -45,7 +45,7 @@ from agent_runtime.errors import (
     ProviderUnavailableError,
     SafeRouteReasonCode,
 )
-from agent_runtime.events import FinalEvent
+from agent_runtime_client.turn_events import FinalEvent
 
 
 def test_stream_turn_refuses_an_unknown_provider_before_any_route_runs(monkeypatch):

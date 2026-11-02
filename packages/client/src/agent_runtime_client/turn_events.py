@@ -1,7 +1,7 @@
 """The event family a provider turn streams to its in-process caller.
 
-Every transport — Claude's CLI/MCP stream, the OpenAI-compatible HTTP
-adapters, the tool loop — yields these types. They are the core's own turn
+Every backend — Claude's CLI/MCP stream, the OpenAI-compatible HTTP
+adapters, the tool loop — yields these types. They are the in-process turn
 events, not the agent service's wire: the streamed run contract has one owner,
 ``agent_runtime_client.wire``, onto which the agent service maps a turn's events
 (slice A1a). Hosts that call the core directly still consume these types, so
