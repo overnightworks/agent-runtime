@@ -163,8 +163,8 @@ scripted transport passed as `transport=`.
 ### The gateway backend
 
 `GatewayBackend(config, *, tools=(), transport=None)` runs a text turn, with the app's
-`HandTool`s when the agent selects any, and no pictures yet. A selected tool with no handler
-raises `ValueError` at `run`, before any request. In order, before any request: a `person.role`
+`HandTool`s when the agent selects any, and no pictures yet. A selected tool with no handler, or whose request
+declaration differs from its `HandTool`'s, raises `ValueError` at `run`, before any request. In order, before any request: a `person.role`
 outside `request.roles` is `refused: forbidden`; `person.groups()` runs once and a refusal it
 raises reaches the app unchanged; an `api_group` the person lacks is `refused: not_enabled`.
 The key file is read per turn after that: one printable ASCII line of at most 1024 bytes,
@@ -211,9 +211,9 @@ For each call, in order: `ToolCallEvent`; the side-effect state set from the dec
 `ToolEffect`, before the handler runs; `await handler(principal, arguments)`;
 `ToolResultEvent`. A call, or the next request, that the deadline has already passed when its
 turn comes (a slow consumer of the events) is not started: `failed: limit_exceeded`, with the
-side-effect state unchanged by it. A handler whose outcome is unusable (not a `ToolOutcome`, or
-a `content` that is not text a UTF-8 body can carry) is a host defect like one that raises. The
-model reads an error outcome as `Error: ` followed by the content, because the chat format has
+side-effect state unchanged by it. A handler whose outcome is unusable (not a `ToolOutcome`, an
+`is_error` that is not a bool, or a `content` that is not text a UTF-8 body can carry) is a host
+defect like one that raises. The model reads an error outcome as `Error: ` followed by the content, because the chat format has
 no error flag on a tool message. A call that started may have written, and a cancelled `asyncio.to_thread`
 write may still finish; nothing implies it was undone. A blocking tool stays the app's: its
 handler uses `asyncio.to_thread`. A `ToolOutcome(is_error=True)` goes to the model and the turn
