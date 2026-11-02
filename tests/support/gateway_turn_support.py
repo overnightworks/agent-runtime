@@ -26,15 +26,14 @@ class SkewedLoop(asyncio.SelectorEventLoop):
 
 
 class FailingTransport(httpx2.AsyncBaseTransport):
-    """Refuses every request with ``error``; it counts the attempts."""
+    """Refuses every request with a connection error; it counts the attempts."""
 
-    def __init__(self, error: Exception | None = None) -> None:
+    def __init__(self) -> None:
         self.attempts = 0
-        self._error = error or httpx2.ConnectError("refused")
 
     async def handle_async_request(self, request):
         self.attempts += 1
-        raise self._error
+        raise httpx2.ConnectError("refused")
 
 
 class HangingTransport(httpx2.AsyncBaseTransport):
