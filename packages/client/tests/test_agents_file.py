@@ -312,6 +312,13 @@ def test_a_request_with_tools_and_no_bound_is_refused(tmp_path: Path) -> None:
         TurnRequest(**{**dict(request), "max_tool_calls": None})
 
 
+def test_a_definition_with_tools_and_no_bound_is_refused_where_it_is_built(tmp_path: Path) -> None:
+    agent = load(tmp_path, agent_text())
+
+    with pytest.raises(ValidationError):
+        AgentDefinition(**{**dict(agent), "max_tool_calls": None})
+
+
 @pytest.mark.parametrize("description", [None, "''", '"two\\nlines"', "|", "|\n  two\n  lines"])
 def test_missing_empty_or_multiline_description_is_refused(
     tmp_path: Path, description: str | None

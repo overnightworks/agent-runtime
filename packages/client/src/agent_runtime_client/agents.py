@@ -103,8 +103,7 @@ class TurnRequest(BaseModel):
 
     @model_validator(mode="after")
     def _pair_tools_with_their_call_bound(self) -> Self:
-        if bool(self.tools) != (self.max_tool_calls is not None):
-            raise ValueError("max_tool_calls is set exactly when tools is not empty")
+        _refuse_unpaired_call_bound(self.tools, self.max_tool_calls)
         return self
 
 
@@ -121,6 +120,11 @@ class AgentDefinition(BaseModel):
     model: GatewayModelName
     max_duration_seconds: PositiveInt
     max_tool_calls: PositiveInt | None
+
+    @model_validator(mode="after")
+    def _pair_tools_with_their_call_bound(self) -> Self:
+        _refuse_unpaired_call_bound(self.tools, self.max_tool_calls)
+        return self
 
     def offered_to(self, role: AgentRole) -> bool:
         """Whether a person with this app role is shown the agent (not a security boundary)."""
@@ -164,7 +168,10 @@ def load_agent(source: Traversable, declarations: list[ToolDeclaration]) -> Agen
     if not prompt:
         raise AgentFileError(f"{file_name}: prompt is empty")
     tools = _selected_tools(file_name, front_matter.tools, declarations)
-    _check_tool_call_bound(file_name, tools, front_matter.max_tool_calls)
+    try:
+        _refuse_unpaired_call_bound(tools, front_matter.max_tool_calls)
+    except ValueError as error:
+        raise AgentFileError(f"{file_name}: maxToolCalls: {error}") from None
     return AgentDefinition(
         name=front_matter.name,
         description=front_matter.description,
@@ -177,13 +184,14 @@ def load_agent(source: Traversable, declarations: list[ToolDeclaration]) -> Agen
     )
 
 
-def _check_tool_call_bound(
-    file_name: str, tools: tuple[ToolDeclaration, ...], max_tool_calls: int | None
+def _refuse_unpaired_call_bound(
+    tools: tuple[ToolDeclaration, ...], max_tool_calls: int | None
 ) -> None:
+    """The one rule: a call bound is set exactly when the agent has tools."""
     if tools and max_tool_calls is None:
-        raise AgentFileError(f"{file_name}: maxToolCalls: required when tools is not empty")
+        raise ValueError("required when tools is not empty")
     if not tools and max_tool_calls is not None:
-        raise AgentFileError(f"{file_name}: maxToolCalls: must be absent when tools is empty")
+        raise ValueError("must be absent when tools is empty")
 
 
 def _checked_stem(file_name: str) -> str:
