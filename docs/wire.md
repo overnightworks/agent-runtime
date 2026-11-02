@@ -188,12 +188,14 @@ every person's budget. `["https://issuer.example", "subject-1"]` gives
 | 200 otherwise (malformed JSON, no choices, empty text, another `finish_reason`, a lone surrogate, a longer reply) | `failed: provider_error` |
 | 429 | `refused: busy`; `retry_after_s` from the `Retry-After` seconds, at most `MAX_RETRY_AFTER_S`; an HTTP-date or no header gives none |
 | another 4xx, a budget refusal included | `failed: provider_unavailable`, detail `gateway_refused`, body unread |
-| 5xx (a `Retry-After` is ignored) | `failed: provider_unavailable`, detail `gateway_failed` |
+| 3xx (a redirect is not followed) or 5xx (a `Retry-After` is ignored) | `failed: provider_unavailable`, detail `gateway_failed` |
 | connection refused or reset, TLS failure | `failed: provider_unavailable` |
 
 A person over budget therefore reads as "unavailable", the same as any other refusal; telling
 them apart is a named gap. `detail` is for logs only. `after_side_effect` stays false: no tool
 runs here.
+
+`GatewayBackend`'s constructor sets the `httpx2` and `httpcore2` loggers to WARNING for the whole process, overriding an app's own DEBUG setting there.
 
 ## Agent files
 

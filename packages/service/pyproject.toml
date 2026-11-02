@@ -1,14 +1,14 @@
 [project]
 name = "overnightworks-agent-runtime-service"
-version = "0.16.0"
+version = "0.17.0"
 description = "The overnightworks agent service: the one authenticated entrance through which apps start agent runs"
 authors = [{ name = "Flex0r (Felix Hummert)", email = "felix.hummert@gmail.com" }]
 license = { text = "MIT" }
 requires-python = ">=3.14"
 
 dependencies = [
-    "overnightworks-agent-runtime==0.16.0",
-    "overnightworks-agent-runtime-client==0.16.0",
+    "overnightworks-agent-runtime==0.17.0",
+    "overnightworks-agent-runtime-client==0.17.0",
     "overnightworks-webauth @ git+https://github.com/overnightworks/webauth@v0.27.0",
     "fastapi>=0.133,<1",
     "httpx>=0.27,<1",
