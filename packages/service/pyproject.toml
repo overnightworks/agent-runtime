@@ -4,7 +4,7 @@ version = "0.16.0"
 description = "The overnightworks agent service: the one authenticated entrance through which apps start agent runs"
 authors = [{ name = "Flex0r (Felix Hummert)", email = "felix.hummert@gmail.com" }]
 license = { text = "MIT" }
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 
 dependencies = [
     "overnightworks-agent-runtime==0.16.0",
