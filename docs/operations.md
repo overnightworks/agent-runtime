@@ -349,7 +349,7 @@ A Claude, Codex or Grok run that its CLI ends with a reported error still ends
 `failed: provider_error`, and the log carries one warning naming the provider and the error's class
 (`class=<name>`), never the CLI's message, stderr, a token, a header or a path. Claude's class is the
 assistant line's `error` (`rate_limit`, `invalid_request`) or the result line's `subtype`
-(`error_max_turns`, `error_during_execution`); any other value logs as `other`. Codex's failed turn
+(`error_max_turns`); any other value logs as `other`. Codex's failed turn
 and Grok's `error` event carry only message text, so they log `turn_failed` and `error_event`. A
 refused login logs no class and ends `CliLoginRefusedError` as before.
 
