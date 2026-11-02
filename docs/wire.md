@@ -257,8 +257,8 @@ state. The core's `ToolCatalog` builds on the same class.
 `HandTool` is a declaration with the async handler `(Principal, JsonObject) -> ToolOutcome`
 that serves it in the app's own process; `ToolOutcome` is `content` and `is_error`. The module
 exports `Principal` and `JsonObject` too, so an app's `agent/tools.py` imports only
-`agent_runtime_client.tools`. It imports neither `wire` nor `mcp_wire`, which re-exports
-`ToolOutcome`.
+`agent_runtime_client.tools`. It imports neither `wire` nor `mcp_wire`, which binds
+`ToolOutcome` for its own use but does not export it to a type checker.
 
 ## API text results
 
