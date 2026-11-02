@@ -1,4 +1,4 @@
-"""The gateway as a backend: one buffered chat completion per turn, under one deadline.
+"""The gateway as a backend: one buffered chat completion per round of a turn, under one deadline.
 
 The app's key never leaves this module: it is read per turn, sent as the bearer and
 written to no exception or log record.
@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Final
+from typing import Final, NotRequired, Required, TypedDict
 
 import httpx2
 from pydantic import TypeAdapter
@@ -60,6 +60,8 @@ _MAX_REQUEST_BYTES: Final = 4 * MAX_EVENT_BYTES
 _ARGUMENTS: Final = TypeAdapter(JsonObject)
 _HANDLER_FAILED_TEXT: Final = "The tool failed."
 _RESULT_TOO_LARGE_TEXT: Final = "The tool result was too large to return."
+# The chat format has no error flag on a tool message, so the text carries it to the model.
+_ERROR_PREFIX: Final = "Error: "
 
 
 class GatewayDetail(StrEnum):
@@ -84,19 +86,21 @@ class GatewayBackend(AgentBackend):
             logging.getLogger(name).setLevel(logging.WARNING)
         self._config = config
         self._transport = transport
-        self._handlers: dict[str, HandToolHandler] = {}
+        self._tools: dict[str, HandTool] = {}
         for tool in tools:
-            if tool.declaration.name in self._handlers:
+            if tool.declaration.name in self._tools:
                 raise ValueError(f"tool {tool.declaration.name!r} is given twice")
-            self._handlers[tool.declaration.name] = tool.handler
+            self._tools[tool.declaration.name] = tool
 
     async def run(
         self, request: TurnRequest, person: TurnPerson
     ) -> AsyncGenerator[TurnEvent, None]:
         tools = {declaration.name: declaration for declaration in request.tools}
-        for name in tools:
-            if name not in self._handlers:
+        for name, declaration in tools.items():
+            if name not in self._tools:
                 raise ValueError(f"tool {name!r} has no handler")
+            if self._tools[name].declaration != declaration:
+                raise ValueError(f"tool {name!r} is declared differently than its handler")
         if person.role not in request.roles:
             raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.FORBIDDEN)
         deadline = asyncio.get_running_loop().time() + request.max_duration_seconds
@@ -106,11 +110,12 @@ class GatewayBackend(AgentBackend):
             messages = _opening_messages(request)
             user = _fingerprint(person.principal)
             while True:
+                _refuse_after(deadline)
                 body = _body(request, messages, user)
                 if len(body.encode("utf-8")) > _MAX_REQUEST_BYTES:
-                    raise TurnStopped(TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
+                    raise _limit_exceeded()
                 reply = await _before(deadline, self._post(body, key, frozenset(tools)))
-                if not reply.calls:
+                if reply.message is None:
                     yield AssistantTextEvent(text=reply.text)
                     yield FinalEvent(text=reply.text)
                     return
@@ -118,9 +123,10 @@ class GatewayBackend(AgentBackend):
                 messages.append(reply.message)
                 for call in reply.calls:
                     yield ToolCallEvent(tool_use_id=call.id, name=call.name, input=call.arguments)
+                    _refuse_after(deadline)
                     progress.wrote |= tools[call.name].effect is ToolEffect.SIDE_EFFECTING
-                    handler = self._handlers[call.name]
-                    outcome = _bounded(await _before(deadline, _serve(handler, person, call)))
+                    handler = self._tools[call.name].handler
+                    outcome = await _before(deadline, _serve(handler, person, call))
                     yield ToolResultEvent(
                         tool_use_id=call.id, content=outcome.content, is_error=outcome.is_error
                     )
@@ -162,6 +168,37 @@ class GatewayBackend(AgentBackend):
         )
 
 
+class _ToolCallEcho(TypedDict):
+    id: str
+    type: str
+    function: dict[str, str]
+
+
+class _Message(TypedDict):
+    role: Required[str]
+    content: NotRequired[str | None]
+    tool_call_id: NotRequired[str]
+    tool_calls: NotRequired[list[_ToolCallEcho]]
+
+
+class _FunctionSpec(TypedDict):
+    name: str
+    description: str
+    parameters: JsonObject
+
+
+class _FunctionTool(TypedDict):
+    type: str
+    function: _FunctionSpec
+
+
+class _Body(TypedDict):
+    model: str
+    messages: list[_Message]
+    user: str
+    tools: NotRequired[list[_FunctionTool]]
+
+
 @dataclass(frozen=True)
 class _Call:
     id: str
@@ -175,7 +212,7 @@ class _Round:
 
     text: str
     calls: tuple[_Call, ...]
-    message: dict[str, Any]
+    message: _Message | None
 
 
 @dataclass
@@ -192,7 +229,7 @@ class _Progress:
         if len(ids) != len(calls) or not ids.isdisjoint(self.call_ids):
             raise _malformed_reply()
         if self.calls + len(calls) > self.max_tool_calls:
-            raise TurnStopped(TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
+            raise _limit_exceeded()
         self.calls += len(calls)
         self.call_ids |= ids
 
@@ -205,12 +242,23 @@ async def _before[Result](deadline: float, step: Awaitable[Result]) -> Result:
     except TimeoutError:
         if not scope.expired():
             raise
-        raise TurnStopped(TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED) from None
+        raise _limit_exceeded() from None
+
+
+def _refuse_after(deadline: float) -> None:
+    """A step the turn has not started is not started past its deadline."""
+    if asyncio.get_running_loop().time() >= deadline:
+        raise _limit_exceeded()
+
+
+def _limit_exceeded() -> TurnStopped:
+    return TurnStopped(TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
 
 
 async def _serve(handler: HandToolHandler, person: TurnPerson, call: _Call) -> ToolOutcome:
+    """Run one handler; whatever it raises or returns that is unusable is a host defect."""
     try:
-        outcome = await handler(person.principal, call.arguments)
+        outcome = _bounded(await handler(person.principal, call.arguments))
     except Exception as error:  # a handler is the app's code; its failure is a host defect
         _LOGGER.error("tool %s raised %s", call.name, type(error).__qualname__)
         outcome = ToolOutcome(_HANDLER_FAILED_TEXT, is_error=True)
@@ -230,20 +278,21 @@ def _fingerprint(principal: Principal) -> str:
     return "fp-" + sha256(identity.encode("utf-8")).hexdigest()
 
 
-def _opening_messages(request: TurnRequest) -> list[dict[str, Any]]:
-    messages: list[dict[str, Any]] = [{"role": "system", "content": request.turn.system}]
+def _opening_messages(request: TurnRequest) -> list[_Message]:
+    messages: list[_Message] = [{"role": "system", "content": request.turn.system}]
     messages += [
         {"role": message.role.value, "content": message.text} for message in request.turn.messages
     ]
     return messages
 
 
-def _result_message(call: _Call, outcome: ToolOutcome) -> dict[str, Any]:
-    return {"role": "tool", "tool_call_id": call.id, "content": outcome.content}
+def _result_message(call: _Call, outcome: ToolOutcome) -> _Message:
+    content = _ERROR_PREFIX + outcome.content if outcome.is_error else outcome.content
+    return {"role": "tool", "tool_call_id": call.id, "content": content}
 
 
-def _body(request: TurnRequest, messages: list[dict[str, Any]], user: str) -> str:
-    body: dict[str, Any] = {"model": request.model, "messages": messages, "user": user}
+def _body(request: TurnRequest, messages: list[_Message], user: str) -> str:
+    body: _Body = {"model": request.model, "messages": messages, "user": user}
     if request.tools:
         # ``effect`` is for the client, so the projection names its fields.
         body["tools"] = [
@@ -313,21 +362,24 @@ async def _judged(response: httpx2.Response, offered: frozenset[str]) -> _Round:
 def _answer_of(text: str) -> _Round:
     if not text.strip() or len(text.encode("utf-8")) > MAX_EVENT_BYTES:
         raise _malformed_reply()
-    return _Round(text=text, calls=(), message={})
+    return _Round(text=text, calls=(), message=None)
 
 
-def _calls_of(message: dict[str, Any], offered: frozenset[str]) -> _Round:
+def _calls_of(message: JsonObject, offered: frozenset[str]) -> _Round:
     """Every call of a round is judged before any is shown or run."""
     content = message.get("content")
     raw_calls = message["tool_calls"]
     if (content is not None and not isinstance(content, str)) or not raw_calls:
         raise _malformed_reply()
+    if content is not None:
+        content.encode("utf-8")  # a lone surrogate is a ValueError, judged as a malformed reply
     calls = []
     for raw in raw_calls:
         function = raw["function"]
         name, call_id = function["name"], raw["id"]
         if name not in offered or not isinstance(call_id, str) or not call_id:
             raise _malformed_reply()
+        call_id.encode("utf-8")  # as above
         arguments = _ARGUMENTS.validate_json(function["arguments"])
         calls.append(_Call(id=call_id, name=name, arguments=arguments))
     echoed = [
@@ -338,7 +390,7 @@ def _calls_of(message: dict[str, Any], offered: frozenset[str]) -> _Round:
         }
         for call, raw in zip(calls, raw_calls, strict=True)
     ]
-    reply = {"role": "assistant", "content": content, "tool_calls": echoed}
+    reply: _Message = {"role": "assistant", "content": content, "tool_calls": echoed}
     return _Round(text="", calls=tuple(calls), message=reply)
 
 

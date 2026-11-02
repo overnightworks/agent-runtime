@@ -9,9 +9,10 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
 
 import httpx2
+
+from agent_runtime_client.tools import JsonObject
 
 
 @dataclass(frozen=True)
@@ -27,15 +28,15 @@ def completion(text: str, *, finish_reason: str = "stop") -> Reply:
     return Reply(body=json.dumps({"choices": [choice]}).encode())
 
 
-def tool_call(call_id: str, name: str, arguments: Mapping[str, Any] | str) -> dict[str, Any]:
+def tool_call(call_id: str, name: str, arguments: JsonObject | str) -> JsonObject:
     """One function call of a model; a string ``arguments`` is sent as written."""
     written = arguments if isinstance(arguments, str) else json.dumps(arguments)
     return {"id": call_id, "type": "function", "function": {"name": name, "arguments": written}}
 
 
-def tool_round(*calls: dict[str, Any]) -> Reply:
+def tool_round(*calls: JsonObject, content: str | None = None) -> Reply:
     """A 200 chat completion that asks for these calls and ends with ``tool_calls``."""
-    message = {"role": "assistant", "content": None, "tool_calls": list(calls)}
+    message = {"role": "assistant", "content": content, "tool_calls": list(calls)}
     choice = {"finish_reason": "tool_calls", "message": message}
     return Reply(body=json.dumps({"choices": [choice]}).encode())
 

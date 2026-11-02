@@ -84,12 +84,13 @@ class Shop:
         max_tool_calls: int = 5,
         selected: tuple[str, ...] | None = None,
         max_duration_seconds: float = 30,
+        consumer_pause_seconds: float = 0,
     ) -> tuple[list, TurnStopped | None, FakeGateway]:
         gateway = FakeGateway(*replies)
         chosen = [t for t in self.tools if selected is None or t.declaration.name in selected]
         request = a_request(chosen, max_tool_calls, max_duration_seconds)
         backend = GatewayBackend(self.config(), tools=self.tools, transport=gateway)
-        events, stopped = asyncio.run(_turn(backend, request))
+        events, stopped = asyncio.run(_turn(backend, request, consumer_pause_seconds))
         return events, stopped, gateway
 
     def config(self) -> AgentConfig:
@@ -129,12 +130,13 @@ def a_person() -> TurnPerson:
     )
 
 
-async def _turn(backend: GatewayBackend, request: TurnRequest):
+async def _turn(backend: GatewayBackend, request: TurnRequest, consumer_pause_seconds: float = 0):
     events = []
     try:
         async with contextlib.aclosing(backend.run(request, a_person())) as stream:
             async for event in stream:
                 events.append(event)
+                await asyncio.sleep(consumer_pause_seconds)
     except TurnStopped as stopped:
         return events, stopped
     return events, None
@@ -221,8 +223,21 @@ def test_two_calls_in_one_round_run_in_order_each_between_its_events(shop):
         tool_round(tool_call("c1", "lookup", {}), tool_call("c1", "lookup", {})),
         tool_round(),
         completion("never", finish_reason="length"),
+        tool_round(tool_call("\ud800", "lookup", {})),
+        tool_round(tool_call("c1", "lookup", {}), tool_call("\ud800", "lookup", {})),
+        tool_round(tool_call("c1", "lookup", {}), content="lone \ud800 surrogate"),
     ],
-    ids=["unoffered", "not-json", "not-an-object", "duplicate-id", "no-calls", "other-ending"],
+    ids=[
+        "unoffered",
+        "not-json",
+        "not-an-object",
+        "duplicate-id",
+        "no-calls",
+        "other-ending",
+        "surrogate-id",
+        "surrogate-id-second-call",
+        "surrogate-content",
+    ],
 )
 def test_a_round_that_is_not_whole_runs_nothing_and_shows_nothing(shop, bad_round):
     shop.add_tool("lookup", effect=ToolEffect.SIDE_EFFECTING)
@@ -257,8 +272,51 @@ def test_an_error_outcome_reaches_the_model_and_the_turn_goes_on(shop):
 
     assert stopped is None
     assert events[1] == ToolResultEvent(tool_use_id="c1", content="no such note", is_error=True)
-    assert sent(gateway, 1)["messages"][-1]["content"] == "no such note"
+    assert sent(gateway, 1)["messages"][-1]["content"] != "noted"
+    assert "no such note" in sent(gateway, 1)["messages"][-1]["content"]
     assert events[-1] == FinalEvent(text="Sorry.")
+
+
+def test_the_model_reads_an_error_outcome_differently_from_a_success_of_the_same_text(shop):
+    outcomes = iter([ToolOutcome("same", is_error=True), ToolOutcome("same", is_error=False)])
+
+    async def answer() -> ToolOutcome:
+        return next(outcomes)
+
+    shop.add_tool("lookup", answer=answer)
+
+    _, _, gateway = shop.run(
+        tool_round(tool_call("c1", "lookup", {})),
+        tool_round(tool_call("c2", "lookup", {})),
+        completion("ok"),
+    )
+
+    results = [m for m in sent(gateway, 2)["messages"] if m["role"] == "tool"]
+    assert results[0]["content"] != results[1]["content"]
+
+
+@pytest.mark.parametrize(
+    "unusable",
+    [ToolOutcome("bad \udc80 name", is_error=False), None],
+    ids=["lone-surrogate", "no-outcome"],
+)
+def test_an_unusable_outcome_of_a_side_effecting_handler_is_an_error_and_the_turn_goes_on(
+    shop, unusable
+):
+    async def answer() -> ToolOutcome:
+        return unusable
+
+    shop.add_tool("write", effect=ToolEffect.SIDE_EFFECTING, answer=answer)
+
+    events, stopped, _ = shop.run(
+        tool_round(tool_call("c1", "write", {})), Reply(429), max_tool_calls=3
+    )
+
+    assert len(shop.seen) == 1
+    assert [type(event) for event in events] == [ToolCallEvent, ToolResultEvent]
+    assert events[1].is_error
+    assert ending(stopped) == BUSY
+    assert stopped.after_side_effect
 
 
 def test_a_raising_handler_logs_its_class_only_and_the_model_gets_an_error(shop, caplog):
@@ -324,6 +382,7 @@ def test_crossing_max_tool_calls_fails_with_limit_exceeded(shop, replies, calls_
 
 @pytest.mark.parametrize("effect", list(ToolEffect))
 def test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state(shop, effect):
+    # One whole second, which the first round and its call event cannot plausibly outlast.
     cancelled = []
 
     async def stuck() -> ToolOutcome:
@@ -337,7 +396,7 @@ def test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state(
     shop.add_tool("lookup", effect=effect, answer=stuck)
 
     events, stopped, gateway = shop.run(
-        tool_round(tool_call("c1", "lookup", {})), completion("never"), max_duration_seconds=0.05
+        tool_round(tool_call("c1", "lookup", {})), completion("never"), max_duration_seconds=1
     )
 
     assert ending(stopped) == LIMIT_EXCEEDED
@@ -345,6 +404,43 @@ def test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state(
     assert cancelled == [True]
     assert [type(event) for event in events] == [ToolCallEvent]
     assert len(gateway.requests) == 1
+
+
+def test_a_deadline_that_passed_while_the_app_took_the_call_event_starts_no_handler(shop):
+    shop.add_tool("write", effect=ToolEffect.SIDE_EFFECTING)
+
+    events, stopped, gateway = shop.run(
+        tool_round(tool_call("c1", "write", {})),
+        completion("never"),
+        max_duration_seconds=1,
+        consumer_pause_seconds=1.2,
+    )
+
+    assert ending(stopped) == LIMIT_EXCEEDED
+    assert not stopped.after_side_effect
+    assert (shop.seen, [type(event) for event in events], len(gateway.requests)) == (
+        [],
+        [ToolCallEvent],
+        1,
+    )
+
+
+def test_a_call_id_reused_in_a_later_round_refuses_that_round_and_keeps_the_side_effect_state(
+    shop,
+):
+    shop.add_tool("write", effect=ToolEffect.SIDE_EFFECTING)
+
+    events, stopped, gateway = shop.run(
+        tool_round(tool_call("c1", "write", {})),
+        tool_round(tool_call("c1", "write", {})),
+        completion("never"),
+    )
+
+    assert ending(stopped) == PROVIDER_ERROR
+    assert stopped.after_side_effect
+    assert len(shop.seen) == 1
+    assert [type(event) for event in events] == [ToolCallEvent, ToolResultEvent]
+    assert len(gateway.requests) == 2
 
 
 @pytest.mark.parametrize(
@@ -410,8 +506,10 @@ def test_cancelling_between_a_call_and_its_result_reaches_the_caller_unchanged(s
     ("extra_bytes", "reaches_the_model"), [(0, True), (1, False)], ids=["at-bound", "one-over"]
 )
 def test_a_tool_result_over_the_event_bound_is_replaced_and_the_side_effect_stands(
-    shop, extra_bytes, reaches_the_model
+    shop, caplog, extra_bytes, reaches_the_model
 ):
+    caplog.set_level(logging.INFO)
+
     async def big() -> ToolOutcome:
         return ToolOutcome("a" * (MAX_EVENT_BYTES + extra_bytes), is_error=False)
 
@@ -422,9 +520,11 @@ def test_a_tool_result_over_the_event_bound_is_replaced_and_the_side_effect_stan
     )
 
     result = events[1]
+    logged = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    assert [f"is_error={result.is_error}" in line for line in logged] == [True]
     assert (result.content == "a" * MAX_EVENT_BYTES) is reaches_the_model
     assert result.is_error is (not reaches_the_model)
-    assert sent(gateway, 1)["messages"][-1]["content"] == result.content
+    assert result.content in sent(gateway, 1)["messages"][-1]["content"]
     assert len(shop.seen) == 1
     assert stopped.after_side_effect
 
@@ -453,6 +553,32 @@ def test_a_selected_tool_without_a_handler_raises_before_any_request(shop):
 
     with pytest.raises(ValueError, match="lookup"):
         asyncio.run(_turn(backend, request))
+
+    assert gateway.requests == []
+
+
+def test_two_tools_with_one_name_are_refused_at_construction(shop):
+    shop.add_tool("lookup")
+    shop.add_tool("lookup")
+
+    with pytest.raises(ValueError, match="lookup"):
+        GatewayBackend(shop.config(), tools=shop.tools)
+
+
+def test_a_request_declaration_that_differs_from_its_handler_s_raises_before_any_request(shop):
+    shop.add_tool("write", effect=ToolEffect.SIDE_EFFECTING)
+    gateway = FakeGateway(completion("never"))
+    declared_read_only = a_request(shop.tools, 3).model_copy(
+        update={
+            "tools": (
+                shop.tools[0].declaration.model_copy(update={"effect": ToolEffect.READ_ONLY}),
+            )
+        }
+    )
+    backend = GatewayBackend(shop.config(), tools=shop.tools, transport=gateway)
+
+    with pytest.raises(ValueError, match="write"):
+        asyncio.run(_turn(backend, declared_read_only))
 
     assert gateway.requests == []
 
