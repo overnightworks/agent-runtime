@@ -13,14 +13,14 @@ HTTPS_GATEWAY = {
     "key_file": "/run/secrets/key",
     "ca_file": "/run/secrets/ca.pem",
 }
-SECTION = {"backend": "litellm", "gateway": GATEWAY, "api_group": "/apps/songmaker"}
+SECTION = {"backend": "litellm", "gateway": GATEWAY, "api_group": "/apps/example"}
 
 
 def test_c7_the_litellm_backend_with_a_gateway_and_group_builds():
     config = AgentConfig.model_validate(SECTION)
 
     assert config.gateway.origin == "http://gateway.test:4000"
-    assert config.api_group == "/apps/songmaker"
+    assert config.api_group == "/apps/example"
 
 
 @pytest.mark.parametrize(

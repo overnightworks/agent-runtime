@@ -394,7 +394,7 @@ def _agent_request(roles: list[AgentRole]):
         pytest.param(["admin", "user"], SUBSCRIBER_ROLE_USER, True, id="C1-everyone-file-user"),
     ],
 )
-def test_the_roles_of_an_agent_file_are_what_the_service_enforces(gate, roles, groups, admitted):
+def test_the_service_enforces_the_roles_a_request_carries(gate, roles, groups, admitted):
     document = _agent_request(roles)
 
     if admitted:

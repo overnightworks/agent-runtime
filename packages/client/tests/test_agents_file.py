@@ -491,6 +491,14 @@ def test_request_model_is_the_override_when_given(tmp_path: Path) -> None:
     assert request.model == "text/haiku"
 
 
+def test_request_model_override_accepts_an_image_name(tmp_path: Path) -> None:
+    agent = load(tmp_path, agent_text())
+
+    request = agent.request([TurnMessage(role=TurnRole.USER, text="hi")], model="image/draw")
+
+    assert request.model == "image/draw"
+
+
 def test_request_refuses_a_malformed_model_override(tmp_path: Path) -> None:
     agent = load(tmp_path, agent_text())
 

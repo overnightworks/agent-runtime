@@ -31,9 +31,9 @@ the operator enabled ([The app's own runs](#the-apps-own-runs)). `POST /runs` an
 | `v` | The protocol version, `6`. Any other body answers 400 `unsupported_version`. |
 | `agent` | The agent's name, `[a-z][a-z0-9-]{0,63}`. It labels the run and its capability, and names the agent whose configured model the run uses unless the request names a model. |
 | `turn` | The system prompt and the messages (`Turn`, `TurnMessage`). |
-| `roles` | The agent's allowed roles, exactly `["admin"]` or `["admin", "user"]`; `AgentDefinition.request` fills it from the agent file. |
+| `roles` | The agent's allowed roles, exactly `["admin"]` or `["admin", "user"]`; a host builds the `RunRequest` and sets it. |
 | `tools` | A map from each tool the run may call to its `ToolEffect`; required, possibly `{}`. |
-| `model` | Optional. A full `<provider>/<model>` name (no version) the installation offers: the full names in its `[cli.<provider>] models` lists, the same for every app. A named model wins over the agent's, the app's and the default; absent or `null` runs the configured model as before. A name outside the grammar answers 422 `invalid_request`, a valid name the installation does not offer 422 `model_not_offered`, checked after the `forbidden` refusals and before the route. `AgentDefinition.request(messages, model=...)` writes it. The agent file still refuses a `model:` key. |
+| `model` | Optional. A full `<provider>/<model>` name (no version) the installation offers: the full names in its `[cli.<provider>] models` lists, the same for every app. A named model wins over the agent's, the app's and the default; absent or `null` runs the configured model as before. A name outside the grammar answers 422 `invalid_request`, a valid name the installation does not offer 422 `model_not_offered`, checked after the `forbidden` refusals and before the route. The host sets it; `AgentDefinition.request()` returns a `TurnRequest`, not a `RunRequest`. |
 
 `GET /runs/{id}` returns the run's `RunStatus`, readable only by the app and
 user that started it, or for the app's own run by that app with its workload token alone ([What a run keeps](#what-a-run-keeps) says what the record holds).
