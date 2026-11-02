@@ -281,11 +281,14 @@ jobs:
           enable-cache: false
           python-version: "3.14"
 
-      # Without the lockfile, uv resolves fresh and needs webauth's metadata,
-      # which only a build of its pinned git commit yields, so this install
-      # cannot pass --no-build.
+      # Resolving needs webauth's metadata, which only a build of its pinned git
+      # commit yields, so `uv lock` may build. The installs then run frozen:
+      # the first builds nothing, the second builds only webauth.
       - name: Install the lowest declared direct dependencies
-        run: uv sync --all-packages --extra dev --no-install-workspace
+        run: |
+          uv lock
+          uv sync --frozen --all-packages --extra dev --no-install-workspace --no-build --no-install-package overnightworks-webauth
+          uv sync --frozen --all-packages --extra dev --no-install-workspace
 
       - name: Versions the suite runs against
         run: uv pip list
