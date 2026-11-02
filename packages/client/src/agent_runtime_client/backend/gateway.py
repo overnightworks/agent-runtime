@@ -35,6 +35,7 @@ from agent_runtime_client.tools import (
     HandTool,
     HandToolHandler,
     JsonObject,
+    ToolDeclaration,
     ToolEffect,
     ToolOutcome,
 )
@@ -95,12 +96,7 @@ class GatewayBackend(AgentBackend):
     async def run(
         self, request: TurnRequest, person: TurnPerson
     ) -> AsyncGenerator[TurnEvent, None]:
-        tools = {declaration.name: declaration for declaration in request.tools}
-        for name, declaration in tools.items():
-            if name not in self._tools:
-                raise ValueError(f"tool {name!r} has no handler")
-            if self._tools[name].declaration != declaration:
-                raise ValueError(f"tool {name!r} is declared differently than its handler")
+        tools = self._declared_tools(request)
         if person.role not in request.roles:
             raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.FORBIDDEN)
         deadline = asyncio.get_running_loop().time() + request.max_duration_seconds
@@ -132,6 +128,15 @@ class GatewayBackend(AgentBackend):
         except TurnStopped as stopped:
             stopped.after_side_effect = stopped.after_side_effect or progress.wrote
             raise
+
+    def _declared_tools(self, request: TurnRequest) -> dict[str, ToolDeclaration]:
+        tools = {declaration.name: declaration for declaration in request.tools}
+        for name, declaration in tools.items():
+            if name not in self._tools:
+                raise ValueError(f"tool {name!r} has no handler")
+            if self._tools[name].declaration != declaration:
+                raise ValueError(f"tool {name!r} is declared differently than its handler")
+        return tools
 
     async def _authorise(self, person: TurnPerson) -> str:
         if self._config.api_group not in await person.groups():

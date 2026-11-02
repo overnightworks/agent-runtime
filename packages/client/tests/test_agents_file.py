@@ -285,31 +285,38 @@ def test_an_agent_without_tools_has_no_tool_call_bound(tmp_path: Path, tools: st
 
 
 def test_a_missing_tool_call_bound_is_refused_when_there_are_tools(tmp_path: Path) -> None:
+    text = agent_text(max_tool_calls=None)
+
     with pytest.raises(AgentFileError, match="maxToolCalls"):
-        load(tmp_path, agent_text(max_tool_calls=None))
+        load(tmp_path, text)
 
 
 @pytest.mark.parametrize("tools", [None, "[]"])
 def test_a_tool_call_bound_is_refused_when_there_are_no_tools(
     tmp_path: Path, tools: str | None
 ) -> None:
+    text = agent_text(tools=tools, max_tool_calls="3")
+
     with pytest.raises(AgentFileError, match="maxToolCalls"):
-        load(tmp_path, agent_text(tools=tools, max_tool_calls="3"))
+        load(tmp_path, text)
 
 
 @pytest.mark.parametrize("bound", ["0", "-1", "true", "'3'", "1.5", "null", "''"])
 def test_a_tool_call_bound_that_is_not_a_positive_integer_is_refused_and_named(
     tmp_path: Path, bound: str
 ) -> None:
+    text = agent_text(max_tool_calls=bound)
+
     with pytest.raises(AgentFileError, match="maxToolCalls"):
-        load(tmp_path, agent_text(max_tool_calls=bound))
+        load(tmp_path, text)
 
 
 def test_a_request_with_tools_and_no_bound_is_refused(tmp_path: Path) -> None:
     request = load(tmp_path, agent_text()).request([TurnMessage(role=TurnRole.USER, text="hi")])
+    fields = {**dict(request), "max_tool_calls": None}
 
     with pytest.raises(ValidationError):
-        TurnRequest(**{**dict(request), "max_tool_calls": None})
+        TurnRequest(**fields)
 
 
 def test_a_definition_with_tools_and_no_bound_is_refused_where_it_is_built(tmp_path: Path) -> None:

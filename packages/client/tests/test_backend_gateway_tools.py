@@ -607,9 +607,10 @@ def test_a_selected_tool_without_a_handler_raises_before_any_request(shop):
     gateway = FakeGateway(completion("never"))
     request = a_request(shop.tools, 3)
     backend = GatewayBackend(shop.config(), tools=(), transport=gateway)
+    turn = _turn(backend, request)
 
     with pytest.raises(ValueError, match="lookup"):
-        asyncio.run(_turn(backend, request))
+        asyncio.run(turn)
 
     assert gateway.requests == []
 
@@ -617,9 +618,11 @@ def test_a_selected_tool_without_a_handler_raises_before_any_request(shop):
 def test_two_tools_with_one_name_are_refused_at_construction(shop):
     shop.add_tool("lookup")
     shop.add_tool("lookup")
+    config = shop.config()
+    tools = shop.tools
 
     with pytest.raises(ValueError, match="lookup"):
-        GatewayBackend(shop.config(), tools=shop.tools)
+        GatewayBackend(config, tools=tools)
 
 
 def test_a_request_declaration_that_differs_from_its_handler_s_raises_before_any_request(shop):
@@ -633,9 +636,10 @@ def test_a_request_declaration_that_differs_from_its_handler_s_raises_before_any
         }
     )
     backend = GatewayBackend(shop.config(), tools=shop.tools, transport=gateway)
+    turn = _turn(backend, declared_read_only)
 
     with pytest.raises(ValueError, match="write"):
-        asyncio.run(_turn(backend, declared_read_only))
+        asyncio.run(turn)
 
     assert gateway.requests == []
 
