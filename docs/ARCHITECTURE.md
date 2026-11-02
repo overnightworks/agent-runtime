@@ -16,7 +16,9 @@ directory-name constants. The service is the one authenticated entrance through
 which apps start agent runs: one agent service decides who is asking, whether
 they may use the operator's subscription, and which route serves them. An app
 that starts runs through the service holds no LLM or subscription credential, and
-its tools stay with the app.
+its tools stay with the app. An app may instead run its turns directly on the
+inference gateway through the client's `GatewayBackend` and hold its own gateway
+key ([decision 0002](decisions/0002-library-and-app-keys.md)).
 
 ## The three distributions
 
@@ -210,6 +212,10 @@ service's container ([host.md](host.md)).
   registered MCP origin. The request names the tools and their effects; the
   service signs a per-run capability that grants exactly those names, and the app
   verifies it with the public key ([wire.md](wire.md) has the details).
-- *No credential in an app.* The subscription login is one file the operator
-  names; an app that starts runs through the service holds none (the interim core
-  path in [operations.md](operations.md) is the exception).
+- *An app holds at most its own gateway key.* The subscription login is one file the
+  operator names; an app that starts runs through the service holds none (the interim
+  core path in [operations.md](operations.md) is the exception). An app on the
+  gateway backend holds one LiteLLM key of its own, with its own budget and limit, in
+  a file named by its configuration; the client reads it per turn and writes it to no
+  log, and model vendors stay reachable only through the gateway
+  ([decision 0002](decisions/0002-library-and-app-keys.md)).

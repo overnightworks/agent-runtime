@@ -113,6 +113,9 @@ jobs:
           for module in pkgutil.walk_packages(agent_runtime_client.__path__, "agent_runtime_client."):
               if module.name == "agent_runtime_client.mcp_server" or module.name.startswith(
                   "agent_runtime_client.mcp_server."
+              ) or module.name in (
+                  "agent_runtime_client.backend.gateway",
+                  "agent_runtime_client.backend.fake_gateway",
               ):
                   continue
               importlib.import_module(module.name)
@@ -133,6 +136,23 @@ jobs:
 
           assert importlib.util.find_spec("agent_runtime") is None, "core leaked in"
           print("imported", agent_runtime_client.mcp_server.__name__)
+          '
+
+      - name: The client wheel with the backend extra imports the gateway backend
+        run: |
+          proof="$(mktemp -d "$RUNNER_TEMP/client-backend.XXXXXX")"
+          uv venv "$proof/venv"
+          client_wheel="$(ls "$GITHUB_WORKSPACE"/dist/overnightworks_agent_runtime_client-*-py3-none-any.whl)"
+          uv pip install --python "$proof/venv/bin/python" "$client_wheel[backend]"
+          cd "$proof"
+          "$proof/venv/bin/python" -I -c '
+          import importlib.util
+
+          import agent_runtime_client.backend.fake_gateway
+          import agent_runtime_client.backend.gateway
+
+          assert importlib.util.find_spec("agent_runtime") is None, "core leaked in"
+          print("imported", agent_runtime_client.backend.gateway.__name__)
           '
 
       - name: Both wheels install together and the core imports dispatch

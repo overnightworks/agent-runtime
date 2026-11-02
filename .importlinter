@@ -109,6 +109,8 @@ source_modules =
     agent_runtime_client
     agent_runtime_client.agents
     agent_runtime_client.backend
+    agent_runtime_client.backend.fake_gateway
+    agent_runtime_client.backend.gateway
     agent_runtime_client.capability
     agent_runtime_client.config
     agent_runtime_client.errors
@@ -125,8 +127,8 @@ forbidden_modules =
     jwt
     cryptography
 
-# The backend extra stays an extra: an HTTP backend module imports httpx2, so no
-# base module (the package __init__ and the backend port included) does.
+# The backend extra stays an extra: backend.gateway and backend.fake_gateway import
+# httpx2, so no base module (the package __init__ and the backend port included) does.
 [importlinter:contract:client-base-stays-free-of-http]
 name = the client base modules import no HTTP library
 type = forbidden
