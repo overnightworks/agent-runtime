@@ -26,7 +26,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationErr
 from pydantic.alias_generators import to_camel
 
 from agent_runtime_client.errors import raise_without_chain
-from agent_runtime_client.wire import (
+from agent_runtime_client.turn import (
     MAX_EVENT_BYTES,
     JsonObject,
     UnicodeText,

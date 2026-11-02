@@ -17,13 +17,14 @@ from uuid import UUID
 from pydantic import SecretStr
 
 from agent_runtime_client.capability import CapabilityPrincipal
+from agent_runtime_client.turn import FailureCode, RejectionCode
 from agent_runtime_client.turn_events import (
     AssistantTextEvent,
     FinalEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
-from agent_runtime_client.wire import FailureCode, RejectionCode, RunRequest
+from agent_runtime_client.wire import RunRequest
 
 TurnEvent = AssistantTextEvent | ToolCallEvent | ToolResultEvent | FinalEvent
 

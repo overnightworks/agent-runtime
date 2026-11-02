@@ -7,7 +7,8 @@
 `.importlinter` owns the layering and the forbidden imports; `uv run lint-imports`
 proves it. The traps it cannot show:
 
-- The service's wire has one owner, `agent_runtime_client.wire`.
+- The service's wire has one owner, `agent_runtime_client.wire`; the turn's vocabulary has one,
+  `agent_runtime_client.turn`, which `wire` composes.
 - `agent_runtime_client.turn_events` is the in-process turn event, never a second wire.
 - The `[api]` and `[mcp-server]` extras stay optional: their libraries are imported only inside the route or module that needs them.
 

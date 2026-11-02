@@ -7,7 +7,7 @@ from typing import Self
 
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, model_validator
 
-from agent_runtime_client.wire import NonEmptyUnicodeText
+from agent_runtime_client.turn import NonEmptyUnicodeText
 
 
 class BackendKind(StrEnum):

@@ -5,7 +5,8 @@ the request an app sends, the events it reads back, the agent files it ships,
 the tool contract it declares, the MCP endpoint it serves and what the service
 keeps of a run. This is a
 reference; `agent_runtime_client.wire` owns the wire (its stream rules sit in
-`agent_runtime_client.run_stream` and `agent_runtime_client.sse`), `agent_runtime_client.agents` the agent
+`agent_runtime_client.run_stream` and `agent_runtime_client.sse`), `agent_runtime_client.turn` the
+turn's vocabulary that the wire composes, `agent_runtime_client.agents` the agent
 file, `agent_runtime_client.tools` the tool contract and `agent_runtime_client.mcp_server` the
 tool endpoint, and their docstrings are exact where this file is short. The
 decision record [0001](decisions/0001-agent-service.md) owns the rulings behind
