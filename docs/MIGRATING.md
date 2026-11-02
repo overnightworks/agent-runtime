@@ -7,6 +7,8 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | Before (0.16.0) | Now |
 | --- | --- |
 | The three wheels declared `requires-python = ">=3.12"`. | They declare `>=3.14`; a host installs them on Python 3.14 or newer, and an install on 3.12 or 3.13 fails. |
+| The service pinned `overnightworks-webauth` 0.26.0 by its release wheel URL. | It pins 0.27.0 by git (`overnightworks-webauth @ git+https://github.com/overnightworks/webauth@v0.27.0`). A host that pins webauth by git no longer meets uv's conflicting-URLs error; a host that pinned the wheel URL moves to the git form. The wire codes are unchanged. |
+| A host installed the wheels from the release page only. | It may install by git tag: `overnightworks-agent-runtime @ git+https://github.com/overnightworks/agent-runtime@v0.17.0` (core at the root), with `#subdirectory=packages/client` or `packages/service` for the others. hal's image stays on the release's hashed wheels while webauth#543's line 4 is open. |
 
 ## Migrating to 0.16.0
 

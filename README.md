@@ -16,7 +16,10 @@ for apps, and the agent service `overnightworks-agent-runtime-service`.
 No distribution is on PyPI. Install the wheels that the
 [latest release](https://github.com/overnightworks/agent-runtime/releases/latest)
 lists: its page gives each as a `name @ URL#sha256=…` requirement for `pip install`
-or `uv add`.
+or `uv add`. A host may instead install by git tag:
+`name @ git+https://github.com/overnightworks/agent-runtime@v<version>`, with
+`#subdirectory=packages/client` or `#subdirectory=packages/service` for those two
+distributions and core at the root.
 
 ## Where to read
 

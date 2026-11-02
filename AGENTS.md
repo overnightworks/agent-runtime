@@ -61,7 +61,7 @@ owns the allowed hits. The required check is `quality / verdict`
 A release is a tag, and the three distributions move in lockstep. On a `v*`
 tag `.github/workflows/release.yml` builds the three wheels, checks that their
 names carry the tag's version, and attaches exactly those three wheels to the
-GitHub release; hosts pin those wheel URLs and never install by name from PyPI. A release whose `docs/MIGRATING.md`
+GitHub release; hosts pin those wheel URLs (hal's image, which installs with `--require-hashes`) or the git tag (`@v<version>`, with `#subdirectory=packages/client` or `packages/service`, core at the root), and never install by name from PyPI. A release whose `docs/MIGRATING.md`
 holds `## Migrating to <version>` gets a release page that opens with a link to
 that section, so a breaking release writes that section before the tag. A tag
 is never moved — a broken release gets the next patch tag — so the pull
