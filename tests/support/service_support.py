@@ -91,7 +91,7 @@ OLD_SUBSCRIPTION_GROUP: Final = "/old-subscription-members"
 API_GROUP: Final = "/api-members"
 AUDIENCE: Final = "agent-service"
 GROUP_CLAIM: Final = "groups"
-SONGMAKER_GROUP: Final = "/apps/songmaker"
+APP_GROUP: Final = "/apps/songmaker"
 SONGMAKER_ORIGIN: Final = "https://songmaker.internal"
 PROCESS_TOKEN: Final = "setup-token-for-the-test-process"
 PINNED_CLAUDE_VERSION: Final = "2.1.302"
@@ -651,7 +651,7 @@ class TokenMint:
         return self.token(self.workload_claims(client, **overrides))
 
     def user_claims(
-        self, groups: object = (SUBSCRIPTION_GROUP, SONGMAKER_GROUP), **overrides: object
+        self, groups: object = (SUBSCRIPTION_GROUP, APP_GROUP), **overrides: object
     ) -> dict[str, object]:
         now = int(time.time())
         claims = {
@@ -667,7 +667,7 @@ class TokenMint:
         return _merged(claims, overrides)
 
     def user(
-        self, groups: object = (SUBSCRIPTION_GROUP, SONGMAKER_GROUP), **overrides: object
+        self, groups: object = (SUBSCRIPTION_GROUP, APP_GROUP), **overrides: object
     ) -> str:
         return self.token(self.user_claims(groups, **overrides))
 

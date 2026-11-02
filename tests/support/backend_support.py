@@ -17,6 +17,7 @@ from agent_runtime_client.backend import (
     Asker,
     RunRegistrationRefused,
     RunTokens,
+    ServiceRunLifecycle,
     TurnEvent,
     TurnStopped,
 )
@@ -47,11 +48,11 @@ def an_asker(*, person: bool = True, tokens_asked: list[None] | None = None) -> 
     return Asker(principal=PERSON if person else None, tokens=tokens)
 
 
-def a_backend(base_url: str, lifecycle: object | None = None) -> AgentBackend:
+def a_backend(base_url: str, lifecycle: ServiceRunLifecycle | None = None) -> AgentBackend:
     config = AgentConfig.model_validate(
         {"backend": "service", "service_url": base_url, "workload_scope": "agent-service"}
     )
-    return ServiceBackend(config, lifecycle)  # type: ignore[arg-type]
+    return ServiceBackend(config, lifecycle)
 
 
 class RecordingLifecycle:

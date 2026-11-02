@@ -10,7 +10,6 @@ import asyncio
 from collections.abc import Iterator
 from contextlib import aclosing, contextmanager
 
-import httpx
 import pytest
 from pydantic import SecretStr
 from tests.support.backend_support import (
@@ -25,15 +24,12 @@ from tests.support.backend_support import (
 from tests.support.bounds import TEST_WAIT_SECONDS, within_the_bound
 from tests.support.service_cli_runner_support import eventually
 from tests.support.service_support import (
+    APP_GROUP,
     PRESENTATOR_CLIENT,
-    SONGMAKER_GROUP,
     TEST_ISSUER,
     GatedRunner,
     ScriptedRunner,
     TokenMint,
-    decoded_events,
-    run_body,
-    run_headers,
     served,
     service_config,
 )
@@ -55,13 +51,13 @@ from agent_runtime_client.wire import (
     RejectionCode,
     RunFile,
 )
-from agent_runtime_service.app import create_app
+from agent_runtime_service.app import RETRY_BUSY_AFTER_SECONDS, create_app
 from agent_runtime_service.runners import Runners
 
 MINT = TokenMint()
 ALICE = CapabilityPrincipal(iss=TEST_ISSUER, sub="user-alice")
 ANSWER = (AssistantTextEvent(text="thinking"), FinalEvent(text="done"))
-TOOLS = {"read_song": "read_only", "edit_song": "side_effecting"}
+TOOLS = {"read_note": "read_only", "edit_note": "side_effecting"}
 
 
 def _asker(person_token: str | None = None) -> Asker:
@@ -102,9 +98,7 @@ def _oversized(request):
 # Refused at the entrance by what the request or the tokens say, or by what the service cannot
 # reach; not_found and capability_too_large are driven through the fake service.
 REFUSALS = [
-    pytest.param(
-        RejectionCode.NOT_ENABLED, lambda r: r, {"groups": [SONGMAKER_GROUP]}, id="not_enabled"
-    ),
+    pytest.param(RejectionCode.NOT_ENABLED, lambda r: r, {"groups": [APP_GROUP]}, id="not_enabled"),
     pytest.param(
         RejectionCode.UNSUPPORTED_VERSION,
         lambda r: r.model_copy(update={"v": 1}),
@@ -166,14 +160,14 @@ async def _busy_while_a_run_is_held(base_url: str, runner: GatedRunner) -> None:
         _, stopped = await turn_outcome(a_backend(base_url), a_request(), _asker())
         runner.release(AssistantTextEvent(text="go"))
         await within_the_bound(pending)
-    assert (stopped.code, stopped.retry_after_s) == (RejectionCode.BUSY, 10)
+    assert (stopped.code, stopped.retry_after_s) == (RejectionCode.BUSY, RETRY_BUSY_AFTER_SECONDS)
 
 
 def test_m21_events_map_and_files_are_kept():
-    file = RunFile(name="song.txt", content=b"la la")
+    file = RunFile(name="notes.txt", content=b"la la")
     script = (
         AssistantTextEvent(text="hello"),
-        ToolCallEvent(tool_use_id="t1", name="read_song", input={"id": 1}),
+        ToolCallEvent(tool_use_id="t1", name="read_note", input={"id": 1}),
         ToolResultEvent(tool_use_id="t1", content="ok"),
         FinalEvent(text="done", files=(file,)),
     )
@@ -184,25 +178,55 @@ def test_m21_events_map_and_files_are_kept():
     assert events == list(script)
 
 
+class _HeartbeatWatch:
+    """An ASGI wrapper that notes when a heartbeat frame leaves the service on a response."""
+
+    def __init__(self, app) -> None:
+        self._app = app
+        self.sent = asyncio.Event()
+
+    async def __call__(self, scope, receive, send) -> None:
+        async def watching(message) -> None:
+            body = message.get("body", b"")
+            if b"event: heartbeat" in body:
+                self.sent.set()
+            await send(message)
+
+        await self._app(scope, receive, watching)
+
+
 def test_m22_heartbeats_never_surface():
+    watch_ref: list[_HeartbeatWatch] = []
+
     class Pausing(ScriptedRunner):
         async def run(self, admitted):
             yield AssistantTextEvent(text="before")
-            await asyncio.sleep(1.5)
+            await asyncio.wait_for(watch_ref[0].sent.wait(), TEST_WAIT_SECONDS)
             yield FinalEvent(text="after")
 
     runs = {"heartbeat_interval_s": 1, "stall_timeout_s": 2.0, "idle_timeout_s": 4.0}
-    with _service(Pausing([]), runs=runs) as base_url:
-        raw = httpx.post(
-            f"{base_url}/runs",
-            headers=run_headers(MINT.workload(), MINT.user()),
-            json=run_body(),
-            timeout=TEST_WAIT_SECONDS,
-        )
+    app = create_app(
+        service_config(runs=runs),
+        runners=Runners(cli=Pausing([])),
+        fetch_key_set=MINT.fetch_key_set,
+    )
+    watch_ref.append(_HeartbeatWatch(app))
+    with served(watch_ref[0]) as base_url:
         events, stopped = _turn(base_url)
 
-    assert "heartbeat" in [event.type for event in decoded_events(raw.content)]
+    assert watch_ref[0].sent.is_set()
     assert (stopped, [event.type for event in events]) == (None, ["assistant_text", "final"])
+
+
+@pytest.mark.parametrize("token", ["bad\ntoken", "bad\rtoken", "bad\x00token", "bäd"])
+def test_a_token_no_header_can_carry_ends_the_turn_refused_without_a_request(token):
+    fake = FakeService()
+    with served(fake) as base_url:
+        events, stopped = _turn(base_url, asker=_asker(token))
+
+    assert (events, fake.seen) == ([], [])
+    assert (stopped.kind, stopped.code) == (TurnStopKind.REFUSED, RejectionCode.UNAUTHORIZED)
+    assert token not in f"{stopped} {stopped.detail}"
 
 
 def test_m23_a_failed_run_keeps_its_code():
@@ -213,7 +237,7 @@ def test_m23_a_failed_run_keeps_its_code():
     assert (stopped.kind, stopped.code) == (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
 
 
-def test_m24_the_service_never_sends_cancelled_so_the_fake_service_does():
+def test_m24_a_cancelled_run_ends_the_turn_as_cancelled():
     cancelled = Cancelled(v=PROTOCOL_VERSION, run_id=started().run_id, seq=1)
     with served(FakeService(chunks=frames(started(), cancelled))) as base_url:
         _, stopped = _turn(base_url)

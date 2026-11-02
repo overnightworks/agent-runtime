@@ -23,7 +23,7 @@ from tests.support.openai_completions import (
 )
 from tests.support.service_support import (
     API_GROUP,
-    SONGMAKER_GROUP,
+    APP_GROUP,
     TokenMint,
     decoded_events,
     run_body,
@@ -44,7 +44,7 @@ async def post_tools(config, authority, *, records=None, **body):
                      fetch_key_set=mint.fetch_key_set)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                 base_url="http://service") as client:
-        headers = run_headers(mint.workload(), mint.user(groups=[API_GROUP, SONGMAKER_GROUP]))
+        headers = run_headers(mint.workload(), mint.user(groups=[API_GROUP, APP_GROUP]))
         response = await client.post("/runs", json=run_body(tools={"echo": "read_only"}, **body),
                                      headers=headers)
         events = decoded_events(response.content)
@@ -508,7 +508,7 @@ async def assert_supervised_tool_ending(app, socket, mint, ending):
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                      base_url="http://service") as client:
             record = await client.get(f"/runs/{socket.run_id}", headers=run_headers(
-                mint.workload(), mint.user(groups=[API_GROUP, SONGMAKER_GROUP])))
+                mint.workload(), mint.user(groups=[API_GROUP, APP_GROUP])))
         assert record.json()["state"] == (
             "cancelled" if ending == "before-call" else "failed")
         if ending == "disconnect":
@@ -527,7 +527,7 @@ def tool_socket(mint):
                     tools={"echo": "side_effecting"})).encode(), "more_body": False}
             return await super().receive()
 
-    return ToolSocket(user_token=mint.user(groups=[API_GROUP, SONGMAKER_GROUP]))
+    return ToolSocket(user_token=mint.user(groups=[API_GROUP, APP_GROUP]))
 
 
 async def end_tool_run(socket, clock, limits, ending):

@@ -27,13 +27,13 @@ from tests.support.request_limits_support import (
 )
 from tests.support.service_support import (
     API_GROUP,
+    APP_GROUP,
     COWRITER,
     LAST_TOOL_NAME_LENGTH_AT_THE_LIMIT,
     LONGEST_AGENT,
     MALFORMED_AGENTS,
     PRESENTATOR_CLIENT,
     PRESENTER,
-    SONGMAKER_GROUP,
     SONGMAKER_ORIGIN,
     SONGMAKER_TOOLS,
     TEST_ISSUER,
@@ -424,7 +424,7 @@ def _claims_for(admitted: AdmittedRun, subject: str, **overrides: object) -> Cap
     return CapabilityClaims.model_validate(values)
 
 
-BOB_ON_THE_API_ROUTE = {"groups": [SONGMAKER_GROUP, API_GROUP], "sub": "user-bob"}
+BOB_ON_THE_API_ROUTE = {"groups": [APP_GROUP, API_GROUP], "sub": "user-bob"}
 
 
 @pytest.mark.parametrize(

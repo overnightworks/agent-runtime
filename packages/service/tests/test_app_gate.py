@@ -21,9 +21,9 @@ import httpx
 import pytest
 from tests.support.service_support import (
     API_GROUP,
+    APP_GROUP,
     LISTED_MODEL,
     MALFORMED_AGENTS,
-    SONGMAKER_GROUP,
     SUBSCRIPTION_GROUP,
     TEST_ISSUER,
     ScriptedRunner,
@@ -142,7 +142,7 @@ def _admitted(response: httpx.Response) -> None:
 @pytest.mark.parametrize(
     "groups",
     [
-        pytest.param([SONGMAKER_GROUP], id="A1-the-app-group"),
+        pytest.param([APP_GROUP], id="A1-the-app-group"),
         pytest.param([SONGMAKER_ADMIN_GROUP], id="A2-a-child-of-the-app"),
         pytest.param([f"{SONGMAKER_ADMIN_GROUP}/leads"], id="A2-a-deeper-descendant"),
     ],
@@ -176,7 +176,7 @@ def test_an_entitled_caller_outside_the_app_is_forbidden_before_routing(gate, gr
     gate.refuse(groups)
 
 
-@pytest.mark.parametrize("app_group", [SONGMAKER_GROUP, SONGMAKER_ADMIN_GROUP])
+@pytest.mark.parametrize("app_group", [APP_GROUP, SONGMAKER_ADMIN_GROUP])
 def test_a_member_without_an_ai_group_passes_the_gate_and_is_not_enabled(gate, app_group):
     gate.refuse([app_group], NOT_ENABLED)
 
@@ -185,7 +185,7 @@ def test_a_member_without_an_ai_group_passes_the_gate_and_is_not_enabled(gate, a
     "groups",
     [
         pytest.param([API_GROUP, "/apps/songmaker/team"], id="A7-descendant"),
-        pytest.param([API_GROUP, SONGMAKER_GROUP], id="A7-the-exact-parent"),
+        pytest.param([API_GROUP, APP_GROUP], id="A7-the-exact-parent"),
     ],
 )
 def test_an_api_caller_in_the_app_reaches_the_api_route_on_the_configured_model(gate, groups):
@@ -214,7 +214,7 @@ def test_a_member_moved_from_the_admin_group_to_the_plain_group_still_reads_thei
     run_id = gate.seed_a_run_of_alice()
     assert gate.read(run_id, [SONGMAKER_ADMIN_GROUP]).status_code == 200
 
-    assert gate.read(run_id, [SONGMAKER_GROUP]).status_code == 200
+    assert gate.read(run_id, [APP_GROUP]).status_code == 200
 
 
 def test_a_non_member_is_refused_before_the_request_body_is_read(gate):
@@ -251,7 +251,7 @@ NOT_A_REQUEST = [
 
 @pytest.mark.parametrize(("body", "code", "status"), NOT_A_REQUEST)
 def test_a_member_learns_what_is_wrong_with_the_body(gate, body, code, status):
-    assert_rejected(gate.post([SUBSCRIPTION_GROUP, SONGMAKER_GROUP], **body), code, status)
+    assert_rejected(gate.post([SUBSCRIPTION_GROUP, APP_GROUP], **body), code, status)
 
 
 @pytest.mark.parametrize(("body", "_code", "_status"), NOT_A_REQUEST)
@@ -259,7 +259,7 @@ def test_a_non_member_learns_nothing_about_the_body(gate, body, _code, _status):
     gate.refuse([SUBSCRIPTION_GROUP], **body)
 
 
-SUBSCRIBER_ROLE_USER = [SUBSCRIPTION_GROUP, SONGMAKER_GROUP]
+SUBSCRIBER_ROLE_USER = [SUBSCRIPTION_GROUP, APP_GROUP]
 SUBSCRIBER_ROLE_ADMIN = [SUBSCRIPTION_GROUP, SONGMAKER_ADMIN_GROUP]
 
 
@@ -344,13 +344,13 @@ def test_an_admins_admin_only_body_replayed_with_a_users_token_is_forbidden(gate
 
 
 def test_the_role_is_refused_before_the_route_is_known(gate):
-    gate.refuse([SONGMAKER_GROUP], roles=ADMIN_ONLY)
+    gate.refuse([APP_GROUP], roles=ADMIN_ONLY)
 
-    gate.refuse([SONGMAKER_GROUP], NOT_ENABLED, roles=EVERYONE)
+    gate.refuse([APP_GROUP], NOT_ENABLED, roles=EVERYONE)
 
 
 def test_a_user_on_an_admin_only_agent_is_forbidden_before_the_api_route(gate):
-    gate.refuse([API_GROUP, SONGMAKER_GROUP], roles=ADMIN_ONLY)
+    gate.refuse([API_GROUP, APP_GROUP], roles=ADMIN_ONLY)
 
 
 @pytest.mark.parametrize(

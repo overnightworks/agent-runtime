@@ -24,7 +24,7 @@ from tests.support.openai_completions import (
 )
 from tests.support.service_support import (
     API_GROUP,
-    SONGMAKER_GROUP,
+    APP_GROUP,
     TokenMint,
     decoded_events,
     in_loop,
@@ -71,7 +71,7 @@ async def service_response(config, **body):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                  base_url="http://service") as client:
         return await client.post("/runs", json=run_body(**body), headers=run_headers(
-            mint.workload(), mint.user(groups=[API_GROUP, SONGMAKER_GROUP])))
+            mint.workload(), mint.user(groups=[API_GROUP, APP_GROUP])))
 
 
 @pytest.mark.parametrize("model", [CONFIGURED_MODEL, "grok/synthetic"])
@@ -297,7 +297,7 @@ def test_fragmented_reflection_reaches_no_frame_record_or_log(
                          fetch_key_set=mint.fetch_key_set)
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                      base_url="http://service") as client:
-            headers = run_headers(mint.workload(), mint.user(groups=[API_GROUP, SONGMAKER_GROUP]))
+            headers = run_headers(mint.workload(), mint.user(groups=[API_GROUP, APP_GROUP]))
             response = await client.post("/runs", json=run_body(), headers=headers)
             events = decoded_events(response.content)
             assert [event.type for event in events] == ["run_started", "failed"]
@@ -355,7 +355,7 @@ async def test_buffered_http_keeps_heartbeats_and_closes_on_every_ending(
 
     clients = fake_gateway(monkeypatch, upstream)
     mint = shared_mint()
-    socket = ClientSocket(user_token=mint.user(groups=[API_GROUP, SONGMAKER_GROUP]))
+    socket = ClientSocket(user_token=mint.user(groups=[API_GROUP, APP_GROUP]))
     app = create_app(config, runners=installed_runners(config, None, clock),
                      fetch_key_set=mint.fetch_key_set)
     response = asyncio.create_task(app(socket.scope, socket.receive, socket.send))
@@ -507,7 +507,7 @@ def test_full_cli_capacity_does_not_block_the_real_api_runner(tmp_path, monkeypa
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                          base_url="http://service") as client:
                 both = run_headers(mint.workload(), mint.user(groups=[
-                    API_GROUP, SUBSCRIPTION_GROUP, SONGMAKER_GROUP]))
+                    API_GROUP, SUBSCRIPTION_GROUP, APP_GROUP]))
                 busy = await client.post(
                     "/runs", json=run_body(), headers=both)
                 assert busy.status_code == 429
@@ -549,7 +549,7 @@ def test_process_entry_installs_the_api_route_beside_the_probed_cli_program(
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
                                          base_url="http://service") as client:
                 return await client.post("/runs", json=run_body(), headers=run_headers(
-                    mint.workload(), mint.user(groups=[API_GROUP, SONGMAKER_GROUP])))
+                    mint.workload(), mint.user(groups=[API_GROUP, APP_GROUP])))
         served.extend(decoded_events(asyncio.run(run()).content))
 
     monkeypatch.setattr(uvicorn, "run", serve)

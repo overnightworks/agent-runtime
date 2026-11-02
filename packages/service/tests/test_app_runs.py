@@ -32,12 +32,12 @@ from tests.support.service_config_support import (
 )
 from tests.support.service_support import (
     API_GROUP,
+    APP_GROUP,
     COWRITER,
     LISTED_MODEL,
     PRESENTATOR_CLIENT,
     PRESENTER,
     SONGMAKER_CLIENT,
-    SONGMAKER_GROUP,
     SUBSCRIPTION_GROUP,
     TEST_ISSUER,
     ScriptedRunner,
@@ -250,7 +250,7 @@ def test_p6_a_valid_but_forbidden_bearer_token_is_forbidden_not_the_apps_own_run
 def test_p7_a_person_without_the_requested_role_is_forbidden_though_the_agent_runs_as_the_app(
     service,
 ):
-    refused = service.start(_person(groups=[SONGMAKER_GROUP]), roles=["admin"])
+    refused = service.start(_person(groups=[APP_GROUP]), roles=["admin"])
 
     assert_rejected(refused, RejectionCode.FORBIDDEN, 403)
     assert service.started == 0
@@ -474,8 +474,8 @@ def test_r1_r2_r3_r5_the_route_and_model_come_from_the_service_account_and_the_c
 @pytest.mark.parametrize(
     ("groups", "route"),
     [
-        pytest.param([SONGMAKER_GROUP, SUBSCRIPTION_GROUP], RouteKind.CLI, id="cli"),
-        pytest.param([SONGMAKER_GROUP, API_GROUP], RouteKind.API, id="api"),
+        pytest.param([APP_GROUP, SUBSCRIPTION_GROUP], RouteKind.CLI, id="cli"),
+        pytest.param([APP_GROUP, API_GROUP], RouteKind.API, id="api"),
     ],
 )
 def test_a_persons_run_starts_naming_the_configured_model_and_its_route(service, groups, route):
@@ -487,7 +487,7 @@ def test_a_persons_run_starts_naming_the_configured_model_and_its_route(service,
 
 
 def test_r4_a_service_account_in_no_route_group_is_not_enabled(service):
-    refused = service.start(_own([SONGMAKER_GROUP]))
+    refused = service.start(_own([APP_GROUP]))
 
     assert_rejected(refused, RejectionCode.NOT_ENABLED, 403)
     assert service.started == 0

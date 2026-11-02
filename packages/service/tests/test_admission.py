@@ -25,8 +25,8 @@ from tests.support.recorded_returns import record_returns
 from tests.support.request_limits_support import QUOTATION_MARKS_256, TUNED_AT_THE_LIMIT
 from tests.support.service_support import (
     API_GROUP,
+    APP_GROUP,
     LONGEST_AGENT,
-    SONGMAKER_GROUP,
     SUBSCRIPTION_GROUP,
     ClientSocket,
     ScriptedConfirmation,
@@ -63,7 +63,7 @@ from agent_runtime_service.runners import Runner, Runners
 PLACES: Final = 2
 MINT = TokenMint()
 FINAL = (FinalEvent(text="done"),)
-BOB_ON_THE_API_ROUTE = {"groups": [SONGMAKER_GROUP, API_GROUP], "sub": "user-bob"}
+BOB_ON_THE_API_ROUTE = {"groups": [APP_GROUP, API_GROUP], "sub": "user-bob"}
 
 
 @dataclass
@@ -186,7 +186,7 @@ def test_an_oversized_body_with_every_place_taken_is_too_large_not_busy_and_crea
     ("make_user", "body", "code"),
     [
         pytest.param(
-            lambda: MINT.user(groups=[SONGMAKER_GROUP]),
+            lambda: MINT.user(groups=[APP_GROUP]),
             {},
             RejectionCode.NOT_ENABLED,
             id="route-not-enabled",
@@ -213,7 +213,7 @@ def test_a_non_member_with_every_place_taken_is_forbidden_not_busy_and_holds_no_
 def test_a_user_on_an_admin_only_agent_with_every_place_taken_is_forbidden_not_busy(service):
     held = service.fill_the_places()
 
-    refused = service.run(MINT.user(groups=[SUBSCRIPTION_GROUP, SONGMAKER_GROUP]), roles=["admin"])
+    refused = service.run(MINT.user(groups=[SUBSCRIPTION_GROUP, APP_GROUP]), roles=["admin"])
 
     assert_rejected(refused, RejectionCode.FORBIDDEN, 403)
     assert_rejected(service.run(), RejectionCode.BUSY, 429)
@@ -224,7 +224,7 @@ def test_a_user_on_an_admin_only_agent_with_every_place_taken_is_forbidden_not_b
 def test_a_member_of_both_routes_with_every_place_taken_gets_busy_and_no_api_run(service):
     held = service.fill_the_places()
     signed_before = len(service.signed)
-    both = MINT.user(groups=[SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP])
+    both = MINT.user(groups=[SUBSCRIPTION_GROUP, API_GROUP, APP_GROUP])
 
     assert_rejected(service.run(both), RejectionCode.BUSY, 429)
 
@@ -235,7 +235,7 @@ def test_a_member_of_both_routes_with_every_place_taken_gets_busy_and_no_api_run
 def test_h9_a_listed_model_with_every_place_taken_gets_busy_and_no_api_run(service):
     held = service.fill_the_places()
     signed_before = len(service.signed)
-    both = MINT.user(groups=[SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP])
+    both = MINT.user(groups=[SUBSCRIPTION_GROUP, API_GROUP, APP_GROUP])
 
     assert_rejected(service.run(both), RejectionCode.BUSY, 429)
 

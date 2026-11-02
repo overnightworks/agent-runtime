@@ -52,6 +52,7 @@ OTHER_TIMEOUT_S: Final = 30.0
 # A run's heartbeat comes at most every 300 seconds (wire.RunStarted); the read outlasts one.
 READ_TIMEOUT_S: Final = 330.0
 TRANSPORT_LOST: Final = "transport_lost"
+MALFORMED_TOKEN: Final = "malformed_token"  # noqa: S105 - a closed label and no secret
 _TIMEOUT: Final = httpx2.Timeout(OTHER_TIMEOUT_S, connect=CONNECT_TIMEOUT_S, read=READ_TIMEOUT_S)
 _RETRY_AFTER_HEADER: Final = "Retry-After"
 
@@ -63,6 +64,10 @@ class ServiceBackend(AgentBackend):
 
     async def run(self, request: RunRequest, asker: Asker) -> AsyncGenerator[TurnEvent, None]:
         tokens = await asker.tokens()
+        if not _header_safe(tokens):
+            raise TurnStopped(
+                TurnStopKind.REFUSED, RejectionCode.UNAUTHORIZED, detail=MALFORMED_TOKEN
+            )
         stream = RunStream()
         held: UUID | None = None
         started: UUID | None = None
@@ -104,6 +109,16 @@ class ServiceBackend(AgentBackend):
         except RunRegistrationRefused:
             raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.UNAVAILABLE) from None
         return run_id
+
+
+def _header_safe(tokens: RunTokens) -> bool:
+    # The HTTP layer would quote a rejected header value in its error and its debug log.
+    values = (tokens.workload, tokens.person)
+    return all(
+        v.get_secret_value().isascii() and v.get_secret_value().isprintable()
+        for v in values
+        if v is not None
+    )
 
 
 def _headers(tokens: RunTokens) -> dict[str, str]:
