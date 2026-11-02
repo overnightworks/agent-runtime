@@ -13,9 +13,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.support.gateway_turn_support import SkewedLoop, a_gateway_config, a_person, ending
 
 from agent_runtime_client.agents import TurnRequest
-from agent_runtime_client.backend import TurnPerson, TurnStopKind, TurnStopped
+from agent_runtime_client.backend import TurnStopKind, TurnStopped
 from agent_runtime_client.backend.fake_gateway import (
     FakeGateway,
     Reply,
@@ -52,15 +53,6 @@ PROVIDER_ERROR = (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
 LIMIT_EXCEEDED = (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
 BUSY = (TurnStopKind.REFUSED, RejectionCode.BUSY)
 TURN_BUDGET_SECONDS = 30
-
-
-class SkewedLoop(asyncio.SelectorEventLoop):
-    """An event loop whose clock the app side can move on, so a late consumer needs no sleep."""
-
-    skew_seconds: float = 0
-
-    def time(self) -> float:
-        return super().time() + self.skew_seconds
 
 
 @dataclass
@@ -106,12 +98,7 @@ class Shop:
         return events, stopped, gateway
 
     def config(self) -> AgentConfig:
-        key_file = self.directory / "key"
-        key_file.write_text("stand-in-key-0001\n")
-        gateway = {"origin": "http://gateway.test", "key_file": str(key_file)}
-        return AgentConfig.model_validate(
-            {"backend": "litellm", "gateway": gateway, "api_group": "/apps/example"}
-        )
+        return a_gateway_config(self.directory)
 
 
 async def _noted() -> ToolOutcome:
@@ -127,15 +114,6 @@ def a_request(tools: list[HandTool], max_tool_calls: int) -> TurnRequest:
         model="text/standin",
         max_duration_seconds=TURN_BUDGET_SECONDS,
         max_tool_calls=max_tool_calls if tools else None,
-    )
-
-
-def a_person() -> TurnPerson:
-    async def groups() -> frozenset[str]:
-        return frozenset({"/apps/example"})
-
-    return TurnPerson(
-        principal=Principal(iss="https://issuer.example", sub="s-1"), role="user", groups=groups
     )
 
 
@@ -161,10 +139,6 @@ def logged_flag(caplog) -> str:
     """The is_error state the one INFO record of the call states, as printed."""
     (record,) = call_records(caplog)
     return record.getMessage().rsplit("is_error=", 1)[1]
-
-
-def ending(stopped: TurnStopped | None):
-    return None if stopped is None else (stopped.kind, stopped.code)
 
 
 def sent(gateway: FakeGateway, index: int) -> dict:

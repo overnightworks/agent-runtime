@@ -11,6 +11,12 @@ from pathlib import Path
 
 import httpx2
 import pytest
+from tests.support.gateway_turn_support import (
+    SkewedLoop,
+    a_gateway_config,
+    a_person,
+    ending,
+)
 
 from agent_runtime_client.agents import TurnRequest
 from agent_runtime_client.backend import TurnPerson, TurnStopKind, TurnStopped
@@ -21,7 +27,6 @@ from agent_runtime_client.turn import (
     MAX_EVENT_BYTES,
     MAX_RUN_FILES_BYTES,
     FailureCode,
-    Principal,
     RejectionCode,
     RunFile,
     Turn,
@@ -36,8 +41,6 @@ UNAVAILABLE = (TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE)
 LIMIT_EXCEEDED = (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
 BUSY = (TurnStopKind.REFUSED, RejectionCode.BUSY)
 TURN_BUDGET_SECONDS = 30
-API_GROUP = "/apps/example"
-GATEWAY_ORIGIN = "http://gateway.test"
 
 
 def a_picture_request(**changes) -> TurnRequest:
@@ -52,27 +55,6 @@ def a_picture_request(**changes) -> TurnRequest:
         "picture_size": "1024x1024",
     }
     return TurnRequest(**{**fields, **changes})
-
-
-class SkewedLoop(asyncio.SelectorEventLoop):
-    """An event loop whose clock a transport can move on, so a deadline needs no waiting."""
-
-    skew_seconds: float = 0
-
-    def time(self) -> float:
-        return super().time() + self.skew_seconds
-
-
-def ending(stopped: TurnStopped | None):
-    return None if stopped is None else (stopped.kind, stopped.code)
-
-
-def a_person(groups: frozenset[str] = frozenset({API_GROUP}), role: str = "user") -> TurnPerson:
-    async def member_of() -> frozenset[str]:
-        return groups
-
-    principal = Principal(iss="https://issuer.example", sub="s-1")
-    return TurnPerson(principal=principal, role=role, groups=member_of)
 
 
 def a_json_reply(body: object) -> Reply:
@@ -90,14 +72,7 @@ class Studio:
     directory: Path
 
     def config(self) -> AgentConfig:
-        (self.directory / "key").write_text("stand-in-key-0001\n")
-        return AgentConfig.model_validate(
-            {
-                "backend": "litellm",
-                "api_group": API_GROUP,
-                "gateway": {"origin": GATEWAY_ORIGIN, "key_file": str(self.directory / "key")},
-            }
-        )
+        return a_gateway_config(self.directory)
 
     def run(self, *replies: Reply, request: TurnRequest | None = None, person=None, transport=None):
         gateway = FakeGateway(*replies) if transport is None else transport
