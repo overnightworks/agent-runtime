@@ -1,7 +1,8 @@
 """How an app runs one agent turn: the port, who asks, and how a turn ends short.
 
 ``AgentBackend`` is the port an app consumes inside ``contextlib.aclosing``:
-closing the generator runs the backend's cleanup. This package imports no HTTP library.
+closing the generator runs the backend's cleanup. This module imports no HTTP library;
+``backend.gateway`` and ``backend.fake_gateway`` need the ``backend`` extra.
 """
 
 from __future__ import annotations

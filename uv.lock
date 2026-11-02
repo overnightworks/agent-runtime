@@ -532,7 +532,7 @@ wheels = [
 
 [[package]]
 name = "overnightworks-agent-runtime"
-version = "0.16.0"
+version = "0.17.0"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
@@ -568,7 +568,7 @@ provides-extras = ["api", "dev"]
 
 [[package]]
 name = "overnightworks-agent-runtime-client"
-version = "0.16.0"
+version = "0.17.0"
 source = { editable = "packages/client" }
 dependencies = [
     { name = "pydantic" },
@@ -600,7 +600,7 @@ provides-extras = ["backend", "dev", "mcp-server"]
 
 [[package]]
 name = "overnightworks-agent-runtime-service"
-version = "0.16.0"
+version = "0.17.0"
 source = { editable = "packages/service" }
 dependencies = [
     { name = "anyio" },
