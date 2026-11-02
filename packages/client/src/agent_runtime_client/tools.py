@@ -2,15 +2,24 @@
 
 This module is the one owner of ``ToolDeclaration`` and its ``ToolEffect``;
 the provider core builds its ``ToolCatalog`` on the declaration and
-re-exports the identical class.
+re-exports the identical class. ``HandTool`` is a declaration with the handler
+that serves it in the capability front, whose caller is the person a run acts for.
 """
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+if TYPE_CHECKING:
+    # ``wire`` imports this module, so the names its siblings own are read by checkers only.
+    from agent_runtime_client.capability import CapabilityPrincipal
+    from agent_runtime_client.mcp_wire import ToolOutcome
+    from agent_runtime_client.wire import JsonObject
 
 
 class ToolEffect(StrEnum):
@@ -40,3 +49,14 @@ class ToolDeclaration(BaseModel):
     description: str = Field(min_length=1)
     parameters: dict[str, Any]
     effect: ToolEffect = ToolEffect.SIDE_EFFECTING
+
+
+type HandToolHandler = Callable[[CapabilityPrincipal, JsonObject], Awaitable[ToolOutcome]]
+
+
+@dataclass(frozen=True)
+class HandTool:
+    """A tool the app serves itself, for the person a run acts for."""
+
+    declaration: ToolDeclaration
+    handler: HandToolHandler

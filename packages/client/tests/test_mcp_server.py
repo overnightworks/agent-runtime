@@ -21,18 +21,18 @@ from starlette.routing import Route
 from tests.support.mcp_server_support import (
     ISSUED_AT,
     LIFETIME,
-    OTHER_RUN_ID,
     RUN_ID,
     VERIFICATION_KEY,
     RecordingHandlers,
+    admit_everything,
     declaration,
     minted_capability,
     signature_segment_of,
 )
 
-from agent_runtime_client.mcp_server import HandlerFailureWithheld, McpServer, McpTool
+from agent_runtime_client.mcp_server import HandlerFailureWithheld, McpServer
 from agent_runtime_client.mcp_wire import ToolOutcome
-from agent_runtime_client.tools import ToolEffect
+from agent_runtime_client.tools import HandTool, ToolEffect
 from agent_runtime_client.wire import MAX_EVENT_BYTES
 
 ORIGIN = "https://notes.internal"
@@ -150,7 +150,9 @@ def served(handlers: RecordingHandlers) -> Fixture:
         handlers.tool("edit_note", ToolEffect.SIDE_EFFECTING),
         handlers.tool("other_tool"),
     ]
-    server = McpServer(ORIGIN, VERIFICATION_KEY, tools, wall_clock=lambda: ISSUED_AT + 1)
+    server = McpServer(
+        ORIGIN, VERIFICATION_KEY, tools, handlers.admit_run, wall_clock=lambda: ISSUED_AT + 1
+    )
     return Fixture(handlers, server, minted_capability(ORIGIN).token, [])
 
 
@@ -182,49 +184,100 @@ def test_tools_list_gives_declared_tools_the_capability_allows_in_declaration_or
     assert listed[0]["inputSchema"]["type"] == "object"
 
 
-def test_an_allowed_call_hands_the_handler_the_verified_claims_and_the_arguments(
+def test_an_allowed_call_hands_the_handler_the_verified_principal_and_the_arguments(
     served: Fixture,
 ) -> None:
     reply = served.post(rpc("tools/call", call_params("read_note", note="n1")))
 
     assert reply.json()["result"]["content"] == [{"type": "text", "text": "done"}]
-    [(name, claims, arguments)] = served.handlers.calls
-    assert (name, claims.sub, arguments) == ("read_note", str(RUN_ID), {"note": "n1"})
+    [(name, principal, arguments)] = served.handlers.calls
+    assert (name, principal.sub, arguments) == ("read_note", "user-alice", {"note": "n1"})
+    assert served.handlers.admitted_runs == [str(RUN_ID)]
 
 
-def test_interleaved_calls_of_two_runs_each_get_the_claims_of_their_own_request(
+def test_a_call_of_a_refused_run_is_an_error_result_and_never_reaches_the_handler(
+    served: Fixture,
+) -> None:
+    served.handlers.admits = False
+
+    reply = served.post(rpc("tools/call", call_params("read_note", note="n1")))
+
+    result = reply.json()["result"]
+    assert (reply.status, result["isError"]) == (200, True)
+    assert len(result["content"]) == 1
+    assert served.handlers.calls == []
+    assert served.handlers.admitted_runs == [str(RUN_ID)]
+
+
+def test_a_tool_the_capability_does_not_grant_is_refused_before_the_run_is_asked(
+    served: Fixture,
+) -> None:
+    served.handlers.admits = False
+
+    reply = served.post(rpc("tools/call", call_params("other_tool")))
+
+    assert reply.json()["error"] == INVALID_PARAMS
+    assert served.handlers.admitted_runs == []
+
+
+def test_the_listing_does_not_depend_on_the_run_admission(served: Fixture) -> None:
+    served.handlers.admits = False
+
+    reply = served.post(rpc("tools/list"))
+
+    assert [tool["name"] for tool in reply.json()["result"]["tools"]] == ["read_note", "edit_note"]
+    assert served.handlers.admitted_runs == []
+
+
+def test_a_run_admission_that_raises_with_the_capability_is_withheld(
+    served: Fixture, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING, logger=LOGGER)
+    segment = served.token.rsplit(".", 1)[-1]
+    served.handlers.admission_failure = RuntimeError(f"failed with {segment}")
+
+    with pytest.raises(HandlerFailureWithheld) as raised:
+        served.post(rpc("tools/call", call_params("read_note")))
+
+    assert raised.value.tool_name == "read_note"
+    assert segment not in "".join(traceback.format_exception(raised.value)) + caplog.text
+    assert served.handlers.calls == []
+
+
+def test_interleaved_calls_of_two_runs_each_get_the_principal_of_their_own_request(
     served: Fixture,
 ) -> None:
     seen: list[tuple[str, str]] = []
 
-    async def handler(claims: Any, arguments: Any) -> ToolOutcome:
+    async def handler(principal: Any, arguments: Any) -> ToolOutcome:
         await asyncio.sleep(0)
-        seen.append((arguments["tag"], claims.sub))
+        seen.append((arguments["tag"], principal.sub))
         return ToolOutcome("ok", is_error=False)
 
     server = McpServer(
         ORIGIN,
         VERIFICATION_KEY,
-        [McpTool(declaration("read_note"), handler)],
+        [HandTool(declaration("read_note"), handler)],
+        admit_everything,
         wall_clock=lambda: ISSUED_AT + 1,
     )
-    runs = {"first": RUN_ID, "second": OTHER_RUN_ID}
+    runs = {"first": "user-alice", "second": "user-bob"}
 
     async def both() -> None:
         await asyncio.gather(
             *(
                 drive_scope(
                     server,
-                    http_scope(request_headers(minted_capability(ORIGIN, run_id=run).token)),
+                    http_scope(request_headers(minted_capability(ORIGIN, subject=person).token)),
                     rpc("tools/call", call_params("read_note", tag=tag)),
                 )
-                for tag, run in runs.items()
+                for tag, person in runs.items()
             )
         )
 
     asyncio.run(both())
 
-    assert sorted(seen) == sorted((tag, str(run)) for tag, run in runs.items())
+    assert sorted(seen) == sorted(runs.items())
 
 
 @pytest.mark.parametrize(
@@ -320,7 +373,11 @@ def test_any_origin_header_is_forbidden_even_the_apps_own(served: Fixture, origi
 
 def test_the_apps_authority_with_a_port_is_matched_exactly() -> None:
     server = McpServer(
-        "https://notes.internal:8443", VERIFICATION_KEY, [], wall_clock=lambda: ISSUED_AT + 1
+        "https://notes.internal:8443",
+        VERIFICATION_KEY,
+        [],
+        admit_everything,
+        wall_clock=lambda: ISSUED_AT + 1,
     )
     token = minted_capability("https://notes.internal:8443").token
     scope = http_scope(request_headers(token, host=[b"notes.internal:8443"]))
@@ -358,7 +415,7 @@ def test_the_helper_owns_the_prefix_and_never_redirects(
 
 
 def test_the_prefix_without_authorization_is_401_and_other_paths_are_the_hosts() -> None:
-    server = McpServer(ORIGIN, VERIFICATION_KEY, [])
+    server = McpServer(ORIGIN, VERIFICATION_KEY, [], admit_everything)
     app = server.in_front_of(host_app())
     unauthorized = asyncio.run(drive_scope(app, http_scope(request_headers(None), path="/mcp/")))
     unauthenticated = request_headers(None)
@@ -444,9 +501,9 @@ def test_a_repeated_tool_name_or_a_non_canonical_origin_is_refused_at_constructi
 ) -> None:
     repeated = [handlers.tool("read_note"), handlers.tool("read_note")]
     with pytest.raises(ValueError):
-        McpServer(ORIGIN, VERIFICATION_KEY, repeated)
+        McpServer(ORIGIN, VERIFICATION_KEY, repeated, admit_everything)
     with pytest.raises(ValueError):
-        McpServer("https://Notes.internal/", VERIFICATION_KEY, [])
+        McpServer("https://Notes.internal/", VERIFICATION_KEY, [], admit_everything)
 
 
 def test_lifespan_is_a_type_error_on_the_bare_server_and_the_hosts_through_the_helper(
@@ -601,7 +658,7 @@ def test_a_handler_failure_carrying_the_signature_is_withheld_without_a_chain(
 def test_the_default_clock_is_the_real_one_so_a_capability_long_expired_is_refused(
     handlers: RecordingHandlers,
 ) -> None:
-    server = McpServer(ORIGIN, VERIFICATION_KEY, [handlers.tool("read_note")])
+    server = McpServer(ORIGIN, VERIFICATION_KEY, [handlers.tool("read_note")], handlers.admit_run)
     token = minted_capability(ORIGIN).token
 
     reply = asyncio.run(drive_scope(server, http_scope(request_headers(token)), rpc("ping")))

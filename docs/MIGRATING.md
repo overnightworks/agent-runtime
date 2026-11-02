@@ -2,6 +2,13 @@
 
 Read by a host bumping its pin; each release that breaks a host has one section, newest first.
 
+## Migrating to 0.18.0
+
+| Before (0.17.0) | Now |
+| --- | --- |
+| `McpServer(origin, key, tools)` took `McpTool`s, and `agent_runtime_client.mcp_server` exported `McpTool`. | It takes `HandTool`s from `agent_runtime_client.tools` and a required `admit_run: Callable[[CapabilityClaims], bool]`; `McpTool` and the `ToolHandler` alias are gone. |
+| A handler was `async (CapabilityClaims, arguments) -> ToolOutcome` and checked the run's holder itself. | It is `async (CapabilityPrincipal, arguments) -> ToolOutcome`; the holder check moves into `admit_run`. A call of a refused run ends as a tool result with `is_error` and one fixed text, and the handler does not run. |
+
 ## Migrating to 0.17.0
 
 | Before (0.16.0) | Now |

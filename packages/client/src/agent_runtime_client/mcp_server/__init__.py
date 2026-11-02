@@ -4,7 +4,7 @@ No base module of ``agent_runtime_client`` imports this package, so the base kee
 dependencies, pydantic and ruamel.yaml.
 """
 
-from agent_runtime_client.mcp_server.app import HandlerFailureWithheld, McpServer, McpTool
+from agent_runtime_client.mcp_server.app import HandlerFailureWithheld, McpServer
 from agent_runtime_client.mcp_server.verification import (
     CapabilityRefusal,
     CapabilityVerificationKey,
@@ -15,7 +15,6 @@ from agent_runtime_client.mcp_server.verification import (
 __all__ = [
     "HandlerFailureWithheld",
     "McpServer",
-    "McpTool",
     "CapabilityRefusal",
     "CapabilityVerificationKey",
     "UnsoundVerificationKey",

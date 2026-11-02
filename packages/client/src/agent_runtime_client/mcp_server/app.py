@@ -3,9 +3,10 @@
 ``McpServer.in_front_of(host_app)`` is the outermost ASGI app: it owns ``MCP_ENDPOINT_PATH``
 and everything under ``MCP_ENDPOINT_PATH + "/"``, so no router of the host answers there with
 a redirect or a middleware. It answers the first failing head check with an empty body, in
-this order: Host, Origin, authorization, path, method, body size. It is stateless: each handler
-gets exactly the claims of its own request's capability. The capability proves the signed run
-id and nothing about the run being live, so the handler's ownership check stays mandatory
+this order: Host, Origin, authorization, path, method, body size. It is stateless: the app's
+``admit_run`` decides each call against the claims of its own request's capability, and the
+handler gets the principal of that capability. The capability proves the signed run id and
+nothing about the run being live, so the app's run admission stays mandatory
 (decision record 0001, O4 and H3).
 
 Once a capability is verified, every body written for that request is asked
@@ -60,7 +61,7 @@ from agent_runtime_client.mcp_wire import (
     tool_result_response,
     tools_list_response,
 )
-from agent_runtime_client.tools import ToolDeclaration
+from agent_runtime_client.tools import HandTool, ToolDeclaration
 from agent_runtime_client.wire import MAX_EVENT_BYTES, JsonObject
 
 type Scope = MutableMapping[str, Any]
@@ -68,11 +69,11 @@ type Message = MutableMapping[str, Any]
 type Receive = Callable[[], Awaitable[Message]]
 type Send = Callable[[Message], Awaitable[None]]
 type AsgiApp = Callable[[Scope, Receive, Send], Awaitable[None]]
-type ToolHandler = Callable[[CapabilityClaims, JsonObject], Awaitable[ToolOutcome]]
 
 _LOG: Final = logging.getLogger("agent_runtime_client.mcp_server")
 _UNKNOWN_METHOD: Final = "unknown_method"
 _UNKNOWN_TOOL: Final = "unknown_tool"
+_RUN_REFUSED: Final = ToolOutcome("This run may not call this tool now.", is_error=True)
 _KNOWN_METHODS: Final = frozenset(McpMethod)
 _HTTPS_SCHEME: Final = "https://"
 _BEARER_PREFIX: Final = "Bearer "
@@ -94,12 +95,6 @@ class HandlerFailureWithheld(Exception):
     def __init__(self, tool_name: str) -> None:
         super().__init__(f"the failure of tool {tool_name} carried the capability")
         self.tool_name = tool_name
-
-
-@dataclass(frozen=True)
-class McpTool:
-    declaration: ToolDeclaration
-    handler: ToolHandler
 
 
 @dataclass(frozen=True)
@@ -141,13 +136,15 @@ class McpServer:
         self,
         origin: str,
         key: CapabilityVerificationKey,
-        tools: Sequence[McpTool],
+        tools: Sequence[HandTool],
+        admit_run: Callable[[CapabilityClaims], bool],
         wall_clock: Callable[[], float] = time.time,
     ) -> None:
         self._origin = _ORIGIN.validate_python(origin)
         self._host = self._origin.removeprefix(_HTTPS_SCHEME).encode("ascii")
         self._key = key
         self._wall_clock = wall_clock
+        self._admit_run = admit_run
         self._tools = {tool.declaration.name: tool for tool in tools}
         if len(self._tools) != len(tools):
             raise ValueError("a tool name is declared more than once")
@@ -232,7 +229,11 @@ class McpServer:
                 return answer_for(error_response(request_id, JsonRpcErrorCode.INVALID_PARAMS))
             case Call(request_id, params):
                 return await _called(
-                    self._tools[params.name], verified, request_id, params.arguments
+                    self._tools[params.name],
+                    self._admit_run,
+                    verified,
+                    request_id,
+                    params.arguments,
                 )
             case _:
                 raise AssertionError("a server decision is not handled")
@@ -260,12 +261,19 @@ class McpServer:
 
 
 async def _called(
-    tool: McpTool, verified: _Verified, request_id: RequestId, arguments: JsonObject
+    tool: HandTool,
+    admit_run: Callable[[CapabilityClaims], bool],
+    verified: _Verified,
+    request_id: RequestId,
+    arguments: JsonObject,
 ) -> HttpAnswer:
-    """The tool's answer; a failure of the handler or of writing its outcome is the same failure."""
+    """The tool's answer; a failure of admission, handler or outcome writing is one failure."""
     outcome_text = ""
     try:
-        outcome = await tool.handler(verified.claims, arguments)
+        if admit_run(verified.claims):
+            outcome = await tool.handler(verified.claims.principal, arguments)
+        else:
+            outcome = _RUN_REFUSED
         outcome_text = f"{outcome.content}{outcome.is_error}"
         return answer_for(tool_result_response(request_id, outcome))
     except Exception as failure:

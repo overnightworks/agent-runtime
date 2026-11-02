@@ -71,7 +71,9 @@ def app(authority: Any) -> Iterator[RunningApp]:
         handlers.tool("read_note"),
         handlers.tool("other_tool"),
     ]
-    server = McpServer(origin, VERIFICATION_KEY, tools, wall_clock=lambda: ISSUED_AT + 1)
+    server = McpServer(
+        origin, VERIFICATION_KEY, tools, handlers.admit_run, wall_clock=lambda: ISSUED_AT + 1
+    )
     with served(
         server.in_front_of(no_host_routes),
         tls=authority.credentials_for(CERTIFICATE_HOST),

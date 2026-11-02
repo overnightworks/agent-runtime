@@ -9,10 +9,10 @@ from uuid import UUID
 from cryptography.hazmat.primitives import serialization
 from tests.support.service_support import generated_rsa_key
 
-from agent_runtime_client.capability import CapabilityClaims
-from agent_runtime_client.mcp_server import CapabilityVerificationKey, McpTool
+from agent_runtime_client.capability import CapabilityClaims, CapabilityPrincipal
+from agent_runtime_client.mcp_server import CapabilityVerificationKey
 from agent_runtime_client.mcp_wire import ToolOutcome
-from agent_runtime_client.tools import ToolDeclaration, ToolEffect
+from agent_runtime_client.tools import HandTool, ToolDeclaration, ToolEffect
 from agent_runtime_client.wire import JsonObject
 from agent_runtime_service.capability import (
     Capability,
@@ -44,6 +44,7 @@ def minted_capability(
     run_id: UUID = RUN_ID,
     tools: Sequence[str] = ALLOWED_TOOLS,
     issued_at: float = ISSUED_AT,
+    subject: str = "user-alice",
 ) -> Capability:
     scope = CapabilityScope(origin, tuple(tools), SIGNING_KEY)
     claims = capability_claims(
@@ -51,7 +52,7 @@ def minted_capability(
         run_id=run_id,
         app="notes",
         issuer="https://keycloak.test/realms/agent-test",
-        subject="user-alice",
+        subject=subject,
         agent="notes.assistant",
         now=issued_at,
         max_duration_s=LIFETIME,
@@ -72,19 +73,32 @@ def declaration(name: str, effect: ToolEffect = ToolEffect.READ_ONLY) -> ToolDec
     )
 
 
+def admit_everything(claims: CapabilityClaims) -> bool:
+    return True
+
+
 @dataclass
 class RecordingHandlers:
-    """Tool handlers that record each call and answer with a settable outcome or failure."""
+    """Tool handlers that record each call, and the app's run admission with a settable verdict."""
 
-    calls: list[tuple[str, CapabilityClaims, JsonObject]] = field(default_factory=list)
+    calls: list[tuple[str, CapabilityPrincipal, JsonObject]] = field(default_factory=list)
+    admitted_runs: list[str] = field(default_factory=list)
     outcome: ToolOutcome = DONE
     failure: Exception | None = None
+    admits: bool = True
+    admission_failure: Exception | None = None
 
-    def tool(self, name: str, effect: ToolEffect = ToolEffect.READ_ONLY) -> McpTool:
-        async def handler(claims: CapabilityClaims, arguments: JsonObject) -> ToolOutcome:
-            self.calls.append((name, claims, arguments))
+    def admit_run(self, claims: CapabilityClaims) -> bool:
+        self.admitted_runs.append(claims.sub)
+        if self.admission_failure is not None:
+            raise self.admission_failure
+        return self.admits
+
+    def tool(self, name: str, effect: ToolEffect = ToolEffect.READ_ONLY) -> HandTool:
+        async def handler(principal: CapabilityPrincipal, arguments: JsonObject) -> ToolOutcome:
+            self.calls.append((name, principal, arguments))
             if self.failure is not None:
                 raise self.failure
             return self.outcome
 
-        return McpTool(declaration(name, effect), handler)
+        return HandTool(declaration(name, effect), handler)
