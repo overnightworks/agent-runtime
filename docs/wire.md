@@ -191,11 +191,11 @@ every person's budget. `["https://issuer.example", "subject-1"]` gives
 | 3xx (a redirect is not followed) or 5xx (a `Retry-After` is ignored) | `failed: provider_unavailable`, detail `gateway_failed` |
 | connection refused or reset, TLS failure | `failed: provider_unavailable` |
 
-`GatewayBackend`'s constructor sets the `httpx2` and `httpcore2` loggers to WARNING for the whole process, overriding an app's own DEBUG setting there.
-
 A person over budget therefore reads as "unavailable", the same as any other refusal; telling
 them apart is a named gap. `detail` is for logs only. `after_side_effect` stays false: no tool
 runs here.
+
+`GatewayBackend`'s constructor sets the `httpx2` and `httpcore2` loggers to WARNING for the whole process, overriding an app's own DEBUG setting there.
 
 ## Agent files
 
