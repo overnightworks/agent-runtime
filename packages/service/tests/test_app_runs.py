@@ -180,6 +180,12 @@ def test_p1_e1_a_workload_token_alone_runs_an_enabled_agent_as_the_service_accou
     assert (admitted.route, admitted.model) == (Cli(Provider.ANTHROPIC), LISTED)
 
 
+def test_a_workload_token_living_over_300_seconds_is_admitted(service):
+    token = _workload_of_lifetime(301)
+
+    _succeeded(service.start({"Agent-Workload-Token": token}))
+
+
 @pytest.mark.parametrize(
     "authorization",
     [
@@ -335,10 +341,6 @@ def test_w1_w2_a_missing_or_unverifiable_workload_token_is_unauthorized(service,
 @pytest.mark.parametrize(
     "workload_token",
     [
-        pytest.param(
-            lambda: _workload_of_lifetime(301),
-            id="lifetime-over-300-seconds",
-        ),
         pytest.param(
             lambda: MINT.workload(groups=[SUBSCRIPTION_GROUP], realm_access={"roles": []}),
             id="no-agent-workload-role",

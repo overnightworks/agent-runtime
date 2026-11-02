@@ -31,7 +31,6 @@ pytestmark = [
 ]
 
 WORKLOAD_ROLE = "agent-workload"
-MAX_ACCESS_TOKEN_SECONDS = 300
 
 EXPECTED_GROUPS = {
     "alice": {"/subscription-members", "/apps/songmaker"},
@@ -105,13 +104,6 @@ def test_service_account_token_names_its_client_in_azp_and_client_id(
 def test_service_account_token_carries_the_agent_workload_role(service_account_claims, client):
     roles = _realm_roles(service_account_claims[client])
     assert WORKLOAD_ROLE in roles, f"realm_access.roles {sorted(roles)} lacks {WORKLOAD_ROLE}"
-
-
-@pytest.mark.parametrize("client", WORKLOAD_CLIENTS)
-def test_service_account_token_lives_at_most_300_seconds(service_account_claims, client):
-    claims = service_account_claims[client]
-    lifetime = claims["exp"] - claims["iat"]
-    assert lifetime <= MAX_ACCESS_TOKEN_SECONDS, f"exp - iat is {lifetime} s, over 300 s"
 
 
 @pytest.mark.parametrize("user", USERS)

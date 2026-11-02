@@ -5800,6 +5800,16 @@ The agent file still names no model. D2 and D3 stay: names are versionless
 one switch day for all apps. Slice 1 (#630) builds the request field; `GET /models` follows in
 slice 2.
 
+### Workload lifetime cap removed (head, 02.11.2026, #718)
+
+The service moves to webauth v0.29.0, whose 0.28.0 removed `ServiceIdentity.max_workload_seconds`: the
+workload binding (U1') no longer compares `exp - iat`, so a workload token of any lifetime is admitted
+while `exp`, `iat` and `nbf` stay checked against the clock with `leeway_seconds`. The issuer owns the
+token's lifetime; Keycloak stamps `exp - iat` as the lifespan or the lifespan + 1, so the cap refused a
+valid token now and then. The operator's word: „ja wir prüfen das nciht mehr passt!“. The 300-second
+sentences above are the history before this amendment; the test `test_service_account_token_lives_at_most_300_seconds`
+is gone, and a stolen workload token is bounded by its `exp` plus `leeway_seconds` alone.
+
 ## Out of scope at this size
 
 - arbitrary MCP endpoints and dynamic discovery;
