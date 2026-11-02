@@ -21,6 +21,7 @@ from starlette.routing import Route
 from tests.support.mcp_server_support import (
     ISSUED_AT,
     LIFETIME,
+    OTHER_RUN_ID,
     RUN_ID,
     VERIFICATION_KEY,
     RecordingHandlers,
@@ -261,23 +262,25 @@ def test_interleaved_calls_of_two_runs_each_get_the_principal_of_their_own_reque
         admit_everything,
         wall_clock=lambda: ISSUED_AT + 1,
     )
-    runs = {"first": "user-alice", "second": "user-bob"}
+    runs = {"first": (RUN_ID, "user-alice"), "second": (OTHER_RUN_ID, "user-bob")}
 
     async def both() -> None:
         await asyncio.gather(
             *(
                 drive_scope(
                     server,
-                    http_scope(request_headers(minted_capability(ORIGIN, subject=person).token)),
+                    http_scope(
+                        request_headers(minted_capability(ORIGIN, run_id=run, subject=person).token)
+                    ),
                     rpc("tools/call", call_params("read_note", tag=tag)),
                 )
-                for tag, person in runs.items()
+                for tag, (run, person) in runs.items()
             )
         )
 
     asyncio.run(both())
 
-    assert sorted(seen) == sorted(runs.items())
+    assert sorted(seen) == sorted((tag, person) for tag, (_, person) in runs.items())
 
 
 @pytest.mark.parametrize(
