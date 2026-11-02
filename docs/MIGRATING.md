@@ -11,6 +11,8 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | `ToolOutcome` lived in `agent_runtime_client.mcp_wire`. | It lives in `agent_runtime_client.tools`, next to the new `HandTool`, `HandToolHandler`, `Principal` and `JsonObject`; `mcp_wire` re-exports `ToolOutcome`, so no import changes. |
 | A request body had no byte bound. | A turn's request is bounded like any other: one near `4 × MAX_EVENT_BYTES` ends `failed: limit_exceeded`, a tool-free turn included. ([wire.md](wire.md#the-tool-loop)) |
 | `after_side_effect` was always false on a gateway turn. | It is true once a side-effecting tool call started in the turn, on `refused: busy` too. |
+| An agent file could not make a picture agent, and `GatewayBackend` returned no picture. | The file's `picture: {size: <width>x<height>}` makes one: its `model` is an `image/<model>` name (a file without `picture` must name `text/…`), it selects no `tools` and carries no `maxToolCalls`. `AgentDefinition` and `TurnRequest` carry `picture_size` (`None` for a text agent, the default); a picture `TurnRequest` holds exactly one user message and no tools, else `ValueError`. `GatewayBackend.run` posts it to `/v1/images/generations` and ends with `FinalEvent(text="", files=(RunFile(name="picture", …),))` and no `AssistantTextEvent`; a non-null `url`, not exactly one entry, bad base64 or a picture over `MAX_RUN_FILES_BYTES` is `failed: provider_error`. ([wire.md](wire.md#a-picture-agent)) |
+| `FinalEvent.files` was filled only by a CLI run. | A gateway picture turn fills it with its one picture; `backend.fake_gateway.picture(content)` scripts that reply. |
 
 ## Migrating to 0.17.0
 
