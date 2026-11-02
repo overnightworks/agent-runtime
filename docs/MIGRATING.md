@@ -7,7 +7,7 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | Before (0.17.0) | Now |
 | --- | --- |
 | `GatewayBackend(config, *, transport=None)` raised `ValueError` for an agent with tools. | `GatewayBackend(config, *, tools=(), transport=None)` takes the app's `agent_runtime_client.tools.HandTool`s and runs the agent's tool calls in the client's own loop; a selected tool with no handler raises `ValueError` at `run`. A tool's `content` reaches the model and the gateway. ([wire.md](wire.md#the-tool-loop)) |
-| An agent file had no `maxToolCalls`. | `maxToolCalls` (a positive integer) is required exactly when `tools` is not empty and refused otherwise; `AgentDefinition` and `TurnRequest` carry `max_tool_calls`, `None` for an agent with no tools. `TurnRequest(...)` built by hand needs the new field. An agent file that selects tools needs the key. |
+| An agent file had no `maxToolCalls`. | `maxToolCalls` (a positive integer) is required exactly when `tools` is not empty and refused otherwise; `AgentDefinition` and `TurnRequest` carry `max_tool_calls`, `None` for an agent with no tools. `AgentDefinition(...)` and `TurnRequest(...)` built by hand need the new field, and each refuses a pairing that breaks the rule. An agent file that selects tools needs the key. |
 | `ToolOutcome` lived in `agent_runtime_client.mcp_wire`. | It lives in `agent_runtime_client.tools`, next to the new `HandTool`, `HandToolHandler`, `Principal` and `JsonObject`; `mcp_wire` re-exports `ToolOutcome`, so no import changes. |
 | `after_side_effect` was always false on a gateway turn. | It is true once a side-effecting tool call started in the turn, on `refused: busy` too. |
 

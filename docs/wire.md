@@ -209,7 +209,12 @@ take the turn past `max_tool_calls` ends `failed: limit_exceeded` the same way.
 
 For each call, in order: `ToolCallEvent`; the side-effect state set from the declaration's
 `ToolEffect`, before the handler runs; `await handler(principal, arguments)`;
-`ToolResultEvent`. A call that started may have written, and a cancelled `asyncio.to_thread`
+`ToolResultEvent`. A call, or the next request, that the deadline has already passed when its
+turn comes (a slow consumer of the events) is not started: `failed: limit_exceeded`, with the
+side-effect state unchanged by it. A handler whose outcome is unusable (not a `ToolOutcome`, or
+a `content` that is not text a UTF-8 body can carry) is a host defect like one that raises. The
+model reads an error outcome as `Error: ` followed by the content, because the chat format has
+no error flag on a tool message. A call that started may have written, and a cancelled `asyncio.to_thread`
 write may still finish; nothing implies it was undone. A blocking tool stays the app's: its
 handler uses `asyncio.to_thread`. A `ToolOutcome(is_error=True)` goes to the model and the turn
 goes on. A handler that raises is a host defect: the client logs its class name only and tells
@@ -223,7 +228,7 @@ a tool returns only what that may see.
 | Bound | Value | Over it |
 | --- | --- | --- |
 | One tool result | `MAX_EVENT_BYTES` | the model gets a fixed `is_error` sentence instead of the content; the side effect stands; the turn continues |
-| One request of a turn, serialised | 4 × `MAX_EVENT_BYTES` | no request is sent; `failed: limit_exceeded` |
+| One request of a turn, serialised | 4 × `MAX_EVENT_BYTES` | no request is sent; `failed: limit_exceeded`. It bounds a text turn's first request too: a turn input near that size ends `failed: limit_exceeded` |
 | One response body | as for a text turn | `failed: provider_error` |
 
 `GatewayBackend`'s constructor sets the `httpx2` and `httpcore2` loggers to WARNING for the whole process, overriding an app's own DEBUG setting there.
@@ -244,8 +249,8 @@ security boundary.
 
 `agent_runtime_client.tools.ToolDeclaration` is the one declaration of a tool: name,
 description, arguments and a `ToolEffect`, `read_only` or `side_effecting`. The
-effect is for the service and never reaches a prompt; it defaults to
-side-effecting, because a tool nobody classified must be assumed to change
+effect is for the host (the service and `GatewayBackend` read it for `after_side_effect`) and
+never reaches a prompt; it defaults to side-effecting, because a tool nobody classified must be assumed to change
 state. The core's `ToolCatalog` builds on the same class.
 
 `HandTool` is a declaration with the async handler `(Principal, JsonObject) -> ToolOutcome`

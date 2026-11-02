@@ -44,8 +44,9 @@ class ToolEffect(StrEnum):
 class ToolDeclaration(BaseModel):
     """One tool as a model sees it: its name, its purpose, its arguments.
 
-    ``effect`` is for the service, not the model: the provider projections
-    pick their fields explicitly, so it never reaches a prompt. It defaults to
+    ``effect`` is for the host, not the model: the service and ``GatewayBackend`` read it for
+    ``after_side_effect``, and the provider projections pick their fields explicitly, so it
+    never reaches a prompt. It defaults to
     side-effecting because a tool nobody classified must be assumed to change
     state.
     """
