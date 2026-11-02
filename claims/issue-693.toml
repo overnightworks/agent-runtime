@@ -3,6 +3,6 @@ agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
 role = "builder"
 base = "ee16c520224de2b74f12356e6697513688fe9958"
 branch = "claude/issue-693-picture-agent"
-scope = ["docs/MIGRATING.md", "docs/wire.md", "packages/client/src/agent_runtime_client/agents.py", "packages/client/src/agent_runtime_client/backend/fake_gateway.py", "packages/client/src/agent_runtime_client/backend/gateway.py", "packages/client/src/agent_runtime_client/turn_events.py", "packages/client/tests/test_agents_file.py", "packages/client/tests/test_backend_gateway_pictures.py", "packages/client/tests/test_backend_gateway_tools.py", "quality/baseline.toml"]
+scope = ["docs/MIGRATING.md", "docs/wire.md", "packages/client/src/agent_runtime_client/agents.py", "packages/client/src/agent_runtime_client/backend/fake_gateway.py", "packages/client/src/agent_runtime_client/backend/gateway.py", "packages/client/src/agent_runtime_client/turn_events.py", "packages/client/tests/test_agents_file.py", "packages/client/tests/test_backend_gateway_pictures.py", "packages/client/tests/test_backend_gateway_tools.py", "quality/baseline.toml", "tests/support/gateway_turn_support.py"]
 opened_commit = "66412fa38150c8742d86ddb12bca53e57cec4e84"
 whole_reason = "The agent file's key, the call and its reply bounds have no caller apart, and the fake and the documents state them."
