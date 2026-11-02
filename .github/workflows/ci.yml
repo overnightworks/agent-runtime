@@ -111,6 +111,8 @@ jobs:
                   "agent_runtime_client.mcp_server."
               ):
                   continue
+              if module.name == "agent_runtime_client.backend.service":
+                  continue
               importlib.import_module(module.name)
               print("imported", module.name)
           '

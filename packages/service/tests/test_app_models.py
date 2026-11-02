@@ -33,9 +33,9 @@ from tests.support.service_cli_runner_support import (
 )
 from tests.support.service_support import (
     API_GROUP,
+    APP_GROUP,
     COWRITER,
     PRESENTATOR_CLIENT,
-    SONGMAKER_GROUP,
     SONGMAKER_TOOLS,
     SUBSCRIPTION_GROUP,
     ScriptedRunner,
@@ -104,7 +104,7 @@ class _Service:
     mint: TokenMint
 
     def person_run(self, groups: list[str] | None = None, **body: object) -> httpx.Response:
-        person = self.mint.user(groups=groups or [SUBSCRIPTION_GROUP, SONGMAKER_GROUP])
+        person = self.mint.user(groups=groups or [SUBSCRIPTION_GROUP, APP_GROUP])
         return post_run(self.base_url, run_headers(self.mint.workload(), person), run_body(**body))
 
     def app_run(self, **body: object) -> httpx.Response:
@@ -308,14 +308,14 @@ def test_m16_an_api_only_caller_names_an_offered_model_and_the_gateway_receives_
     )
 
     with served(app) as base_url:
-        headers = run_headers(mint.workload(), mint.user(groups=[API_GROUP, SONGMAKER_GROUP]))
+        headers = run_headers(mint.workload(), mint.user(groups=[API_GROUP, APP_GROUP]))
         events = decoded_events(post_run(base_url, headers, run_body(model=models.opus)).content)
 
     assert (events[0].model, events[-1].type, received) == (models.opus, "succeeded", [models.opus])
 
 
 def test_m17_a_caller_in_no_route_group_is_not_enabled_though_the_model_is_offered(service, models):
-    response = service.person_run([SONGMAKER_GROUP], model=models.opus)
+    response = service.person_run([APP_GROUP], model=models.opus)
 
     assert_rejected(response, RejectionCode.NOT_ENABLED, 403)
     assert service.started == 0
@@ -325,7 +325,7 @@ def test_m17_a_caller_in_no_route_group_is_not_enabled_for_a_tool_run_on_a_subsc
     tmp_path, table
 ):
     with _serving(a_config_with_both_providers(tmp_path, table)) as serving:
-        response = serving.person_run([SONGMAKER_GROUP], model=table.listed, tools=SONGMAKER_TOOLS)
+        response = serving.person_run([APP_GROUP], model=table.listed, tools=SONGMAKER_TOOLS)
 
     assert_rejected(response, RejectionCode.NOT_ENABLED, 403)
     assert serving.started == 0
@@ -342,7 +342,7 @@ def test_m18_tools_on_a_subscription_model_are_admitted(tmp_path, table):
 def test_m19_a_full_subscription_answers_busy_and_never_falls_back_to_the_api_route(models):
     held = HeldRunner()
     config = _config(runs={"max_parallel_cli_runs": 1})
-    both_routes = [SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP]
+    both_routes = [SUBSCRIPTION_GROUP, API_GROUP, APP_GROUP]
     with ThreadPoolExecutor() as pool, _serving(config, cli=held) as serving:
         try:
             pending = pool.submit(serving.person_run, both_routes, model=models.opus)

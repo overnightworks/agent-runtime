@@ -36,10 +36,10 @@ from tests.support.service_cli_runner_support import (
 )
 from tests.support.service_support import (
     API_GROUP,
+    APP_GROUP,
     COWRITER,
     LISTED_MODEL,
     PRESENTATOR_CLIENT,
-    SONGMAKER_GROUP,
     SONGMAKER_TOOLS,
     SUBSCRIPTION_GROUP,
     assert_rejected,
@@ -446,7 +446,7 @@ def test_a_second_run_beyond_the_limit_is_busy_and_never_goes_to_the_api_route(
         runs={"max_parallel_cli_runs": 1},
         fake={"stream": table.answering("one", False), "then": PARKED},
     )
-    both = run_headers(MINT.workload(), MINT.user((SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP)))
+    both = run_headers(MINT.workload(), MINT.user((SUBSCRIPTION_GROUP, API_GROUP, APP_GROUP)))
 
     def scenario(base_url: str) -> tuple[int, str]:
         leave_after(base_url, "assistant_text")
@@ -470,7 +470,7 @@ def test_a_tool_request_beyond_the_places_is_busy_before_any_capability_or_child
     table: ProviderTable,
 ) -> None:
     signed = record_signed_tokens(monkeypatch)
-    both = run_headers(MINT.workload(), MINT.user((SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP)))
+    both = run_headers(MINT.workload(), MINT.user((SUBSCRIPTION_GROUP, API_GROUP, APP_GROUP)))
     with a_tool_app(authority) as app:
         config = a_codex_config(
             table.document(

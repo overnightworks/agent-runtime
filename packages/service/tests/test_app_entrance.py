@@ -22,12 +22,12 @@ from fastapi import FastAPI
 from tests.support.service_support import (
     ADMITTED_AGENTS,
     API_GROUP,
+    APP_GROUP,
     COWRITER,
     LISTED_MODEL,
     MALFORMED_AGENTS,
     OLD_SUBSCRIPTION_GROUP,
     PRESENTATOR_CLIENT,
-    SONGMAKER_GROUP,
     SONGMAKER_TOOLS,
     SUBSCRIPTION_GROUP,
     ScriptedRunner,
@@ -133,7 +133,7 @@ def test_an_api_group_member_of_the_app_runs_on_the_api_route(service, runners):
     response = post_run(
         service,
         run_headers(
-            MINT.workload(), MINT.user(groups=[SONGMAKER_GROUP, API_GROUP], sub="user-bob")
+            MINT.workload(), MINT.user(groups=[APP_GROUP, API_GROUP], sub="user-bob")
         ),
     )
 
@@ -147,7 +147,7 @@ def _loaded_service_run(tmp_path, subscription_groups, user_groups):
     with served(app) as base_url:
         response = post_run(
             base_url,
-            run_headers(MINT.workload(), MINT.user(groups=[*user_groups, SONGMAKER_GROUP])),
+            run_headers(MINT.workload(), MINT.user(groups=[*user_groups, APP_GROUP])),
         )
     return response, runners
 
@@ -180,7 +180,7 @@ def test_a_subscription_group_removed_from_the_configuration_is_not_enabled(
 def test_a_member_of_neither_group_is_not_enabled_and_starts_no_run(service, runners):
     runs_before = len(runners.cli.admitted) + len(runners.api.admitted)
 
-    response = post_run(service, run_headers(MINT.workload(), MINT.user(groups=[SONGMAKER_GROUP])))
+    response = post_run(service, run_headers(MINT.workload(), MINT.user(groups=[APP_GROUP])))
 
     assert_rejected(response, RejectionCode.NOT_ENABLED, 403)
     assert len(runners.cli.admitted) + len(runners.api.admitted) == runs_before
@@ -371,8 +371,8 @@ def test_a_body_naming_a_field_reserved_to_the_service_is_invalid(service, field
     assert_rejected(response, RejectionCode.INVALID_REQUEST, 422)
 
 
-SUBSCRIBER = [SUBSCRIPTION_GROUP, SONGMAKER_GROUP]
-API_MEMBER = [API_GROUP, SONGMAKER_GROUP]
+SUBSCRIBER = [SUBSCRIPTION_GROUP, APP_GROUP]
+API_MEMBER = [API_GROUP, APP_GROUP]
 
 
 def _routed_run(config, groups, *, model=LISTED):
@@ -670,7 +670,7 @@ def test_a_capability_too_large_rejection_is_422_with_its_own_message_and_no_ret
     assert "retry-after" not in response.headers
 
 
-BOTH_RIGHTS = [SUBSCRIPTION_GROUP, API_GROUP, SONGMAKER_GROUP]
+BOTH_RIGHTS = [SUBSCRIPTION_GROUP, API_GROUP, APP_GROUP]
 
 
 def test_s3_a_run_is_routed_on_exactly_the_configured_model(tmp_path):

@@ -108,7 +108,9 @@ as_packages = False
 source_modules =
     agent_runtime_client
     agent_runtime_client.agents
+    agent_runtime_client.backend
     agent_runtime_client.capability
+    agent_runtime_client.config
     agent_runtime_client.errors
     agent_runtime_client.mcp_wire
     agent_runtime_client.run_stream
@@ -121,3 +123,27 @@ forbidden_modules =
     agent_runtime_client.mcp_server.**
     jwt
     cryptography
+
+# The backend extra stays an extra: only agent_runtime_client.backend.service
+# imports httpx2, so no base module (the package __init__ and the backend port
+# included) does.
+[importlinter:contract:client-base-stays-free-of-http]
+name = the client base modules import no HTTP library
+type = forbidden
+as_packages = False
+source_modules =
+    agent_runtime_client
+    agent_runtime_client.agents
+    agent_runtime_client.backend
+    agent_runtime_client.capability
+    agent_runtime_client.config
+    agent_runtime_client.errors
+    agent_runtime_client.mcp_wire
+    agent_runtime_client.run_stream
+    agent_runtime_client.sse
+    agent_runtime_client.tools
+    agent_runtime_client.turn_events
+    agent_runtime_client.wire
+forbidden_modules =
+    httpx2
+    httpx
