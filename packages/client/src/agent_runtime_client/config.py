@@ -13,7 +13,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, model_validator
 from agent_runtime_client.turn import NonEmptyUnicodeText
 
 _ORIGIN: Final = re.compile(
-    r"(https?)://(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::(\d+))?", re.ASCII | re.IGNORECASE
+    r"(https?)://(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(?::(\d+))?", re.ASCII | re.IGNORECASE
 )
 _HOST_LABEL: Final = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?")
 

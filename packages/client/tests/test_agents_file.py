@@ -247,16 +247,20 @@ def test_a_file_without_a_required_key_is_refused_and_names_it(tmp_path: Path, f
 def test_a_model_that_is_not_a_text_gateway_name_is_refused_and_named(
     tmp_path: Path, model: str
 ) -> None:
+    text = agent_text(model=model)
+
     with pytest.raises(AgentFileError, match="model"):
-        load(tmp_path, agent_text(model=model))
+        load(tmp_path, text)
 
 
 @pytest.mark.parametrize("seconds", ["0", "-1", "true", "'300'", "1.5", "null", "''"])
 def test_a_duration_that_is_not_a_positive_integer_is_refused_and_named(
     tmp_path: Path, seconds: str
 ) -> None:
+    text = agent_text(max_duration_seconds=seconds)
+
     with pytest.raises(AgentFileError, match="maxDurationSeconds"):
-        load(tmp_path, agent_text(max_duration_seconds=seconds))
+        load(tmp_path, text)
 
 
 @pytest.mark.parametrize("description", [None, "''", '"two\\nlines"', "|", "|\n  two\n  lines"])
@@ -502,8 +506,10 @@ def test_request_model_override_accepts_an_image_name(tmp_path: Path) -> None:
 def test_request_refuses_a_malformed_model_override(tmp_path: Path) -> None:
     agent = load(tmp_path, agent_text())
 
+    messages = [TurnMessage(role=TurnRole.USER, text="hi")]
+
     with pytest.raises(ValueError, match="model"):
-        agent.request([TurnMessage(role=TurnRole.USER, text="hi")], model="Text/Opus")
+        agent.request(messages, model="Text/Opus")
 
 
 def test_request_of_an_agent_without_tools_names_none(tmp_path: Path) -> None:
