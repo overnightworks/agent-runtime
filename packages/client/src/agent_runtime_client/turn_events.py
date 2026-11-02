@@ -14,7 +14,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from agent_runtime_client.wire import RunFile
+from agent_runtime_client.turn import RunFile
 
 
 class StreamEvent(BaseModel):

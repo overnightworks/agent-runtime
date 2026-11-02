@@ -19,7 +19,7 @@ from uuid import UUID
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
-from agent_runtime_client.wire import NonEmptyUnicodeText
+from agent_runtime_client.turn import NonEmptyUnicodeText, Principal
 
 CAPABILITY_ISSUER: Final = "agent-service"
 CAPABILITY_TOKEN_TYPE: Final = "agent-capability-2+jwt"  # noqa: S105 - a token type name and no secret
@@ -124,11 +124,8 @@ class _StrictClaims(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
 
-class CapabilityPrincipal(_StrictClaims):
-    """The verified caller exactly as the service saw it: no bound, no normalization."""
-
-    iss: NonEmptyUnicodeText
-    sub: NonEmptyUnicodeText
+CapabilityPrincipal = Principal
+"""The verified caller exactly as the service saw it, under the name capability readers use."""
 
 
 class CapabilityClaims(_StrictClaims):

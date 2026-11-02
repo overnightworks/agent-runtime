@@ -28,16 +28,8 @@ from pydantic import (
 from ruamel.yaml import YAML, YAMLError
 
 from agent_runtime_client.tools import ToolDeclaration
-from agent_runtime_client.wire import (
-    PROTOCOL_VERSION,
-    AgentName,
-    AgentRole,
-    AgentRoles,
-    ModelName,
-    RunRequest,
-    Turn,
-    TurnMessage,
-)
+from agent_runtime_client.turn import AgentName, AgentRole, AgentRoles, Turn, TurnMessage
+from agent_runtime_client.wire import PROTOCOL_VERSION, ModelName, RunRequest
 
 _AGENT_FILE_SUFFIX: Final = ".md"
 _FRONT_MATTER_FENCE: Final = "---"
@@ -94,9 +86,7 @@ class AgentDefinition(BaseModel):
             raise ValueError(f"role must be 'admin' or 'user', not {role!r}") from error
         return checked_role in self.roles
 
-    def request(
-        self, messages: list[TurnMessage], *, model: ModelName | None = None
-    ) -> RunRequest:
+    def request(self, messages: list[TurnMessage], *, model: ModelName | None = None) -> RunRequest:
         """The body that starts a run of this agent over these messages.
 
         ``model`` names one model the service offers; without it the service runs its configured
