@@ -163,7 +163,7 @@ scripted transport passed as `transport=`.
 ### The gateway backend
 
 `GatewayBackend(config, *, tools=(), transport=None)` runs a text turn, with the app's
-`HandTool`s when the agent selects any, and no pictures yet. A selected tool with no handler, or whose request
+`HandTool`s when the agent selects any (a tool name given twice raises `ValueError` at construction), and no pictures yet. A selected tool with no handler, or whose request
 declaration differs from its `HandTool`'s, raises `ValueError` at `run`, before any request. In order, before any request: a `person.role`
 outside `request.roles` is `refused: forbidden`; `person.groups()` runs once and a refusal it
 raises reaches the app unchanged; an `api_group` the person lacks is `refused: not_enabled`.
@@ -211,16 +211,17 @@ For each call, in order: `ToolCallEvent`; the side-effect state set from the dec
 `ToolEffect`, before the handler runs; `await handler(principal, arguments)`;
 `ToolResultEvent`. A call, or the next request, that the deadline has already passed when its
 turn comes (a slow consumer of the events) is not started: `failed: limit_exceeded`, with the
-side-effect state unchanged by it. A handler whose outcome is unusable (not a `ToolOutcome`, an
-`is_error` that is not a bool, or a `content` that is not text a UTF-8 body can carry) is a host
-defect like one that raises. The model reads an error outcome as `Error: ` followed by the content, because the chat format has
+side-effect state unchanged by it. An outcome that does not make a valid `ToolResultEvent` (a `content`
+that is not text, an `is_error` that is not a bool), or whose content a UTF-8 body cannot carry, is a
+host defect like a handler that raises. The model reads an error outcome as `Error: ` followed by the content, because the chat format has
 no error flag on a tool message. A call that started may have written, and a cancelled `asyncio.to_thread`
 write may still finish; nothing implies it was undone. A blocking tool stays the app's: its
 handler uses `asyncio.to_thread`. A `ToolOutcome(is_error=True)` goes to the model and the turn
 goes on. A handler that raises is a host defect: the client logs its class name only and tells
 the model the call failed. Task cancellation reaches the caller unchanged and no later round
 runs. Per call one INFO record carries the tool name, call id and `is_error`, never the
-arguments or the content.
+arguments or the content; a call the deadline or a cancellation cut off leaves its record too, with
+`is_error` unset.
 
 A tool's `content` reaches the model, and so the gateway and the provider the model names:
 a tool returns only what that may see.
