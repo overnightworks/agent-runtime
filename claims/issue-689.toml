@@ -1,8 +1,0 @@
-claim_id = "b45bffa6726a493c93a3514b1affdbbf"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "0975190aa1ce5cdd6fbb11b4ac0d3968f110d0d0"
-branch = "claude/issue-689-hand-tools"
-scope = ["docs/MIGRATING.md", "docs/wire.md", "packages/client/src/agent_runtime_client/mcp_server/__init__.py", "packages/client/src/agent_runtime_client/mcp_server/app.py", "packages/client/src/agent_runtime_client/tools.py", "packages/client/tests/test_mcp_server.py", "packages/client/tests/test_mcp_server_interop.py", "tests/support/mcp_server_support.py"]
-opened_commit = "04030073edfac2b4b9d72388bda0d671bb1fdcbc"
-whole_reason = "One public type replaces another: the type, the server that takes it, its exports, its tests and the two documents naming it change together or the client does not import."
