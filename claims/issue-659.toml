@@ -1,0 +1,8 @@
+claim_id = "6e6e12456e6d4f139dd512996ab5ca4b"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "0975190aa1ce5cdd6fbb11b4ac0d3968f110d0d0"
+branch = "claude/issue-659-webauth-git"
+scope = [".github/dependabot.yml", "AGENTS.md", "README.md", "docs/MIGRATING.md", "packages/service/pyproject.toml", "packages/service/src/agent_runtime_service/identity.py", "packages/service/tests/fixtures/keycloak/requirements.in", "packages/service/tests/fixtures/keycloak/requirements.txt", "packages/service/tests/test_identity_token_reading.py", "uv.lock"]
+opened_commit = "0a2fa0b149c3c265429d2ad0bcd5ffa3fc18dc80"
+whole_reason = "One webauth version and one install path: the service manifest, the workspace lock, the Keycloak fixture pins and the refusal map move together, or the service and its token-shape job test different webauths, and the rule and docs that state the install path change with the pin they describe."
