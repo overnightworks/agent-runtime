@@ -237,8 +237,10 @@ def test_a_run_admission_that_raises_with_the_capability_is_withheld(
     segment = served.token.rsplit(".", 1)[-1]
     served.handlers.admission_failure = RuntimeError(f"failed with {segment}")
 
+    request = rpc("tools/call", call_params("read_note"))
+
     with pytest.raises(HandlerFailureWithheld) as raised:
-        served.post(rpc("tools/call", call_params("read_note")))
+        served.post(request)
 
     assert raised.value.tool_name == "read_note"
     assert segment not in "".join(traceback.format_exception(raised.value)) + caplog.text

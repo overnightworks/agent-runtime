@@ -208,13 +208,13 @@ The app installs the client with `[mcp-server]` and serves
 `Mount` in its router (the service refuses their slash redirects). It passes
 the bytes of its public key (one PEM `PUBLIC KEY` block holding an RSA-3072 key
 with exponent 65537) and its `HandTool`s (a declaration and a handler that gets
-the `CapabilityPrincipal` of the run) and a required `admit_run`, the app's own decision,
-from the run's claims, whether that run may call a tool now (a holder check with
-a fresh database session). A call of a run that `admit_run` refuses is a tool
-result with `is_error` and one fixed text and never reaches its handler.
-`verify_capability` returns the claims or one closed `CapabilityRefusal` and
-never raises for token content; a body that carries the capability's token or
-signature is replaced by an empty 500.
+the `CapabilityPrincipal` of the run) and a required `admit_run`, the app's own
+decision, from the run's claims, whether that run may call a tool now (a holder
+check with a fresh database session). A call of a run that `admit_run` refuses
+is a tool result with `is_error` and one fixed text and never reaches its
+handler. `verify_capability` returns the claims or one closed
+`CapabilityRefusal` and never raises for token content; a body that carries the
+capability's token or signature is replaced by an empty 500.
 `agent_runtime_client.mcp_server` documents the order of the checks.
 
 ## What a run keeps
