@@ -1,7 +1,0 @@
-claim_id = "cd32d3222a1d4986b495f6d356524756"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "0975190aa1ce5cdd6fbb11b4ac0d3968f110d0d0"
-branch = "claude/issue-695-sonar-parentheses"
-scope = ["src/agent_runtime/codex/transport.py", "src/agent_runtime/grok/transport.py", "src/agent_runtime/process.py"]
-opened_commit = "49fad1c778d0ccf9704f5bd76fa8c932cca0e837"
