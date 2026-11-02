@@ -76,13 +76,15 @@ class GatewayBackend(AgentBackend):
 
     async def _answer(self, request: TurnRequest, person: TurnPerson) -> str:
         try:
-            async with asyncio.timeout(request.max_duration_seconds):
+            async with asyncio.timeout(request.max_duration_seconds) as deadline:
                 if self._config.api_group not in await person.groups():
                     raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.NOT_ENABLED)
                 key = _read_key(self._config.gateway.key_file)
                 body = _body(request, _fingerprint(person.principal))
                 return await self._post(body, key)
         except TimeoutError:
+            if not deadline.expired():
+                raise
             raise TurnStopped(TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED) from None
 
     async def _post(self, body: str, key: str) -> str:

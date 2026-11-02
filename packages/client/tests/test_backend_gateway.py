@@ -294,9 +294,9 @@ def test_an_agent_with_tools_raises_before_any_request(scenario):
     gateway = FakeGateway(completion("ok"))
     tool = ToolDeclaration(name="lookup", description="Look something up.", parameters={})
     backend = GatewayBackend(scenario.config(), transport=gateway)
-
+    request = a_request(tools=(tool,))
     with pytest.raises(ValueError, match="tools"):
-        scenario.outcome(backend, a_request(tools=(tool,)))
+        scenario.outcome(backend, request)
 
     assert gateway.requests == []
 
@@ -325,7 +325,10 @@ def test_a_generator_never_iterated_opens_nothing_and_reads_no_key(scenario):
     ],
     ids=["missing", "oversized", "key-then-line", "two-lines", "empty", "space", "non-ascii"],
 )
-def test_an_unusable_key_file_is_provider_unavailable_and_sends_nothing(scenario, content, secret):
+def test_an_unusable_key_file_is_provider_unavailable_and_sends_nothing(
+    scenario, caplog, content, secret
+):
+    caplog.set_level(logging.DEBUG)
     config = scenario.config(key=content or b"")
     if content is None:
         config.gateway.key_file.unlink()
@@ -342,6 +345,7 @@ def test_an_unusable_key_file_is_provider_unavailable_and_sends_nothing(scenario
             str(stopped.detail),
             repr(stopped.__context__),
             repr(stopped.__cause__),
+            caplog.text,
         ]
     )
     assert secret is None or secret not in everything_it_carries
@@ -767,7 +771,7 @@ def test_an_unusable_ca_file_is_provider_unavailable(scenario):
 
 def test_debug_logging_writes_the_key_into_no_record(scenario, caplog):
     for name in ("httpx2", "httpcore2"):
-        logging.getLogger(name).setLevel(logging.DEBUG)
+        caplog.set_level(logging.DEBUG, logger=name)
     caplog.set_level(logging.DEBUG)
 
     events, stopped = _loopback_turn(scenario)
@@ -781,12 +785,12 @@ def test_debug_logging_writes_the_key_into_no_record(scenario, caplog):
 @pytest.mark.parametrize(
     "name", ["httpx2", "httpcore2", "httpcore2.connection", "httpcore2.http11"]
 )
-def test_the_transport_loggers_that_could_carry_the_key_are_not_enabled_for_debug(scenario, name):
-    logging.getLogger("httpx2").setLevel(logging.DEBUG)
-    logging.getLogger("httpcore2").setLevel(logging.DEBUG)
-
+def test_the_transport_loggers_that_could_carry_the_key_are_not_enabled_for_debug(
+    scenario, caplog, name
+):
+    for logger in ("httpx2", "httpcore2"):
+        caplog.set_level(logging.DEBUG, logger=logger)
     GatewayBackend(scenario.config())
-
     assert not logging.getLogger(name).isEnabledFor(logging.DEBUG)
 
 
