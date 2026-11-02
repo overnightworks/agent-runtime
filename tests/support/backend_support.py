@@ -77,7 +77,8 @@ async def turn_outcome(
     events: list[TurnEvent] = []
     try:
         async with aclosing(backend.run(request, asker)) as run:
-            events.extend([event async for event in run])
+            async for event in run:
+                events.append(event)
     except TurnStopped as stopped:
         return events, stopped
     return events, None
