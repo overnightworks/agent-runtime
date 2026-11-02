@@ -7,6 +7,7 @@ tokens, admission, refusals and event stream are the service's own.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Iterator
 from contextlib import aclosing, contextmanager
 
@@ -60,9 +61,11 @@ ANSWER = (AssistantTextEvent(text="thinking"), FinalEvent(text="done"))
 TOOLS = {"read_note": "read_only", "edit_note": "side_effecting"}
 
 
-def _asker(person_token: str | None = None) -> Asker:
+def _asker(person_token: str | None = None, workload_token: str | None = None) -> Asker:
     async def tokens() -> RunTokens:
-        return RunTokens(SecretStr(person_token or MINT.user()), SecretStr(MINT.workload()))
+        return RunTokens(
+            SecretStr(person_token or MINT.user()), SecretStr(workload_token or MINT.workload())
+        )
 
     return Asker(principal=ALICE, tokens=tokens)
 
@@ -218,15 +221,24 @@ def test_m22_heartbeats_never_surface():
     assert (stopped, [event.type for event in events]) == (None, ["assistant_text", "final"])
 
 
-@pytest.mark.parametrize("token", ["bad\ntoken", "bad\rtoken", "bad\x00token", "bäd"])
-def test_a_token_no_header_can_carry_ends_the_turn_refused_without_a_request(token):
+@pytest.mark.parametrize("field", ["person", "workload"])
+@pytest.mark.parametrize(
+    "token", ["bad\ntoken", "bad\rtoken", "bad\x00token", "bäd", " lead", "trail ", "mid dle"]
+)
+def test_a_token_no_header_can_carry_ends_the_turn_refused_without_a_request(
+    token, field, caplog
+):
     fake = FakeService()
+    lifecycle = RecordingLifecycle()
+    asker = _asker(**{f"{field}_token": token})
+    caplog.set_level(logging.DEBUG)
     with served(fake) as base_url:
-        events, stopped = _turn(base_url, asker=_asker(token))
+        events, stopped = _turn(base_url, asker=asker, lifecycle=lifecycle)
 
     assert (events, fake.seen) == ([], [])
     assert (stopped.kind, stopped.code) == (TurnStopKind.REFUSED, RejectionCode.UNAUTHORIZED)
-    assert token not in f"{stopped} {stopped.detail}"
+    assert _lifecycle_events(lifecycle) == (0, 0)
+    assert token not in f"{stopped} {stopped.detail} {caplog.text}"
 
 
 def test_m23_a_failed_run_keeps_its_code():

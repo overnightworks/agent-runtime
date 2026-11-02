@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import http
+import re
 from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Final
 from uuid import UUID
@@ -111,13 +112,14 @@ class ServiceBackend(AgentBackend):
         return run_id
 
 
+_VISIBLE_ASCII: Final = re.compile(r"[\x21-\x7e]+")
+
+
 def _header_safe(tokens: RunTokens) -> bool:
     # The HTTP layer would quote a rejected header value in its error and its debug log.
     values = (tokens.workload, tokens.person)
     return all(
-        v.get_secret_value().isascii() and v.get_secret_value().isprintable()
-        for v in values
-        if v is not None
+        _VISIBLE_ASCII.fullmatch(value.get_secret_value()) for value in values if value is not None
     )
 
 
