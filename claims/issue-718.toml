@@ -1,0 +1,8 @@
+claim_id = "a4d7d74fb47c48738cfcb95f6be4996f"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "ee16c520224de2b74f12356e6697513688fe9958"
+branch = "claude/issue-718-webauth-0-29-0"
+scope = ["docs/MIGRATING.md", "docs/decisions/0001-agent-service.md", "packages/service/pyproject.toml", "packages/service/src/agent_runtime_service/identity.py", "packages/service/tests/fixtures/keycloak/requirements.in", "packages/service/tests/fixtures/keycloak/requirements.txt", "packages/service/tests/fixtures/keycloak/webauth-pin.txt", "packages/service/tests/test_app_runs.py", "packages/service/tests/test_identity_keycloak_token_shapes.py", "tests/support/token_rejection_support.py", "uv.lock"]
+opened_commit = "76d65eac187b5c04560077a9ed63cece51f654c9"
+whole_reason = "One pin move: the pinned library no longer takes the argument, so the pin, the removed argument and the proofs that name the cap land together."
