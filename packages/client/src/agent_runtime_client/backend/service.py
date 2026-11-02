@@ -56,6 +56,8 @@ TRANSPORT_LOST: Final = "transport_lost"
 MALFORMED_TOKEN: Final = "malformed_token"  # noqa: S105 - a closed label and no secret
 _TIMEOUT: Final = httpx2.Timeout(OTHER_TIMEOUT_S, connect=CONNECT_TIMEOUT_S, read=READ_TIMEOUT_S)
 _RETRY_AFTER_HEADER: Final = "Retry-After"
+# A rejection is a code and a message of at most wire.MAX_MESSAGE_LENGTH characters.
+REJECTION_BODY_LIMIT_BYTES: Final = 65_536
 
 
 class ServiceBackend(AgentBackend):
@@ -74,7 +76,9 @@ class ServiceBackend(AgentBackend):
         started: UUID | None = None
         try:
             async with (
-                httpx2.AsyncClient(base_url=self._service_url, timeout=_TIMEOUT) as client,
+                httpx2.AsyncClient(
+                    base_url=self._service_url, timeout=_TIMEOUT, trust_env=False
+                ) as client,
                 client.stream(
                     "POST",
                     RUNS_PATH,
@@ -176,8 +180,11 @@ def _cut_short(stream: RunStream, started: UUID | None, detail: str) -> TurnStop
 
 
 async def _refusal(response: httpx2.Response) -> TurnStopped:
+    body = await _bounded_body(response)
+    if body is None:
+        return TurnStopped(TurnStopKind.REFUSED, RejectionCode.UNAVAILABLE)
     try:
-        code = RunRejection.model_validate_json(await response.aread()).code
+        code = RunRejection.model_validate_json(body).code
     except ValidationError:
         return TurnStopped(TurnStopKind.REFUSED, RejectionCode.UNAVAILABLE)
     if code is not RejectionCode.BUSY:
@@ -186,7 +193,19 @@ async def _refusal(response: httpx2.Response) -> TurnStopped:
     return TurnStopped(TurnStopKind.REFUSED, code, retry_after_s=wait)
 
 
+async def _bounded_body(response: httpx2.Response) -> bytes | None:
+    """The body, or ``None`` once it passes the bound; the rest stays unread."""
+    body = bytearray()
+    async for chunk in response.aiter_bytes():
+        body += chunk
+        if len(body) > REJECTION_BODY_LIMIT_BYTES:
+            return None
+    return bytes(body)
+
+
 def _wait_seconds(retry_after: str | None) -> int | None:
     if retry_after is None or not retry_after.isascii() or not retry_after.isdigit():
         return None
+    if len(retry_after) > len(str(MAX_RETRY_AFTER_S)):
+        return MAX_RETRY_AFTER_S
     return min(int(retry_after), MAX_RETRY_AFTER_S)
