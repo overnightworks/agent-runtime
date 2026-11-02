@@ -695,10 +695,12 @@ def test_a_picture_request_holds_exactly_one_user_message(
 
 
 def test_a_picture_request_with_tools_is_refused() -> None:
+    turn = Turn(system="s", messages=[TurnMessage(role=TurnRole.USER, text="a")])
+
     with pytest.raises(ValueError, match="tools"):
         TurnRequest(
             agent="painter",
-            turn=Turn(system="s", messages=[TurnMessage(role=TurnRole.USER, text="a")]),
+            turn=turn,
             roles=["admin"],
             tools=(READ_NOTE,),
             model="image/draw",

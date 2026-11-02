@@ -47,7 +47,7 @@ _FRONT_MATTER_FENCE: Final = "---"
 _AGENT_ROLES: Final = TypeAdapter(AgentRole)
 _AGENT_NAME: Final = TypeAdapter(AgentName)
 _YAML: Final = YAML(typ="safe", pure=True)
-_PICTURE_SIZE: Final = re.compile(r"[1-9][0-9]*x[1-9][0-9]*")
+_PICTURE_SIZE: Final = re.compile(r"[1-9]\d*x[1-9]\d*", re.ASCII)
 _DUPLICATE_KEY: Final = re.compile(r'found duplicate key "(.*?)" with value')
 
 
