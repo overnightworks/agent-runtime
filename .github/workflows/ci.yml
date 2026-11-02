@@ -50,8 +50,8 @@ jobs:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
 
-      # The workspace's own packages are put on the path rather than built, so
-      # every checking step runs only locked wheels and no setup script.
+      # The workspace's own packages are put on the path rather than built;
+      # every other package is locked, and webauth is built from its pinned git commit.
       - name: Install dependencies
         run: uv sync --locked --all-packages --extra dev --no-install-workspace
 
@@ -238,8 +238,8 @@ jobs:
           "$RUNNER_TEMP/venv/bin/python" -m pytest --noconftest -p no:cacheprovider
           packages/service/tests/test_identity_keycloak_token_shapes.py -m keycloak -q -rP
 
-      # The workspace's own packages are put on the path rather than built, so
-      # this job runs no setup script: every installed package is a locked wheel.
+      # The workspace's own packages are put on the path rather than built;
+      # every other package is locked, and webauth is built from its pinned git commit.
       - name: Install the workspace's locked wheels for the service's end-to-end proof
         run: uv sync --locked --all-packages --extra dev --no-install-workspace
 
