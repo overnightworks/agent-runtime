@@ -1,0 +1,7 @@
+claim_id = "b7aba9b57a48469aa0fd3e29611375e3"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "0975190aa1ce5cdd6fbb11b4ac0d3968f110d0d0"
+branch = "claude/issue-690-backend-env"
+scope = ["docs/MIGRATING.md", "packages/client/src/agent_runtime_client/backend/service.py", "packages/client/tests/test_backend_transport.py"]
+opened_commit = "4bbd9e3c14d6e3aa63bef4d5da737b352dda4dc6"
