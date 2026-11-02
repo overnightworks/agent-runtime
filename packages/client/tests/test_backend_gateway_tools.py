@@ -51,7 +51,7 @@ from agent_runtime_client.turn_events import (
 PROVIDER_ERROR = (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
 LIMIT_EXCEEDED = (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
 BUSY = (TurnStopKind.REFUSED, RejectionCode.BUSY)
-DEFAULT_MAX_DURATION_SECONDS = 30
+TURN_BUDGET_SECONDS = 30
 
 
 class SkewedLoop(asyncio.SelectorEventLoop):
@@ -95,12 +95,11 @@ class Shop:
         *replies: Reply,
         max_tool_calls: int = 5,
         selected: tuple[str, ...] | None = None,
-        max_duration_seconds: int = DEFAULT_MAX_DURATION_SECONDS,
         late_after: type | None = None,
     ) -> tuple[list, TurnStopped | None, FakeGateway]:
         gateway = FakeGateway(*replies)
         chosen = [t for t in self.tools if selected is None or t.declaration.name in selected]
-        request = a_request(chosen, max_tool_calls, max_duration_seconds)
+        request = a_request(chosen, max_tool_calls)
         backend = GatewayBackend(self.config(), tools=self.tools, transport=gateway)
         with asyncio.Runner(loop_factory=SkewedLoop) as runner:
             events, stopped = runner.run(_turn(backend, request, late_after))
@@ -119,18 +118,14 @@ async def _noted() -> ToolOutcome:
     return ToolOutcome("noted", is_error=False)
 
 
-def a_request(
-    tools: list[HandTool],
-    max_tool_calls: int,
-    max_duration_seconds: int = DEFAULT_MAX_DURATION_SECONDS,
-) -> TurnRequest:
+def a_request(tools: list[HandTool], max_tool_calls: int) -> TurnRequest:
     return TurnRequest(
         agent="helper",
         turn=Turn(system="Answer briefly.", messages=[TurnMessage(role=TurnRole.USER, text="Hi")]),
         roles=["admin", "user"],
         tools=tuple(tool.declaration for tool in tools),
         model="text/standin",
-        max_duration_seconds=max_duration_seconds,
+        max_duration_seconds=TURN_BUDGET_SECONDS,
         max_tool_calls=max_tool_calls if tools else None,
     )
 
@@ -427,7 +422,7 @@ def test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state(
     cancelled = []
 
     async def stuck() -> ToolOutcome:
-        asyncio.get_running_loop().skew_seconds += DEFAULT_MAX_DURATION_SECONDS + 1
+        asyncio.get_running_loop().skew_seconds += TURN_BUDGET_SECONDS + 1
         try:
             await asyncio.Event().wait()
         except asyncio.CancelledError:
