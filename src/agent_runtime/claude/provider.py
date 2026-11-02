@@ -30,6 +30,7 @@ from agent_runtime.anchored_turn import (
     ReapBounds,
     anchored_turn_child,
 )
+from agent_runtime.claude.cli_error_class import log_cli_error_class
 from agent_runtime.cli_run import (
     CliStreamLineTooLong,
     StepEvent,
@@ -143,13 +144,6 @@ _NO_TOOLS_EXPECTED: Final[frozenset[str]] = frozenset()
 _TOOL_SURFACE_PROBE_USER_ID: Final = "tool-surface-probe"
 
 _CLI_AUTHENTICATION_FAILED: Final = "authentication_failed"
-# The classes a run the CLI ends with an error may log: the assistant line's `error` and the
-# result line's `subtype`, as recorded for Claude CLI 2.1.302 (ADR 0001, A1b-0a c4 and the
-# limit and max-turns records). Any other value logs as `other`.
-_CLI_ERROR_CLASSES: Final = frozenset(
-    {"rate_limit", "invalid_request", "error_max_turns", "error_during_execution"}
-)
-_OTHER_CLI_ERROR_CLASS: Final = "other"
 _CLI_INIT_EVENT_TYPE: Final = "system"
 _CLI_INIT_EVENT_SUBTYPE: Final = "init"
 _CLI_MCP_CONNECTED_STATUS: Final = "connected"
@@ -457,26 +451,16 @@ def _dispatch_stream_event(payload: dict, correlation_id: str | None) -> list[St
     return []
 
 
-def _log_cli_error_class(reported: object) -> None:
-    listed = isinstance(reported, str) and reported in _CLI_ERROR_CLASSES
-    log.warning(
-        "Claude run ended on a CLI error (class=%s)",
-        reported if listed else _OTHER_CLI_ERROR_CLASS,
-    )
-
-
 def _raise_for_error_result(payload: dict) -> None:
     if payload.get("is_error"):
-        _log_cli_error_class(payload.get("subtype"))
+        log_cli_error_class(payload.get("subtype"))
         raise_without_chain(UnavailableError(CLAUDE_CLI_UNAVAILABLE_DETAIL))
 
 
 def _parse_result_events(payload: dict, correlation_id: str | None) -> list[StreamEvent]:
     _raise_for_error_result(payload)
     text = payload.get("result")
-    if isinstance(text, str):
-        return [FinalEvent(text=text, correlation_id=correlation_id)]
-    return []
+    return [FinalEvent(text=text, correlation_id=correlation_id)] if isinstance(text, str) else []
 
 
 def _raise_for_api_error_message(payload: dict) -> None:
@@ -484,15 +468,14 @@ def _raise_for_api_error_message(payload: dict) -> None:
         return
     if payload.get("error") == _CLI_AUTHENTICATION_FAILED:
         raise_without_chain(CliLoginRefusedError(CLAUDE_CLI_LOGIN_REFUSED_DETAIL))
-    _log_cli_error_class(payload.get("error"))
+    log_cli_error_class(payload.get("error"))
     raise_without_chain(UnavailableError(CLAUDE_CLI_UNAVAILABLE_DETAIL))
 
 
 def _parse_assistant_events(payload: dict, correlation_id: str | None) -> list[StreamEvent]:
-    message = payload.get("message") or {}
     _raise_for_api_error_message(payload)
     events: list[StreamEvent] = []
-    for block in message.get("content") or []:
+    for block in (payload.get("message") or {}).get("content") or []:
         btype = block.get("type")
         if btype == "text":
             text = block.get("text") or ""
