@@ -2,6 +2,13 @@
 
 Read by a host bumping its pin; each release that breaks a host has one section, newest first.
 
+## Migrating to 0.19.0
+
+| Before (0.18.0) | Now |
+| --- | --- |
+| An agent file could not make a picture agent, and `GatewayBackend` returned no picture. | The file's `picture: {size: <width>x<height>}` makes one: its `model` is an `image/<model>` name (a file without `picture` must name `text/…`), it selects no `tools` and carries no `maxToolCalls`. `AgentDefinition` and `TurnRequest` carry `picture_size` (`None` for a text agent, the default); a picture `TurnRequest` holds exactly one user message and no tools, else `ValueError`. `GatewayBackend.run` posts it to `/v1/images/generations` and ends with `FinalEvent(text="", files=(RunFile(name="picture", …),))` and no `AssistantTextEvent`; a non-null `url`, not exactly one entry, bad base64 or a picture over `MAX_RUN_FILES_BYTES` is `failed: provider_error`. ([wire.md](wire.md#a-picture-agent)) |
+| `FinalEvent.files` was filled only by a CLI run. | A gateway picture turn fills it with its one picture; `backend.fake_gateway.picture(content)` scripts that reply. |
+
 ## Migrating to 0.18.0
 
 | Before (0.17.0) | Now |
@@ -12,9 +19,6 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | A request body had no byte bound. | A turn's request is bounded like any other: one near `4 × MAX_EVENT_BYTES` ends `failed: limit_exceeded`, a tool-free turn included. ([wire.md](wire.md#the-tool-loop)) |
 | `after_side_effect` was always false on a gateway turn. | It is true once a side-effecting tool call started in the turn, on `refused: busy` too. |
 | The service pinned `overnightworks-webauth` 0.27.0 by git and refused a workload token living over 300 s (`exp - iat`) as `forbidden`. | It pins 0.29.0 by git (`overnightworks-webauth @ git+https://github.com/overnightworks/webauth@v0.29.0`) and admits a workload token of any lifetime; `exp`, `iat` and `nbf` stay checked against the clock. A host that pins webauth beside the service moves to 0.29.0 too: webauth 0.28.0 removed `ServiceIdentity.max_workload_seconds` and `CallerRefusalReason.WORKLOAD_LIVES_TOO_LONG`; it also moved `BearerGate`'s `paths` and `authorized_parties` into `machine_paths` and made `authorized_parties` required on `PersonPaths` (webauth's 0.28.0 Breaking lines own the detail). The service's `agent_runtime_service.identity.MAX_WORKLOAD_TOKEN_SECONDS` is gone with the 300 s bound. |
-| The service pinned `overnightworks-webauth` 0.27.0 by git and refused a workload token living over 300 s (`exp - iat`) as `forbidden`. | It pins 0.29.0 by git (`overnightworks-webauth @ git+https://github.com/overnightworks/webauth@v0.29.0`) and admits a workload token of any lifetime; `exp`, `iat` and `nbf` stay checked against the clock. A host that pins webauth beside the service moves to 0.29.0 too: webauth 0.28.0 removed `ServiceIdentity.max_workload_seconds` and `CallerRefusalReason.WORKLOAD_LIVES_TOO_LONG`. |
-| An agent file could not make a picture agent, and `GatewayBackend` returned no picture. | The file's `picture: {size: <width>x<height>}` makes one: its `model` is an `image/<model>` name (a file without `picture` must name `text/…`), it selects no `tools` and carries no `maxToolCalls`. `AgentDefinition` and `TurnRequest` carry `picture_size` (`None` for a text agent, the default); a picture `TurnRequest` holds exactly one user message and no tools, else `ValueError`. `GatewayBackend.run` posts it to `/v1/images/generations` and ends with `FinalEvent(text="", files=(RunFile(name="picture", …),))` and no `AssistantTextEvent`; a non-null `url`, not exactly one entry, bad base64 or a picture over `MAX_RUN_FILES_BYTES` is `failed: provider_error`. ([wire.md](wire.md#a-picture-agent)) |
-| `FinalEvent.files` was filled only by a CLI run. | A gateway picture turn fills it with its one picture; `backend.fake_gateway.picture(content)` scripts that reply. |
 
 ## Migrating to 0.17.0
 
