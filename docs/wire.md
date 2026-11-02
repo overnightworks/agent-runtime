@@ -219,9 +219,9 @@ write may still finish; nothing implies it was undone. A blocking tool stays the
 handler uses `asyncio.to_thread`. A `ToolOutcome(is_error=True)` goes to the model and the turn
 goes on. A handler that raises is a host defect: the client logs its class name only and tells
 the model the call failed. Task cancellation reaches the caller unchanged and no later round
-runs. Per call one INFO record carries the tool name, call id and `is_error`, never the
+runs. Per started call one INFO record carries the tool name, call id and `is_error`, never the
 arguments or the content; a call the deadline or a cancellation cut off leaves its record too, with
-`is_error` unset. A call the deadline refuses before its handler started ran nothing and leaves no record.
+`is_error` unset. A call refused before its handler started ran nothing and leaves no record.
 
 A tool's `content` reaches the model, and so the gateway and the provider the model names:
 a tool returns only what that may see.
