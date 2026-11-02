@@ -578,10 +578,10 @@ def test_a_groups_lookup_that_never_answers_ends_at_the_limit(scenario):
     person = TurnPerson(principal=Principal(iss="i", sub="s"), role="user", groups=never)
     gateway = FakeGateway(completion("ok"))
     request = a_request().model_copy(update={"max_duration_seconds": 0.05})
+    backend = GatewayBackend(scenario.config(), transport=gateway)
 
-    _, stopped = scenario.outcome(
-        GatewayBackend(scenario.config(), transport=gateway), request, person
-    )
+    # A turn that ignores its limit would hang; the outer bound turns that into a failure.
+    _, stopped = asyncio.run(asyncio.wait_for(_turn(backend, request, person), timeout=5))
 
     assert ending(stopped) == (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
     assert gateway.requests == []
@@ -650,10 +650,9 @@ def test_closing_a_suspended_turn_leaves_the_response_closed_and_yields_nothing_
         await stream.aclose()
         with pytest.raises(StopAsyncIteration):
             await anext(stream)
-        return first
+        return first, transport.closed.is_set()
 
-    assert asyncio.run(scenario_run()) == AssistantTextEvent(text="The answer.")
-    assert transport.closed.is_set()
+    assert asyncio.run(scenario_run()) == (AssistantTextEvent(text="The answer."), True)
 
 
 def test_a_redirect_is_not_followed_and_a_cookie_is_not_kept(scenario):
