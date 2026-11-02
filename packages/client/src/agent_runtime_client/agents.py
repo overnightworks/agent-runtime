@@ -4,7 +4,8 @@ An agent file is Claude Code's subagent format (YAML front matter between two
 ``---`` lines, read as YAML 1.2 by ruamel.yaml, then the prompt as Markdown) with one
 extra key, ``appRoles`` (decision record 0001, H9), and two required ones: ``model``, a
 ``text/<model>`` name, and ``maxDurationSeconds``. ``maxToolCalls`` is required exactly when
-``tools`` is not empty. ``offered_to`` is a display
+``tools`` is not empty. ``picture: {size: <width>x<height>}`` makes a picture agent: its
+``model`` is an ``image/<model>`` name and it selects no tools. ``offered_to`` is a display
 filter for the app's own UI; the boundary is the
 gateway's group check.
 """
@@ -38,6 +39,7 @@ from agent_runtime_client.turn import (
     GatewayModelName,
     Turn,
     TurnMessage,
+    TurnRole,
 )
 
 _AGENT_FILE_SUFFIX: Final = ".md"
@@ -45,6 +47,7 @@ _FRONT_MATTER_FENCE: Final = "---"
 _AGENT_ROLES: Final = TypeAdapter(AgentRole)
 _AGENT_NAME: Final = TypeAdapter(AgentName)
 _YAML: Final = YAML(typ="safe", pure=True)
+_PICTURE_SIZE: Final = re.compile(r"[1-9][0-9]*x[1-9][0-9]*")
 _DUPLICATE_KEY: Final = re.compile(r'found duplicate key "(.*?)" with value')
 
 
@@ -58,10 +61,20 @@ def _refuse_non_single_line(text: str) -> str:
     return text
 
 
-def _refuse_non_text_model(model: str) -> str:
-    if not model.startswith("text/"):
-        raise ValueError("must be a text/<model> name")
-    return model
+def _refuse_non_picture_size(size: str) -> str:
+    if _PICTURE_SIZE.fullmatch(size) is None:
+        raise ValueError("must be <width>x<height>, positive whole numbers")
+    return size
+
+
+PictureSize = Annotated[StrictStr, AfterValidator(_refuse_non_picture_size)]
+"""The shape of a picture's size; which sizes exist is the gateway's."""
+
+
+class _Picture(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    size: PictureSize
 
 
 class _FrontMatter(BaseModel):
@@ -71,9 +84,10 @@ class _FrontMatter(BaseModel):
     description: Annotated[StrictStr, AfterValidator(_refuse_non_single_line)]
     tools: list[StrictStr] = Field(default_factory=list)
     roles: AgentRoles = Field(alias="appRoles")
-    model: Annotated[GatewayModelName, AfterValidator(_refuse_non_text_model)]
+    model: GatewayModelName
     max_duration_seconds: StrictInt = Field(alias="maxDurationSeconds", gt=0)
     max_tool_calls: StrictInt | None = Field(default=None, alias="maxToolCalls", gt=0)
+    picture: _Picture | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -100,10 +114,22 @@ class TurnRequest(BaseModel):
     model: GatewayModelName
     max_duration_seconds: PositiveInt
     max_tool_calls: PositiveInt | None
+    picture_size: PictureSize | None = None
 
     @model_validator(mode="after")
     def _pair_tools_with_their_call_bound(self) -> Self:
         _refuse_unpaired_call_bound(self.tools, self.max_tool_calls)
+        return self
+
+    @model_validator(mode="after")
+    def _hold_a_picture_to_one_message_and_no_tools(self) -> Self:
+        if self.picture_size is None:
+            return self
+        if self.tools:
+            raise ValueError("a picture request selects no tools")
+        messages = self.turn.messages
+        if len(messages) != 1 or messages[0].role is not TurnRole.USER:
+            raise ValueError("a picture request holds exactly one user message")
         return self
 
 
@@ -120,6 +146,7 @@ class AgentDefinition(BaseModel):
     model: GatewayModelName
     max_duration_seconds: PositiveInt
     max_tool_calls: PositiveInt | None
+    picture_size: PictureSize | None = None
 
     @model_validator(mode="after")
     def _pair_tools_with_their_call_bound(self) -> Self:
@@ -149,6 +176,7 @@ class AgentDefinition(BaseModel):
             model=self.model if model is None else model,
             max_duration_seconds=self.max_duration_seconds,
             max_tool_calls=self.max_tool_calls,
+            picture_size=self.picture_size,
         )
 
 
@@ -167,7 +195,10 @@ def load_agent(source: Traversable, declarations: list[ToolDeclaration]) -> Agen
         )
     if not prompt:
         raise AgentFileError(f"{file_name}: prompt is empty")
+    _refuse_model_of_the_wrong_kind(file_name, front_matter)
     tools = _selected_tools(file_name, front_matter.tools, declarations)
+    if front_matter.picture is not None and tools:
+        raise AgentFileError(f"{file_name}: tools: a picture agent selects none")
     try:
         _refuse_unpaired_call_bound(tools, front_matter.max_tool_calls)
     except ValueError as error:
@@ -181,7 +212,14 @@ def load_agent(source: Traversable, declarations: list[ToolDeclaration]) -> Agen
         model=front_matter.model,
         max_duration_seconds=front_matter.max_duration_seconds,
         max_tool_calls=front_matter.max_tool_calls,
+        picture_size=None if front_matter.picture is None else front_matter.picture.size,
     )
+
+
+def _refuse_model_of_the_wrong_kind(file_name: str, front_matter: _FrontMatter) -> None:
+    kind = "text" if front_matter.picture is None else "image"
+    if not front_matter.model.startswith(f"{kind}/"):
+        raise AgentFileError(f"{file_name}: model: must be a {kind}/<model> name")
 
 
 def _refuse_unpaired_call_bound(

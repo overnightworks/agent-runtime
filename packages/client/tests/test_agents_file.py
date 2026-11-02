@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from agent_runtime_client.agents import AgentDefinition, AgentFileError, TurnRequest, load_agent
 from agent_runtime_client.tools import ToolDeclaration, ToolEffect
-from agent_runtime_client.turn import TurnMessage, TurnRole
+from agent_runtime_client.turn import Turn, TurnMessage, TurnRole
 
 READ_NOTE = ToolDeclaration(
     name="read_note", description="Read a note", parameters={}, effect=ToolEffect.READ_ONLY
@@ -593,3 +593,116 @@ def test_loaded_definition_is_frozen(tmp_path: Path) -> None:
 
     with pytest.raises(ValidationError):
         agent.name = "other"  # type: ignore[misc]
+
+
+PICTURE = "picture: {size: 1024x1024}"
+
+
+def picture_text(**changes: str | None) -> str:
+    fields = {"tools": "[]", "model": "image/draw", "extra": PICTURE} | changes
+    return agent_text(**fields)
+
+
+def test_a_picture_agent_carries_its_size_into_its_request(tmp_path: Path) -> None:
+    agent = load(tmp_path, picture_text())
+
+    request = agent.request([TurnMessage(role=TurnRole.USER, text="a cat")])
+
+    assert (agent.picture_size, request.picture_size, request.model) == (
+        "1024x1024",
+        "1024x1024",
+        "image/draw",
+    )
+
+
+def test_a_text_agent_has_no_picture_size(tmp_path: Path) -> None:
+    agent = load(tmp_path, agent_text())
+
+    assert agent.picture_size is None
+    assert agent.request([TurnMessage(role=TurnRole.USER, text="hi")]).picture_size is None
+
+
+@pytest.mark.parametrize(
+    ("changes", "field"),
+    [
+        ({"model": "text/opus"}, "model"),
+        ({"extra": ""}, "model"),
+        ({"tools": "[read_note]"}, "tools"),
+        ({"max_tool_calls": "5"}, "maxToolCalls"),
+    ],
+)
+def test_a_picture_file_that_does_not_fit_a_picture_agent_is_refused_and_named(
+    tmp_path: Path, changes: dict[str, str], field: str
+) -> None:
+    text = picture_text(**changes)
+
+    with pytest.raises(AgentFileError, match=field):
+        load(tmp_path, text)
+
+
+@pytest.mark.parametrize(
+    "size",
+    [
+        "1024",
+        "1024x",
+        "x1024",
+        "0x10",
+        "10x0",
+        "01x10",
+        "1024X1024",
+        "1024 x 1024",
+        "-1x5",
+        "'1x2x3'",
+        "1.5x2",
+        "7",
+        "''",
+    ],
+)
+def test_a_malformed_picture_size_is_refused_and_named(tmp_path: Path, size: str) -> None:
+    text = picture_text(extra=f"picture: {{size: {size}}}")
+
+    with pytest.raises(AgentFileError, match="picture"):
+        load(tmp_path, text)
+
+
+@pytest.mark.parametrize(
+    "picture", ["picture: {}", "picture: {size: 1x1, quality: high}", "picture: 1x1"]
+)
+def test_a_picture_key_that_is_not_exactly_a_size_is_refused_and_named(
+    tmp_path: Path, picture: str
+) -> None:
+    text = picture_text(extra=picture)
+
+    with pytest.raises(AgentFileError, match="picture"):
+        load(tmp_path, text)
+
+
+@pytest.mark.parametrize(
+    "turn_messages",
+    [
+        [],
+        [TurnMessage(role=TurnRole.USER, text="a"), TurnMessage(role=TurnRole.USER, text="b")],
+        [TurnMessage(role=TurnRole.ASSISTANT, text="a")],
+    ],
+)
+def test_a_picture_request_holds_exactly_one_user_message(
+    tmp_path: Path, turn_messages: list[TurnMessage]
+) -> None:
+    agent = load(tmp_path, picture_text())
+
+    with pytest.raises(ValueError, match="message"):
+        agent.request(turn_messages)
+
+
+def test_a_picture_request_with_tools_is_refused() -> None:
+    with pytest.raises(ValueError, match="tools"):
+        TurnRequest(
+            agent="painter",
+            turn=Turn(system="s", messages=[TurnMessage(role=TurnRole.USER, text="a")]),
+            roles=["admin"],
+            tools=(READ_NOTE,),
+            model="image/draw",
+            max_duration_seconds=30,
+            max_tool_calls=5,
+            picture_size="1x1",
+        )
