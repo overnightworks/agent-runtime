@@ -1,4 +1,6 @@
-"""The gateway as a backend: one buffered chat completion per round of a turn, under one deadline.
+"""The gateway as a backend: one buffered completion per round of a turn, or one picture.
+
+A turn runs under one deadline.
 
 The app's key never leaves this module: it is read per turn, sent as the bearer and
 written to no exception or log record.
@@ -11,15 +13,16 @@ import json
 import logging
 import re
 import ssl
-from collections.abc import AsyncGenerator, Awaitable, Iterable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from functools import partial
 from hashlib import sha256
 from pathlib import Path
 from typing import Final, NotRequired, Required, TypedDict
 
 import httpx2
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
 from agent_runtime_client.agents import TurnRequest
 from agent_runtime_client.backend import (
@@ -39,7 +42,15 @@ from agent_runtime_client.tools import (
     ToolEffect,
     ToolOutcome,
 )
-from agent_runtime_client.turn import MAX_EVENT_BYTES, FailureCode, Principal, RejectionCode
+from agent_runtime_client.turn import (
+    MAX_EVENT_BYTES,
+    MAX_RUN_FILES_BYTES,
+    FailureCode,
+    Principal,
+    RejectionCode,
+    RunFile,
+    base64_length,
+)
 from agent_runtime_client.turn_events import (
     AssistantTextEvent,
     FinalEvent,
@@ -49,6 +60,8 @@ from agent_runtime_client.turn_events import (
 
 _LOGGER: Final = logging.getLogger(__name__)
 _COMPLETIONS_PATH: Final = "/v1/chat/completions"
+_PICTURES_PATH: Final = "/v1/images/generations"
+_PICTURE_FILE_NAME: Final = "picture"
 # A DEBUG record of either library may carry request headers, and the key is one.
 _TRANSPORT_LOGGERS: Final = ("httpx2", "httpcore2")
 _MAX_KEY_BYTES: Final = 1024
@@ -58,6 +71,15 @@ _JSON_ESCAPE_FACTOR: Final = 6
 _ENVELOPE_ALLOWANCE_BYTES: Final = 65_536
 _MAX_BODY_BYTES: Final = _JSON_ESCAPE_FACTOR * MAX_EVENT_BYTES + _ENVELOPE_ALLOWANCE_BYTES
 _MAX_REQUEST_BYTES: Final = 4 * MAX_EVENT_BYTES
+_MAX_PICTURE_BODY_BYTES: Final = base64_length(MAX_RUN_FILES_BYTES) + MAX_EVENT_BYTES
+_UNREADABLE_REPLY: Final = (
+    ValueError,
+    KeyError,
+    IndexError,
+    TypeError,
+    AttributeError,
+    RecursionError,
+)
 _ARGUMENTS: Final = TypeAdapter(JsonObject)
 _HANDLER_FAILED_TEXT: Final = "The tool failed."
 _RESULT_TOO_LARGE_TEXT: Final = "The tool result was too large to return."
@@ -100,17 +122,19 @@ class GatewayBackend(AgentBackend):
         if person.role not in request.roles:
             raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.FORBIDDEN)
         deadline = asyncio.get_running_loop().time() + request.max_duration_seconds
+        if request.picture_size is not None:
+            yield await _before(deadline, self._picture(request, request.picture_size, person))
+            return
         progress = _Progress(request.max_tool_calls or 0)
         try:
             key = await _before(deadline, self._authorise(person))
+            read = partial(_judged, offered=frozenset(tools))
             messages = _opening_messages(request)
             user = _fingerprint(person.principal)
             while True:
                 _refuse_after(deadline)
-                body = _body(request, messages, user)
-                if len(body.encode("utf-8")) > _MAX_REQUEST_BYTES:
-                    raise _limit_exceeded()
-                reply = await _before(deadline, self._post(body, key, frozenset(tools)))
+                body = _bounded(_body(request, messages, user))
+                reply = await _before(deadline, self._post(_COMPLETIONS_PATH, body, key, read))
                 if reply.message is None:
                     yield AssistantTextEvent(text=reply.text)
                     yield FinalEvent(text=reply.text)
@@ -143,15 +167,27 @@ class GatewayBackend(AgentBackend):
             raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.NOT_ENABLED)
         return _read_key(self._config.gateway.key_file)
 
-    async def _post(self, body: str, key: str, offered: frozenset[str]) -> _Round:
+    async def _picture(self, request: TurnRequest, size: str, person: TurnPerson) -> FinalEvent:
+        key = await self._authorise(person)
+        body = _bounded(_picture_body(request, size, _fingerprint(person.principal)))
+        file = await self._post(_PICTURES_PATH, body, key, _picture_of)
+        return FinalEvent(text="", files=(file,))
+
+    async def _post[Result](
+        self,
+        path: str,
+        body: str,
+        key: str,
+        read: Callable[[httpx2.Response], Awaitable[Result]],
+    ) -> Result:
         headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
         try:
             # ssl.SSLError is an OSError.
             async with (
                 self._client() as client,
-                client.stream("POST", _COMPLETIONS_PATH, content=body, headers=headers) as response,
+                client.stream("POST", path, content=body, headers=headers) as response,
             ):
-                return await _round_of(response, offered)
+                return await _reply_of(response, read)
         except httpx2.HTTPError, OSError:
             raise _unavailable(GatewayDetail.CONNECTION_FAILED) from None
 
@@ -193,6 +229,13 @@ class _FunctionSpec(TypedDict):
 class _FunctionTool(TypedDict):
     type: str
     function: _FunctionSpec
+
+
+class _PictureBody(TypedDict):
+    model: str
+    prompt: str
+    size: str
+    user: str
 
 
 class _Body(TypedDict):
@@ -326,6 +369,24 @@ def _body(request: TurnRequest, messages: list[_Message], user: str) -> str:
     return json.dumps(body)
 
 
+def _picture_body(request: TurnRequest, size: str, user: str) -> str:
+    prompt = f"{request.turn.system}\n\n{request.turn.messages[0].text}"
+    body: _PictureBody = {
+        "model": request.model,
+        "prompt": prompt,
+        "size": size,
+        "user": user,
+    }
+    return json.dumps(body)
+
+
+def _bounded(body: str) -> str:
+    """A request over the one bound is not sent."""
+    if len(body.encode("utf-8")) > _MAX_REQUEST_BYTES:
+        raise _limit_exceeded()
+    return body
+
+
 def _read_key(key_file: Path) -> str:
     try:
         with key_file.open("rb") as file:
@@ -342,10 +403,12 @@ def _unavailable(detail: GatewayDetail) -> TurnStopped:
     return TurnStopped(TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE, detail=detail)
 
 
-async def _round_of(response: httpx2.Response, offered: frozenset[str]) -> _Round:
+async def _reply_of[Result](
+    response: httpx2.Response, read: Callable[[httpx2.Response], Awaitable[Result]]
+) -> Result:
     status = response.status_code
     if status == httpx2.codes.OK:
-        return await _judged(response, offered)
+        return await read(response)
     if status == httpx2.codes.TOO_MANY_REQUESTS:
         wait = _wait_seconds(response.headers.get("Retry-After"))
         raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.BUSY, retry_after_s=wait)
@@ -355,15 +418,20 @@ async def _round_of(response: httpx2.Response, offered: frozenset[str]) -> _Roun
     raise _unavailable(detail)
 
 
-async def _judged(response: httpx2.Response, offered: frozenset[str]) -> _Round:
+async def _read_body(response: httpx2.Response, limit: int) -> bytes:
     body = bytearray()
     try:
         async for chunk in response.aiter_bytes():
             body += chunk
-            if len(body) > _MAX_BODY_BYTES:
+            if len(body) > limit:
                 raise _malformed_reply()
     except httpx2.DecodingError:
         raise _malformed_reply() from None
+    return bytes(body)
+
+
+async def _judged(response: httpx2.Response, *, offered: frozenset[str]) -> _Round:
+    body = await _read_body(response, _MAX_BODY_BYTES)
     try:
         choice = json.loads(body)["choices"][0]
         finish_reason, message = choice["finish_reason"], choice["message"]
@@ -371,9 +439,26 @@ async def _judged(response: httpx2.Response, offered: frozenset[str]) -> _Round:
             return _calls_of(message, offered)
         if finish_reason == "stop":
             return _answer_of(message["content"])
-    except ValueError, KeyError, IndexError, TypeError, AttributeError, RecursionError:
+    except _UNREADABLE_REPLY:
         pass
     raise _malformed_reply()
+
+
+async def _picture_of(response: httpx2.Response) -> RunFile:
+    """Exactly one entry whose ``b64_json`` is a canonical picture within its bound; no URL."""
+    body = await _read_body(response, _MAX_PICTURE_BODY_BYTES)
+    try:
+        entries = json.loads(body)["data"]
+        if not isinstance(entries, list) or len(entries) != 1 or entries[0].get("url") is not None:
+            raise _malformed_reply()
+        file = RunFile.model_validate(
+            {"name": _PICTURE_FILE_NAME, "content": entries[0]["b64_json"]}, strict=True
+        )
+    except (*_UNREADABLE_REPLY, ValidationError):
+        raise _malformed_reply() from None
+    if len(file.content) > MAX_RUN_FILES_BYTES:
+        raise _malformed_reply()
+    return file
 
 
 def _answer_of(text: str) -> _Round:

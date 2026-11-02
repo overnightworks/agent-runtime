@@ -53,7 +53,8 @@ class ToolResultEvent(StreamEvent):
 class FinalEvent(StreamEvent):
     """A turn's ending: its words and the files its run left in its output folder.
 
-    Only a CLI run collects files; every other producer leaves ``files`` empty.
+    A CLI run collects files, and a gateway picture turn ends with its one picture; a text
+    turn leaves ``files`` empty.
     """
 
     type: Literal["final"] = "final"

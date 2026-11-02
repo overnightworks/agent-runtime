@@ -445,7 +445,7 @@ def test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state(
     assert logged_flag(caplog) == "None"
 
 
-def test_a_deadline_that_passed_while_the_app_took_the_call_event_starts_no_handler(shop, caplog):
+def test_a_call_event_taken_past_the_deadline_starts_no_handler_and_leaves_no_record(shop, caplog):
     shop.add_tool("write", effect=ToolEffect.SIDE_EFFECTING)
     caplog.set_level(logging.INFO)
 
