@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_runtime import secret_file
 from agent_runtime.secret_file import (
     MAX_SECRET_FILE_BYTES,
     SecretFileFault,
@@ -101,7 +102,13 @@ def test_a_failure_of_any_descriptor_call_is_unreadable_not_raised(
             real_call(descriptor)
         raise OSError(5, "injected")
 
-    monkeypatch.setattr(os, failing_call, failing)
+    class OsSeenByTheReader:
+        """The reader's own view of `os`: only it meets the injected failure."""
+
+        def __getattr__(self, name: str) -> object:
+            return failing if name == failing_call else getattr(os, name)
+
+    monkeypatch.setattr(secret_file, "os", OsSeenByTheReader())
 
     assert read_secret_file_without_following_links(path) is SecretFileFault.UNREADABLE
     if failing_call == "close":
