@@ -1,0 +1,8 @@
+claim_id = "422747fa942347dd933d067ac071fb15"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "26c7ba33d6ba9c4197ae265eb53e05dc047968f4"
+branch = "claude/issue-675-ar-1-an-app-runs-an-agent-turn-through-t"
+scope = [".importlinter", "docs/MIGRATING.md", "docs/wire.md", "packages/client/pyproject.toml", "packages/client/src/agent_runtime_client/backend", "packages/client/src/agent_runtime_client/config.py", "packages/client/tests", "packages/service/tests", "tests/support", "uv.lock"]
+opened_commit = "11b0bc4b413f7011493c25b078d17b60657b57c1"
+whole_reason = "Transport, refusal rules, lifecycle and the configuration they read are one owner no app can adopt in parts."
