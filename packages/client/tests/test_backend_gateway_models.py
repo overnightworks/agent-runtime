@@ -9,7 +9,13 @@ from pathlib import Path
 
 import httpx2
 import pytest
-from tests.support.gateway_turn_support import SkewedLoop, a_gateway_config
+from tests.support.gateway_turn_support import (
+    GATEWAY_KEY,
+    FailingTransport,
+    HangingTransport,
+    SkewedLoop,
+    a_gateway_config,
+)
 
 from agent_runtime_client.agents import AgentDefinition
 from agent_runtime_client.backend.fake_gateway import FakeGateway, Reply, model_list
@@ -21,7 +27,6 @@ from agent_runtime_client.backend.gateway import (
 from agent_runtime_client.config import ChatGateway
 from agent_runtime_client.turn import MAX_EVENT_BYTES
 
-KEY = "stand-in-key-0001"
 DEADLINE_SECONDS = 10
 
 
@@ -84,7 +89,7 @@ def test_the_request_is_a_bare_get_with_the_key_and_nothing_else(tmp_path):
         b"",
         b"",
     )
-    assert sent.headers["authorization"] == f"Bearer {KEY}"
+    assert sent.headers["authorization"] == f"Bearer {GATEWAY_KEY}"
     assert [name for name in sent.headers if name.startswith(("anthropic-", "x-litellm-"))] == []
     assert "content-type" not in sent.headers
 
@@ -130,29 +135,9 @@ def test_the_key_is_read_again_for_each_call(tmp_path):
     list_models(gateway, fake)
 
     assert [request.headers["authorization"] for request in fake.requests] == [
-        f"Bearer {KEY}",
+        f"Bearer {GATEWAY_KEY}",
         "Bearer second-key-0002",
     ]
-
-
-class _Failing(httpx2.AsyncBaseTransport):
-    async def handle_async_request(self, request):
-        raise httpx2.ConnectError("refused")
-
-
-class _Hanging(httpx2.AsyncBaseTransport):
-    """Takes the request and never answers, while the clock moves past the deadline."""
-
-    def __init__(self) -> None:
-        self.cancelled = False
-
-    async def handle_async_request(self, request):
-        asyncio.get_running_loop().skew_seconds += DEADLINE_SECONDS + 1
-        try:
-            await asyncio.Event().wait()
-        except asyncio.CancelledError:
-            self.cancelled = True
-            raise
 
 
 @pytest.mark.parametrize(
@@ -166,16 +151,17 @@ class _Hanging(httpx2.AsyncBaseTransport):
         (FakeGateway(a_json_reply({"data": [{"name": "text/a"}]})), "malformed_reply"),
         (FakeGateway(a_json_reply({"data": [{"id": 7}]})), "malformed_reply"),
         (FakeGateway(a_json_reply([])), "malformed_reply"),
-        (FakeGateway(a_json_reply({"error": KEY}, status=401)), "gateway_refused"),
-        (FakeGateway(a_json_reply({"error": KEY}, status=429)), "gateway_refused"),
-        (FakeGateway(a_json_reply({"error": KEY}, status=500)), "gateway_failed"),
+        (FakeGateway(Reply(body=b"\xff" + GATEWAY_KEY.encode())), "malformed_reply"),
+        (FakeGateway(a_json_reply({"error": GATEWAY_KEY}, status=401)), "gateway_refused"),
+        (FakeGateway(a_json_reply({"error": GATEWAY_KEY}, status=429)), "gateway_refused"),
+        (FakeGateway(a_json_reply({"error": GATEWAY_KEY}, status=500)), "gateway_failed"),
         (
             FakeGateway(Reply(status=302, headers={"Location": "http://elsewhere.test/v1/models"})),
             "gateway_failed",
         ),
         (FakeGateway(a_padded_reply(MAX_EVENT_BYTES + 1)), "malformed_reply"),
-        (_Failing(), "connection_failed"),
-        (_Hanging(), "timed_out"),
+        (FailingTransport(), "connection_failed"),
+        (HangingTransport(seconds_passing=DEADLINE_SECONDS + 1), "timed_out"),
     ],
     ids=[
         "not-json",
@@ -186,6 +172,7 @@ class _Hanging(httpx2.AsyncBaseTransport):
         "entry-without-id",
         "id-not-text",
         "reply-not-an-object",
+        "invalidly-encoded",
         "401",
         "429",
         "500",
@@ -203,8 +190,8 @@ def test_every_failure_raises_the_one_exception_without_the_key(
     failure = the_failure(a_gateway(tmp_path), transport)
 
     assert failure.detail == detail
-    assert KEY not in everything_it_shows(failure)
-    assert KEY not in caplog.text
+    assert GATEWAY_KEY not in everything_it_shows(failure)
+    assert GATEWAY_KEY not in caplog.text
 
 
 def test_a_redirect_is_not_followed(tmp_path):
@@ -217,7 +204,7 @@ def test_a_redirect_is_not_followed(tmp_path):
 
 
 def test_a_stalled_call_is_cancelled(tmp_path):
-    hanging = _Hanging()
+    hanging = HangingTransport(seconds_passing=DEADLINE_SECONDS + 1)
 
     the_failure(a_gateway(tmp_path), hanging)
 
@@ -250,3 +237,17 @@ def test_a_key_file_that_is_missing_or_malformed_raises_the_same_and_sends_nothi
 
     assert (failure.detail, fake.requests) == ("key_unusable", [])
     assert "first-line-0001" not in everything_it_shows(failure) + caplog.text
+
+
+def test_a_list_call_keeps_the_transport_loggers_off_debug_so_the_key_stays_out_of_them(
+    tmp_path, caplog
+):
+    for name in ("httpx2", "httpcore2"):
+        caplog.set_level(logging.DEBUG, logger=name)
+
+    list_models(a_gateway(tmp_path), FakeGateway(model_list("text/a")))
+
+    assert not any(
+        logging.getLogger(name).isEnabledFor(logging.DEBUG)
+        for name in ("httpx2", "httpcore2", "httpcore2.connection", "httpcore2.http11")
+    )

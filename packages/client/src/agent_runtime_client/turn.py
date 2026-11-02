@@ -36,8 +36,19 @@ MAX_RUN_FILE_NAME_BYTES: Final = 255
 MAX_TOOL_INPUT_DEPTH: Final = 128
 MAX_AGENT_LENGTH: Final = 64
 MODEL_PART_PATTERN: Final = re.compile(r"[a-z0-9.-]+")
-_GATEWAY_MODEL_NAME: Final = re.compile(rf"(?:text|image)/{MODEL_PART_PATTERN.pattern}")
 _AGENT_PATTERN: Final = re.compile(rf"[a-z][a-z0-9-]{{0,{MAX_AGENT_LENGTH - 1}}}")
+
+
+class ModelKind(StrEnum):
+    """What a gateway model makes: the name's prefix, and so the kind of agent that may run it."""
+
+    TEXT = "text"
+    IMAGE = "image"
+
+
+_GATEWAY_MODEL_NAME: Final = re.compile(
+    rf"(?:{'|'.join(map(re.escape, ModelKind))})/{MODEL_PART_PATTERN.pattern}"
+)
 
 
 class FailureCode(StrEnum):
@@ -273,3 +284,8 @@ def _refuse_non_gateway_model(text: str) -> str:
 
 GatewayModelName = Annotated[str, AfterValidator(_refuse_non_gateway_model)]
 """The one decider of a gateway model: its kind (``text`` or ``image``), a slash, the model part."""
+
+
+def model_kind_of(name: GatewayModelName) -> ModelKind:
+    """The one reading of a model name's kind; the name is already a ``GatewayModelName``."""
+    return ModelKind(name.partition("/")[0])

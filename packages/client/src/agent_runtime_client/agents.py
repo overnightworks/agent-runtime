@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import io
 import re
-from enum import StrEnum
 from importlib.resources.abc import Traversable
 from typing import Annotated, Final, Self
 
@@ -37,9 +36,11 @@ from agent_runtime_client.turn import (
     AgentRole,
     AgentRoles,
     GatewayModelName,
+    ModelKind,
     Turn,
     TurnMessage,
     TurnRole,
+    model_kind_of,
 )
 
 _AGENT_FILE_SUFFIX: Final = ".md"
@@ -49,18 +50,6 @@ _AGENT_NAME: Final = TypeAdapter(AgentName)
 _YAML: Final = YAML(typ="safe", pure=True)
 _PICTURE_SIZE: Final = re.compile(r"[1-9]\d*x[1-9]\d*", re.ASCII)
 _DUPLICATE_KEY: Final = re.compile(r'found duplicate key "(.*?)" with value')
-
-
-class ModelKind(StrEnum):
-    """What a gateway model makes: the name's prefix, and so the kind of agent that may run it."""
-
-    TEXT = "text"
-    IMAGE = "image"
-
-
-def model_kind_of(name: GatewayModelName) -> ModelKind:
-    """The one reading of a model name's kind; the name is already a ``GatewayModelName``."""
-    return ModelKind(name.partition("/")[0])
 
 
 def _agent_model_kind(*, is_picture: bool) -> ModelKind:

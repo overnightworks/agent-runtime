@@ -280,7 +280,7 @@ of the wrong kind (a picture agent needs `image/…`, any other agent `text/…`
 The gateway may later withdraw a name an app stored: that turn ends `failed: provider_unavailable` and the client does
 not fall back to the file's model.
 
-`GatewayBackend`'s constructor sets the `httpx2` and `httpcore2` loggers to WARNING for the whole process, overriding an app's own DEBUG setting there.
+`GatewayBackend`'s constructor and every `list_gateway_models` call set the `httpx2` and `httpcore2` loggers to WARNING for the whole process, overriding an app's own DEBUG setting there.
 
 ## Agent files
 

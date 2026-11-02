@@ -24,7 +24,7 @@ from typing import Final, NotRequired, Required, TypedDict
 import httpx2
 from pydantic import TypeAdapter, ValidationError
 
-from agent_runtime_client.agents import AgentDefinition, ModelKind, TurnRequest, model_kind_of
+from agent_runtime_client.agents import AgentDefinition, TurnRequest
 from agent_runtime_client.backend import (
     MAX_RETRY_AFTER_S,
     AgentBackend,
@@ -47,10 +47,12 @@ from agent_runtime_client.turn import (
     MAX_RUN_FILES_BYTES,
     FailureCode,
     GatewayModelName,
+    ModelKind,
     Principal,
     RejectionCode,
     RunFile,
     base64_length,
+    model_kind_of,
 )
 from agent_runtime_client.turn_events import (
     AssistantTextEvent,
@@ -92,7 +94,7 @@ _ERROR_PREFIX: Final = "Error: "
 
 
 class GatewayDetail(StrEnum):
-    """Why a turn or a model list stopped, for logs only."""
+    """Why a turn or a model list stopped: logged for a turn, public on a list's exception."""
 
     KEY_UNUSABLE = "key_unusable"
     GATEWAY_REFUSED = "gateway_refused"
@@ -225,11 +227,11 @@ async def list_gateway_models(
             return await _send(gateway, transport, "GET", _MODELS_PATH, key, _models_of)
     except TurnStopped as stopped:
         # A 429 carries no detail; for a list it is a refusal like any other 4xx.
-        raise ModelListUnavailable(
-            GatewayDetail(stopped.detail or GatewayDetail.GATEWAY_REFUSED)
-        ) from None
+        detail = GatewayDetail(stopped.detail or GatewayDetail.GATEWAY_REFUSED)
     except TimeoutError:
-        raise ModelListUnavailable(GatewayDetail.TIMED_OUT) from None
+        detail = GatewayDetail.TIMED_OUT
+    # Raised outside the handlers, so no underlying exception stays in __context__.
+    raise ModelListUnavailable(detail)
 
 
 def _quiet_transport_loggers() -> None:
