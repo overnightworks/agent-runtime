@@ -3,6 +3,6 @@ agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
 role = "builder"
 base = "10919775a6d1d610498d984ee5fce925e5f62458"
 branch = "claude/issue-721-release-0-18-0"
-scope = ["docs/MIGRATING.md", "packages/client/pyproject.toml", "packages/service/pyproject.toml", "pyproject.toml", "src/agent_runtime/__init__.py", "uv.lock"]
+scope = ["docs/MIGRATING.md", "docs/operations.md", "docs/wire.md", "packages/client/pyproject.toml", "packages/service/pyproject.toml", "pyproject.toml", "src/agent_runtime/__init__.py", "uv.lock"]
 opened_commit = "37624d8d3d226ca717903e6c6898adb4fafcb6a0"
 whole_reason = "A release raises its version literals together."
