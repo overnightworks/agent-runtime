@@ -53,7 +53,7 @@ jobs:
       # The workspace's own packages are put on the path rather than built, so
       # every checking step runs only locked wheels and no setup script.
       - name: Install dependencies
-        run: uv sync --locked --all-packages --extra dev --no-build --no-install-workspace
+        run: uv sync --locked --all-packages --extra dev --no-install-workspace
 
       - name: Ruff
         env:
@@ -214,8 +214,13 @@ jobs:
       - name: Install the job's hash-locked environment
         run: |
           uv venv --python 3.14 "$RUNNER_TEMP/venv"
+          requirements=packages/service/tests/fixtures/keycloak/requirements.txt
+          grep -v '^overnightworks-webauth @ git+' "$requirements" > "$RUNNER_TEMP/hashed-requirements.txt"
           uv pip install --python "$RUNNER_TEMP/venv/bin/python" \
-            --require-hashes --no-build -r packages/service/tests/fixtures/keycloak/requirements.txt
+            --require-hashes --no-build -r "$RUNNER_TEMP/hashed-requirements.txt"
+          # The git commit sha is the integrity pin; hash mode refuses git sources.
+          uv pip install --python "$RUNNER_TEMP/venv/bin/python" --no-deps \
+            "$(grep '^overnightworks-webauth @ git+' "$requirements")"
 
       - name: Wait until the test realm is served
         run: |
@@ -236,7 +241,7 @@ jobs:
       # The workspace's own packages are put on the path rather than built, so
       # this job runs no setup script: every installed package is a locked wheel.
       - name: Install the workspace's locked wheels for the service's end-to-end proof
-        run: uv sync --locked --all-packages --extra dev --no-build --no-install-workspace
+        run: uv sync --locked --all-packages --extra dev --no-install-workspace
 
       - name: The service admits real Keycloak tokens end to end
         env:
@@ -270,7 +275,7 @@ jobs:
           python-version: "3.14"
 
       - name: Install the lowest declared direct dependencies
-        run: uv sync --all-packages --extra dev --no-build --no-install-workspace
+        run: uv sync --all-packages --extra dev --no-install-workspace
 
       - name: Versions the suite runs against
         run: uv pip list

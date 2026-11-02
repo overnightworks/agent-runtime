@@ -21,6 +21,9 @@ or `uv add`. A host may instead install by git tag:
 `#subdirectory=packages/client` or `#subdirectory=packages/service` for those two
 distributions and core at the root.
 
+hal's image installs with `--require-hashes`, which refuses git sources, so it stays on the release's
+hashed wheels while webauth#543's line 4 is open; [docs/MIGRATING.md](docs/MIGRATING.md) states the condition.
+
 ## Where to read
 
 | You are | Read |
