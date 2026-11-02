@@ -117,8 +117,8 @@ Keycloak groups of the app's service account ([operations.md](operations.md#who-
 An app runs a turn through `agent_runtime_client.backend.AgentBackend`, installed as
 `src/<app>/agent/backend.py` with its tools in `src/<app>/agent/tools.py`.
 `backend.run(request, person)` is an async generator of `TurnEvent`s that the app consumes inside
-`contextlib.aclosing`; closing it runs the backend's cleanup. The package names no implementation
-yet and imports no HTTP library.
+`contextlib.aclosing`; closing it runs the backend's cleanup. The package's base modules import no HTTP
+library; the one implementation, `backend.gateway.GatewayBackend`, needs the `backend` extra.
 
 `request` is a `TurnRequest` (`agent_runtime_client.agents`, frozen): `agent`, `turn`, `roles`,
 `tools` (the agent's selected `ToolDeclaration`s), `model` and `max_duration_seconds`.
@@ -137,6 +137,63 @@ The app's configuration embeds `agent_runtime_client.config.AgentConfig` as the 
 `ChatGateway` is `origin` (scheme, host and optional port; no path, query, fragment or userinfo),
 `key_file` and `ca_file`, both absolute paths. `ca_file` is required for HTTPS and forbidden for
 HTTP.
+
+### What every app does the same
+
+Every app names the same files: `agent/backend.py` builds the backend, `agent/tools.py` holds
+its tools, `agent/mcp.py` its MCP surface, and `agent/settings.py` its `agent` configuration
+section. `agent/settings.py` is the one place that imports `agent_runtime_client.config`.
+import-linter folds an external package into one graph node, so an app without marked routes
+can forbid the client outside `<app>.agent` outright; an app with marked routes holds the
+`.tools`-only rule by review.
+
+`TurnPerson` is always the verified person, and `principal.iss` is passed exactly as the app
+bound it: two spellings of one issuer split one person's budget.
+
+`busy` may carry no `retry_after_s`, so the app needs a defined fallback; a value that varies
+by app stays the app's.
+
+Tests use a fake `AgentBackend` that yields `TurnEvent`s and raises `TurnStopped`. A proof
+through the real entry point runs `GatewayBackend` on `backend.fake_gateway.FakeGateway`, a
+scripted transport passed as `transport=`.
+
+### The gateway backend
+
+`GatewayBackend(config, *, transport=None)` runs a text turn: no tools (an agent with tools
+raises `ValueError`) and no pictures yet. In order, before any request: a `person.role`
+outside `request.roles` is `refused: forbidden`; `person.groups()` runs once and a refusal it
+raises reaches the app unchanged; an `api_group` the person lacks is `refused: not_enabled`.
+The key file is read per turn after that: one printable ASCII line of at most 1024 bytes,
+opaque whatever its prefix; any other content is `failed: provider_unavailable`.
+`request.max_duration_seconds` is one deadline around the whole turn; past it the turn
+`failed: limit_exceeded`.
+
+What the client sends, and nothing else:
+
+| Part | Value |
+| --- | --- |
+| Request | `POST <origin>/v1/chat/completions`, no redirect followed, no cookie kept, no proxy variable read; HTTPS trusts `ca_file` alone |
+| Headers | `Authorization: Bearer <key>`, `Content-Type: application/json`, and the transport's own defaults; no `x-litellm-*` or `anthropic-*` header, and nothing relies on `User-Agent` or `x-litellm-tags` |
+| Body | exactly `model` (the request's `text/<model>` name), `messages` (the system prompt, then the turn's messages) and `user`; no `stream`, `max_tokens`, `metadata`, `tags`, `fallbacks`, `num_retries`, `mock_response` or `api_key` |
+| `user` | `"fp-" + sha256(json.dumps([iss, sub], ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()`, 67 characters |
+
+The fingerprint's prefix, input and algorithm are one contract across apps: a change splits
+every person's budget. `["https://issuer.example", "subject-1"]` gives
+`fp-2db44d96ffdef38f9e1cbfe73e9cf248fb66955b894846b34843a2d3a849d764`, and a non-ASCII subject, `["https://issuer.example", "subjéct-ü-1"]`, gives
+`fp-4670d575ad432d6edf969bf640bca6a2114230ad288ca5893725c511dd7c94c9`.
+
+| The gateway answers | The turn ends |
+| --- | --- |
+| 200, `finish_reason: stop`, non-empty text of at most `MAX_EVENT_BYTES` | one `AssistantTextEvent`, then `FinalEvent` |
+| 200 otherwise (malformed JSON, no choices, empty text, another `finish_reason`, a lone surrogate, a longer reply) | `failed: provider_error` |
+| 429 | `refused: busy`; `retry_after_s` from the `Retry-After` seconds, at most `MAX_RETRY_AFTER_S`; an HTTP-date or no header gives none |
+| another 4xx, a budget refusal included | `failed: provider_unavailable`, detail `gateway_refused`, body unread |
+| 5xx (a `Retry-After` is ignored) | `failed: provider_unavailable`, detail `gateway_failed` |
+| connection refused or reset, TLS failure | `failed: provider_unavailable` |
+
+A person over budget therefore reads as "unavailable", the same as any other refusal; telling
+them apart is a named gap. `detail` is for logs only. `after_side_effect` stays false: no tool
+runs here.
 
 ## Agent files
 
