@@ -1,0 +1,7 @@
+claim_id = "285cf84f15b94e769b183919650d7b3c"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "3eebdf147e6ca44a885e1e166b6795e2ee5551d3"
+branch = "claude/issue-716-dev-tools-bump"
+scope = ["tests/test_secret_file.py", "uv.lock"]
+opened_commit = "14c73b381edeb4d5efccc5ed53aefb75a606f04e"
