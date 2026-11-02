@@ -2071,11 +2071,10 @@ def _read_credential_file(path: Path) -> bytes | None:
     except FileNotFoundError:
         return None
     except OSError as exc:
-        refusal = (
-            _CREDENTIAL_SYMLINK_DETAIL
-            if exc.errno == errno.ELOOP
-            else _CREDENTIAL_UNREADABLE_DETAIL
-        )
+        if exc.errno == errno.ELOOP:
+            refusal = _CREDENTIAL_SYMLINK_DETAIL
+        else:
+            refusal = _CREDENTIAL_UNREADABLE_DETAIL
         raise_without_chain(CliLoginUnusableError(refusal))
     try:
         content, refusal = _read_regular_file(descriptor)
