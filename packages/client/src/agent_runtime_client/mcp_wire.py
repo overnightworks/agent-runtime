@@ -26,6 +26,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationErr
 from pydantic.alias_generators import to_camel
 
 from agent_runtime_client.errors import raise_without_chain
+from agent_runtime_client.tools import ToolOutcome
 from agent_runtime_client.turn import (
     MAX_EVENT_BYTES,
     JsonObject,
@@ -379,12 +380,6 @@ class _OtherBlock(_Tolerant):
 class _CallToolResult(_Tolerant):
     content: _JsonArray[Annotated[_TextBlock | _OtherBlock, Field(union_mode="left_to_right")]]
     is_error: bool = False
-
-
-@dataclass(frozen=True)
-class ToolOutcome:
-    content: str
-    is_error: bool
 
 
 def read_tool_outcome(result: Mapping[str, Any]) -> ToolOutcome:

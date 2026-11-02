@@ -2,15 +2,31 @@
 
 This module is the one owner of ``ToolDeclaration`` and its ``ToolEffect``;
 the provider core builds its ``ToolCatalog`` on the declaration and
-re-exports the identical class.
+re-exports the identical class. ``HandTool`` is a declaration with the handler an app serves
+it with, for the person a turn acts for; ``ToolOutcome`` is what a handler answers. ``Principal``
+and ``JsonObject`` are re-exported so an app's tools import only this module.
 """
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from agent_runtime_client.turn import JsonObject, Principal
+
+__all__ = [
+    "HandTool",
+    "HandToolHandler",
+    "JsonObject",
+    "Principal",
+    "ToolDeclaration",
+    "ToolEffect",
+    "ToolOutcome",
+]
 
 
 class ToolEffect(StrEnum):
@@ -40,3 +56,22 @@ class ToolDeclaration(BaseModel):
     description: str = Field(min_length=1)
     parameters: dict[str, Any]
     effect: ToolEffect = ToolEffect.SIDE_EFFECTING
+
+
+@dataclass(frozen=True)
+class ToolOutcome:
+    """What a tool answers: the text a model is shown and whether the call failed."""
+
+    content: str
+    is_error: bool
+
+
+type HandToolHandler = Callable[[Principal, JsonObject], Awaitable[ToolOutcome]]
+
+
+@dataclass(frozen=True)
+class HandTool:
+    """A tool the app serves itself, for the person a turn acts for."""
+
+    declaration: ToolDeclaration
+    handler: HandToolHandler

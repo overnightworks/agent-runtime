@@ -2,6 +2,15 @@
 
 Read by a host bumping its pin; each release that breaks a host has one section, newest first.
 
+## Migrating to 0.18.0
+
+| Before (0.17.0) | Now |
+| --- | --- |
+| `GatewayBackend(config, *, transport=None)` raised `ValueError` for an agent with tools. | `GatewayBackend(config, *, tools=(), transport=None)` takes the app's `agent_runtime_client.tools.HandTool`s and runs the agent's tool calls in the client's own loop; a selected tool with no handler raises `ValueError` at `run`. A tool's `content` reaches the model and the gateway. ([wire.md](wire.md#the-tool-loop)) |
+| An agent file had no `maxToolCalls`. | `maxToolCalls` (a positive integer) is required exactly when `tools` is not empty and refused otherwise; `AgentDefinition` and `TurnRequest` carry `max_tool_calls`, `None` for an agent with no tools. `TurnRequest(...)` built by hand needs the new field. An agent file that selects tools needs the key. |
+| `ToolOutcome` lived in `agent_runtime_client.mcp_wire`. | It lives in `agent_runtime_client.tools`, next to the new `HandTool`, `HandToolHandler`, `Principal` and `JsonObject`; `mcp_wire` re-exports `ToolOutcome`, so no import changes. |
+| `after_side_effect` was always false on a gateway turn. | It is true once a side-effecting tool call started in the turn, on `refused: busy` too. |
+
 ## Migrating to 0.17.0
 
 | Before (0.16.0) | Now |
@@ -16,7 +25,7 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | `AgentConfig` was `backend` (`service` or `litellm`), `service_url` and `workload_scope`; `litellm` failed at validation. | `AgentConfig` is `backend` (`litellm`, the one value), `gateway` and `api_group`. `backend = "service"`, `service_url` and `workload_scope` fail at validation. `ChatGateway` is `origin`, `key_file` and `ca_file`; `ca_file` is required for HTTPS and forbidden for HTTP. |
 | The service pinned `overnightworks-webauth` 0.26.0 by its release wheel URL. | It pins 0.27.0 by git (`overnightworks-webauth @ git+https://github.com/overnightworks/webauth@v0.27.0`). A host that pins webauth by git no longer meets uv's conflicting-URLs error; a host that pinned the wheel URL moves to the git form. The wire codes are unchanged. |
 | A host installed the wheels from the release page only. | It may install by git tag: `overnightworks-agent-runtime @ git+https://github.com/overnightworks/agent-runtime@v0.17.0` (core at the root), with `#subdirectory=packages/client` or `packages/service` for the others. hal's image stays on the release's hashed wheels while webauth#543's line 4 is open. |
-| `from agent_runtime_client.wire import *` imported every public name of the module, `RunRequest`, `RunStarted`, `PROTOCOL_VERSION` and `ModelName` among them. | `wire` has an `__all__` that holds only the moved vocabulary, so a wildcard import no longer binds those four names and a host using them gets `NameError`. Import them explicitly: `from agent_runtime_client.wire import RunRequest, RunStarted, PROTOCOL_VERSION, ModelName`. |
+| `from agent_runtime_client.wire import *` imported every public name of the module, `RunRequest`, `RunStarted`, `PROTOCOL_VERSION` and `ModelName` among them. | `wire` has an `__all__` that holds only the moved vocabulary, so a wildcard import no longer binds any other name of the module (those four included) and a host using one gets `NameError`. Import them explicitly: `from agent_runtime_client.wire import RunRequest, RunStarted, PROTOCOL_VERSION, ModelName`. |
 | The client required `ruamel.yaml>=0.19,<0.20`. | It requires `ruamel.yaml>=0.19.1,<0.20`: a host that pins `ruamel.yaml==0.19.0` no longer resolves, and 0.19.0 needed an sdist-only dependency. |
 
 ## Migrating to 0.16.0
