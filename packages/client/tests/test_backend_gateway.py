@@ -4,14 +4,22 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import ipaddress
 import json
 import logging
 import re
+import ssl
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx2
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import NameOID
 
 from agent_runtime_client.agents import TurnRequest
 from agent_runtime_client.backend import MAX_RETRY_AFTER_S, TurnPerson, TurnStopKind, TurnStopped
@@ -30,11 +38,18 @@ from agent_runtime_client.turn import (
 )
 from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent
 
-KEY = "stand-in-key-0001"
-API_GROUP = "/apps/example"
-ISSUER = "https://issuer.example"
-SUBJECT = "subject-1"
-FIXED_FINGERPRINT = "fp-2db44d96ffdef38f9e1cbfe73e9cf248fb66955b894846b34843a2d3a849d764"
+FINGERPRINT_VECTORS = [
+    (
+        "https://issuer.example",
+        "subject-1",
+        "fp-2db44d96ffdef38f9e1cbfe73e9cf248fb66955b894846b34843a2d3a849d764",
+    ),
+    (
+        "https://issuer.example",
+        "subjéct-ü-1",
+        "fp-4670d575ad432d6edf969bf640bca6a2114230ad288ca5893725c511dd7c94c9",
+    ),
+]
 TRANSPORT_DEFAULT_HEADERS = {
     "host",
     "accept",
@@ -59,15 +74,57 @@ PINNED_ABSENT_BODY_KEYS = {
 }
 
 
-def a_config(tmp_path: Path, *, origin: str = "http://gateway.test", key: bytes | None = None):
-    key_file = tmp_path / "key"
-    key_file.write_bytes(f"{KEY}\n".encode() if key is None else key)
-    section = {
-        "backend": "litellm",
-        "gateway": {"origin": origin, "key_file": str(key_file)},
-        "api_group": API_GROUP,
-    }
-    return AgentConfig.model_validate(section)
+@dataclass(frozen=True)
+class Scenario:
+    """The example app, key, group and person every test of this file runs as."""
+
+    directory: Path
+    key: str = "stand-in-key-0001"
+    api_group: str = "/apps/example"
+    issuer: str = "https://issuer.example"
+    subject: str = "subject-1"
+
+    def config(
+        self,
+        *,
+        origin: str = "http://gateway.test",
+        key: bytes | None = None,
+        ca_file: Path | None = None,
+    ) -> AgentConfig:
+        key_file = self.directory / "key"
+        key_file.write_bytes(f"{self.key}\n".encode() if key is None else key)
+        gateway = {"origin": origin, "key_file": str(key_file)}
+        if ca_file is not None:
+            gateway["ca_file"] = str(ca_file)
+        section = {"backend": "litellm", "gateway": gateway, "api_group": self.api_group}
+        return AgentConfig.model_validate(section)
+
+    def person(self, groups=None, *, iss=None, sub=None, role="user"):
+        calls = []
+        member_of_groups = frozenset({self.api_group}) if groups is None else groups
+
+        async def member_of() -> frozenset[str]:
+            calls.append(1)
+            if isinstance(member_of_groups, Exception):
+                raise member_of_groups
+            return member_of_groups
+
+        principal = Principal(iss=iss or self.issuer, sub=sub or self.subject)
+        return TurnPerson(principal=principal, role=role, groups=member_of), calls
+
+    def fingerprint(self, iss=None, sub=None) -> str:
+        gateway = FakeGateway(completion("ok"))
+        person, _ = self.person(iss=iss, sub=sub)
+        self.outcome(GatewayBackend(self.config(), transport=gateway), person=person)
+        return json.loads(gateway.requests[0].content)["user"]
+
+    def outcome(self, backend, request=None, person=None):
+        return asyncio.run(_turn(backend, request or a_request(), person or self.person()[0]))
+
+
+@pytest.fixture
+def scenario(tmp_path) -> Scenario:
+    return Scenario(tmp_path)
 
 
 def a_request(**changes) -> TurnRequest:
@@ -90,19 +147,6 @@ def a_request(**changes) -> TurnRequest:
     return TurnRequest(**{**fields, **changes})
 
 
-def a_person(groups=frozenset({API_GROUP}), *, iss=ISSUER, sub=SUBJECT, role="user"):
-    calls = []
-
-    async def member_of() -> frozenset[str]:
-        calls.append(1)
-        if isinstance(groups, Exception):
-            raise groups
-        return groups
-
-    person = TurnPerson(principal=Principal(iss=iss, sub=sub), role=role, groups=member_of)
-    return person, calls
-
-
 async def _turn(backend, request, person):
     events = []
     try:
@@ -114,10 +158,6 @@ async def _turn(backend, request, person):
     return events, None
 
 
-def outcome(backend, request=None, person=None):
-    return asyncio.run(_turn(backend, request or a_request(), person or a_person()[0]))
-
-
 def ending(stopped: TurnStopped | None):
     return None if stopped is None else (stopped.kind, stopped.code)
 
@@ -126,19 +166,19 @@ UNAVAILABLE = (TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE)
 PROVIDER_ERROR = (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
 
 
-def test_a_text_turn_ends_with_the_answer(tmp_path):
+def test_a_text_turn_ends_with_the_answer(scenario):
     gateway = FakeGateway(completion("The answer."))
 
-    events, stopped = outcome(GatewayBackend(a_config(tmp_path), transport=gateway))
+    events, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=gateway))
 
     assert stopped is None
     assert events == [AssistantTextEvent(text="The answer."), FinalEvent(text="The answer.")]
 
 
-def test_the_request_is_one_post_with_the_system_prompt_and_the_messages(tmp_path):
+def test_the_request_is_one_post_with_the_system_prompt_and_the_messages(scenario):
     gateway = FakeGateway(completion("ok"))
 
-    outcome(GatewayBackend(a_config(tmp_path), transport=gateway))
+    scenario.outcome(GatewayBackend(scenario.config(), transport=gateway))
 
     (sent,) = gateway.requests
     assert (sent.method, sent.url.path, sent.url.host) == (
@@ -146,7 +186,7 @@ def test_the_request_is_one_post_with_the_system_prompt_and_the_messages(tmp_pat
         "/v1/chat/completions",
         "gateway.test",
     )
-    assert sent.headers["authorization"] == f"Bearer {KEY}"
+    assert sent.headers["authorization"] == f"Bearer {scenario.key}"
     assert sent.headers["content-type"] == "application/json"
     body = json.loads(sent.content)
     assert set(body) == {"model", "messages", "user"}
@@ -159,143 +199,158 @@ def test_the_request_is_one_post_with_the_system_prompt_and_the_messages(tmp_pat
     ]
 
 
-def test_no_header_beyond_the_transports_own_defaults_is_sent(tmp_path):
+def test_no_header_beyond_the_transports_own_defaults_is_sent(scenario):
     gateway = FakeGateway(completion("ok"))
 
-    outcome(GatewayBackend(a_config(tmp_path), transport=gateway))
+    scenario.outcome(GatewayBackend(scenario.config(), transport=gateway))
 
     assert {name.lower() for name in gateway.requests[0].headers} <= TRANSPORT_DEFAULT_HEADERS
 
 
-def test_no_pinned_absent_field_is_sent(tmp_path):
+def test_no_pinned_absent_field_is_sent(scenario):
     gateway = FakeGateway(completion("ok"))
 
-    outcome(GatewayBackend(a_config(tmp_path), transport=gateway))
+    scenario.outcome(GatewayBackend(scenario.config(), transport=gateway))
 
     text = gateway.requests[0].content.decode()
     assert not PINNED_ABSENT_BODY_KEYS & set(json.loads(text))
     assert not re.search(r"extra_|x-litellm|anthropic-", text)
 
 
-def test_the_user_field_is_the_fixed_fingerprint_of_the_principal(tmp_path):
-    gateway = FakeGateway(completion("ok"))
-
-    outcome(GatewayBackend(a_config(tmp_path), transport=gateway))
-
-    assert json.loads(gateway.requests[0].content)["user"] == FIXED_FINGERPRINT
-
-
-def _fingerprint_of(tmp_path, iss, sub) -> str:
-    gateway = FakeGateway(completion("ok"))
-    person, _ = a_person(iss=iss, sub=sub)
-    outcome(GatewayBackend(a_config(tmp_path), transport=gateway), person=person)
-    return json.loads(gateway.requests[0].content)["user"]
+@pytest.mark.parametrize(
+    ("iss", "sub", "fingerprint"), FINGERPRINT_VECTORS, ids=["ascii", "non-ascii"]
+)
+def test_the_user_field_is_the_fixed_fingerprint_of_the_principal(scenario, iss, sub, fingerprint):
+    assert scenario.fingerprint(iss, sub) == fingerprint
 
 
 @pytest.mark.parametrize(
-    ("other_iss", "other_sub"),
-    [(ISSUER + "/", SUBJECT), (ISSUER, SUBJECT + "x"), ("https://issuer.exampl", "e" + SUBJECT)],
+    "other",
+    [
+        lambda iss, sub: (iss + "/", sub),
+        lambda iss, sub: (iss, sub + "x"),
+        lambda iss, sub: (iss[:-1], iss[-1] + sub),
+    ],
     ids=["issuer", "subject", "pair-colliding-under-concatenation"],
 )
-def test_a_different_principal_gets_a_different_fingerprint(tmp_path, other_iss, other_sub):
-    assert _fingerprint_of(tmp_path, ISSUER, SUBJECT) != _fingerprint_of(
-        tmp_path, other_iss, other_sub
-    )
+def test_a_different_principal_gets_a_different_fingerprint(scenario, other):
+    assert scenario.fingerprint() != scenario.fingerprint(*other(scenario.issuer, scenario.subject))
 
 
-def test_a_fingerprint_is_67_characters_and_the_same_for_one_principal(tmp_path):
-    first = _fingerprint_of(tmp_path, ISSUER, SUBJECT)
+def test_a_fingerprint_is_67_characters_and_the_same_for_one_principal(scenario):
+    first = scenario.fingerprint()
 
     assert re.fullmatch(r"fp-[0-9a-f]{64}", first)
-    assert first == _fingerprint_of(tmp_path, ISSUER, SUBJECT)
+    assert first == scenario.fingerprint()
 
 
-def test_a_role_outside_the_agents_roles_is_forbidden_and_sends_nothing(tmp_path):
+def test_a_role_outside_the_agents_roles_is_forbidden_and_sends_nothing(scenario):
     gateway = FakeGateway(completion("ok"))
-    person, calls = a_person(role="user")
+    person, calls = scenario.person(role="user")
 
-    _, stopped = outcome(
-        GatewayBackend(a_config(tmp_path), transport=gateway), a_request(roles=["admin"]), person
+    _, stopped = scenario.outcome(
+        GatewayBackend(scenario.config(), transport=gateway), a_request(roles=["admin"]), person
     )
 
     assert ending(stopped) == (TurnStopKind.REFUSED, RejectionCode.FORBIDDEN)
     assert (gateway.requests, calls) == ([], [])
 
 
-def test_a_group_the_person_lacks_is_not_enabled_and_sends_nothing(tmp_path):
+def test_a_group_the_person_lacks_is_not_enabled_and_sends_nothing(scenario):
     gateway = FakeGateway(completion("ok"))
-    person, calls = a_person(frozenset({"/apps/other"}))
+    person, calls = scenario.person(frozenset({"/apps/other"}))
 
-    _, stopped = outcome(GatewayBackend(a_config(tmp_path), transport=gateway), person=person)
+    _, stopped = scenario.outcome(
+        GatewayBackend(scenario.config(), transport=gateway), person=person
+    )
 
     assert ending(stopped) == (TurnStopKind.REFUSED, RejectionCode.NOT_ENABLED)
     assert (gateway.requests, calls) == ([], [1])
 
 
-def test_a_refusal_the_groups_lookup_raises_reaches_the_app_unchanged(tmp_path):
+def test_a_refusal_the_groups_lookup_raises_reaches_the_app_unchanged(scenario):
     gateway = FakeGateway(completion("ok"))
     refusal = TurnStopped(TurnStopKind.REFUSED, RejectionCode.UNAVAILABLE)
-    person, calls = a_person(refusal)
+    person, calls = scenario.person(refusal)
 
-    _, stopped = outcome(GatewayBackend(a_config(tmp_path), transport=gateway), person=person)
+    _, stopped = scenario.outcome(
+        GatewayBackend(scenario.config(), transport=gateway), person=person
+    )
 
     assert stopped is refusal
     assert (gateway.requests, calls) == ([], [1])
 
 
-def test_groups_are_asked_once_per_turn(tmp_path):
-    person, calls = a_person()
+def test_groups_are_asked_once_per_turn(scenario):
+    person, calls = scenario.person()
 
-    backend = GatewayBackend(a_config(tmp_path), transport=FakeGateway(completion("ok")))
-    outcome(backend, person=person)
+    backend = GatewayBackend(scenario.config(), transport=FakeGateway(completion("ok")))
+    scenario.outcome(backend, person=person)
 
     assert calls == [1]
 
 
-def test_an_agent_with_tools_raises_before_any_request(tmp_path):
+def test_an_agent_with_tools_raises_before_any_request(scenario):
     gateway = FakeGateway(completion("ok"))
     tool = ToolDeclaration(name="lookup", description="Look something up.", parameters={})
-    backend = GatewayBackend(a_config(tmp_path), transport=gateway)
+    backend = GatewayBackend(scenario.config(), transport=gateway)
 
     with pytest.raises(ValueError, match="tools"):
-        outcome(backend, a_request(tools=(tool,)))
+        scenario.outcome(backend, a_request(tools=(tool,)))
 
     assert gateway.requests == []
 
 
-def test_a_generator_never_iterated_opens_nothing_and_reads_no_key(tmp_path):
-    config = a_config(tmp_path)
+def test_a_generator_never_iterated_opens_nothing_and_reads_no_key(scenario):
+    config = scenario.config()
     config.gateway.key_file.unlink()
     gateway = FakeGateway(completion("ok"))
 
     backend = GatewayBackend(config, transport=gateway)
-    backend.run(a_request(), a_person()[0])
+    backend.run(a_request(), scenario.person()[0])
 
     assert gateway.requests == []
 
 
 @pytest.mark.parametrize(
-    "key",
-    [None, b"x" * 100_000, b"first\nsecond\n", b"", b"has space\n", "kéy\n".encode()],
-    ids=["missing", "oversized", "two-lines", "empty", "space", "non-ascii"],
+    ("content", "secret"),
+    [
+        (None, None),
+        (b"x" * 100_000, "x" * 64),
+        (b"stand-in-key-0001\nsecond\n", "stand-in-key-0001"),
+        (b"first\nsecond\n", "second"),
+        (b"", None),
+        (b"has space\n", "has space"),
+        ("kéy\n".encode(), "kéy"),
+    ],
+    ids=["missing", "oversized", "key-then-line", "two-lines", "empty", "space", "non-ascii"],
 )
-def test_an_unusable_key_file_is_provider_unavailable_and_sends_nothing(tmp_path, key):
-    config = a_config(tmp_path, key=key or b"")
-    if key is None:
+def test_an_unusable_key_file_is_provider_unavailable_and_sends_nothing(scenario, content, secret):
+    config = scenario.config(key=content or b"")
+    if content is None:
         config.gateway.key_file.unlink()
     gateway = FakeGateway(completion("ok"))
 
-    _, stopped = outcome(GatewayBackend(config, transport=gateway))
+    _, stopped = scenario.outcome(GatewayBackend(config, transport=gateway))
 
     assert ending(stopped) == UNAVAILABLE
     assert gateway.requests == []
-    assert KEY not in repr(stopped.args) and "second" not in repr(stopped.args)
+    everything_it_carries = " ".join(
+        [
+            str(stopped),
+            repr(stopped),
+            str(stopped.detail),
+            repr(stopped.__context__),
+            repr(stopped.__cause__),
+        ]
+    )
+    assert secret is None or secret not in everything_it_carries
 
 
-def test_a_key_with_any_prefix_is_sent_as_it_is(tmp_path):
+def test_a_key_with_any_prefix_is_sent_as_it_is(scenario):
     gateway = FakeGateway(completion("ok"))
 
-    outcome(GatewayBackend(a_config(tmp_path, key=b"sk-anything/+=\n"), transport=gateway))
+    scenario.outcome(GatewayBackend(scenario.config(key=b"sk-anything/+=\n"), transport=gateway))
 
     assert gateway.requests[0].headers["authorization"] == "Bearer sk-anything/+="
 
@@ -304,25 +359,36 @@ def test_a_key_with_any_prefix_is_sent_as_it_is(tmp_path):
     "reply",
     [Reply(401), Reply(403), Reply(422, body=b'{"error":"budget_exceeded"}'), Reply(404)],
 )
-def test_a_refusal_status_is_provider_unavailable_as_gateway_refused(tmp_path, reply, caplog):
+def test_a_refusal_status_is_provider_unavailable_as_gateway_refused(scenario, reply, caplog):
     caplog.set_level(logging.INFO)
 
-    _, stopped = outcome(GatewayBackend(a_config(tmp_path), transport=FakeGateway(reply)))
+    _, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=FakeGateway(reply)))
 
     assert ending(stopped) == UNAVAILABLE
     assert stopped.detail == "gateway_refused"
     assert str(reply.status) in caplog.text
 
 
+def test_a_refusal_body_is_never_read_and_the_response_is_closed(scenario):
+    refusal = _Streamed((b'{"error":"budget_exceeded"}',), status=422)
+
+    _, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=refusal))
+
+    assert ending(stopped) == UNAVAILABLE
+    assert stopped.detail == "gateway_refused"
+    assert not refusal.read
+    assert refusal.closed.is_set()
+
+
 @pytest.mark.parametrize("retry_after", [None, "7"])
 @pytest.mark.parametrize("status", [500, 502, 503])
 def test_a_server_failure_is_provider_unavailable_and_ignores_retry_after(
-    tmp_path, status, retry_after
+    scenario, status, retry_after
 ):
     headers = {} if retry_after is None else {"Retry-After": retry_after}
 
-    _, stopped = outcome(
-        GatewayBackend(a_config(tmp_path), transport=FakeGateway(Reply(status, headers)))
+    _, stopped = scenario.outcome(
+        GatewayBackend(scenario.config(), transport=FakeGateway(Reply(status, headers)))
     )
 
     assert ending(stopped) == UNAVAILABLE
@@ -352,11 +418,11 @@ def test_a_server_failure_is_provider_unavailable_and_ignores_retry_after(
         "none",
     ],
 )
-def test_busy_carries_the_standard_header_seconds_capped_or_none(tmp_path, retry_after, wait):
+def test_busy_carries_the_standard_header_seconds_capped_or_none(scenario, retry_after, wait):
     headers = {} if retry_after is None else {"Retry-After": retry_after}
 
-    _, stopped = outcome(
-        GatewayBackend(a_config(tmp_path), transport=FakeGateway(Reply(429, headers)))
+    _, stopped = scenario.outcome(
+        GatewayBackend(scenario.config(), transport=FakeGateway(Reply(429, headers)))
     )
 
     assert ending(stopped) == (TurnStopKind.REFUSED, RejectionCode.BUSY)
@@ -382,6 +448,9 @@ def _wrapped(choice: dict) -> bytes:
         _wrapped({"finish_reason": "stop", "message": {"content": "\ud800"}}),
         _wrapped({"finish_reason": "stop", "message": {"content": "a" * (MAX_EVENT_BYTES + 1)}}),
         b"\xff\xfe",
+        b"[" * 200_000,
+        b'{"choices":' + b"[" * 200_000,
+        b"[" * 100_000 + b"]" * 100_000,
     ],
     ids=[
         "malformed-json",
@@ -396,33 +465,63 @@ def _wrapped(choice: dict) -> bytes:
         "lone-surrogate",
         "one-byte-past-the-bound",
         "not-utf8",
+        "nested-open",
+        "nested-in-choices",
+        "nested-closed",
     ],
 )
-def test_a_200_that_is_no_complete_text_is_provider_error(tmp_path, body):
-    events, stopped = outcome(
-        GatewayBackend(a_config(tmp_path), transport=FakeGateway(Reply(200, body=body)))
+def test_a_200_that_is_no_complete_text_is_provider_error(scenario, body):
+    events, stopped = scenario.outcome(
+        GatewayBackend(scenario.config(), transport=FakeGateway(Reply(200, body=body)))
     )
 
     assert (events, ending(stopped)) == ([], PROVIDER_ERROR)
 
 
-def test_a_reply_of_exactly_the_event_bound_is_answered(tmp_path):
+def test_a_200_body_that_cannot_be_decoded_is_provider_error(scenario):
+    undecodable = _Streamed((b"this is not gzip",), headers={"Content-Encoding": "gzip"})
+
+    events, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=undecodable))
+
+    assert (events, ending(stopped)) == ([], PROVIDER_ERROR)
+    assert undecodable.closed.is_set()
+
+
+def test_a_reply_of_exactly_the_event_bound_is_answered(scenario):
     text = "a" * MAX_EVENT_BYTES
 
-    events, stopped = outcome(
-        GatewayBackend(a_config(tmp_path), transport=FakeGateway(completion(text)))
+    events, stopped = scenario.outcome(
+        GatewayBackend(scenario.config(), transport=FakeGateway(completion(text)))
     )
 
     assert stopped is None
     assert events[-1] == FinalEvent(text=text)
 
 
-def test_a_body_without_end_is_cut_at_the_bound_as_provider_error(tmp_path):
-    reply = Reply(200, body=b"x" * (4 * MAX_EVENT_BYTES))
+def test_a_reply_of_the_event_bound_in_json_escapes_is_answered(scenario):
+    escaped = "\\u0061" * MAX_EVENT_BYTES
+    body = (
+        '{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"'
+        + escaped
+        + '"}}],"usage":{"total_tokens":1}}'
+    ).encode()
 
-    _, stopped = outcome(GatewayBackend(a_config(tmp_path), transport=FakeGateway(reply)))
+    events, stopped = scenario.outcome(
+        GatewayBackend(scenario.config(), transport=FakeGateway(Reply(200, body=body)))
+    )
+
+    assert stopped is None
+    assert events[-1] == FinalEvent(text="a" * MAX_EVENT_BYTES)
+
+
+def test_a_body_that_never_ends_is_cut_at_the_bound_as_provider_error(scenario):
+    endless = _Streamed((b"x" * MAX_EVENT_BYTES,) * 16, hangs=True)
+    request = a_request(max_duration_seconds=5)
+
+    _, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=endless), request)
 
     assert ending(stopped) == PROVIDER_ERROR
+    assert endless.closed.is_set()
 
 
 class _Failing(httpx2.AsyncBaseTransport):
@@ -443,8 +542,8 @@ class _Failing(httpx2.AsyncBaseTransport):
         httpx2.ConnectError("tls handshake failed"),
     ],
 )
-def test_a_lost_connection_is_provider_unavailable(tmp_path, error):
-    _, stopped = outcome(GatewayBackend(a_config(tmp_path), transport=_Failing(error)))
+def test_a_lost_connection_is_provider_unavailable(scenario, error):
+    _, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=_Failing(error)))
 
     assert ending(stopped) == UNAVAILABLE
 
@@ -461,20 +560,49 @@ class _Silent(httpx2.AsyncBaseTransport):
             raise
 
 
-def test_a_transport_that_never_answers_ends_at_the_limit(tmp_path):
+def test_a_transport_that_never_answers_ends_at_the_limit(scenario):
     silent = _Silent()
     request = a_request().model_copy(update={"max_duration_seconds": 0.05})
 
-    _, stopped = outcome(GatewayBackend(a_config(tmp_path), transport=silent), request)
+    _, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=silent), request)
 
     assert ending(stopped) == (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
     assert silent.cancelled
 
 
-class _Trickle(httpx2.AsyncBaseTransport):
-    """Answers 200 and then never finishes its body, recording whether its stream was closed."""
+def test_a_groups_lookup_that_never_answers_ends_at_the_limit(scenario):
+    async def never() -> frozenset[str]:
+        await asyncio.Event().wait()
+        return frozenset()
 
-    def __init__(self) -> None:
+    person = TurnPerson(principal=Principal(iss="i", sub="s"), role="user", groups=never)
+    gateway = FakeGateway(completion("ok"))
+    request = a_request().model_copy(update={"max_duration_seconds": 0.05})
+
+    _, stopped = scenario.outcome(
+        GatewayBackend(scenario.config(), transport=gateway), request, person
+    )
+
+    assert ending(stopped) == (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
+    assert gateway.requests == []
+
+
+class _Streamed(httpx2.AsyncBaseTransport):
+    """Answers with a streamed body, recording whether it was read and whether it was closed."""
+
+    def __init__(
+        self,
+        chunks: tuple[bytes, ...],
+        *,
+        status: int = 200,
+        headers: dict[str, str] | None = None,
+        hangs: bool = False,
+    ) -> None:
+        self._chunks = chunks
+        self._status = status
+        self._headers = headers or {}
+        self._hangs = hangs
+        self.read = False
         self.closed = asyncio.Event()
         self.started = asyncio.Event()
 
@@ -483,40 +611,60 @@ class _Trickle(httpx2.AsyncBaseTransport):
 
         class Body(httpx2.AsyncByteStream):
             async def __aiter__(self) -> AsyncIterator[bytes]:
-                yield b"{"
+                transport.read = True
+                for chunk in transport._chunks:
+                    yield chunk
                 transport.started.set()
-                await asyncio.Event().wait()
+                if transport._hangs:
+                    await asyncio.Event().wait()
 
             async def aclose(self) -> None:
                 transport.closed.set()
 
-        return httpx2.Response(200, stream=Body())
+        return httpx2.Response(self._status, headers=self._headers, stream=Body())
 
 
-def test_cancelling_a_turn_closes_the_response(tmp_path):
-    trickle = _Trickle()
+def test_cancelling_a_turn_closes_the_response(scenario):
+    trickle = _Streamed((b"{",), hangs=True)
 
-    async def scenario() -> bool:
-        backend = GatewayBackend(a_config(tmp_path), transport=trickle)
-        task = asyncio.create_task(_turn(backend, a_request(), a_person()[0]))
+    async def drive() -> bool:
+        backend = GatewayBackend(scenario.config(), transport=trickle)
+        task = asyncio.create_task(_turn(backend, a_request(), scenario.person()[0]))
         await trickle.started.wait()
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
         return trickle.closed.is_set()
 
-    assert asyncio.run(scenario())
+    assert asyncio.run(drive())
 
 
-def test_a_redirect_is_not_followed_and_a_cookie_is_not_kept(tmp_path):
+def test_closing_a_suspended_turn_leaves_the_response_closed_and_yields_nothing_more(scenario):
+    answer = completion("The answer.").body
+    transport = _Streamed((answer,))
+
+    async def scenario_run():
+        backend = GatewayBackend(scenario.config(), transport=transport)
+        stream = backend.run(a_request(), scenario.person()[0])
+        first = await anext(stream)
+        await stream.aclose()
+        with pytest.raises(StopAsyncIteration):
+            await anext(stream)
+        return first
+
+    assert asyncio.run(scenario_run()) == AssistantTextEvent(text="The answer.")
+    assert transport.closed.is_set()
+
+
+def test_a_redirect_is_not_followed_and_a_cookie_is_not_kept(scenario):
     gateway = FakeGateway(
         Reply(302, {"Location": "http://elsewhere.test/", "Set-Cookie": "session=1"}),
         completion("ok"),
     )
-    backend = GatewayBackend(a_config(tmp_path), transport=gateway)
+    backend = GatewayBackend(scenario.config(), transport=gateway)
 
-    _, first = outcome(backend)
-    outcome(backend)
+    _, first = scenario.outcome(backend)
+    scenario.outcome(backend)
 
     assert ending(first) == UNAVAILABLE
     assert [sent.url.host for sent in gateway.requests] == ["gateway.test", "gateway.test"]
@@ -532,29 +680,117 @@ async def _serve_ok(reader, writer):
     writer.close()
 
 
-def test_the_proxy_environment_is_ignored(tmp_path, monkeypatch):
+def _loopback_turn(scenario, *, server_context=None, ca_file=None):
+    async def drive():
+        server = await asyncio.start_server(_serve_ok, "127.0.0.1", 0, ssl=server_context)
+        port = server.sockets[0].getsockname()[1]
+        scheme = "http" if server_context is None else "https"
+        config = scenario.config(origin=f"{scheme}://127.0.0.1:{port}", ca_file=ca_file)
+        async with server:
+            return await _turn(GatewayBackend(config), a_request(), scenario.person()[0])
+
+    return asyncio.run(drive())
+
+
+def test_the_proxy_environment_is_ignored(scenario, monkeypatch):
     # Port 1 refuses; a client that trusted the environment would try it and fail.
     monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:1")
     monkeypatch.setenv("http_proxy", "http://127.0.0.1:1")
 
-    async def scenario():
-        server = await asyncio.start_server(_serve_ok, "127.0.0.1", 0)
-        port = server.sockets[0].getsockname()[1]
-        config = a_config(tmp_path, origin=f"http://127.0.0.1:{port}")
-        async with server:
-            return await _turn(GatewayBackend(config), a_request(), a_person()[0])
-
-    events, stopped = asyncio.run(scenario())
+    events, stopped = _loopback_turn(scenario)
 
     assert stopped is None
     assert events[-1] == FinalEvent(text="hi")
 
 
-def test_debug_logging_writes_the_key_into_no_record(tmp_path, caplog):
+def _self_signed_authority(directory: Path, name: str) -> tuple[Path, Path]:
+    """A certificate for 127.0.0.1 that is its own authority: (certificate file, key file)."""
+    key = ec.generate_private_key(ec.SECP256R1())
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, name)])
+    now = datetime.now(UTC)
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(minutes=5))
+        .not_valid_after(now + timedelta(hours=1))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+        .add_extension(
+            x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]),
+            critical=False,
+        )
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+        .sign(key, hashes.SHA256())
+    )
+    certificate_file, key_file = directory / f"{name}.pem", directory / f"{name}.key"
+    certificate_file.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    key_file.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    return certificate_file, key_file
+
+
+def _server_context(authority: tuple[Path, Path]) -> ssl.SSLContext:
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(*authority)
+    return context
+
+
+def test_https_is_trusted_through_the_configured_ca_file_alone(scenario):
+    served = _self_signed_authority(scenario.directory, "served")
+    other = _self_signed_authority(scenario.directory, "other")
+    context = _server_context(served)
+
+    trusted, trusted_stop = _loopback_turn(scenario, server_context=context, ca_file=served[0])
+    distrusted, distrusted_stop = _loopback_turn(scenario, server_context=context, ca_file=other[0])
+
+    assert (trusted_stop, trusted[-1]) == (None, FinalEvent(text="hi"))
+    assert (distrusted, ending(distrusted_stop)) == ([], UNAVAILABLE)
+
+
+def test_an_unusable_ca_file_is_provider_unavailable(scenario):
+    served = _self_signed_authority(scenario.directory, "served")
+    unusable = scenario.directory / "not-a-ca.pem"
+    unusable.write_text("not a certificate")
+
+    events, stopped = _loopback_turn(
+        scenario, server_context=_server_context(served), ca_file=unusable
+    )
+
+    assert (events, ending(stopped)) == ([], UNAVAILABLE)
+
+
+def test_debug_logging_writes_the_key_into_no_record(scenario, caplog):
+    for name in ("httpx2", "httpcore2"):
+        logging.getLogger(name).setLevel(logging.DEBUG)
     caplog.set_level(logging.DEBUG)
-    backend = GatewayBackend(a_config(tmp_path), transport=FakeGateway(completion("ok")))
 
-    outcome(backend)
+    events, stopped = _loopback_turn(scenario)
 
-    assert KEY not in caplog.text
-    assert KEY not in "".join(str(record.__dict__) for record in caplog.records)
+    assert stopped is None
+    assert events[-1] == FinalEvent(text="hi")
+    assert scenario.key not in caplog.text
+    assert scenario.key not in "".join(str(record.__dict__) for record in caplog.records)
+
+
+@pytest.mark.parametrize(
+    "name", ["httpx2", "httpcore2", "httpcore2.connection", "httpcore2.http11"]
+)
+def test_the_transport_loggers_that_could_carry_the_key_are_not_enabled_for_debug(scenario, name):
+    logging.getLogger("httpx2").setLevel(logging.DEBUG)
+    logging.getLogger("httpcore2").setLevel(logging.DEBUG)
+
+    GatewayBackend(scenario.config())
+
+    assert not logging.getLogger(name).isEnabledFor(logging.DEBUG)
+
+
+def test_a_fake_gateway_without_replies_is_refused():
+    with pytest.raises(ValueError, match="at least one reply"):
+        FakeGateway()
