@@ -46,7 +46,7 @@ from agent_runtime_client.wire import (
 )
 
 RUNS_PATH: Final = "/runs"
-WORKLOAD_TOKEN_HEADER: Final = "Agent-Workload-Token"  # noqa: S105 - a header name, no secret
+WORKLOAD_TOKEN_HEADER: Final = "Agent-Workload-Token"  # noqa: S105 - a header name and no secret
 CONNECT_TIMEOUT_S: Final = 10.0
 OTHER_TIMEOUT_S: Final = 30.0
 # A run's heartbeat comes at most every 300 seconds (wire.RunStarted); the read outlasts one.
