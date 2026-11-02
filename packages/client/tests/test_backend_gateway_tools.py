@@ -165,7 +165,7 @@ def test_one_round_runs_the_call_then_the_answer_follows(shop):
         FinalEvent(text="Done."),
     ]
     assert [(name, arguments) for name, _, arguments in shop.seen] == [("lookup", {"topic": "x"})]
-    assert shop.seen[0][1] == Principal(iss="https://issuer.example", sub="s-1")
+    assert shop.seen[0][1] == a_person().principal
     follow_up = sent(gateway, 1)["messages"][-2:]
     assert follow_up[0]["tool_calls"][0]["id"] == "c1"
     assert follow_up[1] == {"role": "tool", "tool_call_id": "c1", "content": "noted"}

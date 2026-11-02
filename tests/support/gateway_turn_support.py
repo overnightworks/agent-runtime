@@ -26,12 +26,12 @@ def ending(stopped: TurnStopped | None):
     return None if stopped is None else (stopped.kind, stopped.code)
 
 
-def a_person(groups: frozenset[str] = frozenset({API_GROUP}), role: str = "user") -> TurnPerson:
+def a_person(groups: frozenset[str] = frozenset({API_GROUP})) -> TurnPerson:
     async def member_of() -> frozenset[str]:
         return groups
 
     principal = Principal(iss="https://issuer.example", sub="s-1")
-    return TurnPerson(principal=principal, role=role, groups=member_of)
+    return TurnPerson(principal=principal, role="user", groups=member_of)
 
 
 def a_gateway_config(directory: Path) -> AgentConfig:

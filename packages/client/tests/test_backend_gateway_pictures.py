@@ -295,16 +295,16 @@ def test_a_call_past_the_deadline_is_limit_exceeded_and_cancelled_with_no_retry(
     assert (events, ending(stopped), slow.attempts, slow.cancelled) == ([], LIMIT_EXCEEDED, 1, True)
 
 
-def test_closing_the_stream_before_it_is_taken_sends_no_request(studio):
-    gateway = FakeGateway(picture(b"PNG"))
-    backend = GatewayBackend(studio.config(), transport=gateway)
+def test_a_deadline_passed_during_admission_is_limit_exceeded_with_no_request(studio):
+    async def member_of() -> frozenset[str]:
+        asyncio.get_running_loop().skew_seconds += TURN_BUDGET_SECONDS + 1
+        return await a_person().groups()
 
-    async def close_untaken() -> None:
-        await backend.run(a_picture_request(), a_person()).aclose()
+    late = TurnPerson(principal=a_person().principal, role="user", groups=member_of)
 
-    asyncio.run(close_untaken())
+    events, stopped, gateway = studio.run(picture(b"PNG"), person=late)
 
-    assert gateway.requests == []
+    assert (events, ending(stopped), gateway.requests) == ([], LIMIT_EXCEEDED, [])
 
 
 def test_closing_the_stream_while_the_call_is_open_cancels_it_and_sends_no_other(studio):

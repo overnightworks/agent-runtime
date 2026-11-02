@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Final, NotRequired, Required, TypedDict
 
 import httpx2
-from pydantic import TypeAdapter, ValidationError
+from pydantic import TypeAdapter
 
 from agent_runtime_client.agents import TurnRequest
 from agent_runtime_client.backend import (
@@ -123,7 +123,9 @@ class GatewayBackend(AgentBackend):
             raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.FORBIDDEN)
         deadline = asyncio.get_running_loop().time() + request.max_duration_seconds
         if request.picture_size is not None:
-            yield await _before(deadline, self._picture(request, request.picture_size, person))
+            yield await _before(
+                deadline, self._picture(request, request.picture_size, person, deadline)
+            )
             return
         progress = _Progress(request.max_tool_calls or 0)
         try:
@@ -167,8 +169,11 @@ class GatewayBackend(AgentBackend):
             raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.NOT_ENABLED)
         return _read_key(self._config.gateway.key_file)
 
-    async def _picture(self, request: TurnRequest, size: str, person: TurnPerson) -> FinalEvent:
+    async def _picture(
+        self, request: TurnRequest, size: str, person: TurnPerson, deadline: float
+    ) -> FinalEvent:
         key = await self._authorise(person)
+        _refuse_after(deadline)
         body = _bounded(_picture_body(request, size, _fingerprint(person.principal)))
         file = await self._post(_PICTURES_PATH, body, key, _picture_of)
         return FinalEvent(text="", files=(file,))
@@ -454,7 +459,7 @@ async def _picture_of(response: httpx2.Response) -> RunFile:
         file = RunFile.model_validate(
             {"name": _PICTURE_FILE_NAME, "content": entries[0]["b64_json"]}, strict=True
         )
-    except (*_UNREADABLE_REPLY, ValidationError):
+    except _UNREADABLE_REPLY:
         raise _malformed_reply() from None
     if len(file.content) > MAX_RUN_FILES_BYTES:
         raise _malformed_reply()
