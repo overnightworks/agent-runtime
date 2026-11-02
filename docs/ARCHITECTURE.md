@@ -43,7 +43,8 @@ flowchart TB
 `webauth`.*
 
 - The **client** is light: it depends on `pydantic` and `ruamel.yaml` only (plus
-  PyJWT with cryptography in `[mcp-server]`) and never imports the core. It owns
+  PyJWT with cryptography in `[mcp-server]`, and `httpx2` in `[backend]` for the
+  gateway backend) and never imports the core. It owns
   the tool contract `ToolDeclaration`, the agent-file reader, the service's wire
   (the `RunRequest` and the streamed run events), the run capability's format and
   the app side of the MCP profile. An app installs it.

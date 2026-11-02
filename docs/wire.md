@@ -179,7 +179,8 @@ What the client sends, and nothing else:
 
 The fingerprint's prefix, input and algorithm are one contract across apps: a change splits
 every person's budget. `["https://issuer.example", "subject-1"]` gives
-`fp-2db44d96ffdef38f9e1cbfe73e9cf248fb66955b894846b34843a2d3a849d764`.
+`fp-2db44d96ffdef38f9e1cbfe73e9cf248fb66955b894846b34843a2d3a849d764`, and a non-ASCII subject, `["https://issuer.example", "subjéct-ü-1"]`, gives
+`fp-4670d575ad432d6edf969bf640bca6a2114230ad288ca5893725c511dd7c94c9`.
 
 | The gateway answers | The turn ends |
 | --- | --- |

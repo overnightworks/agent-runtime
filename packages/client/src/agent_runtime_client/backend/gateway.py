@@ -38,8 +38,10 @@ _COMPLETIONS_PATH: Final = "/v1/chat/completions"
 _TRANSPORT_LOGGERS: Final = ("httpx2", "httpcore2")
 _MAX_KEY_BYTES: Final = 1024
 _PRINTABLE_ASCII: Final = re.compile(r"[\x21-\x7e]+")
-# Room for the JSON escaping of a reply of MAX_EVENT_BYTES and the envelope around it.
-_MAX_BODY_BYTES: Final = 4 * MAX_EVENT_BYTES
+# JSON writes one byte of text as up to six (a \u00XX escape); the rest is the envelope.
+_JSON_ESCAPE_FACTOR: Final = 6
+_ENVELOPE_ALLOWANCE_BYTES: Final = 65_536
+_MAX_BODY_BYTES: Final = _JSON_ESCAPE_FACTOR * MAX_EVENT_BYTES + _ENVELOPE_ALLOWANCE_BYTES
 
 
 class GatewayDetail(StrEnum):
@@ -68,17 +70,18 @@ class GatewayBackend(AgentBackend):
             raise ValueError("tools are not served by the gateway backend yet")
         if person.role not in request.roles:
             raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.FORBIDDEN)
-        if self._config.api_group not in await person.groups():
-            raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.NOT_ENABLED)
-        key = _read_key(self._config.gateway.key_file)
-        text = await self._answer(request, _fingerprint(person.principal), key)
+        text = await self._answer(request, person)
         yield AssistantTextEvent(text=text)
         yield FinalEvent(text=text)
 
-    async def _answer(self, request: TurnRequest, user: str, key: str) -> str:
+    async def _answer(self, request: TurnRequest, person: TurnPerson) -> str:
         try:
             async with asyncio.timeout(request.max_duration_seconds):
-                return await self._post(_body(request, user), key)
+                if self._config.api_group not in await person.groups():
+                    raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.NOT_ENABLED)
+                key = _read_key(self._config.gateway.key_file)
+                body = _body(request, _fingerprint(person.principal))
+                return await self._post(body, key)
         except TimeoutError:
             raise TurnStopped(TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED) from None
 
@@ -155,15 +158,18 @@ async def _answer_of(response: httpx2.Response) -> str:
 
 async def _text_of(response: httpx2.Response) -> str:
     body = bytearray()
-    async for chunk in response.aiter_bytes():
-        body += chunk
-        if len(body) > _MAX_BODY_BYTES:
-            raise _malformed_reply()
+    try:
+        async for chunk in response.aiter_bytes():
+            body += chunk
+            if len(body) > _MAX_BODY_BYTES:
+                raise _malformed_reply()
+    except httpx2.DecodingError:
+        raise _malformed_reply() from None
     try:
         choice = json.loads(body)["choices"][0]
         finish_reason, text = choice["finish_reason"], choice["message"]["content"]
         size = len(text.encode("utf-8"))
-    except (ValueError, KeyError, IndexError, TypeError, AttributeError):
+    except (ValueError, KeyError, IndexError, TypeError, AttributeError, RecursionError):
         raise _malformed_reply() from None
     if finish_reason != "stop" or not text.strip() or size > MAX_EVENT_BYTES:
         raise _malformed_reply()
