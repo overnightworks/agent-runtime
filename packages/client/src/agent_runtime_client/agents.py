@@ -3,7 +3,8 @@
 An agent file is Claude Code's subagent format (YAML front matter between two
 ``---`` lines, read as YAML 1.2 by ruamel.yaml, then the prompt as Markdown) with one
 extra key, ``appRoles`` (decision record 0001, H9), and two required ones: ``model``, a
-``text/<model>`` name, and ``maxDurationSeconds``. ``offered_to`` is a display
+``text/<model>`` name, and ``maxDurationSeconds``. ``maxToolCalls`` is required exactly when
+``tools`` is not empty. ``offered_to`` is a display
 filter for the app's own UI; the boundary is the
 gateway's group check.
 """
@@ -13,7 +14,7 @@ from __future__ import annotations
 import io
 import re
 from importlib.resources.abc import Traversable
-from typing import Annotated, Final
+from typing import Annotated, Final, Self
 
 from pydantic import (
     AfterValidator,
@@ -72,6 +73,7 @@ class _FrontMatter(BaseModel):
     roles: AgentRoles = Field(alias="appRoles")
     model: Annotated[GatewayModelName, AfterValidator(_refuse_non_text_model)]
     max_duration_seconds: StrictInt = Field(alias="maxDurationSeconds", gt=0)
+    max_tool_calls: StrictInt | None = Field(default=None, alias="maxToolCalls", gt=0)
 
     @model_validator(mode="before")
     @classmethod
@@ -84,7 +86,10 @@ class _FrontMatter(BaseModel):
 
 
 class TurnRequest(BaseModel):
-    """What a backend runs: the agent, its turn, its tools and the model and time bound."""
+    """What a backend runs: the agent, its turn, its tools and the model, time and call bounds.
+
+    ``max_tool_calls`` is ``None`` exactly when the agent has no tools.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -94,6 +99,12 @@ class TurnRequest(BaseModel):
     tools: tuple[ToolDeclaration, ...]
     model: GatewayModelName
     max_duration_seconds: PositiveInt
+    max_tool_calls: PositiveInt | None
+
+    @model_validator(mode="after")
+    def _pair_tools_with_their_call_bound(self) -> Self:
+        _refuse_unpaired_call_bound(self.tools, self.max_tool_calls)
+        return self
 
 
 class AgentDefinition(BaseModel):
@@ -108,6 +119,12 @@ class AgentDefinition(BaseModel):
     prompt: str
     model: GatewayModelName
     max_duration_seconds: PositiveInt
+    max_tool_calls: PositiveInt | None
+
+    @model_validator(mode="after")
+    def _pair_tools_with_their_call_bound(self) -> Self:
+        _refuse_unpaired_call_bound(self.tools, self.max_tool_calls)
+        return self
 
     def offered_to(self, role: AgentRole) -> bool:
         """Whether a person with this app role is shown the agent (not a security boundary)."""
@@ -131,6 +148,7 @@ class AgentDefinition(BaseModel):
             tools=self.tools,
             model=self.model if model is None else model,
             max_duration_seconds=self.max_duration_seconds,
+            max_tool_calls=self.max_tool_calls,
         )
 
 
@@ -149,15 +167,31 @@ def load_agent(source: Traversable, declarations: list[ToolDeclaration]) -> Agen
         )
     if not prompt:
         raise AgentFileError(f"{file_name}: prompt is empty")
+    tools = _selected_tools(file_name, front_matter.tools, declarations)
+    try:
+        _refuse_unpaired_call_bound(tools, front_matter.max_tool_calls)
+    except ValueError as error:
+        raise AgentFileError(f"{file_name}: maxToolCalls: {error}") from None
     return AgentDefinition(
         name=front_matter.name,
         description=front_matter.description,
         roles=front_matter.roles,
-        tools=_selected_tools(file_name, front_matter.tools, declarations),
+        tools=tools,
         prompt=prompt,
         model=front_matter.model,
         max_duration_seconds=front_matter.max_duration_seconds,
+        max_tool_calls=front_matter.max_tool_calls,
     )
+
+
+def _refuse_unpaired_call_bound(
+    tools: tuple[ToolDeclaration, ...], max_tool_calls: int | None
+) -> None:
+    """The one rule: a call bound is set exactly when the agent has tools."""
+    if tools and max_tool_calls is None:
+        raise ValueError("required when tools is not empty")
+    if not tools and max_tool_calls is not None:
+        raise ValueError("must be absent when tools is empty")
 
 
 def _checked_stem(file_name: str) -> str:

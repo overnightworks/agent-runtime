@@ -150,3 +150,12 @@ source_modules =
 forbidden_modules =
     httpx2
     httpx
+
+[importlinter:contract:hand-tools-stay-below-the-wire]
+name = agent_runtime_client.tools imports neither agent_runtime_client.wire nor agent_runtime_client.mcp_wire
+type = forbidden
+source_modules =
+    agent_runtime_client.tools
+forbidden_modules =
+    agent_runtime_client.wire
+    agent_runtime_client.mcp_wire

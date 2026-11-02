@@ -24,9 +24,8 @@ from cryptography.x509.oid import NameOID
 from agent_runtime_client.agents import TurnRequest
 from agent_runtime_client.backend import MAX_RETRY_AFTER_S, TurnPerson, TurnStopKind, TurnStopped
 from agent_runtime_client.backend.fake_gateway import FakeGateway, Reply, completion
-from agent_runtime_client.backend.gateway import GatewayBackend
+from agent_runtime_client.backend.gateway import GatewayBackend, GatewayDetail
 from agent_runtime_client.config import AgentConfig
-from agent_runtime_client.tools import ToolDeclaration
 from agent_runtime_client.turn import (
     MAX_EVENT_BYTES,
     FailureCode,
@@ -143,6 +142,7 @@ def a_request(**changes) -> TurnRequest:
         "tools": (),
         "model": "text/standin",
         "max_duration_seconds": 30,
+        "max_tool_calls": None,
     }
     return TurnRequest(**{**fields, **changes})
 
@@ -300,17 +300,6 @@ def test_groups_are_asked_once_per_turn(scenario):
     scenario.outcome(backend, person=person)
 
     assert calls == [1]
-
-
-def test_an_agent_with_tools_raises_before_any_request(scenario):
-    gateway = FakeGateway(completion("ok"))
-    tool = ToolDeclaration(name="lookup", description="Look something up.", parameters={})
-    backend = GatewayBackend(scenario.config(), transport=gateway)
-    request = a_request(tools=(tool,))
-    with pytest.raises(ValueError, match="tools"):
-        scenario.outcome(backend, request)
-
-    assert gateway.requests == []
 
 
 def test_a_generator_never_iterated_opens_nothing_and_reads_no_key(scenario):
@@ -669,7 +658,7 @@ def test_a_redirect_is_not_followed_and_a_cookie_is_not_kept(scenario):
     _, first = scenario.outcome(backend)
     scenario.outcome(backend)
 
-    assert ending(first) == UNAVAILABLE
+    assert (first.kind, first.code, first.detail) == (*UNAVAILABLE, GatewayDetail.GATEWAY_FAILED)
     assert [sent.url.host for sent in gateway.requests] == ["gateway.test", "gateway.test"]
     assert "cookie" not in gateway.requests[1].headers
 

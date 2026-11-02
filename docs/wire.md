@@ -121,7 +121,8 @@ An app runs a turn through `agent_runtime_client.backend.AgentBackend`, installe
 library; the one implementation, `backend.gateway.GatewayBackend`, needs the `backend` extra.
 
 `request` is a `TurnRequest` (`agent_runtime_client.agents`, frozen): `agent`, `turn`, `roles`,
-`tools` (the agent's selected `ToolDeclaration`s), `model` and `max_duration_seconds`.
+`tools` (the agent's selected `ToolDeclaration`s), `model`, `max_duration_seconds` and
+`max_tool_calls` (`None` exactly when `tools` is empty).
 `AgentDefinition.request(messages, *, model=None)` builds it; `model` overrides the file's model
 for that run.
 
@@ -130,7 +131,9 @@ for that run.
 
 A turn ends short of its answer with one exception, `TurnStopped(kind, code, retry_after_s,
 after_side_effect, detail)`: `refused` carries a `RejectionCode`, `failed` a `FailureCode`,
-`cancelled` none.
+`cancelled` none. `after_side_effect` is true once a side-effecting tool call started in the turn,
+whatever ended it, `refused: busy` included, so an app does not retry a turn that may have
+written.
 
 The app's configuration embeds `agent_runtime_client.config.AgentConfig` as the `agent` section:
 `backend` (`litellm`, the one value), `gateway` and `api_group`, none with a default.
@@ -159,14 +162,15 @@ scripted transport passed as `transport=`.
 
 ### The gateway backend
 
-`GatewayBackend(config, *, transport=None)` runs a text turn: no tools (an agent with tools
-raises `ValueError`) and no pictures yet. In order, before any request: a `person.role`
+`GatewayBackend(config, *, tools=(), transport=None)` runs a text turn, with the app's
+`HandTool`s when the agent selects any (a tool name given twice raises `ValueError` at construction), and no pictures yet. A selected tool with no handler, or whose request
+declaration differs from its `HandTool`'s, raises `ValueError` at `run`, before any request. In order, before any request: a `person.role`
 outside `request.roles` is `refused: forbidden`; `person.groups()` runs once and a refusal it
 raises reaches the app unchanged; an `api_group` the person lacks is `refused: not_enabled`.
 The key file is read per turn after that: one printable ASCII line of at most 1024 bytes,
 opaque whatever its prefix; any other content is `failed: provider_unavailable`.
-`request.max_duration_seconds` is one deadline around the whole turn; past it the turn
-`failed: limit_exceeded`.
+`request.max_duration_seconds` is one deadline around the whole turn, every round and handler
+included; past it the turn `failed: limit_exceeded` and a running handler is cancelled.
 
 What the client sends, and nothing else:
 
@@ -174,7 +178,7 @@ What the client sends, and nothing else:
 | --- | --- |
 | Request | `POST <origin>/v1/chat/completions`, no redirect followed, no cookie kept, no proxy variable read; HTTPS trusts `ca_file` alone |
 | Headers | `Authorization: Bearer <key>`, `Content-Type: application/json`, and the transport's own defaults; no `x-litellm-*` or `anthropic-*` header, and nothing relies on `User-Agent` or `x-litellm-tags` |
-| Body | exactly `model` (the request's `text/<model>` name), `messages` (the system prompt, then the turn's messages) and `user`; no `stream`, `max_tokens`, `metadata`, `tags`, `fallbacks`, `num_retries`, `mock_response` or `api_key` |
+| Body | exactly `model` (the request's `text/<model>` name), `messages` (the system prompt, then the turn's messages, then the round's calls and results), `user` and, when the agent has tools, `tools` (OpenAI function tools of each declaration's `name`, `description` and `parameters`; `effect` never reaches the model); no `stream`, `max_tokens`, `metadata`, `tags`, `fallbacks`, `num_retries`, `mock_response` or `api_key` |
 | `user` | `"fp-" + sha256(json.dumps([iss, sub], ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()`, 67 characters |
 
 The fingerprint's prefix, input and algorithm are one contract across apps: a change splits
@@ -185,15 +189,48 @@ every person's budget. `["https://issuer.example", "subject-1"]` gives
 | The gateway answers | The turn ends |
 | --- | --- |
 | 200, `finish_reason: stop`, non-empty text of at most `MAX_EVENT_BYTES` | one `AssistantTextEvent`, then `FinalEvent` |
-| 200 otherwise (malformed JSON, no choices, empty text, another `finish_reason`, a lone surrogate, a longer reply) | `failed: provider_error` |
+| 200, `finish_reason: tool_calls`, whole round | the calls run in order (see below), then the next request |
+| 200 otherwise (malformed JSON, no choices, empty text, another `finish_reason`, a lone surrogate, a longer reply, a round that is not whole) | `failed: provider_error` |
 | 429 | `refused: busy`; `retry_after_s` from the `Retry-After` seconds, at most `MAX_RETRY_AFTER_S`; an HTTP-date or no header gives none |
 | another 4xx, a budget refusal included | `failed: provider_unavailable`, detail `gateway_refused`, body unread |
-| 3xx (a redirect is not followed) or 5xx (a `Retry-After` is ignored) | `failed: provider_unavailable`, detail `gateway_failed` |
+| 1xx, a 2xx other than 200, 3xx (a redirect is not followed) or 5xx (a `Retry-After` is ignored) | `failed: provider_unavailable`, detail `gateway_failed` |
 | connection refused or reset, TLS failure | `failed: provider_unavailable` |
 
 A person over budget therefore reads as "unavailable", the same as any other refusal; telling
-them apart is a named gap. `detail` is for logs only. `after_side_effect` stays false: no tool
-runs here.
+them apart is a named gap. `detail` is for logs only.
+
+#### The tool loop
+
+The loop runs in the client, in process, over buffered rounds. A round is judged whole before
+anything shows or runs: only the request's tool names are offered and accepted, so a call to
+any other name, arguments that are not a JSON object, an empty round or a call id used twice in
+the turn refuses the round (`failed: provider_error`) with no handler run. A round that would
+take the turn past `max_tool_calls` ends `failed: limit_exceeded` the same way.
+
+For each call, in order: `ToolCallEvent`; the side-effect state set from the declaration's
+`ToolEffect`, before the handler runs; `await handler(principal, arguments)`;
+`ToolResultEvent`. A call, or the next request, that the deadline has already passed when its
+turn comes (a slow consumer of the events) is not started: `failed: limit_exceeded`, with the
+side-effect state unchanged by it. An outcome that does not make a valid `ToolResultEvent` (a `content`
+that is not text, an `is_error` that is not a bool), or whose content a UTF-8 body cannot carry, is a
+host defect like a handler that raises. The model reads an error outcome as `Error: ` followed by the content, because the chat format has
+no error flag on a tool message. A call that started may have written, and a cancelled `asyncio.to_thread`
+write may still finish; nothing implies it was undone. A blocking tool stays the app's: its
+handler uses `asyncio.to_thread`. A `ToolOutcome(is_error=True)` goes to the model and the turn
+goes on. A handler that raises is a host defect: the client logs its class name only and tells
+the model the call failed. Task cancellation reaches the caller unchanged and no later round
+runs. Per started call one INFO record carries the tool name, call id and `is_error`, never the
+arguments or the content; a call the deadline or a cancellation cut off leaves its record too, with
+`is_error` unset. A call refused before its handler started ran nothing and leaves no record.
+
+A tool's `content` reaches the model, and so the gateway and the provider the model names:
+a tool returns only what that may see.
+
+| Bound | Value | Over it |
+| --- | --- | --- |
+| One tool result | `MAX_EVENT_BYTES` | the model gets a fixed `is_error` sentence instead of the content; the side effect stands; the turn continues |
+| One request of a turn, serialised | 4 × `MAX_EVENT_BYTES` | no request is sent; `failed: limit_exceeded`. It bounds a text turn's first request too: a turn input near that size ends `failed: limit_exceeded` |
+| One response body | as for a text turn | `failed: provider_error` |
 
 `GatewayBackend`'s constructor sets the `httpx2` and `httpcore2` loggers to WARNING for the whole process, overriding an app's own DEBUG setting there.
 
@@ -202,10 +239,10 @@ runs here.
 An app declares its agents as Claude Code subagent files,
 `src/<pkg>/agents/<name>.md`, that `agent_runtime_client.agents.load_agent` reads into
 an `AgentDefinition`: YAML front matter (`name`, `description`, `tools`, `model`,
-`maxDurationSeconds`, plus the extension `appRoles`, exactly `[admin]`
+`maxDurationSeconds`, `maxToolCalls`, plus the extension `appRoles`, exactly `[admin]`
 or `[admin, user]`) and the Markdown body as the prompt. `model` is a `text/<model>` name
 (lower-case letters, digits, `.` and `-`) and `maxDurationSeconds` a positive integer; both are
-required. `AgentFileError` names
+required. `maxToolCalls` is a positive integer, required exactly when `tools` is not empty and refused when it is. `AgentFileError` names
 the file and the field. `offered_to(role)` is a display filter, not the
 security boundary.
 
@@ -213,9 +250,15 @@ security boundary.
 
 `agent_runtime_client.tools.ToolDeclaration` is the one declaration of a tool: name,
 description, arguments and a `ToolEffect`, `read_only` or `side_effecting`. The
-effect is for the service and never reaches a prompt; it defaults to
-side-effecting, because a tool nobody classified must be assumed to change
+effect is for the host (the service and `GatewayBackend` read it for `after_side_effect`) and
+never reaches a prompt; it defaults to side-effecting, because a tool nobody classified must be assumed to change
 state. The core's `ToolCatalog` builds on the same class.
+
+`HandTool` is a declaration with the async handler `(Principal, JsonObject) -> ToolOutcome`
+that serves it in the app's own process; `ToolOutcome` is `content` and `is_error`. The module
+exports `Principal` and `JsonObject` too, so an app's `agent/tools.py` imports only
+`agent_runtime_client.tools`. It imports neither `wire` nor `mcp_wire`, which re-exports
+`ToolOutcome`.
 
 ## API text results
 

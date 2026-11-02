@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import traceback
 from pathlib import Path
+from types import EllipsisType
 
 import pytest
 from pydantic import ValidationError
@@ -29,6 +30,7 @@ def agent_text(
     roles: str | None = "[admin, user]",
     model: str | None = "text/opus",
     max_duration_seconds: str | None = "300",
+    max_tool_calls: str | None | EllipsisType = ...,
     extra: str = "",
     body: str = PROMPT,
 ) -> str:
@@ -43,6 +45,10 @@ def agent_text(
         lines.append(f"model: {model}")
     if max_duration_seconds is not None:
         lines.append(f"maxDurationSeconds: {max_duration_seconds}")
+    if max_tool_calls is ...:
+        max_tool_calls = None if tools in (None, "[]") else "5"
+    if max_tool_calls is not None:
+        lines.append(f"maxToolCalls: {max_tool_calls}")
     if extra:
         lines.append(extra)
     return "---\n" + "\n".join(lines) + "\n---\n" + body + "\n"
@@ -261,6 +267,63 @@ def test_a_duration_that_is_not_a_positive_integer_is_refused_and_named(
 
     with pytest.raises(AgentFileError, match="maxDurationSeconds"):
         load(tmp_path, text)
+
+
+def test_the_tool_call_bound_is_carried_by_the_definition_and_its_request(tmp_path: Path) -> None:
+    agent = load(tmp_path, agent_text(max_tool_calls="7"))
+
+    request = agent.request([TurnMessage(role=TurnRole.USER, text="hi")])
+
+    assert (agent.max_tool_calls, request.max_tool_calls) == (7, 7)
+
+
+@pytest.mark.parametrize("tools", [None, "[]"])
+def test_an_agent_without_tools_has_no_tool_call_bound(tmp_path: Path, tools: str | None) -> None:
+    agent = load(tmp_path, agent_text(tools=tools))
+
+    assert agent.max_tool_calls is None
+
+
+def test_a_missing_tool_call_bound_is_refused_when_there_are_tools(tmp_path: Path) -> None:
+    text = agent_text(max_tool_calls=None)
+
+    with pytest.raises(AgentFileError, match="maxToolCalls"):
+        load(tmp_path, text)
+
+
+@pytest.mark.parametrize("tools", [None, "[]"])
+def test_a_tool_call_bound_is_refused_when_there_are_no_tools(
+    tmp_path: Path, tools: str | None
+) -> None:
+    text = agent_text(tools=tools, max_tool_calls="3")
+
+    with pytest.raises(AgentFileError, match="maxToolCalls"):
+        load(tmp_path, text)
+
+
+@pytest.mark.parametrize("bound", ["0", "-1", "true", "'3'", "1.5", "null", "''"])
+def test_a_tool_call_bound_that_is_not_a_positive_integer_is_refused_and_named(
+    tmp_path: Path, bound: str
+) -> None:
+    text = agent_text(max_tool_calls=bound)
+
+    with pytest.raises(AgentFileError, match="maxToolCalls"):
+        load(tmp_path, text)
+
+
+def test_a_request_with_tools_and_no_bound_is_refused(tmp_path: Path) -> None:
+    request = load(tmp_path, agent_text()).request([TurnMessage(role=TurnRole.USER, text="hi")])
+    fields = {**dict(request), "max_tool_calls": None}
+
+    with pytest.raises(ValidationError):
+        TurnRequest(**fields)
+
+
+def test_a_definition_with_tools_and_no_bound_is_refused_where_it_is_built(tmp_path: Path) -> None:
+    agent = load(tmp_path, agent_text())
+
+    with pytest.raises(ValidationError):
+        AgentDefinition(**{**dict(agent), "max_tool_calls": None})
 
 
 @pytest.mark.parametrize("description", [None, "''", '"two\\nlines"', "|", "|\n  two\n  lines"])
