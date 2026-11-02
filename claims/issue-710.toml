@@ -1,8 +1,0 @@
-claim_id = "a82ce670728a4787a4062c175a4f3281"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "c950f7ac6862a066c93ebbf6b3d30146f67dc8e3"
-branch = "claude/issue-710-gateway-backend"
-scope = [".github/workflows/ci.yml", ".importlinter", "docs/ARCHITECTURE.md", "docs/MIGRATING.md", "docs/decisions/0002-library-and-app-keys.md", "docs/wire.md", "packages/client/src/agent_runtime_client/backend/fake_gateway.py", "packages/client/src/agent_runtime_client/backend/gateway.py", "packages/client/tests/test_backend_gateway.py", "quality/baseline.toml"]
-opened_commit = "a11e127937a6e296b500ea1899ed04e8b1311752"
-whole_reason = "One turn cannot run in parts: request, admission and mapping have no caller apart, and the documents state what they do."
