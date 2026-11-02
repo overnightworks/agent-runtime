@@ -11,6 +11,7 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | `ToolOutcome` lived in `agent_runtime_client.mcp_wire`. | It lives in `agent_runtime_client.tools`, next to the new `HandTool`, `HandToolHandler`, `Principal` and `JsonObject`; `mcp_wire` re-exports `ToolOutcome`, so no import changes. |
 | A request body had no byte bound. | A turn's request is bounded like any other: one near `4 × MAX_EVENT_BYTES` ends `failed: limit_exceeded`, a tool-free turn included. ([wire.md](wire.md#the-tool-loop)) |
 | `after_side_effect` was always false on a gateway turn. | It is true once a side-effecting tool call started in the turn, on `refused: busy` too. |
+| The service pinned `overnightworks-webauth` 0.27.0 by git and refused a workload token living over 300 s (`exp - iat`) as `forbidden`. | It pins 0.29.0 by git (`overnightworks-webauth @ git+https://github.com/overnightworks/webauth@v0.29.0`) and admits a workload token of any lifetime; `exp`, `iat` and `nbf` stay checked against the clock. A host that pins webauth beside the service moves to 0.29.0 too: webauth 0.28.0 removed `ServiceIdentity.max_workload_seconds` and `CallerRefusalReason.WORKLOAD_LIVES_TOO_LONG`. |
 
 ## Migrating to 0.17.0
 
