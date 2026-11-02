@@ -569,8 +569,10 @@ def test_a_stream_that_is_unknown_unreadable_or_failed_ends_closed_without_cli_t
 def test_a_failed_turn_logs_its_class_and_no_cli_text(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.DEBUG)
 
+    stream = (codex_line(type="turn.failed", error={"message": f"usage limit {CLI_TEXT}"}),)
+
     with pytest.raises(CodexTurnFailed):
-        decoded((codex_line(type="turn.failed", error={"message": f"usage limit {CLI_TEXT}"}),))
+        decoded(stream)
 
     [warning] = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert "turn_failed" in warning.getMessage()
