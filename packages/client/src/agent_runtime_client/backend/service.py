@@ -206,4 +206,6 @@ async def _bounded_body(response: httpx2.Response) -> bytes | None:
 def _wait_seconds(retry_after: str | None) -> int | None:
     if retry_after is None or not retry_after.isascii() or not retry_after.isdigit():
         return None
+    if len(retry_after) > len(str(MAX_RETRY_AFTER_S)):
+        return MAX_RETRY_AFTER_S
     return min(int(retry_after), MAX_RETRY_AFTER_S)

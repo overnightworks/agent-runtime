@@ -72,8 +72,8 @@ def test_m16_17_an_undecodable_or_unknown_refusal_is_unavailable(body):
 
 @pytest.mark.parametrize(
     ("retry_after", "wait"),
-    [("86400", 600), ("7", 7), ("soon", None), ("-3", None), (None, None)],
-    ids=["m19-bounded", "kept", "m20-malformed", "negative", "absent"],
+    [("86400", 600), ("9" * 5000, 600), ("7", 7), ("soon", None), ("-3", None), (None, None)],
+    ids=["m19-bounded", "digit-limit-length", "kept", "m20-malformed", "negative", "absent"],
 )
 def test_m19_20_busy_carries_a_bounded_wait_or_none(retry_after, wait):
     headers = {} if retry_after is None else {"Retry-After": retry_after}
