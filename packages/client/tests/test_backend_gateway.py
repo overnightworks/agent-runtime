@@ -20,6 +20,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
+from tests.support.gateway_turn_support import ending
 
 from agent_runtime_client.agents import TurnRequest
 from agent_runtime_client.backend import MAX_RETRY_AFTER_S, TurnPerson, TurnStopKind, TurnStopped
@@ -156,10 +157,6 @@ async def _turn(backend, request, person):
     except TurnStopped as stopped:
         return events, stopped
     return events, None
-
-
-def ending(stopped: TurnStopped | None):
-    return None if stopped is None else (stopped.kind, stopped.code)
 
 
 UNAVAILABLE = (TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE)

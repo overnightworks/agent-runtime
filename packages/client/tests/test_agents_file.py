@@ -654,6 +654,7 @@ def test_a_picture_file_that_does_not_fit_a_picture_agent_is_refused_and_named(
         "-1x5",
         "'1x2x3'",
         "1.5x2",
+        "1٠x1",
         "7",
         "''",
     ],
