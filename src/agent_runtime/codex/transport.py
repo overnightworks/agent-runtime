@@ -216,11 +216,10 @@ class CodexCliToolTransport:
         except CodexCliStreamFailure as exc:
             channel.request_abort()
             await asyncio.shield(runner)
-            stream_failure_reason = (
-                SafeRouteReasonCode.TOOL_EXECUTION_FAILED
-                if exc.code == "codex_cli_tool_call_blocked"
-                else SafeRouteReasonCode.CLI_PROTOCOL_ERROR
-            )
+            if exc.code == "codex_cli_tool_call_blocked":
+                stream_failure_reason = SafeRouteReasonCode.TOOL_EXECUTION_FAILED
+            else:
+                stream_failure_reason = SafeRouteReasonCode.CLI_PROTOCOL_ERROR
         finally:
             channel.request_abort()
             await asyncio.shield(runner)
