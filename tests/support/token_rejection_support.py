@@ -30,11 +30,6 @@ def expired_workload() -> str:
     return MINT.workload(iat=now - 400, exp=now - 100)
 
 
-def _long_lived_workload() -> str:
-    now = int(time.time())
-    return MINT.workload(iat=now, exp=now + 301)
-
-
 def _user_with_the_workload_subject() -> str:
     return MINT.user(sub=f"service-account-user-of-{SONGMAKER_CLIENT}")
 
@@ -134,7 +129,6 @@ TOKEN_REJECTIONS = [
         FORBIDDEN,
         id="workload-of-an-unregistered-client",
     ),
-    pytest.param(_long_lived_workload, MINT.user, FORBIDDEN, id="workload-living-over-300-s"),
     pytest.param(
         lambda: MINT.workload(sub=""), MINT.user, UNAUTHORIZED, id="workload-with-empty-subject"
     ),

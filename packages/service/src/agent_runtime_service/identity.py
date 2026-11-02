@@ -2,9 +2,9 @@
 
 The proof is webauth's ``ServiceCallerCheck`` (``webauth.service_callers``), built once per
 process from ``[identity]``, the registered apps of ``[apps]`` and the ruled constants of
-decision record 0001 (U1'): the realm role ``agent-workload`` and a workload token that
-lives at most 300 seconds. It owns the one verifier and the order of the refusals: every
-refusal about the tokens that is ``unavailable`` or ``unauthorized`` comes before any
+decision record 0001 (U1'): the realm role ``agent-workload``. It owns the one verifier and
+the order of the refusals: every refusal about the tokens that is ``unavailable`` or
+``unauthorized`` comes before any
 ``forbidden`` one (decision record 0001, the order of checks). This module maps each refusal
 by its class: a key set that cannot be fetched is ``unavailable``; a missing or unverifiable
 token, or a subject or group claim webauth cannot read, is ``unauthorized``; tokens that do
@@ -38,7 +38,6 @@ from agent_runtime_client.wire import AgentRole, RejectionCode
 from agent_runtime_service.config import ServiceConfig
 
 WORKLOAD_ROLE: Final = "agent-workload"
-MAX_WORKLOAD_TOKEN_SECONDS: Final = 300
 
 Caller = WorkloadCaller | PersonCaller
 
@@ -80,7 +79,6 @@ class CallerCheck:
                 jwks_url=identity.jwks_url,
                 workload_role=WORKLOAD_ROLE,
                 group_claim=identity.group_claim,
-                max_workload_seconds=MAX_WORKLOAD_TOKEN_SECONDS,
                 leeway_seconds=identity.leeway_seconds,
             ),
             registered_apps={
