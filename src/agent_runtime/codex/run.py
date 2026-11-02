@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -30,6 +31,8 @@ from agent_runtime.spawn import ChildProcess, ChildProcessSpecificationError, cl
 from agent_runtime.transcript import flatten_messages
 from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent
 from agent_runtime_client.wire import TurnMessage
+
+log = logging.getLogger(__name__)
 
 CODEX_CLI_MAX_CONCURRENT_PROCESSES: Final = 8
 
@@ -100,6 +103,9 @@ _TOOL_ITEM_TYPES: Final = frozenset(
         "image_gen",
     }
 )
+# Codex's `turn.failed` carries only message text (ADR 0001, A1b-C0a), so the class a failed turn
+# logs is the event kind itself; the text never reaches the log.
+_FAILED_TURN_CLASS: Final = "turn_failed"
 _ERROR_ITEM: Final = "error"
 _SILENT_ITEM_TYPES: Final = frozenset({"reasoning", "todo_list", _ERROR_ITEM})
 _DROPPED_ITEM_TYPES: Final = _TOOL_ITEM_TYPES | _SILENT_ITEM_TYPES
@@ -229,6 +235,7 @@ class CodexStreamDecoder:
     def _fail_turn(event: _TurnFailedEvent) -> NoReturn:
         if event.error is not None and _LOGIN_REFUSED_STATUS in event.error.message:
             raise_without_chain(CliLoginRefusedError(CODEX_CLI_LOGIN_REFUSED_DETAIL))
+        log.warning("Codex run ended on a CLI error (class=%s)", _FAILED_TURN_CLASS)
         raise_without_chain(CodexTurnFailed())
 
     def ending(self, returncode: int) -> FinalEvent:

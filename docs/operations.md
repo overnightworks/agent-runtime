@@ -343,6 +343,16 @@ A typo is not caught at startup. On `grok 1.0.60` a mistyped value prints `Error
 agent config: …` and the key on stderr only, with an empty stdout and exit 1, so the run ends
 `failed: provider_error` and the log names `GrokAnswerMissing`, not the key.
 
+## A run the CLI ends with an error
+
+A Claude, Codex or Grok run that its CLI ends with a reported error still ends
+`failed: provider_error`, and the log carries one warning naming the provider and the error's class
+(`class=<name>`), never the CLI's message, stderr, a token, a header or a path. Claude's class is the
+assistant line's `error` (`rate_limit`, `invalid_request`) or the result line's `subtype`
+(`error_max_turns`, `error_during_execution`); any other value logs as `other`. Codex's failed turn
+and Grok's `error` event carry only message text, so they log `turn_failed` and `error_event`. A
+refused login logs no class and ends `CliLoginRefusedError` as before.
+
 ## The subscription login
 
 The agent service holds the one login per provider for all apps. Only the
