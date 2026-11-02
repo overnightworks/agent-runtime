@@ -1,8 +1,0 @@
-claim_id = "96a4aaa26bf74413a2e46b5fa547ae10"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "4f0692a179c3fe5bbd17acf0550b1a4df82930f9"
-branch = "claude/issue-706-turn-vocabulary"
-scope = [".importlinter", "AGENTS.md", "docs/ARCHITECTURE.md", "docs/wire.md", "packages/client/src/agent_runtime_client/agents.py", "packages/client/src/agent_runtime_client/backend/__init__.py", "packages/client/src/agent_runtime_client/capability.py", "packages/client/src/agent_runtime_client/config.py", "packages/client/src/agent_runtime_client/mcp_wire.py", "packages/client/src/agent_runtime_client/turn.py", "packages/client/src/agent_runtime_client/turn_events.py", "packages/client/src/agent_runtime_client/wire.py", "packages/client/tests/test_turn_vocabulary.py", "quality/baseline.toml"]
-opened_commit = "0fde80d3ed87c4cc688503f94a1a5d37306e055e"
-whole_reason = "One owner cannot move in parts: the vocabulary, the re-exports that keep every import working, the import contract and the documents that state the owner change together."
