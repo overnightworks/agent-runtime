@@ -36,6 +36,7 @@ from agent_runtime_client.turn import (
 
 JSON_MEDIA_TYPE: Final = "application/json"
 EVENT_STREAM_MEDIA_TYPE: Final = "text/event-stream"
+MCP_ENDPOINT_PATH: Final = "/mcp"
 PROTOCOL_VERSION_HEADER: Final = "MCP-Protocol-Version"
 SESSION_ID_HEADER: Final = "Mcp-Session-Id"
 _SESSION_ID: Final = re.compile(r"[\x21-\x7e]+")
@@ -335,10 +336,15 @@ class ListToolsParams(_Tolerant):
     cursor: UnicodeText | None = None
 
 
+class ToolAnnotations(_Tolerant):
+    read_only_hint: bool | None = None
+
+
 class ToolDefinition(_Tolerant):
     name: UnicodeText
     description: UnicodeText | None = None
     input_schema: JsonObject
+    annotations: ToolAnnotations | None = None
 
 
 class ListToolsResult(_Tolerant):

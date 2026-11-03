@@ -356,6 +356,37 @@ database session. `verify_capability` returns the claims or one closed
 the capability's token or signature is replaced by an empty 500.
 `agent_runtime_client.mcp_server` documents the order of the checks.
 
+## The person front
+
+`agent_runtime_client.mcp_server.McpPersonFront(tools, *, resolve_person)` is the
+MCP endpoint of an app for the agent of one signed-in person. It is an ASGI 3 app
+the host registers as the exact route `MCP_ENDPOINT_PATH`, never a `Mount`, which
+redirects `/mcp` to `/mcp/`, and behind the middleware that admits the caller:
+webauth's `BearerGate(resource=…)` answers every 401 and 403 before routing, so the
+front answers no challenge.
+
+`resolve_person` is a port, `Callable[[Scope], Principal]`, and the front's one seam
+to webauth: the client imports no webauth, and the host binds the port to
+`webauth.middleware.resource_person`. The front calls it first on every request,
+before it reads the body. Its failure propagates to the host: no tool runs and the
+front writes no answer, because a front reached without the gate's admission is a
+host defect.
+
+A tool is `PersonTool(declaration, handler)`; the handler is
+`PersonToolHandler = Callable[[PersonRequest, JsonObject], Awaitable[ToolOutcome]]`,
+and `PersonRequest(principal, scope)` carries the resolved `Principal` and the
+request's ASGI scope, which holds the bearer, `Host` and client address a handler
+replays. A name given twice raises `ValueError` at construction.
+
+A request with an `Origin` header is 403 (its clients are agents, which send none),
+anything but `POST` is 405 with `Allow: POST`, and a body over `MAX_EVENT_BYTES` is
+413. The profile is the capability front's: `mcp_wire.decide_server_message`
+decides. `tools/list` offers every tool, because rights are the route's, with
+`annotations.readOnlyHint` true for a `READ_ONLY` tool and absent otherwise. A
+handler that raises answers a failed tool result with one fixed text; the log
+names the tool and the exception's class, and nothing of its message reaches the
+wire or the log.
+
 ## What a run keeps
 
 The service has no database. The messages, the tool calls and results, the

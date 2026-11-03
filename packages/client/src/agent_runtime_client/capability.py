@@ -19,6 +19,7 @@ from uuid import UUID
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
+from agent_runtime_client.mcp_wire import MCP_ENDPOINT_PATH as MCP_ENDPOINT_PATH
 from agent_runtime_client.turn import NonEmptyUnicodeText, Principal
 
 CAPABILITY_ISSUER: Final = "agent-service"
@@ -26,7 +27,6 @@ CAPABILITY_TOKEN_TYPE: Final = "agent-capability-2+jwt"  # noqa: S105 - a token 
 MAX_CAPABILITY_CHARACTERS: Final = 8192
 SIGNING_KEY_BITS: Final = 3072
 SIGNING_KEY_EXPONENT: Final = 65537
-MCP_ENDPOINT_PATH: Final = "/mcp"
 
 _HTTPS_SCHEME: Final = "https://"
 _DEFAULT_HTTPS_PORT: Final = 443
