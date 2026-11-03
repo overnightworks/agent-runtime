@@ -194,7 +194,7 @@ every person's budget. `["https://issuer.example", "subject-1"]` gives
 | 429 | `refused: busy`; `retry_after_s` from the `Retry-After` seconds, at most `MAX_RETRY_AFTER_S`; an HTTP-date or no header gives none |
 | another 4xx, a budget refusal included | `failed: provider_unavailable`, detail `gateway_refused`, body unread |
 | 1xx, a 2xx other than 200, 3xx (a redirect is not followed) or 5xx (a `Retry-After` is ignored) | `failed: provider_unavailable`, detail `gateway_failed` |
-| connection refused or reset, TLS failure | `failed: provider_unavailable` |
+| connection refused or reset, TLS failure, an origin the HTTP library refuses | `failed: provider_unavailable` |
 
 A person over budget therefore reads as "unavailable", the same as any other refusal; telling
 them apart is a named gap. `detail` is for logs only.
@@ -272,7 +272,7 @@ The whole call has one deadline of 10 seconds and a reply body bound of `MAX_EVE
 
 Every failure raises the one `ModelListUnavailable`, whose `detail` (`key_unusable`, `gateway_refused`,
 `gateway_failed`, `connection_failed`, `malformed_reply` or `timed_out`) is a closed label; neither the key nor any text
-of the reply is in it. That covers an unusable key file, a 4xx (a 429 too), a 5xx or redirect, a lost connection, the
+of the reply is in it, and the key is in neither the exception's cause nor its traceback's frames. That covers an unusable key file, a 4xx (a 429 too), a 5xx or redirect, a lost connection or an origin the HTTP library refuses, the
 deadline, and a body that is over its bound or is not a JSON object whose `data` is a list of objects with a text `id`.
 
 An app sets an agent's model with `agent.request(messages, model=name)`; without `model` the file's model runs. A name
