@@ -121,10 +121,10 @@ An app runs a turn through `agent_runtime_client.backend.AgentBackend`, installe
 library; the one implementation, `backend.gateway.GatewayBackend`, needs the `backend` extra.
 
 `request` is a `TurnRequest` (`agent_runtime_client.agents`, frozen): `agent`, `turn`, `roles`,
-`tools` (the agent's selected `ToolDeclaration`s), `model`, `max_duration_seconds` and
-`max_tool_calls` (`None` exactly when `tools` is empty).
+`tools` (the agent's selected `ToolDeclaration`s), `model`, `max_duration_seconds`, `max_tool_calls`
+(`None` exactly when `tools` is empty) and `picture_size` (`None` for a text agent, see A picture agent).
 `AgentDefinition.request(messages, *, model=None)` builds it; `model` overrides the file's model
-for that run.
+for that run, a model of the agent's kind.
 
 `person` is a `TurnPerson` (frozen, always a person): `principal` (the verified `(iss, sub)`),
 `role` (the app role) and `groups`, an async callable returning the person's groups.
