@@ -35,6 +35,7 @@ from agent_runtime_client.turn import (
     Turn,
     TurnMessage,
     TurnRole,
+    person_fingerprint,
 )
 from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent
 
@@ -219,6 +220,7 @@ def test_no_pinned_absent_field_is_sent(scenario):
 )
 def test_the_user_field_is_the_fixed_fingerprint_of_the_principal(scenario, iss, sub, fingerprint):
     assert scenario.fingerprint(iss, sub) == fingerprint
+    assert person_fingerprint(Principal(iss=iss, sub=sub)) == fingerprint
 
 
 @pytest.mark.parametrize(
