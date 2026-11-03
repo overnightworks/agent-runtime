@@ -4,7 +4,7 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 
 ## Migrating to 0.20.0
 
-| Before (0.18.0) | Now |
+| Before (0.19.0) | Now |
 | --- | --- |
 | The client's only MCP server was the capability front, `McpServer`. | `agent_runtime_client.mcp_server.McpPersonFront(tools, *, resolve_person)` serves a signed-in person's agent on an app's `/mcp` beside it, with `PersonTool`, `PersonToolHandler`, `PersonRequest` and `ResolvePerson`; the host registers it as the exact route `MCP_ENDPOINT_PATH` behind webauth's gate and binds `resolve_person` to a small adapter over `webauth.middleware.resource_person`, which returns an `AuthenticatedUser`, not a `Principal`. ([wire.md](wire.md#the-person-front)) |
 | `MCP_ENDPOINT_PATH` lived in `agent_runtime_client.capability`. | It lives in `agent_runtime_client.mcp_wire`; `capability` still binds the name. |
