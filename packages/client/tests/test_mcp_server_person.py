@@ -18,13 +18,17 @@ from starlette.testclient import TestClient
 from tests.support.mcp_server_support import declaration
 
 from agent_runtime_client.mcp_server import McpPersonFront, PersonRequest, PersonTool
-from agent_runtime_client.mcp_wire import MCP_ENDPOINT_PATH, ToolOutcome
+from agent_runtime_client.mcp_wire import (
+    LATEST_PROTOCOL_VERSION,
+    MCP_ENDPOINT_PATH,
+    JsonRpcErrorCode,
+    ToolOutcome,
+)
 from agent_runtime_client.tools import Principal, ToolEffect
 from agent_runtime_client.wire import MAX_EVENT_BYTES, JsonObject
 
 LOGGER = "agent_runtime_client.mcp_server"
-VERSION = "2025-11-25"
-INVALID_PARAMS = {"code": -32602, "message": "Invalid params"}
+VERSION = str(LATEST_PROTOCOL_VERSION)
 Headers = list[tuple[bytes, bytes]]
 
 
@@ -41,8 +45,10 @@ class Reply:
         return json.loads(self.body)
 
 
-def rpc(method: str, params: dict[str, Any] | None = None) -> bytes:
-    message: dict[str, Any] = {"jsonrpc": "2.0", "method": method, "id": 1}
+def rpc(method: str, params: dict[str, Any] | None = None, *, notification: bool = False) -> bytes:
+    message: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
+    if not notification:
+        message["id"] = 1
     if params is not None:
         message["params"] = params
     return json.dumps(message).encode()
@@ -66,6 +72,7 @@ async def drive_scope(front: McpPersonFront, scope: dict[str, Any], body: bytes)
     sent: list[dict[str, Any]] = []
 
     async def receive() -> dict[str, Any]:
+        await asyncio.sleep(0)
         return {"type": "http.request", "body": body, "more_body": False}
 
     async def send(message: dict[str, Any]) -> None:
@@ -203,17 +210,25 @@ def test_a_call_hands_the_handler_the_resolved_person_and_the_request_scope(
     assert request.scope is person.resolved[0]
 
 
-def test_concurrent_calls_each_get_the_person_of_their_own_request(
+def test_concurrent_calls_each_get_the_person_and_the_scope_of_their_own_request(
     front: McpPersonFront, person: Person
 ) -> None:
     async def both() -> None:
-        scopes = [http_scope(headers_of((b"x-person", name))) for name in (b"alice", b"bob")]
+        scopes = [
+            http_scope(headers_of((b"x-person", name.encode()))) | {"marker": name}
+            for name in ("alice", "bob")
+        ]
         body = rpc("tools/call", call_params("read_note"))
         await asyncio.gather(*(drive_scope(front, scope, body) for scope in scopes))
 
     asyncio.run(both())
 
-    assert sorted(request.principal.sub for _, request, _ in person.calls) == ["alice", "bob"]
+    assert sorted(
+        (request.principal.sub, request.scope["marker"]) for _, request, _ in person.calls
+    ) == [
+        ("alice", "alice"),
+        ("bob", "bob"),
+    ]
 
 
 def test_an_unknown_tool_is_invalid_params_and_runs_nothing(
@@ -221,26 +236,45 @@ def test_an_unknown_tool_is_invalid_params_and_runs_nothing(
 ) -> None:
     reply = post(front, rpc("tools/call", call_params("ghost_tool")))
 
-    assert (reply.status, reply.json()["error"], person.calls) == (200, INVALID_PARAMS, [])
+    assert (reply.status, reply.json()["error"]["code"], person.calls) == (
+        200,
+        JsonRpcErrorCode.INVALID_PARAMS,
+        [],
+    )
 
 
-def test_a_raising_handler_answers_a_failed_result_with_the_fixed_text_and_none_of_its_message(
+def test_handlers_failing_differently_answer_one_failed_result_without_their_messages(
     front: McpPersonFront, person: Person, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.INFO, logger=LOGGER)
-    person.failure = RuntimeError("secret detail")
+    failures = [RuntimeError("first secret"), KeyError("second secret")]
+    results = []
+    for failure in failures:
+        person.failure = failure
+        results.append(post(front, rpc("tools/call", call_params("read_note"))).json()["result"])
 
-    reply = post(front, rpc("tools/call", call_params("read_note")))
-
-    result = reply.json()["result"]
-    assert result["isError"] is True
-    assert "secret detail" not in reply.body.decode()
+    assert results[0] == results[1]
+    assert results[0]["isError"] is True
+    assert results[0]["content"][0]["text"] != ""
     logged = [(record.levelname, record.getMessage()) for record in caplog.records]
-    assert not any("secret detail" in message for _, message in logged)
+    assert not any("secret" in message for _, message in logged)
+    assert not any("secret" in json.dumps(result) for result in results)
     assert any(
-        level == "ERROR" and "read_note" in text and "RuntimeError" in text
-        for level, text in logged
+        level == "ERROR" and "read_note" in text and "KeyError" in text for level, text in logged
     )
+
+
+def test_an_outcome_that_cannot_be_written_answers_the_failed_result_and_leaks_nothing(
+    front: McpPersonFront, person: Person
+) -> None:
+    person.outcome = ToolOutcome("lone \ud800 surrogate", is_error=False)
+    person.failure = None
+    unwritable = post(front, rpc("tools/call", call_params("read_note"))).json()["result"]
+    person.outcome = ToolOutcome("done", is_error=False)
+    person.failure = RuntimeError("x")
+    raised = post(front, rpc("tools/call", call_params("read_note"))).json()["result"]
+
+    assert unwritable == raised
 
 
 @pytest.mark.parametrize("is_error", [False, True])
@@ -269,7 +303,7 @@ def test_two_tools_of_one_name_are_refused_at_construction(person: Person) -> No
 def test_an_exact_starlette_route_serves_initialize_list_and_call_without_a_redirect(
     front: McpPersonFront,
 ) -> None:
-    app = Starlette(routes=[Route(MCP_ENDPOINT_PATH, front, methods=["POST"])])
+    app = Starlette(routes=[Route(MCP_ENDPOINT_PATH, front)])
 
     def headers(version: str | None) -> dict[str, str]:
         return {"MCP-Protocol-Version": version} if version else {}
@@ -280,6 +314,11 @@ def test_an_exact_starlette_route_serves_initialize_list_and_call_without_a_redi
             content=rpc("initialize", {"protocolVersion": VERSION, "capabilities": {}}),
             headers=headers(None),
         )
+        acknowledged = client.post(
+            MCP_ENDPOINT_PATH,
+            content=rpc("notifications/initialized", notification=True),
+            headers=headers(VERSION),
+        )
         listed = client.post(MCP_ENDPOINT_PATH, content=rpc("tools/list"), headers=headers(VERSION))
         called = client.post(
             MCP_ENDPOINT_PATH,
@@ -287,5 +326,11 @@ def test_an_exact_starlette_route_serves_initialize_list_and_call_without_a_redi
             headers=headers(VERSION),
         )
 
-    assert [r.status_code for r in (initialized, listed, called)] == [200, 200, 200]
+    assert [r.status_code for r in (initialized, acknowledged, listed, called)] == [
+        200,
+        202,
+        200,
+        200,
+    ]
+    assert acknowledged.content == b""
     assert json.loads(called.content)["result"]["isError"] is False
