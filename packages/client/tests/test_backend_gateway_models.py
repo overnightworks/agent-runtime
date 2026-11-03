@@ -197,8 +197,10 @@ def test_every_failure_raises_the_one_exception_without_the_key(
 def test_an_origin_the_http_library_refuses_raises_the_one_exception(tmp_path):
     gateway = ChatGateway(origin="http://999.999.999.999", key_file=a_gateway(tmp_path).key_file)
 
+    listing = list_gateway_models(gateway)
+
     with pytest.raises(ModelListUnavailable) as caught:
-        asyncio.run(list_gateway_models(gateway))
+        asyncio.run(listing)
 
     assert caught.value.detail == "connection_failed"
 
