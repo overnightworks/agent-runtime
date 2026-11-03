@@ -384,7 +384,7 @@ anything but `POST` is 405 with `Allow: POST`, and a body over `MAX_EVENT_BYTES`
 413. The profile is the capability front's: `mcp_wire.decide_server_message`
 decides. `tools/list` offers every tool, because rights are the route's, with
 `annotations.readOnlyHint` true for a `READ_ONLY` tool and absent otherwise. A
-handler that raises answers a failed tool result with one fixed text; the log
+handler that raises, or returns an outcome that cannot be written, answers a failed tool result with one fixed text; the log
 names the tool and the exception's class, and nothing of its message reaches the
 wire or the log.
 

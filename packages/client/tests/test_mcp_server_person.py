@@ -18,6 +18,7 @@ from starlette.testclient import TestClient
 from tests.support.mcp_server_support import declaration
 
 from agent_runtime_client.mcp_server import McpPersonFront, PersonRequest, PersonTool
+from agent_runtime_client.mcp_server.asgi import LOGGER_NAME as LOGGER
 from agent_runtime_client.mcp_wire import (
     LATEST_PROTOCOL_VERSION,
     MCP_ENDPOINT_PATH,
@@ -27,7 +28,6 @@ from agent_runtime_client.mcp_wire import (
 from agent_runtime_client.tools import Principal, ToolEffect
 from agent_runtime_client.wire import MAX_EVENT_BYTES, JsonObject
 
-LOGGER = "agent_runtime_client.mcp_server"
 VERSION = str(LATEST_PROTOCOL_VERSION)
 Headers = list[tuple[bytes, bytes]]
 
@@ -243,15 +243,18 @@ def test_an_unknown_tool_is_invalid_params_and_runs_nothing(
     )
 
 
-def test_handlers_failing_differently_answer_one_failed_result_without_their_messages(
+def test_two_tools_failing_differently_answer_one_failed_result_without_their_messages(
     front: McpPersonFront, person: Person, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.INFO, logger=LOGGER)
-    failures = [RuntimeError("first secret"), KeyError("second secret")]
+    failing_calls = [
+        ("read_note", RuntimeError("first secret")),
+        ("edit_note", KeyError("second secret")),
+    ]
     results = []
-    for failure in failures:
+    for tool_name, failure in failing_calls:
         person.failure = failure
-        results.append(post(front, rpc("tools/call", call_params("read_note"))).json()["result"])
+        results.append(post(front, rpc("tools/call", call_params(tool_name))).json()["result"])
 
     assert results[0] == results[1]
     assert results[0]["isError"] is True
@@ -260,7 +263,7 @@ def test_handlers_failing_differently_answer_one_failed_result_without_their_mes
     assert not any("secret" in message for _, message in logged)
     assert not any("secret" in json.dumps(result) for result in results)
     assert any(
-        level == "ERROR" and "read_note" in text and "KeyError" in text for level, text in logged
+        level == "ERROR" and "edit_note" in text and "KeyError" in text for level, text in logged
     )
 
 

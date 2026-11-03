@@ -862,7 +862,9 @@ def _narrowed_to(
     allowed: Sequence[str], offered: Sequence[ToolDefinition]
 ) -> tuple[ToolDefinition, ...]:
     permitted = frozenset(allowed)
-    kept = [tool for tool in offered if tool.name in permitted]
+    kept = [
+        tool.model_copy(update={"annotations": None}) for tool in offered if tool.name in permitted
+    ]
     if len({tool.name for tool in kept}) != len(kept):
         raise_without_chain(RepeatedToolOffer())
     if len(kept) != len(permitted):
