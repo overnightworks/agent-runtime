@@ -8,8 +8,8 @@ from typing import Any, Final
 
 from agent_runtime_client.mcp_wire import (
     PROTOCOL_VERSION_HEADER,
+    AnnotatedToolDefinition,
     HttpAnswer,
-    ToolDefinition,
 )
 from agent_runtime_client.tools import ToolDeclaration
 from agent_runtime_client.wire import MAX_EVENT_BYTES
@@ -42,7 +42,7 @@ def protocol_version(scope: Scope) -> str | None:
 
 def definition_of(
     declaration: ToolDeclaration, *, read_only_hint: bool = False
-) -> ToolDefinition:
+) -> AnnotatedToolDefinition:
     """The listed tool; ``readOnlyHint`` is carried only when asked for, else absent."""
     members: dict[str, Any] = {
         "name": declaration.name,
@@ -51,7 +51,7 @@ def definition_of(
     }
     if read_only_hint:
         members["annotations"] = {"readOnlyHint": True}
-    return ToolDefinition.model_validate(members)
+    return AnnotatedToolDefinition.model_validate(members)
 
 
 async def read_body(receive: Receive) -> bytes | None:

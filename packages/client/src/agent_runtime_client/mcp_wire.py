@@ -344,6 +344,11 @@ class ToolDefinition(_Tolerant):
     name: UnicodeText
     description: UnicodeText | None = None
     input_schema: JsonObject
+
+
+class AnnotatedToolDefinition(ToolDefinition):
+    """A tool this side lists with its hint; an upstream's ``ToolDefinition`` never keeps one."""
+
     annotations: ToolAnnotations | None = None
 
 

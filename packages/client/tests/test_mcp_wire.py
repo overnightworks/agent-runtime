@@ -501,7 +501,9 @@ def test_a_tool_result_response_is_written_by_alias_and_reads_back_to_the_same_o
     assert read_tool_outcome(parsed.result) == outcome
 
 
-def test_a_tools_list_response_writes_kept_definitions_by_alias_without_a_null_member() -> None:
+def test_a_tools_list_response_writes_kept_definitions_by_alias_without_a_null_description() -> (
+    None
+):
     upstream = [
         {
             "name": "echo",
@@ -523,7 +525,6 @@ def test_a_tools_list_response_writes_kept_definitions_by_alias_without_a_null_m
                     "name": "echo",
                     "description": "Say it back",
                     "inputSchema": {"type": "object", "properties": {"text": {"default": None}}},
-                    "annotations": {"readOnlyHint": True},
                 },
                 {"name": "ping", "inputSchema": {"type": "object"}},
             ]
