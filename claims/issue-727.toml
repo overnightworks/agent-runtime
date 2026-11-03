@@ -1,0 +1,8 @@
+claim_id = "7dee456fb569465895150d30c0e8a583"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "b8d20be9783429b7b789e220d535526c45ea7cdb"
+branch = "claude/issue-727-ar-4b-person-front"
+scope = ["docs/MIGRATING.md", "docs/wire.md", "packages/client/src/agent_runtime_client/capability.py", "packages/client/src/agent_runtime_client/mcp_server/__init__.py", "packages/client/src/agent_runtime_client/mcp_server/app.py", "packages/client/src/agent_runtime_client/mcp_server/asgi.py", "packages/client/src/agent_runtime_client/mcp_server/person.py", "packages/client/src/agent_runtime_client/mcp_wire.py", "packages/client/tests/test_mcp_person.py", "packages/client/tests/test_mcp_wire.py", "quality/baseline.toml"]
+opened_commit = "3b3dac2d614d62776960ee3bb9feee323943f6c6"
+whole_reason = "The port, the tool type, the head checks and the wire annotation are one front and mean nothing apart."
