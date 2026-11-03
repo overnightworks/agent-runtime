@@ -266,7 +266,7 @@ async def _send[Result](
             client.stream(method, path, content=content, headers=headers) as response,
         ):
             return await _reply_of(response, read)
-    except httpx2.HTTPError, OSError:
+    except httpx2.HTTPError, httpx2.InvalidURL, OSError:
         raise _unavailable(GatewayDetail.CONNECTION_FAILED) from None
 
 

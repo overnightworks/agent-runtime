@@ -588,7 +588,7 @@ def test_request_refuses_an_override_of_the_wrong_kind(
     agent = load(tmp_path, agent_source())
     messages = [TurnMessage(role=TurnRole.USER, text="hi")]
 
-    with pytest.raises(ValueError, match=f"{kind}/<model>"):
+    with pytest.raises(ValueError, match=f"must start with {kind}/"):
         agent.request(messages, model=override)
 
 

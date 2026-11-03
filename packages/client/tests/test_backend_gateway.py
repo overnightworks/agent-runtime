@@ -20,7 +20,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
-from tests.support.gateway_turn_support import ending
+from tests.support.gateway_turn_support import FailingTransport, ending
 
 from agent_runtime_client.agents import TurnRequest
 from agent_runtime_client.backend import MAX_RETRY_AFTER_S, TurnPerson, TurnStopKind, TurnStopped
@@ -514,14 +514,6 @@ def test_a_body_that_never_ends_is_cut_at_the_bound_as_provider_error(scenario):
     assert endless.closed.is_set()
 
 
-class _Failing(httpx2.AsyncBaseTransport):
-    def __init__(self, error: Exception) -> None:
-        self._error = error
-
-    async def handle_async_request(self, request):
-        raise self._error
-
-
 @pytest.mark.parametrize(
     "error",
     [
@@ -533,7 +525,17 @@ class _Failing(httpx2.AsyncBaseTransport):
     ],
 )
 def test_a_lost_connection_is_provider_unavailable(scenario, error):
-    _, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=_Failing(error)))
+    backend = GatewayBackend(scenario.config(), transport=FailingTransport(error))
+
+    _, stopped = scenario.outcome(backend)
+
+    assert ending(stopped) == UNAVAILABLE
+
+
+def test_an_origin_the_http_library_refuses_is_provider_unavailable(scenario):
+    backend = GatewayBackend(scenario.config(origin="http://999.999.999.999"))
+
+    _, stopped = scenario.outcome(backend)
 
     assert ending(stopped) == UNAVAILABLE
 

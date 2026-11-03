@@ -189,7 +189,7 @@ class AgentDefinition(BaseModel):
             picture_size=self.picture_size,
         )
         if model_kind_of(request.model) is not self.model_kind:
-            raise ValueError(f"model: must be a {self.model_kind}/<model> name")
+            raise ValueError(f"model: must start with {self.model_kind}/")
         return request
 
 
@@ -232,7 +232,7 @@ def load_agent(source: Traversable, declarations: list[ToolDeclaration]) -> Agen
 def _refuse_model_of_the_wrong_kind(file_name: str, front_matter: _FrontMatter) -> None:
     kind = _agent_model_kind(is_picture=front_matter.picture is not None)
     if model_kind_of(front_matter.model) is not kind:
-        raise AgentFileError(f"{file_name}: model: must be a {kind}/<model> name")
+        raise AgentFileError(f"{file_name}: model: must start with {kind}/")
 
 
 def _refuse_unpaired_call_bound(
