@@ -223,15 +223,22 @@ async def list_gateway_models(
     _quiet_transport_loggers()
     try:
         async with asyncio.timeout(_MODEL_LIST_DEADLINE_SECONDS):
-            key = _read_key(gateway.key_file)
-            return await _send(gateway, transport, "GET", _MODELS_PATH, key, _models_of)
+            return await _get_models(gateway, transport)
     except TurnStopped as stopped:
         # A 429 carries no detail; for a list it is a refusal like any other 4xx.
         detail = GatewayDetail(stopped.detail or GatewayDetail.GATEWAY_REFUSED)
     except TimeoutError:
         detail = GatewayDetail.TIMED_OUT
-    # Raised outside the handlers, so no underlying exception stays in __context__.
+    # Raised outside the handlers, so no underlying exception stays in __context__, and in a
+    # frame that never held the key, so its traceback shows none.
     raise ModelListUnavailable(detail)
+
+
+async def _get_models(
+    gateway: ChatGateway, transport: httpx2.AsyncBaseTransport | None
+) -> GatewayModels:
+    key = _read_key(gateway.key_file)
+    return await _send(gateway, transport, "GET", _MODELS_PATH, key, _models_of)
 
 
 def _quiet_transport_loggers() -> None:

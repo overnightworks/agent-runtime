@@ -194,6 +194,26 @@ def test_every_failure_raises_the_one_exception_without_the_key(
     assert GATEWAY_KEY not in caplog.text
 
 
+def test_an_origin_the_http_library_refuses_raises_the_one_exception(tmp_path):
+    gateway = a_gateway(tmp_path).model_copy(update={"origin": "http://999.999.999.999"})
+
+    with pytest.raises(ModelListUnavailable) as caught:
+        asyncio.run(list_gateway_models(gateway))
+
+    assert caught.value.detail == "connection_failed"
+
+
+def test_the_raising_frame_and_its_callers_hold_no_key_in_a_local(tmp_path):
+    failure = the_failure(a_gateway(tmp_path), FailingTransport())
+
+    frames, trace = [], failure.__traceback__
+    while trace is not None:
+        frames.append(trace.tb_frame)
+        trace = trace.tb_next
+    held = [repr(value) for frame in frames for value in frame.f_locals.values()]
+    assert [text for text in held if GATEWAY_KEY in text] == []
+
+
 def test_a_redirect_is_not_followed(tmp_path):
     redirect = Reply(status=302, headers={"Location": "http://elsewhere.test/v1/models"})
     fake = FakeGateway(redirect, model_list("text/a"))
