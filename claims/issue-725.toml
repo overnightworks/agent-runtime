@@ -1,0 +1,8 @@
+claim_id = "a40589352a10461c968b98674f756da5"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "7e780c3bc00309d93c7d34ab881e6246f23b1bf4"
+branch = "claude/issue-725-release-0-19-0"
+scope = ["docs/MIGRATING.md", "docs/operations.md", "docs/wire.md", "packages/client/pyproject.toml", "packages/service/pyproject.toml", "pyproject.toml", "src/agent_runtime/__init__.py", "uv.lock"]
+opened_commit = "df4d5e633825f250fad587188f9acf6dcc93d1a8"
+whole_reason = "A release raises its version literals together."
