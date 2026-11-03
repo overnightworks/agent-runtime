@@ -279,7 +279,7 @@ class Principal(StrictModel):
 
 
 def person_fingerprint(principal: Principal) -> str:
-    """One recipe for every app and hal: a change splits every person's budget."""
+    """One recipe for every caller: a change splits every person's budget."""
     identity = json.dumps([principal.iss, principal.sub], ensure_ascii=False, separators=(",", ":"))
     return "fp-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
 

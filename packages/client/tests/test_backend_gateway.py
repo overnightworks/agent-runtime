@@ -218,7 +218,9 @@ def test_no_pinned_absent_field_is_sent(scenario):
 @pytest.mark.parametrize(
     ("iss", "sub", "fingerprint"), FINGERPRINT_VECTORS, ids=["ascii", "non-ascii"]
 )
-def test_the_user_field_is_the_fixed_fingerprint_of_the_principal(scenario, iss, sub, fingerprint):
+def test_the_public_fingerprint_and_the_gateway_user_give_the_documented_vectors(
+    scenario, iss, sub, fingerprint
+):
     assert scenario.fingerprint(iss, sub) == fingerprint
     assert person_fingerprint(Principal(iss=iss, sub=sub)) == fingerprint
 
