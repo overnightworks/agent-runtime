@@ -558,12 +558,38 @@ def test_request_model_is_the_override_when_given(tmp_path: Path) -> None:
     assert request.model == "text/haiku"
 
 
-def test_request_model_override_accepts_an_image_name(tmp_path: Path) -> None:
-    agent = load(tmp_path, agent_text())
+PICTURE = "picture: {size: 1024x1024}"
 
-    request = agent.request([TurnMessage(role=TurnRole.USER, text="hi")], model="image/draw")
 
-    assert request.model == "image/draw"
+def picture_text(**changes: str | None) -> str:
+    fields = {"tools": "[]", "model": "image/draw", "extra": PICTURE} | changes
+    return agent_text(**fields)
+
+
+def test_a_picture_agents_override_is_an_image_name(tmp_path: Path) -> None:
+    agent = load(tmp_path, picture_text())
+
+    request = agent.request([TurnMessage(role=TurnRole.USER, text="a cat")], model="image/paint")
+
+    assert request.model == "image/paint"
+
+
+@pytest.mark.parametrize(
+    ("agent_source", "override", "kind"),
+    [
+        (agent_text, "image/draw", "text"),
+        (picture_text, "text/haiku", "image"),
+    ],
+    ids=["text-agent-image-name", "picture-agent-text-name"],
+)
+def test_request_refuses_an_override_of_the_wrong_kind(
+    tmp_path: Path, agent_source, override: str, kind: str
+) -> None:
+    agent = load(tmp_path, agent_source())
+    messages = [TurnMessage(role=TurnRole.USER, text="hi")]
+
+    with pytest.raises(ValueError, match=f"must start with {kind}/"):
+        agent.request(messages, model=override)
 
 
 def test_request_refuses_a_malformed_model_override(tmp_path: Path) -> None:
@@ -593,14 +619,6 @@ def test_loaded_definition_is_frozen(tmp_path: Path) -> None:
 
     with pytest.raises(ValidationError):
         agent.name = "other"  # type: ignore[misc]
-
-
-PICTURE = "picture: {size: 1024x1024}"
-
-
-def picture_text(**changes: str | None) -> str:
-    fields = {"tools": "[]", "model": "image/draw", "extra": PICTURE} | changes
-    return agent_text(**fields)
 
 
 def test_a_picture_agent_carries_its_size_into_its_request(tmp_path: Path) -> None:

@@ -9,9 +9,10 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-import httpx2
 import pytest
 from tests.support.gateway_turn_support import (
+    FailingTransport,
+    HangingTransport,
     SkewedLoop,
     a_gateway_config,
     a_person,
@@ -253,43 +254,16 @@ def test_a_busy_refusal_carries_the_wait(studio):
     assert stopped.retry_after_s == 7
 
 
-class _Failing(httpx2.AsyncBaseTransport):
-    def __init__(self) -> None:
-        self.attempts = 0
-
-    async def handle_async_request(self, request):
-        self.attempts += 1
-        raise httpx2.ConnectError("refused")
-
-
 def test_a_lost_connection_is_provider_unavailable_with_no_retry(studio):
-    failing = _Failing()
+    failing = FailingTransport()
 
     _, stopped, _ = studio.run(transport=failing)
 
     assert (ending(stopped), failing.attempts) == (UNAVAILABLE, 1)
 
 
-class _Hanging(httpx2.AsyncBaseTransport):
-    """Takes the request and never answers; it notes whether the call was cancelled."""
-
-    def __init__(self, *, seconds_passing: float = 0) -> None:
-        self.attempts = 0
-        self.cancelled = False
-        self._seconds_passing = seconds_passing
-
-    async def handle_async_request(self, request):
-        self.attempts += 1
-        asyncio.get_running_loop().skew_seconds += self._seconds_passing
-        try:
-            await asyncio.Event().wait()
-        except asyncio.CancelledError:
-            self.cancelled = True
-            raise
-
-
 def test_a_call_past_the_deadline_is_limit_exceeded_and_cancelled_with_no_retry(studio):
-    slow = _Hanging(seconds_passing=TURN_BUDGET_SECONDS + 1)
+    slow = HangingTransport(seconds_passing=TURN_BUDGET_SECONDS + 1)
 
     events, stopped, _ = studio.run(transport=slow)
 
@@ -309,7 +283,7 @@ def test_a_deadline_passed_during_admission_is_limit_exceeded_with_no_request(st
 
 
 def test_closing_the_stream_while_the_call_is_open_cancels_it_and_sends_no_other(studio):
-    slow = _Hanging()
+    slow = HangingTransport()
     backend = GatewayBackend(studio.config(), transport=slow)
 
     async def close_open_call() -> None:

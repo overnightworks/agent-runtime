@@ -1,9 +1,9 @@
 """The gateway as a backend: one buffered completion per round of a turn, or one picture.
 
-A turn runs under one deadline.
+A turn runs under one deadline. An app can also list the models the gateway offers.
 
-The app's key never leaves this module: it is read per turn, sent as the bearer and
-written to no exception or log record.
+The app's key never leaves this module: it is read per turn or per list, sent as the bearer
+and written to no exception or log record.
 """
 
 from __future__ import annotations
@@ -22,9 +22,9 @@ from pathlib import Path
 from typing import Final, NotRequired, Required, TypedDict
 
 import httpx2
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
-from agent_runtime_client.agents import TurnRequest
+from agent_runtime_client.agents import AgentDefinition, TurnRequest
 from agent_runtime_client.backend import (
     MAX_RETRY_AFTER_S,
     AgentBackend,
@@ -33,7 +33,7 @@ from agent_runtime_client.backend import (
     TurnStopKind,
     TurnStopped,
 )
-from agent_runtime_client.config import AgentConfig
+from agent_runtime_client.config import AgentConfig, ChatGateway
 from agent_runtime_client.tools import (
     HandTool,
     HandToolHandler,
@@ -46,10 +46,13 @@ from agent_runtime_client.turn import (
     MAX_EVENT_BYTES,
     MAX_RUN_FILES_BYTES,
     FailureCode,
+    GatewayModelName,
+    ModelKind,
     Principal,
     RejectionCode,
     RunFile,
     base64_length,
+    model_kind_of,
 )
 from agent_runtime_client.turn_events import (
     AssistantTextEvent,
@@ -61,6 +64,8 @@ from agent_runtime_client.turn_events import (
 _LOGGER: Final = logging.getLogger(__name__)
 _COMPLETIONS_PATH: Final = "/v1/chat/completions"
 _PICTURES_PATH: Final = "/v1/images/generations"
+_MODELS_PATH: Final = "/v1/models"
+_MODEL_LIST_DEADLINE_SECONDS: Final = 10
 _PICTURE_FILE_NAME: Final = "picture"
 # A DEBUG record of either library may carry request headers, and the key is one.
 _TRANSPORT_LOGGERS: Final = ("httpx2", "httpcore2")
@@ -81,6 +86,7 @@ _UNREADABLE_REPLY: Final = (
     RecursionError,
 )
 _ARGUMENTS: Final = TypeAdapter(JsonObject)
+_MODEL_NAME: Final = TypeAdapter(GatewayModelName)
 _HANDLER_FAILED_TEXT: Final = "The tool failed."
 _RESULT_TOO_LARGE_TEXT: Final = "The tool result was too large to return."
 # The chat format has no error flag on a tool message, so the text carries it to the model.
@@ -88,13 +94,14 @@ _ERROR_PREFIX: Final = "Error: "
 
 
 class GatewayDetail(StrEnum):
-    """Why a turn stopped, for logs only."""
+    """Why a turn or a model list stopped: logged for a turn, public on a list's exception."""
 
     KEY_UNUSABLE = "key_unusable"
     GATEWAY_REFUSED = "gateway_refused"
     GATEWAY_FAILED = "gateway_failed"
     CONNECTION_FAILED = "connection_failed"
     MALFORMED_REPLY = "malformed_reply"
+    TIMED_OUT = "timed_out"
 
 
 class GatewayBackend(AgentBackend):
@@ -105,8 +112,7 @@ class GatewayBackend(AgentBackend):
         tools: Iterable[HandTool] = (),
         transport: httpx2.AsyncBaseTransport | None = None,
     ) -> None:
-        for name in _TRANSPORT_LOGGERS:
-            logging.getLogger(name).setLevel(logging.WARNING)
+        _quiet_transport_loggers()
         self._config = config
         self._transport = transport
         self._tools: dict[str, HandTool] = {}
@@ -185,31 +191,100 @@ class GatewayBackend(AgentBackend):
         key: str,
         read: Callable[[httpx2.Response], Awaitable[Result]],
     ) -> Result:
-        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
-        try:
-            # ssl.SSLError is an OSError.
-            async with (
-                self._client() as client,
-                client.stream("POST", path, content=body, headers=headers) as response,
-            ):
-                return await _reply_of(response, read)
-        except httpx2.HTTPError, OSError:
-            raise _unavailable(GatewayDetail.CONNECTION_FAILED) from None
-
-    def _client(self) -> httpx2.AsyncClient:
-        gateway = self._config.gateway
-        verify = True
-        if gateway.ca_file is not None and self._transport is None:
-            verify = ssl.create_default_context(cafile=str(gateway.ca_file))
-        # One client per request keeps cookies from outliving it; the deadline is the only timeout.
-        return httpx2.AsyncClient(
-            base_url=gateway.origin,
-            transport=self._transport,
-            verify=verify,
-            trust_env=False,
-            follow_redirects=False,
-            timeout=None,
+        return await _send(
+            self._config.gateway, self._transport, "POST", path, key, read, content=body
         )
+
+
+@dataclass(frozen=True)
+class GatewayModels:
+    """The model names the gateway offers, by kind; a name of no known kind is not offered."""
+
+    text: tuple[str, ...]
+    image: tuple[str, ...]
+
+    def for_agent(self, agent: AgentDefinition) -> tuple[str, ...]:
+        """The names this agent's ``request(..., model=...)`` accepts."""
+        return self.image if agent.model_kind is ModelKind.IMAGE else self.text
+
+
+class ModelListUnavailable(Exception):
+    """The one way a model list fails; ``detail`` is a closed label, never text from the wire."""
+
+    def __init__(self, detail: GatewayDetail) -> None:
+        super().__init__(f"the gateway's model list is unavailable: {detail.value}")
+        self.detail = detail
+
+
+async def list_gateway_models(
+    gateway: ChatGateway, *, transport: httpx2.AsyncBaseTransport | None = None
+) -> GatewayModels:
+    """A bare ``GET /v1/models`` with the app's key, under a fixed deadline."""
+    _quiet_transport_loggers()
+    try:
+        async with asyncio.timeout(_MODEL_LIST_DEADLINE_SECONDS):
+            return await _get_models(gateway, transport)
+    except TurnStopped as stopped:
+        # A 429 carries no detail; for a list it is a refusal like any other 4xx.
+        detail = GatewayDetail(stopped.detail or GatewayDetail.GATEWAY_REFUSED)
+    except TimeoutError:
+        detail = GatewayDetail.TIMED_OUT
+    # Raised outside the handlers, so no underlying exception stays in __context__, and in a
+    # frame that never held the key, so its traceback shows none.
+    raise ModelListUnavailable(detail)
+
+
+async def _get_models(
+    gateway: ChatGateway, transport: httpx2.AsyncBaseTransport | None
+) -> GatewayModels:
+    key = _read_key(gateway.key_file)
+    return await _send(gateway, transport, "GET", _MODELS_PATH, key, _models_of)
+
+
+def _quiet_transport_loggers() -> None:
+    for name in _TRANSPORT_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
+async def _send[Result](
+    gateway: ChatGateway,
+    transport: httpx2.AsyncBaseTransport | None,
+    method: str,
+    path: str,
+    key: str,
+    read: Callable[[httpx2.Response], Awaitable[Result]],
+    *,
+    content: str | None = None,
+) -> Result:
+    headers = {"Authorization": f"Bearer {key}"}
+    if content is not None:
+        headers["Content-Type"] = "application/json"
+    try:
+        # ssl.SSLError is an OSError.
+        async with (
+            _client(gateway, transport) as client,
+            client.stream(method, path, content=content, headers=headers) as response,
+        ):
+            return await _reply_of(response, read)
+    except httpx2.HTTPError, httpx2.InvalidURL, OSError:
+        raise _unavailable(GatewayDetail.CONNECTION_FAILED) from None
+
+
+def _client(
+    gateway: ChatGateway, transport: httpx2.AsyncBaseTransport | None
+) -> httpx2.AsyncClient:
+    verify = True
+    if gateway.ca_file is not None and transport is None:
+        verify = ssl.create_default_context(cafile=str(gateway.ca_file))
+    # One client per request keeps cookies from outliving it; the deadline is the only timeout.
+    return httpx2.AsyncClient(
+        base_url=gateway.origin,
+        transport=transport,
+        verify=verify,
+        trust_env=False,
+        follow_redirects=False,
+        timeout=None,
+    )
 
 
 class _ToolCallEcho(TypedDict):
@@ -417,7 +492,7 @@ async def _reply_of[Result](
     if status == httpx2.codes.TOO_MANY_REQUESTS:
         wait = _wait_seconds(response.headers.get("Retry-After"))
         raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.BUSY, retry_after_s=wait)
-    _LOGGER.warning("the gateway answered the turn with status %d", status)
+    _LOGGER.warning("the gateway answered with status %d", status)
     is_refusal = httpx2.codes.BAD_REQUEST <= status < httpx2.codes.INTERNAL_SERVER_ERROR
     detail = GatewayDetail.GATEWAY_REFUSED if is_refusal else GatewayDetail.GATEWAY_FAILED
     raise _unavailable(detail)
@@ -447,6 +522,33 @@ async def _judged(response: httpx2.Response, *, offered: frozenset[str]) -> _Rou
     except _UNREADABLE_REPLY:
         pass
     raise _malformed_reply()
+
+
+async def _models_of(response: httpx2.Response) -> GatewayModels:
+    """The ``data`` ids that are gateway model names, by kind; any other id is not offered."""
+    body = await _read_body(response, MAX_EVENT_BYTES)
+    try:
+        entries = json.loads(body)["data"]
+        if not isinstance(entries, list):
+            raise _malformed_reply()
+        ids = [entry["id"] for entry in entries]
+    except _UNREADABLE_REPLY:
+        raise _malformed_reply() from None
+    if not all(isinstance(model_id, str) for model_id in ids):
+        raise _malformed_reply()
+    names = [model_id for model_id in ids if _is_model_name(model_id)]
+    return GatewayModels(
+        text=tuple(name for name in names if model_kind_of(name) is ModelKind.TEXT),
+        image=tuple(name for name in names if model_kind_of(name) is ModelKind.IMAGE),
+    )
+
+
+def _is_model_name(text: str) -> bool:
+    try:
+        _MODEL_NAME.validate_python(text, strict=True)
+    except ValidationError:
+        return False
+    return True
 
 
 async def _picture_of(response: httpx2.Response) -> RunFile:
