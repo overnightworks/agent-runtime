@@ -1,4 +1,4 @@
-"""The ASGI plumbing both MCP fronts share: header fields, the request body, the written answer."""
+"""What both MCP fronts share: header fields, request body, written answer, the listed tool."""
 
 from __future__ import annotations
 
@@ -6,7 +6,11 @@ from collections.abc import Awaitable, Callable, MutableMapping
 from http import HTTPStatus
 from typing import Any, Final
 
-from agent_runtime_client.mcp_wire import PROTOCOL_VERSION_HEADER, HttpAnswer, ToolDefinition
+from agent_runtime_client.mcp_wire import (
+    PROTOCOL_VERSION_HEADER,
+    AnnotatedToolDefinition,
+    HttpAnswer,
+)
 from agent_runtime_client.tools import ToolDeclaration
 from agent_runtime_client.wire import MAX_EVENT_BYTES
 
@@ -16,6 +20,7 @@ type Receive = Callable[[], Awaitable[Message]]
 type Send = Callable[[Message], Awaitable[None]]
 type AsgiApp = Callable[[Scope, Receive, Send], Awaitable[None]]
 
+LOGGER_NAME: Final = "agent_runtime_client.mcp_server"
 HEADER_ENCODING: Final = "iso-8859-1"
 _VERSION_SEPARATOR: Final = ", "
 _CONTENT_TYPE_FIELD: Final = b"content-type"
@@ -35,7 +40,9 @@ def protocol_version(scope: Scope) -> str | None:
     return _VERSION_SEPARATOR.join(v.decode(HEADER_ENCODING) for v in values) if values else None
 
 
-def definition_of(declaration: ToolDeclaration, *, read_only_hint: bool = False) -> ToolDefinition:
+def definition_of(
+    declaration: ToolDeclaration, *, read_only_hint: bool = False
+) -> AnnotatedToolDefinition:
     """The listed tool; ``readOnlyHint`` is carried only when asked for, else absent."""
     members: dict[str, Any] = {
         "name": declaration.name,
@@ -44,7 +51,7 @@ def definition_of(declaration: ToolDeclaration, *, read_only_hint: bool = False)
     }
     if read_only_hint:
         members["annotations"] = {"readOnlyHint": True}
-    return ToolDefinition.model_validate(members)
+    return AnnotatedToolDefinition.model_validate(members)
 
 
 async def read_body(receive: Receive) -> bytes | None:

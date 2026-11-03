@@ -16,6 +16,7 @@ from http import HTTPStatus
 from typing import Final
 
 from agent_runtime_client.mcp_server.asgi import (
+    LOGGER_NAME,
     Receive,
     Scope,
     Send,
@@ -47,7 +48,7 @@ from agent_runtime_client.wire import JsonObject
 
 type ResolvePerson = Callable[[Scope], Principal]
 
-_LOG: Final = logging.getLogger("agent_runtime_client.mcp_server")
+_LOG: Final = logging.getLogger(LOGGER_NAME)
 _HANDLER_FAILED_TEXT: Final = "the tool failed"
 
 
@@ -130,8 +131,10 @@ class McpPersonFront:
         name = tool.declaration.name
         try:
             outcome = await tool.handler(request, arguments)
+            response = tool_result_response(request_id, outcome)
         except Exception as failure:
             _LOG.error("a tool failed: %s raised %s", name, type(failure).__name__)
             outcome = ToolOutcome(_HANDLER_FAILED_TEXT, is_error=True)
+            response = tool_result_response(request_id, outcome)
         _LOG.info("a tool was called: %s is_error=%s", name, outcome.is_error)
-        return answer_for(tool_result_response(request_id, outcome))
+        return answer_for(response)

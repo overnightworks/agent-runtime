@@ -367,7 +367,8 @@ front answers no challenge.
 
 `resolve_person` is a port, `Callable[[Scope], Principal]`, and the front's one seam
 to webauth: the client imports no webauth, and the host binds the port to
-`webauth.middleware.resource_person`. The front calls it first on every request,
+a small adapter over `webauth.middleware.resource_person`, which returns an
+`AuthenticatedUser`, while the port returns a `Principal` (`iss` and `sub`). The front calls it first on every request,
 before it reads the body. Its failure propagates to the host: no tool runs and the
 front writes no answer, because a front reached without the gate's admission is a
 host defect.

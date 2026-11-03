@@ -35,6 +35,7 @@ from agent_runtime_client.capability import (
 from agent_runtime_client.errors import raise_without_chain
 from agent_runtime_client.mcp_server.asgi import (
     HEADER_ENCODING,
+    LOGGER_NAME,
     AsgiApp,
     Receive,
     Scope,
@@ -76,7 +77,7 @@ from agent_runtime_client.wire import JsonObject
 
 type ToolHandler = Callable[[CapabilityClaims, JsonObject], Awaitable[ToolOutcome]]
 
-_LOG: Final = logging.getLogger("agent_runtime_client.mcp_server")
+_LOG: Final = logging.getLogger(LOGGER_NAME)
 _UNKNOWN_METHOD: Final = "unknown_method"
 _UNKNOWN_TOOL: Final = "unknown_tool"
 _KNOWN_METHODS: Final = frozenset(McpMethod)
