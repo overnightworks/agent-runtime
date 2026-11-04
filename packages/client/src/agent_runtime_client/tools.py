@@ -19,7 +19,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from agent_runtime_client.turn import JsonObject, Principal
 
 __all__ = [
-    "AGENT_TOOL_EXTENSION",
     "HandTool",
     "HandToolHandler",
     "JsonObject",
