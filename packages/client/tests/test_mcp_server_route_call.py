@@ -13,18 +13,6 @@ from agent_runtime_client.mcp_server.route_call import RouteTarget, call_route
 from agent_runtime_client.tools import ToolOutcome
 from agent_runtime_client.wire import MAX_EVENT_BYTES
 
-OUTER_HEADERS = [
-    (b"host", b"notes.example"),
-    (b"authorization", b"Bearer abc"),
-    (b"cookie", b"session=secret"),
-    (b"origin", b"https://notes.example"),
-    (b"accept-encoding", b"gzip"),
-    (b"x-forwarded-for", b"203.0.113.9"),
-    (b"x-forwarded-for", b"198.51.100.2"),
-    (b"x-forwarded-proto", b"https"),
-    (b"user-agent", b"agent"),
-]
-
 
 class Note(BaseModel):
     title: str
@@ -43,10 +31,39 @@ def outer_scope(root_path: str = "") -> dict[str, Any]:
         "method": "POST",
         "path": "/mcp",
         "query_string": b"",
-        "headers": OUTER_HEADERS,
+        "headers": [
+            (b"host", b"notes.example"),
+            (b"authorization", b"Bearer abc"),
+            (b"cookie", b"session=secret"),
+            (b"origin", b"https://notes.example"),
+            (b"accept-encoding", b"gzip"),
+            (b"x-forwarded-for", b"203.0.113.9"),
+            (b"x-forwarded-for", b"198.51.100.2"),
+            (b"x-forwarded-proto", b"https"),
+            (b"user-agent", b"agent"),
+        ],
         "state": {"admitted": True},
+        "extensions": {"admitted": True},
+        "user": "admitted",
         "app": object(),
     }
+
+
+@pytest.fixture
+def echo_target() -> RouteTarget:
+    return RouteTarget("GET", "/echo/{value}", path=frozenset({"value"}), query=(), body=None)
+
+
+@pytest.fixture
+def search_target() -> RouteTarget:
+    return RouteTarget("GET", "/search", path=frozenset(), query=("q", "limit"), body=None)
+
+
+@pytest.fixture
+def notes_target() -> RouteTarget:
+    return RouteTarget(
+        "POST", "/notes", path=frozenset(), query=(), body=frozenset({"title", "count"})
+    )
 
 
 @pytest.fixture
@@ -84,13 +101,6 @@ def run(app: AsgiApp, target: RouteTarget, arguments: dict[str, Any], **scope: A
     return asyncio.run(call_route(app, outer_scope(**scope), target, arguments))
 
 
-ECHO = RouteTarget("GET", "/echo/{value}", path=frozenset({"value"}), query=(), body=None)
-SEARCH = RouteTarget("GET", "/search", path=frozenset(), query=("q", "limit"), body=None)
-NOTES = RouteTarget(
-    "POST", "/notes", path=frozenset(), query=(), body=frozenset({"title", "count"})
-)
-
-
 @pytest.mark.parametrize(
     ("value", "path", "raw_path"),
     [
@@ -103,16 +113,18 @@ NOTES = RouteTarget(
     ],
 )
 def test_path_values_keep_the_decoded_path_apart_from_the_encoded_raw_path(
-    echo_app: FastAPI, value: str, path: str, raw_path: str
+    echo_target: RouteTarget, echo_app: FastAPI, value: str, path: str, raw_path: str
 ) -> None:
-    outcome = run(echo_app, ECHO, {"value": value})
+    outcome = run(echo_app, echo_target, {"value": value})
 
     reached = json.loads(outcome.content)
     assert (reached["value"], reached["path"], reached["raw_path"]) == (value, path, raw_path)
 
 
-def test_the_outer_root_path_prefixes_the_inner_path(echo_app: FastAPI) -> None:
-    outcome = run(echo_app, ECHO, {"value": "x"}, root_path="/notes")
+def test_the_outer_root_path_prefixes_the_inner_path(
+    echo_target: RouteTarget, echo_app: FastAPI
+) -> None:
+    outcome = run(echo_app, echo_target, {"value": "x"}, root_path="/notes")
 
     reached = json.loads(outcome.content)
     assert (reached["path"], reached["raw_path"]) == ("/notes/echo/x", "/notes/echo/x")
@@ -122,9 +134,11 @@ class RecordingApp:
     def __init__(self, inner: AsgiApp) -> None:
         self.inner = inner
         self.calls = 0
+        self.scopes: list[set[str]] = []
 
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
         self.calls += 1
+        self.scopes.append(set(scope))
         await self.inner(scope, receive, send)
 
 
@@ -143,11 +157,11 @@ class RecordingApp:
     ],
 )
 def test_a_bad_path_value_or_an_unnamed_argument_is_refused_with_no_inner_request(
-    echo_app: FastAPI, arguments: dict[str, Any]
+    echo_target: RouteTarget, echo_app: FastAPI, arguments: dict[str, Any]
 ) -> None:
     app = RecordingApp(echo_app)
 
-    outcome = run(app, ECHO, arguments)
+    outcome = run(app, echo_target, arguments)
 
     assert outcome.is_error
     assert app.calls == 0
@@ -155,11 +169,11 @@ def test_a_bad_path_value_or_an_unnamed_argument_is_refused_with_no_inner_reques
 
 @pytest.mark.parametrize("value", [{"a": 1}, ["a"]])
 def test_an_object_or_array_query_value_is_refused_with_no_inner_request(
-    echo_app: FastAPI, value: Any
+    search_target: RouteTarget, echo_app: FastAPI, value: Any
 ) -> None:
     app = RecordingApp(echo_app)
 
-    outcome = run(app, SEARCH, {"q": value})
+    outcome = run(app, search_target, {"q": value})
 
     assert outcome.is_error
     assert app.calls == 0
@@ -176,9 +190,9 @@ def test_an_object_or_array_query_value_is_refused_with_no_inner_request(
     ],
 )
 def test_query_values_reach_the_route_as_sent(
-    echo_app: FastAPI, arguments: dict[str, Any], query_string: str
+    search_target: RouteTarget, echo_app: FastAPI, arguments: dict[str, Any], query_string: str
 ) -> None:
-    outcome = run(echo_app, SEARCH, arguments)
+    outcome = run(echo_app, search_target, arguments)
 
     assert not outcome.is_error
     assert json.loads(outcome.content)["query_string"] == query_string
@@ -193,27 +207,31 @@ def test_a_boolean_query_value_is_sent_as_its_json_text(echo_app: FastAPI) -> No
 
 
 def test_the_routes_own_422_for_an_empty_query_value_is_a_failed_result_with_its_body(
+    search_target: RouteTarget,
     echo_app: FastAPI,
 ) -> None:
-    outcome = run(echo_app, SEARCH, {"limit": ""})
+    outcome = run(echo_app, search_target, {"limit": ""})
 
     assert outcome.is_error
     assert "limit" in outcome.content
 
 
-def test_the_inner_scope_carries_only_the_allowlisted_keys(echo_app: FastAPI) -> None:
-    outcome = run(echo_app, ECHO, {"value": "x"})
+def test_the_inner_scope_carries_exactly_the_allowlisted_keys(
+    echo_target: RouteTarget, echo_app: FastAPI
+) -> None:
+    app = RecordingApp(echo_app)
 
-    keys = set(json.loads(outcome.content)["scope_keys"])
+    run(app, echo_target, {"value": "x"})
+
     carried = {"type", "asgi", "http_version", "scheme", "server", "client", "root_path"}
     own = {"method", "path", "raw_path", "query_string", "headers"}
-    assert {"state", "cookie", "origin"} & keys == set()
-    assert carried <= keys
-    assert own <= keys
+    assert app.scopes == [carried | own]
 
 
-def test_the_inner_request_replays_exactly_the_named_headers(echo_app: FastAPI) -> None:
-    outcome = run(echo_app, ECHO, {"value": "x"})
+def test_the_inner_request_replays_exactly_the_named_headers(
+    echo_target: RouteTarget, echo_app: FastAPI
+) -> None:
+    outcome = run(echo_app, echo_target, {"value": "x"})
 
     assert json.loads(outcome.content)["headers"] == [
         ["authorization", "Bearer abc"],
@@ -226,9 +244,10 @@ def test_the_inner_request_replays_exactly_the_named_headers(echo_app: FastAPI) 
 
 
 def test_a_post_sends_its_body_fields_as_one_json_object_with_the_body_headers(
+    notes_target: RouteTarget,
     echo_app: FastAPI,
 ) -> None:
-    outcome = run(echo_app, NOTES, {"title": "Dawn", "count": 2})
+    outcome = run(echo_app, notes_target, {"title": "Dawn", "count": 2})
 
     reached = json.loads(outcome.content)
     assert (reached["title"], reached["count"]) == ("Dawn", 2)
@@ -266,9 +285,9 @@ def replying(status: int, *chunks: bytes, complete: bool = True, started: bool =
     ],
 )
 def test_a_2xx_gives_the_body_and_a_4xx_gives_a_failed_result_with_the_routes_body(
-    app: AsgiApp, is_error: bool, content: str
+    echo_target: RouteTarget, app: AsgiApp, is_error: bool, content: str
 ) -> None:
-    outcome = run(app, ECHO, {"value": "x"})
+    outcome = run(app, echo_target, {"value": "x"})
 
     assert outcome == ToolOutcome(content, is_error=is_error)
 
@@ -301,29 +320,36 @@ def test_a_2xx_gives_the_body_and_a_4xx_gives_a_failed_result_with_the_routes_bo
     ],
 )
 def test_an_unusable_response_gives_one_failed_result_that_repeats_nothing_of_the_body(
+    echo_target: RouteTarget,
     app: AsgiApp,
 ) -> None:
-    outcome = run(app, ECHO, {"value": "x"})
+    outcome = run(app, echo_target, {"value": "x"})
 
     assert outcome.is_error
-    assert outcome == run(replying(500, b"other"), ECHO, {"value": "x"})
+    assert outcome == run(replying(500, b"other"), echo_target, {"value": "x"})
 
 
-def test_a_body_exactly_at_the_bound_is_given() -> None:
-    outcome = run(replying(200, b"x" * MAX_EVENT_BYTES), ECHO, {"value": "x"})
+def test_a_body_exactly_at_the_bound_is_given(
+    echo_target: RouteTarget,
+) -> None:
+    outcome = run(replying(200, b"x" * MAX_EVENT_BYTES), echo_target, {"value": "x"})
 
     assert outcome == ToolOutcome("x" * MAX_EVENT_BYTES, is_error=False)
 
 
-def test_an_exception_the_app_raises_propagates() -> None:
+def test_an_exception_the_app_raises_propagates(
+    echo_target: RouteTarget,
+) -> None:
     async def failing(scope: Any, receive: Any, send: Any) -> None:
         raise RuntimeError("boom")
 
     with pytest.raises(RuntimeError):
-        run(failing, ECHO, {"value": "x"})
+        run(failing, echo_target, {"value": "x"})
 
 
-def test_receive_gives_the_body_once_then_blocks_until_the_response_is_complete() -> None:
+def test_receive_gives_the_body_once_then_blocks_until_the_response_is_complete(
+    notes_target: RouteTarget,
+) -> None:
     seen: dict[str, Any] = {}
 
     async def app(scope: Any, receive: Any, send: Any) -> None:
@@ -335,7 +361,7 @@ def test_receive_gives_the_body_once_then_blocks_until_the_response_is_complete(
         await respond(send, 200, b"done")
         seen["second"] = await waiting
 
-    run(app, NOTES, {"title": "Dawn", "count": 2})
+    run(app, notes_target, {"title": "Dawn", "count": 2})
 
     assert seen["first"]["type"] == "http.request"
     assert json.loads(seen["first"]["body"]) == {"title": "Dawn", "count": 2}

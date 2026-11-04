@@ -57,6 +57,7 @@ class Registration:
     effect: ToolEffect = ToolEffect.READ_ONLY
     description: str | None = "Does the thing."
     extra: dict[str, Any] = field(default_factory=dict)
+    document: dict[str, Any] = field(default_factory=dict)
 
 
 def application(*registrations: Registration) -> FastAPI:
@@ -71,7 +72,7 @@ def application(*registrations: Registration) -> FastAPI:
             registration.path,
             registration.endpoint,
             methods=[registration.method],
-            openapi_extra=mark,
+            openapi_extra={**(mark or {}), **registration.document},
             description=registration.description,
             **registration.extra,
         )
@@ -130,6 +131,20 @@ def test_a_body_is_inlined_and_flattened_beside_the_parameters() -> None:
     assert parameters["properties"]["genre"]["enum"] == ["pop", "rock"]
     assert parameters["required"] == ["title", "genre"]
     assert tool.declaration.effect is ToolEffect.SIDE_EFFECTING
+
+
+async def described_genre(genre: Annotated[Genre, Query(description="Which genre.")]) -> Any:
+    return {}
+
+
+def test_a_reference_keeps_the_constraints_and_metadata_written_beside_it() -> None:
+    app = application(Registration("GET", "/notes", described_genre, tool="a"))
+
+    (tool,) = generated(app).tools
+
+    genre = tool.declaration.parameters["properties"]["genre"]
+    assert genre["description"] == "Which genre."
+    assert genre["enum"] == ["pop", "rock"]
 
 
 def test_an_unmarked_route_is_no_tool_and_no_mark() -> None:
@@ -226,6 +241,25 @@ async def integer_path_route(note_id: int) -> Any:
     return {}
 
 
+async def string_path_route(note_id: str) -> Any:
+    return {}
+
+
+async def no_content() -> None:
+    return None
+
+
+def body_of(*media_types: str) -> dict[str, Any]:
+    schema = {"type": "object", "properties": {}}
+    content = {media_type: {"schema": schema} for media_type in media_types}
+    return {"requestBody": {"required": True, "content": content}}
+
+
+QUERY_TWIN_OF_PATH = {
+    "parameters": [{"name": "note_id", "in": "query", "schema": {"type": "string"}}]
+}
+
+
 @pytest.mark.parametrize(
     "registration",
     [
@@ -242,6 +276,15 @@ async def integer_path_route(note_id: int) -> Any:
         Registration("POST", "/notes", shared_name_route, tool="a"),
         Registration("GET", "/notes/{note_id}", integer_path_route, tool="a"),
         Registration("GET", "/notes", nothing, tool="a", description=None),
+        Registration("POST", "/notes", nothing, tool="a", document=body_of("text/plain")),
+        Registration(
+            "POST", "/notes", nothing, tool="a", document=body_of("application/json", "text/plain")
+        ),
+        Registration(
+            "GET", "/notes/{note_id}", string_path_route, tool="a", document=QUERY_TWIN_OF_PATH
+        ),
+        Registration("GET", "/notes", no_content, tool="a", extra={"status_code": 204}),
+        Registration("GET", "/notes", nothing, tool="a", extra={"response_model": Tree}),
     ],
     ids=[
         "put",
@@ -255,15 +298,26 @@ async def integer_path_route(note_id: int) -> Any:
         "name shared by a parameter and a body field",
         "integer path parameter",
         "missing description",
+        "non-JSON body",
+        "body offered in JSON and another type",
+        "name shared by a path and a query parameter",
+        "response without content",
+        "recursive response schema",
     ],
 )
 def test_a_marked_route_outside_the_profile_is_refused_naming_the_operation(
     registration: Registration,
 ) -> None:
-    failure = refused(application(registration))
+    app = application(registration)
+    operation_id = app.openapi()["paths"][registration.path][registration.method.lower()][
+        "operationId"
+    ]
+
+    failure = refused(app)
 
     assert registration.method in str(failure)
     assert registration.path in str(failure)
+    assert operation_id in str(failure)
 
 
 def test_two_marks_of_one_name_are_refused() -> None:
@@ -344,8 +398,10 @@ def test_the_host_mark_functions_value_error_becomes_a_profile_error_with_it_as_
         route_tools(app.openapi(), app, mark_route=mark_route)
 
     assert raised.value.__cause__ is hosts_error
+    operation_id = app.openapi()["paths"]["/notes"]["get"]["operationId"]
     assert "GET" in str(raised.value)
     assert "/notes" in str(raised.value)
+    assert operation_id in str(raised.value)
 
 
 def test_another_exception_from_the_host_mark_function_propagates_unchanged() -> None:

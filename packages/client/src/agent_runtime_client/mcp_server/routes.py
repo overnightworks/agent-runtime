@@ -5,14 +5,13 @@ maps an upper-case method and the document's template to the host's mark type. E
 the supported profile is refused at start with one ``RouteProfileError``.
 """
 
-import re
 from collections.abc import Callable, Hashable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final
 
 from agent_runtime_client.mcp_server.asgi import AsgiApp
 from agent_runtime_client.mcp_server.person import PersonRequest, PersonTool, PersonToolHandler
-from agent_runtime_client.mcp_server.route_call import RouteTarget, call_route
+from agent_runtime_client.mcp_server.route_call import RouteTarget, call_route, placeholder_names
 from agent_runtime_client.tools import (
     AGENT_TOOL_EXTENSION,
     JsonObject,
@@ -26,7 +25,6 @@ _OPERATION_METHODS: Final = frozenset({"get", "post", "put", "patch", "delete", 
 _SCALAR_TYPES: Final = frozenset({"string", "integer", "number", "boolean"})
 _JSON: Final = "application/json"
 _SCHEMA_REFERENCE: Final = "#/components/schemas/"
-_PLACEHOLDER: Final = re.compile(r"\{([^{}]+)\}")
 
 
 class RouteProfileError(ValueError):
@@ -80,7 +78,10 @@ def _inlined(node: Any, components: Mapping[str, Any], seen: tuple[str, ...] = (
     name = reference.removeprefix(_SCHEMA_REFERENCE)
     if name in seen or name not in components:
         raise _Breach("a schema is recursive or unresolved")
-    return _inlined(components[name], components, (*seen, name))
+    resolved = _inlined(components[name], components, (*seen, name))
+    siblings = {key: _inlined(value, components, seen) for key, value in node.items()}
+    siblings.pop("$ref")
+    return {**resolved, **siblings}
 
 
 def _scalar(schema: Mapping[str, Any]) -> bool:
@@ -116,10 +117,18 @@ def _body(
     return schema["properties"], schema.get("required", [])
 
 
-def _check_responses(operation: _Operation) -> None:
-    for response in operation.node.get("responses", {}).values():
-        if not set(response.get("content", {})) <= {_JSON}:
+def _check_responses(operation: _Operation, components: Mapping[str, Any]) -> None:
+    successes = 0
+    for status, response in operation.node.get("responses", {}).items():
+        content = response.get("content", {})
+        if not set(content) <= {_JSON}:
             raise _Breach("a response must be JSON")
+        if _JSON in content:
+            _inlined(content[_JSON].get("schema", {}), components)
+        if str(status).startswith("2"):
+            successes += 1 if _JSON in content else 0
+    if not successes:
+        raise _Breach("a success response must be JSON")
 
 
 def _check_description(operation: _Operation) -> str:
@@ -163,7 +172,7 @@ def _declared_inputs(
         schema = _parameter_schema(parameter, components)
         (paths if parameter["in"] == "path" else queries).append(parameter["name"])
         inputs.add(parameter["name"], schema, is_required=parameter.get("required", False))
-    if set(paths) != set(_PLACEHOLDER.findall(operation.template)):
+    if frozenset(paths) != placeholder_names(operation.template):
         raise _Breach("the path parameters do not match the template")
     body = _body(operation, components)
     for name, schema in (body[0] if body else {}).items():
@@ -185,7 +194,7 @@ def _handler(app: AsgiApp, target: RouteTarget) -> PersonToolHandler:
 def _tool(operation: _Operation, app: AsgiApp, components: Mapping[str, Any]) -> PersonTool:
     if operation.method not in _SUPPORTED_METHODS:
         raise _Breach("only GET and POST can be marked")
-    _check_responses(operation)
+    _check_responses(operation, components)
     description = _check_description(operation)
     target, parameters = _declared_inputs(operation, components)
     mark = operation.node[AGENT_TOOL_EXTENSION]

@@ -42,6 +42,11 @@ _UNSAFE_SEGMENTS: Final = frozenset({"", ".", ".."})
 _PLACEHOLDER: Final = re.compile(r"\{([^{}]+)\}")
 
 
+def placeholder_names(template: str) -> frozenset[str]:
+    """The names a path template holds in braces; the same grammar the call substitutes."""
+    return frozenset(_PLACEHOLDER.findall(template))
+
+
 @dataclass(frozen=True)
 class RouteTarget:
     """A marked operation and where each of its arguments goes; ``body`` is ``None`` without one."""
