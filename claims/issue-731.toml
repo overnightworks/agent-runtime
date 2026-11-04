@@ -1,0 +1,8 @@
+claim_id = "e23e93a196cb4a5c85992fb4ae408b27"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "62f302b0f2588743ed321c1ae5780b519d773793"
+branch = "claude/issue-731-ar-5-a-route-an-app-marks-becomes-a-tool"
+scope = ["docs/MIGRATING.md", "docs/wire.md", "packages/client/pyproject.toml", "packages/client/src/agent_runtime_client/mcp_server/__init__.py", "packages/client/src/agent_runtime_client/mcp_server/route_call.py", "packages/client/src/agent_runtime_client/mcp_server/routes.py", "packages/client/src/agent_runtime_client/tools.py", "packages/client/tests/test_mcp_server_route_call.py", "packages/client/tests/test_mcp_server_routes.py", "pyproject.toml", "quality/baseline.toml", "uv.lock"]
+opened_commit = "481afa3897dac2b32329aa3a773a573efa39cdf1"
+whole_reason = "The mark, the generator and the call are one contract: none proves anything without the other two."
