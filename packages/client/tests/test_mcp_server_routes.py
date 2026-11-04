@@ -133,32 +133,40 @@ def test_a_body_is_inlined_and_flattened_beside_the_parameters() -> None:
     assert tool.declaration.effect is ToolEffect.SIDE_EFFECTING
 
 
-async def described_genre(genre: Annotated[Genre, Query(description="Which genre.")]) -> Any:
+async def described_genre(
+    genre: Annotated[Genre, Query(description="Which genre.")] = Genre.ROCK,
+) -> Any:
     return {}
 
 
-def test_a_reference_keeps_the_description_written_beside_it() -> None:
+def test_annotations_beside_a_reference_are_kept() -> None:
     app = application(Registration("GET", "/notes", described_genre, tool="a"))
 
     (tool,) = generated(app).tools
 
     genre = tool.declaration.parameters["properties"]["genre"]
-    assert genre["description"] == "Which genre."
+    assert (genre["description"], genre["default"]) == ("Which genre.", "rock")
     assert genre["enum"] == ["pop", "rock"]
 
 
-def test_a_constraint_beside_a_reference_narrows_the_component_not_replaces_it() -> None:
+def test_a_constraint_beside_a_reference_is_refused() -> None:
     app = application(Registration("GET", "/notes", list_notes, tool="a"))
     spec = app.openapi()
-    spec["components"]["schemas"]["Text"] = {"type": "string", "maxLength": 3}
-    (limit,) = [p for p in spec["paths"]["/notes"]["get"]["parameters"] if p["name"] == "genre"]
-    limit["schema"] = {"$ref": "#/components/schemas/Text", "maxLength": 5}
+    (genre,) = [p for p in spec["paths"]["/notes"]["get"]["parameters"] if p["name"] == "genre"]
+    genre["schema"] = {**genre["schema"], "maxLength": 5}
 
-    (tool,) = route_tools(spec, app, mark_route=lambda method, template: (method, template)).tools
+    with pytest.raises(RouteProfileError, match="GET /notes"):
+        route_tools(spec, app, mark_route=lambda method, template: (method, template))
 
-    genre = tool.declaration.parameters["properties"]["genre"]
-    assert genre["maxLength"] == 3
-    assert {"maxLength": 5} in genre["allOf"]
+
+def test_a_requirement_beside_a_referenced_body_is_refused() -> None:
+    app = application(Registration("POST", "/notes", create_note, tool="a"))
+    spec = app.openapi()
+    content = spec["paths"]["/notes"]["post"]["requestBody"]["content"]["application/json"]
+    content["schema"] = {**content["schema"], "required": ["title"]}
+
+    with pytest.raises(RouteProfileError, match="POST /notes"):
+        route_tools(spec, app, mark_route=lambda method, template: (method, template))
 
 
 def test_an_unmarked_route_is_no_tool_and_no_mark() -> None:

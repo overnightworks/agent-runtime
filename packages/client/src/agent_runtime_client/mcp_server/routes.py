@@ -5,7 +5,7 @@ maps an upper-case method and the document's template to the host's mark type. E
 the supported profile is refused at start with one ``RouteProfileError``.
 """
 
-from collections.abc import Callable, Hashable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final
 
@@ -25,6 +25,7 @@ _OPERATION_METHODS: Final = frozenset({"get", "post", "put", "patch", "delete", 
 _SCALAR_TYPES: Final = frozenset({"string", "integer", "number", "boolean"})
 _JSON: Final = "application/json"
 _SCHEMA_REFERENCE: Final = "#/components/schemas/"
+_ANNOTATIONS: Final = frozenset({"title", "description", "default", "examples", "deprecated"})
 
 
 class RouteProfileError(ValueError):
@@ -47,7 +48,7 @@ class RouteTools[Mark: Hashable]:
 class _Operation:
     method: str
     template: str
-    node: Mapping[str, Any]
+    node: JsonObject
 
     @property
     def label(self) -> str:
@@ -66,7 +67,7 @@ def _overlap(first: str, second: str) -> bool:
     )
 
 
-def _inlined(node: Any, components: Mapping[str, Any], seen: tuple[str, ...] = ()) -> Any:
+def _inlined(node: Any, components: JsonObject, seen: tuple[str, ...] = ()) -> Any:
     """The schema with every ``$ref`` replaced by its component; a recursive one is a breach."""
     if isinstance(node, list):
         return [_inlined(item, components, seen) for item in node]
@@ -79,14 +80,13 @@ def _inlined(node: Any, components: Mapping[str, Any], seen: tuple[str, ...] = (
     if name in seen or name not in components:
         raise _Breach("a schema is recursive or unresolved")
     resolved = _inlined(components[name], components, (*seen, name))
-    siblings = {key: _inlined(value, components, seen) for key, value in node.items()}
-    siblings.pop("$ref")
-    clashing = {key: value for key, value in siblings.items() if resolved.get(key, value) != value}
-    merged = {**resolved, **{key: value for key, value in siblings.items() if key not in clashing}}
-    return {**merged, "allOf": [*merged.get("allOf", []), clashing]} if clashing else merged
+    siblings = {key: value for key, value in node.items() if key != "$ref"}
+    if not siblings.keys() <= _ANNOTATIONS:
+        raise _Breach("a reference may carry only an annotation beside it")
+    return {**resolved, **siblings}
 
 
-def _scalar(schema: Mapping[str, Any]) -> bool:
+def _scalar(schema: JsonObject) -> bool:
     options = schema.get("anyOf")
     if options is None:
         return schema.get("type") in _SCALAR_TYPES
@@ -94,7 +94,7 @@ def _scalar(schema: Mapping[str, Any]) -> bool:
     return len(options) == 2 and len(present) == 1 and _scalar(present[0])
 
 
-def _parameter_schema(parameter: Mapping[str, Any], components: Mapping[str, Any]) -> JsonObject:
+def _parameter_schema(parameter: JsonObject, components: JsonObject) -> JsonObject:
     schema = _inlined(parameter.get("schema", {}), components)
     where = parameter["in"]
     if where == "path" and schema.get("type") != "string":
@@ -105,8 +105,8 @@ def _parameter_schema(parameter: Mapping[str, Any], components: Mapping[str, Any
 
 
 def _body(
-    operation: _Operation, components: Mapping[str, Any]
-) -> tuple[Mapping[str, Any], Sequence[str]] | None:
+    operation: _Operation, components: JsonObject
+) -> tuple[JsonObject, Sequence[str]] | None:
     """The body's properties and required names, or ``None`` for an operation without one."""
     body = operation.node.get("requestBody")
     if body is None:
@@ -119,7 +119,7 @@ def _body(
     return schema["properties"], schema.get("required", [])
 
 
-def _check_responses(operation: _Operation, components: Mapping[str, Any]) -> None:
+def _check_responses(operation: _Operation, components: JsonObject) -> None:
     successes = 0
     for status, response in operation.node.get("responses", {}).items():
         content = response.get("content", {})
@@ -167,7 +167,7 @@ class _Inputs:
 
 
 def _declared_inputs(
-    operation: _Operation, components: Mapping[str, Any]
+    operation: _Operation, components: JsonObject
 ) -> tuple[RouteTarget, JsonObject]:
     """Where each argument goes, and the input schema."""
     inputs = _Inputs()
@@ -195,7 +195,7 @@ def _handler(app: AsgiApp, target: RouteTarget) -> PersonToolHandler:
     return handler
 
 
-def _tool(operation: _Operation, app: AsgiApp, components: Mapping[str, Any]) -> PersonTool:
+def _tool(operation: _Operation, app: AsgiApp, components: JsonObject) -> PersonTool:
     if operation.method not in _SUPPORTED_METHODS:
         raise _Breach("only GET and POST can be marked")
     _check_responses(operation, components)
@@ -211,7 +211,7 @@ def _tool(operation: _Operation, app: AsgiApp, components: Mapping[str, Any]) ->
     return PersonTool(declaration, _handler(app, target))
 
 
-def _operations(openapi: Mapping[str, Any]) -> list[_Operation]:
+def _operations(openapi: JsonObject) -> list[_Operation]:
     return [
         _Operation(method, template, node)
         for template, item in openapi.get("paths", {}).items()
@@ -231,7 +231,7 @@ def _marked(
     operation: _Operation,
     operations: Sequence[_Operation],
     app: AsgiApp,
-    components: Mapping[str, Any],
+    components: JsonObject,
 ) -> PersonTool:
     try:
         _unshadowed(operation, operations)
@@ -241,7 +241,7 @@ def _marked(
 
 
 def route_tools[Mark: Hashable](
-    openapi: Mapping[str, Any], app: AsgiApp, *, mark_route: Callable[[str, str], Mark]
+    openapi: JsonObject, app: AsgiApp, *, mark_route: Callable[[str, str], Mark]
 ) -> RouteTools[Mark]:
     """The tools and marks of every route marked with ``agent_tool``.
 
