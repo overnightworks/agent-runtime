@@ -182,7 +182,7 @@ What the client sends for a text turn, and nothing else:
 | `user` | `"fp-" + sha256(json.dumps([iss, sub], ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()`, 67 characters |
 
 The fingerprint's prefix, input and algorithm are one contract across apps: a change splits
-every person's budget. `["https://issuer.example", "subject-1"]` gives
+every person's budget, so every caller computes it with `agent_runtime_client.turn.person_fingerprint`. `["https://issuer.example", "subject-1"]` gives
 `fp-2db44d96ffdef38f9e1cbfe73e9cf248fb66955b894846b34843a2d3a849d764`, and a non-ASCII subject, `["https://issuer.example", "subjéct-ü-1"]`, gives
 `fp-4670d575ad432d6edf969bf640bca6a2114230ad288ca5893725c511dd7c94c9`.
 
