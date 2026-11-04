@@ -1,8 +1,0 @@
-claim_id = "53b2304b2670428299d857a9e335a5bd"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "b8d20be9783429b7b789e220d535526c45ea7cdb"
-branch = "claude/issue-732-ar-f-person-fingerprint"
-scope = ["docs/MIGRATING.md", "docs/wire.md", "packages/client/src/agent_runtime_client/backend/gateway.py", "packages/client/src/agent_runtime_client/turn.py", "packages/client/tests/test_backend_gateway.py"]
-opened_commit = "bd1a8e42031005cb67cf5d6cc0e586af1cdc6caa"
-whole_reason = "The recipe's move, its one test and its docs rows are one public name."
