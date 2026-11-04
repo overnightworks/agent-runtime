@@ -546,6 +546,7 @@ api = [
     { name = "anthropic" },
 ]
 dev = [
+    { name = "fastapi" },
     { name = "import-linter" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -556,6 +557,7 @@ dev = [
 requires-dist = [
     { name = "anthropic", marker = "extra == 'api'", specifier = ">=0.26,<2" },
     { name = "anyio", specifier = ">=4.12,<5" },
+    { name = "fastapi", marker = "extra == 'dev'", specifier = ">=0.133,<1" },
     { name = "httpx", specifier = ">=0.27,<1" },
     { name = "import-linter", marker = "extra == 'dev'", specifier = ">=2.15,<3" },
     { name = "overnightworks-agent-runtime-client", editable = "packages/client" },
@@ -583,12 +585,14 @@ dev = [
     { name = "httpx2" },
 ]
 mcp-server = [
+    { name = "anyio" },
     { name = "cryptography" },
     { name = "pyjwt", extra = ["crypto"] },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "anyio", marker = "extra == 'mcp-server'", specifier = ">=4.12,<5" },
     { name = "cryptography", marker = "extra == 'mcp-server'", specifier = ">=50.0.2" },
     { name = "httpx2", marker = "extra == 'backend'", specifier = ">=2.12,<3" },
     { name = "overnightworks-agent-runtime-client", extras = ["backend"], marker = "extra == 'dev'", editable = "packages/client" },

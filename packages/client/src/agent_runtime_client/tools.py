@@ -12,13 +12,14 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent_runtime_client.turn import JsonObject, Principal
 
 __all__ = [
+    "AGENT_TOOL_EXTENSION",
     "HandTool",
     "HandToolHandler",
     "JsonObject",
@@ -26,7 +27,10 @@ __all__ = [
     "ToolDeclaration",
     "ToolEffect",
     "ToolOutcome",
+    "agent_tool",
 ]
+
+AGENT_TOOL_EXTENSION: Final = "x-agent-tool"
 
 
 class ToolEffect(StrEnum):
@@ -76,3 +80,11 @@ class HandTool:
 
     declaration: ToolDeclaration
     handler: HandToolHandler
+
+
+def agent_tool(*, name: str, effect: ToolEffect) -> dict[str, object]:
+    """The mark that makes a route a tool: pass it as FastAPI's ``openapi_extra``.
+
+    An unmarked route is never a tool. The client imports no FastAPI.
+    """
+    return {AGENT_TOOL_EXTENSION: {"name": name, "effect": effect.value}}
