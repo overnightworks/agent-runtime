@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Collection, Container, Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 from http import HTTPStatus
@@ -511,25 +511,3 @@ def carries_signature_of(token: str, data: bytes) -> bool:
     """
     signature_segment = token.rsplit(".", 1)[-1]
     return signature_segment.encode("ascii") in data
-
-
-WITHHELD: Final = HttpAnswer(HTTPStatus.INTERNAL_SERVER_ERROR, None, b"")
-_UNKNOWN_METHOD: Final = "unknown_method"
-_UNKNOWN_TOOL: Final = "unknown_tool"
-_KNOWN_METHODS: Final = frozenset(McpMethod)
-
-
-def request_label(body: bytes, offered_tools: Container[str]) -> str:
-    """Only closed words: a profile method and an offered tool name, else a fixed stand-in."""
-    try:
-        message = parse_message(body)
-    except McpWireError:
-        return _UNKNOWN_METHOD
-    method = getattr(message, "method", None)
-    if method not in _KNOWN_METHODS:
-        return _UNKNOWN_METHOD
-    if method != McpMethod.TOOLS_CALL:
-        return method
-    name = message.params.get("name")
-    known = isinstance(name, str) and name in offered_tools
-    return f"{method} {name if known else _UNKNOWN_TOOL}"

@@ -4,7 +4,8 @@ The host registers ``McpPersonFront`` as the exact route ``MCP_ENDPOINT_PATH``, 
 middleware that has already admitted or refused the caller, so this front answers no
 challenge. ``resolve_person`` is the one seam to that middleware and runs first on every
 request: its failure, or a result that is not a ``Principal``, propagates, because a front
-reached without the gate's admission is a host defect. No answer carries the request's bearer.
+reached without the gate's admission is a host defect. No answer the front writes, refusals
+included, carries the request's bearer.
 Rights are the route's, so ``tools/list`` offers every tool.
 """
 
@@ -19,6 +20,7 @@ from typing import Final
 from agent_runtime_client.mcp_server.asgi import (
     HEADER_ENCODING,
     LOGGER_NAME,
+    WITHHELD,
     Receive,
     Scope,
     Send,
@@ -26,11 +28,11 @@ from agent_runtime_client.mcp_server.asgi import (
     field_values,
     protocol_version,
     read_body,
+    request_label,
     write,
 )
 from agent_runtime_client.mcp_wire import (
     ACKNOWLEDGEMENT,
-    WITHHELD,
     Answered,
     Call,
     HttpAnswer,
@@ -43,7 +45,6 @@ from agent_runtime_client.mcp_wire import (
     carries_signature_of,
     decide_server_message,
     error_response,
-    request_label,
     tool_result_response,
     tools_list_response,
 )
@@ -55,7 +56,7 @@ type ResolvePerson = Callable[[Scope], Principal]
 
 _LOG: Final = logging.getLogger(LOGGER_NAME)
 _HANDLER_FAILED_TEXT: Final = "the tool failed"
-_BEARER_PREFIX: Final = "Bearer "
+_BEARER_SCHEME: Final = "bearer"
 
 
 @dataclass(frozen=True)
@@ -84,6 +85,19 @@ def _refusal(scope: Scope) -> HttpAnswer | None:
     return None
 
 
+def _bearers_of(scope: Scope) -> list[str]:
+    """Every credential the request presents under the ``bearer`` scheme, in the gate's grammar.
+
+    Reads only; whether the request is admitted is the gate's decision, never this front's.
+    """
+    credentials = []
+    for value in field_values(scope, b"authorization"):
+        parts = value.decode(HEADER_ENCODING).split()
+        if len(parts) == 2 and parts[0].casefold() == _BEARER_SCHEME:
+            credentials.append(parts[1])
+    return credentials
+
+
 class McpPersonFront:
     """An ASGI 3 app that serves the JSON-only MCP profile to one resolved person per request."""
 
@@ -103,28 +117,22 @@ class McpPersonFront:
         principal = self._resolve_person(scope)
         if not isinstance(principal, Principal):
             raise TypeError(f"resolve_person returned {type(principal).__name__}, not a Principal")
-        request = PersonRequest(principal, scope)
-        await write(send, await self._answer(request, receive))
+        bearers = _bearers_of(scope)
+        answer, body = await self._answer(PersonRequest(principal, scope), receive)
+        if any(carries_signature_of(token, answer.body) for token in bearers):
+            _LOG.warning("an answer was withheld: %s", request_label(body, self._tools))
+            answer = WITHHELD
+        await write(send, answer)
 
-    async def _answer(self, request: PersonRequest, receive: Receive) -> HttpAnswer:
+    async def _answer(self, request: PersonRequest, receive: Receive) -> tuple[HttpAnswer, bytes]:
+        """The answer and the request body it answers; the body is empty when none was read."""
         refusal = _refusal(request.scope)
         if refusal is not None:
-            return refusal
+            return refusal, b""
         body = await read_body(receive)
         if body is None:
-            return HttpAnswer(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, None, b"")
-        return self._cleared(request.scope, await self._decided(request, body), body)
-
-    def _cleared(self, scope: Scope, answer: HttpAnswer, request_body: bytes) -> HttpAnswer:
-        """The answer, or an empty 500 when it carries the signature of the request's bearer."""
-        for value in field_values(scope, b"authorization"):
-            header = value.decode(HEADER_ENCODING)
-            if header.startswith(_BEARER_PREFIX) and carries_signature_of(
-                header.removeprefix(_BEARER_PREFIX), answer.body
-            ):
-                _LOG.warning("an answer was withheld: %s", request_label(request_body, self._tools))
-                return WITHHELD
-        return answer
+            return HttpAnswer(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, None, b""), b""
+        return await self._decided(request, body), body
 
     async def _decided(self, request: PersonRequest, body: bytes) -> HttpAnswer:
         decision = decide_server_message(body, protocol_version(request.scope), self._tools)

@@ -36,6 +36,7 @@ from agent_runtime_client.errors import raise_without_chain
 from agent_runtime_client.mcp_server.asgi import (
     HEADER_ENCODING,
     LOGGER_NAME,
+    WITHHELD,
     AsgiApp,
     Receive,
     Scope,
@@ -44,6 +45,7 @@ from agent_runtime_client.mcp_server.asgi import (
     field_values,
     protocol_version,
     read_body,
+    request_label,
     write,
 )
 from agent_runtime_client.mcp_server.verification import (
@@ -53,7 +55,6 @@ from agent_runtime_client.mcp_server.verification import (
 )
 from agent_runtime_client.mcp_wire import (
     ACKNOWLEDGEMENT,
-    WITHHELD,
     Answered,
     Call,
     HttpAnswer,
@@ -67,7 +68,6 @@ from agent_runtime_client.mcp_wire import (
     answer_for,
     decide_server_message,
     error_response,
-    request_label,
     tool_result_response,
     tools_list_response,
 )

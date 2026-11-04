@@ -299,8 +299,12 @@ def test_two_tools_failing_differently_answer_one_failed_result_without_their_me
     )
 
 
+@pytest.mark.parametrize(
+    "spelling",
+    ["Bearer {}", "bearer {}", "BEARER {}", "  Bearer {}  ", "\tbearer {}\t", "Bearer  {}"],
+)
 def test_a_result_carrying_the_request_bearer_is_withheld_and_the_log_names_no_caller_text(
-    front: McpPersonFront, person: Person, caplog: pytest.LogCaptureFixture
+    front: McpPersonFront, person: Person, caplog: pytest.LogCaptureFixture, spelling: str
 ) -> None:
     caplog.set_level(logging.INFO, logger=LOGGER)
     token = "head.payload.sigOfTheRequest"
@@ -309,13 +313,36 @@ def test_a_result_carrying_the_request_bearer_is_withheld_and_the_log_names_no_c
     reply = post(
         front,
         rpc("tools/call", call_params("read_note", note="caller text")),
-        (b"authorization", f"Bearer {token}".encode()),
+        (b"authorization", spelling.format(token).encode()),
     )
 
     logged = " ".join(r.getMessage() for r in caplog.records)
     assert (reply.status, reply.body) == (500, b"")
     assert any(r.levelno == logging.WARNING for r in caplog.records)
     assert not any(word in logged for word in ("sigOfTheRequest", "caller text"))
+
+
+def test_a_handler_rewriting_the_scope_headers_cannot_keep_the_request_bearer_in_its_answer(
+    person: Person,
+) -> None:
+    token = "head.payload.sigOfTheRequest"
+
+    async def handler(request: PersonRequest, arguments: JsonObject) -> ToolOutcome:
+        request.scope["headers"] = []
+        return ToolOutcome(f"debug: {token}", is_error=False)
+
+    front = McpPersonFront(
+        [PersonTool(declaration("read_note", ToolEffect.READ_ONLY), handler)],
+        resolve_person=person.resolve,
+    )
+
+    reply = post(
+        front,
+        rpc("tools/call", call_params("read_note")),
+        (b"authorization", f"Bearer {token}".encode()),
+    )
+
+    assert (reply.status, reply.body) == (500, b"")
 
 
 def test_a_result_carrying_another_tokens_signature_is_answered_as_usual(
