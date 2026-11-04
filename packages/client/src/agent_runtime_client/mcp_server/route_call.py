@@ -14,6 +14,7 @@ from typing import Final
 from urllib.parse import quote, urlencode
 
 import anyio
+import anyio.lowlevel
 
 from agent_runtime_client.mcp_server.asgi import (
     LOGGER_NAME,
@@ -207,6 +208,7 @@ async def call_route(
         response.take(message)
         if response.complete:
             finished.set()
+        await anyio.lowlevel.checkpoint()
 
     await app(_inner_scope(outer, target, request), receive, send)
     return _outcome(response)

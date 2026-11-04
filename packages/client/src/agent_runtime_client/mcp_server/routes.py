@@ -85,7 +85,7 @@ def _inlined(node: Any, components: JsonObject, seen: tuple[str, ...] = ()) -> A
         raise _Breach("a schema is recursive or unresolved")
     resolved = _inlined(components[name], components, (*seen, name))
     siblings = {key: value for key, value in node.items() if key != "$ref"}
-    if not siblings.keys() <= _ANNOTATIONS:
+    if siblings.keys() - _ANNOTATIONS:
         raise _Breach("a reference may carry only an annotation beside it")
     return {**resolved, **siblings}
 

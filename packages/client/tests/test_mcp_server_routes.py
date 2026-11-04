@@ -428,11 +428,13 @@ def test_the_host_mark_functions_value_error_becomes_a_profile_error_with_it_as_
     def mark_route(method: str, template: str) -> Mark:
         raise hosts_error
 
+    schema = app.openapi()
+
     with pytest.raises(RouteProfileError) as raised:
-        route_tools(app.openapi(), app, mark_route=mark_route)
+        route_tools(schema, app, mark_route=mark_route)
 
     assert raised.value.__cause__ is hosts_error
-    operation_id = app.openapi()["paths"]["/notes"]["get"]["operationId"]
+    operation_id = schema["paths"]["/notes"]["get"]["operationId"]
     assert "GET" in str(raised.value)
     assert "/notes" in str(raised.value)
     assert operation_id in str(raised.value)
@@ -444,5 +446,7 @@ def test_another_exception_from_the_host_mark_function_propagates_unchanged() ->
     def mark_route(method: str, template: str) -> Mark:
         raise KeyError(template)
 
+    schema = app.openapi()
+
     with pytest.raises(KeyError):
-        route_tools(app.openapi(), app, mark_route=mark_route)
+        route_tools(schema, app, mark_route=mark_route)
