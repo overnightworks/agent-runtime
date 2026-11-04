@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Container, Mapping, Sequence
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 from http import HTTPStatus
@@ -498,3 +498,38 @@ def decide_server_message(
             return Answered(
                 answer_for(error_response(message.id, JsonRpcErrorCode.METHOD_NOT_FOUND))
             )
+
+
+def carries_signature_of(token: str, data: bytes) -> bool:
+    """Whether ``data`` carries ``token``, whole or as its signature segment.
+
+    One needle is enough: every whole token contains its signature segment, the part
+    after the last ``.``. Bodies either front writes are ``json.dumps`` output, which
+    writes base64url characters and ``.`` verbatim, and tool results are asked after
+    decoding. A token split across strings, base64-encoded or reversed is not
+    detected: this stops reflection, not an app that encodes its own capability.
+    """
+    signature_segment = token.rsplit(".", 1)[-1]
+    return signature_segment.encode("ascii") in data
+
+
+WITHHELD: Final = HttpAnswer(HTTPStatus.INTERNAL_SERVER_ERROR, None, b"")
+_UNKNOWN_METHOD: Final = "unknown_method"
+_UNKNOWN_TOOL: Final = "unknown_tool"
+_KNOWN_METHODS: Final = frozenset(McpMethod)
+
+
+def request_label(body: bytes, offered_tools: Container[str]) -> str:
+    """Only closed words: a profile method and an offered tool name, else a fixed stand-in."""
+    try:
+        message = parse_message(body)
+    except McpWireError:
+        return _UNKNOWN_METHOD
+    method = getattr(message, "method", None)
+    if method not in _KNOWN_METHODS:
+        return _UNKNOWN_METHOD
+    if method != McpMethod.TOOLS_CALL:
+        return method
+    name = message.params.get("name")
+    known = isinstance(name, str) and name in offered_tools
+    return f"{method} {name if known else _UNKNOWN_TOOL}"

@@ -53,13 +53,12 @@ from agent_runtime_client.mcp_server.verification import (
 )
 from agent_runtime_client.mcp_wire import (
     ACKNOWLEDGEMENT,
+    WITHHELD,
     Answered,
     Call,
     HttpAnswer,
     JsonRpcErrorCode,
     Listing,
-    McpMethod,
-    McpWireError,
     Notified,
     RequestId,
     ToolDefinition,
@@ -68,7 +67,7 @@ from agent_runtime_client.mcp_wire import (
     answer_for,
     decide_server_message,
     error_response,
-    parse_message,
+    request_label,
     tool_result_response,
     tools_list_response,
 )
@@ -78,12 +77,8 @@ from agent_runtime_client.wire import JsonObject
 type ToolHandler = Callable[[CapabilityClaims, JsonObject], Awaitable[ToolOutcome]]
 
 _LOG: Final = logging.getLogger(LOGGER_NAME)
-_UNKNOWN_METHOD: Final = "unknown_method"
-_UNKNOWN_TOOL: Final = "unknown_tool"
-_KNOWN_METHODS: Final = frozenset(McpMethod)
 _HTTPS_SCHEME: Final = "https://"
 _BEARER_PREFIX: Final = "Bearer "
-_WITHHELD: Final = HttpAnswer(HTTPStatus.INTERNAL_SERVER_ERROR, None, b"")
 _ORIGIN: Final[TypeAdapter[str]] = TypeAdapter(McpOrigin)
 
 
@@ -220,23 +215,8 @@ class McpServer:
     def _cleared(self, verified: _Verified, answer: HttpAnswer, request_body: bytes) -> HttpAnswer:
         if not carries_signature_of(verified.token, answer.body):
             return answer
-        _LOG.warning("an answer was withheld: %s", self._request_label(request_body))
-        return _WITHHELD
-
-    def _request_label(self, body: bytes) -> str:
-        """Only closed words: a profile method and a registered tool name, else a fixed stand-in."""
-        try:
-            message = parse_message(body)
-        except McpWireError:
-            return _UNKNOWN_METHOD
-        method = getattr(message, "method", None)
-        if method not in _KNOWN_METHODS:
-            return _UNKNOWN_METHOD
-        if method != McpMethod.TOOLS_CALL:
-            return method
-        name = message.params.get("name")
-        known = isinstance(name, str) and name in self._tools
-        return f"{method} {name if known else _UNKNOWN_TOOL}"
+        _LOG.warning("an answer was withheld: %s", request_label(request_body, self._tools))
+        return WITHHELD
 
 
 async def _called(

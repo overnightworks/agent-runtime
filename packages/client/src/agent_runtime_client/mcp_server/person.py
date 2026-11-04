@@ -3,8 +3,9 @@
 The host registers ``McpPersonFront`` as the exact route ``MCP_ENDPOINT_PATH``, behind the
 middleware that has already admitted or refused the caller, so this front answers no
 challenge. ``resolve_person`` is the one seam to that middleware and runs first on every
-request: its failure propagates, because a front reached without the gate's admission is a
-host defect. Rights are the route's, so ``tools/list`` offers every tool.
+request: its failure, or a result that is not a ``Principal``, propagates, because a front
+reached without the gate's admission is a host defect. No answer carries the request's bearer.
+Rights are the route's, so ``tools/list`` offers every tool.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from http import HTTPStatus
 from typing import Final
 
 from agent_runtime_client.mcp_server.asgi import (
+    HEADER_ENCODING,
     LOGGER_NAME,
     Receive,
     Scope,
@@ -28,6 +30,7 @@ from agent_runtime_client.mcp_server.asgi import (
 )
 from agent_runtime_client.mcp_wire import (
     ACKNOWLEDGEMENT,
+    WITHHELD,
     Answered,
     Call,
     HttpAnswer,
@@ -37,8 +40,10 @@ from agent_runtime_client.mcp_wire import (
     RequestId,
     Unoffered,
     answer_for,
+    carries_signature_of,
     decide_server_message,
     error_response,
+    request_label,
     tool_result_response,
     tools_list_response,
 )
@@ -50,6 +55,7 @@ type ResolvePerson = Callable[[Scope], Principal]
 
 _LOG: Final = logging.getLogger(LOGGER_NAME)
 _HANDLER_FAILED_TEXT: Final = "the tool failed"
+_BEARER_PREFIX: Final = "Bearer "
 
 
 @dataclass(frozen=True)
@@ -94,7 +100,10 @@ class McpPersonFront:
         self._resolve_person = resolve_person
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        request = PersonRequest(self._resolve_person(scope), scope)
+        principal = self._resolve_person(scope)
+        if not isinstance(principal, Principal):
+            raise TypeError(f"resolve_person returned {type(principal).__name__}, not a Principal")
+        request = PersonRequest(principal, scope)
         await write(send, await self._answer(request, receive))
 
     async def _answer(self, request: PersonRequest, receive: Receive) -> HttpAnswer:
@@ -104,7 +113,18 @@ class McpPersonFront:
         body = await read_body(receive)
         if body is None:
             return HttpAnswer(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, None, b"")
-        return await self._decided(request, body)
+        return self._cleared(request.scope, await self._decided(request, body), body)
+
+    def _cleared(self, scope: Scope, answer: HttpAnswer, request_body: bytes) -> HttpAnswer:
+        """The answer, or an empty 500 when it carries the signature of the request's bearer."""
+        for value in field_values(scope, b"authorization"):
+            header = value.decode(HEADER_ENCODING)
+            if header.startswith(_BEARER_PREFIX) and carries_signature_of(
+                header.removeprefix(_BEARER_PREFIX), answer.body
+            ):
+                _LOG.warning("an answer was withheld: %s", request_label(request_body, self._tools))
+                return WITHHELD
+        return answer
 
     async def _decided(self, request: PersonRequest, body: bytes) -> HttpAnswer:
         decision = decide_server_message(body, protocol_version(request.scope), self._tools)

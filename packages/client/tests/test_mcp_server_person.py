@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -153,6 +154,37 @@ def test_a_resolver_failure_reaches_the_host_before_the_origin_check_and_the_bod
     assert (received, sent, person.calls) == ([], [], [])
 
 
+@pytest.mark.parametrize(
+    "result", [lambda: None, lambda: asyncio.sleep(0)], ids=["none", "coroutine"]
+)
+def test_a_resolver_result_that_is_not_a_principal_reaches_the_host_before_the_body(
+    person: Person, result: Callable[[], Any]
+) -> None:
+    received: list[str] = []
+    sent: list[Any] = []
+    produced: list[Any] = []
+
+    def resolve(_scope: dict[str, Any]) -> Any:
+        produced.append(result())
+        return produced[-1]
+
+    async def receive() -> dict[str, Any]:
+        received.append("read")
+        return {"type": "http.request", "body": rpc("ping")}
+
+    async def send(message: dict[str, Any]) -> None:
+        sent.append(message)
+
+    front = McpPersonFront([person.tool("read_note")], resolve_person=resolve)
+
+    with pytest.raises(TypeError):
+        asyncio.run(front(http_scope(headers_of()), receive, send))
+    for item in produced:
+        if asyncio.iscoroutine(item):
+            item.close()
+    assert (received, sent, person.calls) == ([], [], [])
+
+
 @pytest.mark.parametrize("origin", [b"https://evil.test", b"null", b""])
 def test_a_request_carrying_an_origin_of_any_value_is_forbidden_and_runs_nothing(
     front: McpPersonFront, person: Person, origin: bytes
@@ -265,6 +297,40 @@ def test_two_tools_failing_differently_answer_one_failed_result_without_their_me
     assert any(
         level == "ERROR" and "edit_note" in text and "KeyError" in text for level, text in logged
     )
+
+
+def test_a_result_carrying_the_request_bearer_is_withheld_and_the_log_names_no_caller_text(
+    front: McpPersonFront, person: Person, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER)
+    token = "head.payload.sigOfTheRequest"
+    person.outcome = ToolOutcome(f"debug: {token}", is_error=False)
+
+    reply = post(
+        front,
+        rpc("tools/call", call_params("read_note", note="caller text")),
+        (b"authorization", f"Bearer {token}".encode()),
+    )
+
+    logged = " ".join(r.getMessage() for r in caplog.records)
+    assert (reply.status, reply.body) == (500, b"")
+    assert any(r.levelno == logging.WARNING for r in caplog.records)
+    assert not any(word in logged for word in ("sigOfTheRequest", "caller text"))
+
+
+def test_a_result_carrying_another_tokens_signature_is_answered_as_usual(
+    front: McpPersonFront, person: Person
+) -> None:
+    person.outcome = ToolOutcome("debug: head.payload.sigOfAnother", is_error=False)
+
+    reply = post(
+        front,
+        rpc("tools/call", call_params("read_note")),
+        (b"authorization", b"Bearer head.payload.sigOfTheRequest"),
+    )
+
+    assert reply.status == 200
+    assert "sigOfAnother" in reply.json()["result"]["content"][0]["text"]
 
 
 def test_an_outcome_that_cannot_be_written_answers_the_failed_result_and_leaks_nothing(

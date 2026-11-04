@@ -371,7 +371,7 @@ a small adapter over `webauth.middleware.resource_person`, which returns an
 `AuthenticatedUser`, while the port returns a `Principal` (`iss` and `sub`). The front calls it first on every request,
 before it reads the body. Its failure propagates to the host: no tool runs and the
 front writes no answer, because a front reached without the gate's admission is a
-host defect.
+host defect. A result that is not a `Principal` raises `TypeError` the same way.
 
 A tool is `PersonTool(declaration, handler)`; the handler is
 `PersonToolHandler = Callable[[PersonRequest, JsonObject], Awaitable[ToolOutcome]]`,
@@ -386,7 +386,7 @@ decides. `tools/list` offers every tool, because rights are the route's, with
 `annotations.readOnlyHint` true for a `READ_ONLY` tool and absent otherwise. A
 handler that raises, or returns an outcome that cannot be written, answers a failed tool result with one fixed text; the log
 names the tool and the exception's class, and nothing of its message reaches the
-wire or the log.
+wire or the log. An answer that carries the signature of the request's own bearer is replaced by an empty 500, as the capability front does for its capability.
 
 ## What a run keeps
 
