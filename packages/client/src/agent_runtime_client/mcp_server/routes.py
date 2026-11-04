@@ -21,7 +21,9 @@ from agent_runtime_client.tools import (
 )
 
 _SUPPORTED_METHODS: Final = frozenset({"get", "post"})
-_OPERATION_METHODS: Final = frozenset({"get", "post", "put", "patch", "delete", "head", "options", "trace"})
+_OPERATION_METHODS: Final = frozenset(
+    {"get", "post", "put", "patch", "delete", "head", "options", "trace"}
+)
 _SCALAR_TYPES: Final = frozenset({"string", "integer", "number", "boolean"})
 _JSON: Final = "application/json"
 _SCHEMA_REFERENCE: Final = "#/components/schemas/"
