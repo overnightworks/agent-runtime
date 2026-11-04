@@ -73,8 +73,8 @@ def _overlap(first: str, second: str) -> bool:
 def _inlined(node: Any, components: JsonObject, seen: tuple[str, ...] = ()) -> Any:
     """The schema with every ``$ref`` replaced by its component.
 
-    An annotation beside a reference wins over the component's own; a recursive reference, or a
-    keyword beside it that is no annotation, is a breach.
+    An annotation beside a reference wins over the component's own; a recursive reference, a
+    reference that is no string, or a keyword beside it that is no annotation, is a breach.
     """
     if isinstance(node, list):
         return [_inlined(item, components, seen) for item in node]
@@ -209,6 +209,7 @@ def _mark(operation: _Operation) -> tuple[str, ToolEffect]:
     effects = {effect.value: effect for effect in ToolEffect}
     if not (
         isinstance(mark, dict)
+        and mark.keys() == {"name", "effect"}
         and isinstance(mark.get("name"), str)
         and isinstance(mark.get("effect"), str)
         and mark["effect"] in effects

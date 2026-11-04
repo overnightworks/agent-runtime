@@ -85,7 +85,7 @@ class CapabilityVerificationKey:
             raise_without_chain(UnsoundVerificationKey(reason))
         try:
             public_key = serialization.load_pem_public_key(pem)
-        except (ValueError, UnsupportedAlgorithm):
+        except ValueError, UnsupportedAlgorithm:
             raise_without_chain(UnsoundVerificationKey("is not a PEM public key"))
         return cls(public_key)
 

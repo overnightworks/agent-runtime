@@ -220,19 +220,6 @@ async def aliased_route(draft: Aliased) -> Any:
     return {}
 
 
-def test_a_body_field_named_ref_is_refused_naming_the_operation() -> None:
-    failure = refused(application(Registration("POST", "/notes", aliased_route, tool="a")))
-
-    assert "POST /notes" in str(failure)
-
-
-@pytest.mark.parametrize("method", ["TRACE", "HEAD", "OPTIONS"])
-def test_a_mark_on_trace_head_or_options_is_refused(method: str) -> None:
-    failure = refused(application(Registration(method, "/notes", nothing, tool="a")))
-
-    assert f"{method} /notes" in str(failure)
-
-
 @pytest.mark.parametrize(
     "mark",
     [
@@ -243,8 +230,18 @@ def test_a_mark_on_trace_head_or_options_is_refused(method: str) -> None:
         {"name": "a", "effect": "unknown"},
         {"name": "a", "effect": ["read_only"]},
         {"name": 3, "effect": "read_only"},
+        {"name": "a", "effect": "read_only", "extra": 1},
     ],
-    ids=["string", "list", "no name", "no effect", "unknown effect", "unhashable effect", "name"],
+    ids=[
+        "string",
+        "list",
+        "no name",
+        "no effect",
+        "unknown effect",
+        "unhashable effect",
+        "name",
+        "extra key",
+    ],
 )
 def test_a_hand_written_mark_that_agent_tool_does_not_return_is_refused(mark: Any) -> None:
     app = application(Registration("GET", "/notes", nothing, document={"x-agent-tool": mark}))
@@ -400,6 +397,10 @@ def body_of(*media_types: str) -> dict[str, Any]:
             tool="a",
             document={"responses": {"201": {"description": "Made."}}},
         ),
+        Registration("TRACE", "/notes", nothing, tool="a"),
+        Registration("HEAD", "/notes", nothing, tool="a"),
+        Registration("OPTIONS", "/notes", nothing, tool="a"),
+        Registration("POST", "/notes", aliased_route, tool="a"),
     ],
     ids=[
         "put",
@@ -419,6 +420,10 @@ def body_of(*media_types: str) -> dict[str, Any]:
         "response without content",
         "recursive response schema",
         "contentless success beside a JSON success",
+        "trace",
+        "head",
+        "options",
+        "body field named ref",
     ],
 )
 def test_a_marked_route_outside_the_profile_is_refused_naming_the_operation(
