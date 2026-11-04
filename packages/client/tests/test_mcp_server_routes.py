@@ -139,10 +139,13 @@ async def described_genre(
     return {}
 
 
-def test_annotations_beside_a_reference_are_kept() -> None:
+def test_annotations_beside_a_reference_are_kept_and_win_over_the_components() -> None:
     app = application(Registration("GET", "/notes", described_genre, tool="a"))
+    spec = app.openapi()
+    component = spec["components"]["schemas"]["Genre"]
+    component.update(description="Any genre.", default="pop")
 
-    (tool,) = generated(app).tools
+    (tool,) = route_tools(spec, app, mark_route=lambda method, template: (method, template)).tools
 
     genre = tool.declaration.parameters["properties"]["genre"]
     assert (genre["description"], genre["default"]) == ("Which genre.", "rock")

@@ -68,7 +68,11 @@ def _overlap(first: str, second: str) -> bool:
 
 
 def _inlined(node: Any, components: JsonObject, seen: tuple[str, ...] = ()) -> Any:
-    """The schema with every ``$ref`` replaced by its component; a recursive one is a breach."""
+    """The schema with every ``$ref`` replaced by its component.
+
+    An annotation beside a reference wins over the component's own; a recursive reference, or a
+    keyword beside it that is no annotation, is a breach.
+    """
     if isinstance(node, list):
         return [_inlined(item, components, seen) for item in node]
     if not isinstance(node, dict):
