@@ -406,8 +406,12 @@ front-side deadline.
 integer, number or boolean, with or without `enum`, inline or by `$ref`, nullable through `anyOf [x, null]`); the one
 body is a required `application/json` object whose fields are flattened beside the parameters; `$ref` is inlined from
 `components`, and an annotation beside a reference (`title`, `description`, `default`, `examples`, `deprecated`) is kept and wins over the component's own; every success response is JSON and no response carries another media type. The tool's description is the operation's `description` (the route's docstring)
-and is required. Everything else is refused at start with `RouteProfileError`: a mark on `PUT`, `PATCH` or `DELETE`,
-header and cookie parameters, a non-JSON or optional body, a non-JSON response, a recursive schema, a `$ref` beside any keyword that is not an annotation, a name shared by two
+and is required. Everything else is refused at start with `RouteProfileError`: a mark on any method but `GET` and `POST`
+(`PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS` and `TRACE` included), a mark that is not the mapping `agent_tool` returns,
+header and cookie parameters, a non-JSON or optional body, a non-JSON response, a recursive schema, a `$ref` whose value
+is not a string (such as a body field named `$ref`), a body object carrying any keyword other than `type`, `properties`,
+`required`, `additionalProperties: false` and the annotations (flattening keeps only the properties and the required
+names), a `$ref` beside any keyword that is not an annotation, a name shared by two
 inputs, two marks of one name, an integer path parameter and a missing description.
 
 **Overlap.** Templates are split into segments. Two templates of one method overlap when they have the same number of

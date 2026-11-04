@@ -21,11 +21,12 @@ from agent_runtime_client.tools import (
 )
 
 _SUPPORTED_METHODS: Final = frozenset({"get", "post"})
-_OPERATION_METHODS: Final = frozenset({"get", "post", "put", "patch", "delete", "head", "options"})
+_OPERATION_METHODS: Final = frozenset({"get", "post", "put", "patch", "delete", "head", "options", "trace"})
 _SCALAR_TYPES: Final = frozenset({"string", "integer", "number", "boolean"})
 _JSON: Final = "application/json"
 _SCHEMA_REFERENCE: Final = "#/components/schemas/"
 _ANNOTATIONS: Final = frozenset({"title", "description", "default", "examples", "deprecated"})
+_BODY_KEYWORDS: Final = _ANNOTATIONS | {"type", "properties", "required", "additionalProperties"}
 
 
 class RouteProfileError(ValueError):
@@ -77,9 +78,11 @@ def _inlined(node: Any, components: JsonObject, seen: tuple[str, ...] = ()) -> A
         return [_inlined(item, components, seen) for item in node]
     if not isinstance(node, dict):
         return node
-    reference = node.get("$ref")
-    if reference is None:
+    if "$ref" not in node:
         return {key: _inlined(value, components, seen) for key, value in node.items()}
+    reference = node["$ref"]
+    if not isinstance(reference, str):
+        raise _Breach("a $ref must be a string")
     name = reference.removeprefix(_SCHEMA_REFERENCE)
     if name in seen or name not in components:
         raise _Breach("a schema is recursive or unresolved")
@@ -118,6 +121,8 @@ def _body(operation: _Operation, components: JsonObject) -> tuple[JsonObject, Se
     schema = _inlined(body["content"][_JSON].get("schema", {}), components)
     if schema.get("type") != "object" or "properties" not in schema:
         raise _Breach("a body must be an object")
+    if (schema.keys() - _BODY_KEYWORDS) or schema.get("additionalProperties", False) is not False:
+        raise _Breach("a body object may carry only its properties, required names and annotations")
     return schema["properties"], schema.get("required", [])
 
 
@@ -197,18 +202,28 @@ def _handler(app: AsgiApp, target: RouteTarget) -> PersonToolHandler:
     return handler
 
 
+def _mark(operation: _Operation) -> tuple[str, ToolEffect]:
+    mark = operation.node[AGENT_TOOL_EXTENSION]
+    effects = {effect.value: effect for effect in ToolEffect}
+    if not (
+        isinstance(mark, dict)
+        and isinstance(mark.get("name"), str)
+        and isinstance(mark.get("effect"), str)
+        and mark["effect"] in effects
+    ):
+        raise _Breach("a mark must be the mapping agent_tool returns")
+    return mark["name"], effects[mark["effect"]]
+
+
 def _tool(operation: _Operation, app: AsgiApp, components: JsonObject) -> PersonTool:
     if operation.method not in _SUPPORTED_METHODS:
         raise _Breach("only GET and POST can be marked")
     _check_responses(operation, components)
     description = _check_description(operation)
     target, parameters = _declared_inputs(operation, components)
-    mark = operation.node[AGENT_TOOL_EXTENSION]
+    name, effect = _mark(operation)
     declaration = ToolDeclaration(
-        name=mark["name"],
-        description=description,
-        parameters=parameters,
-        effect=ToolEffect(mark["effect"]),
+        name=name, description=description, parameters=parameters, effect=effect
     )
     return PersonTool(declaration, _handler(app, target))
 

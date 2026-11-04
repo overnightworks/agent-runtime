@@ -9,7 +9,7 @@ from typing import Annotated, Any, Literal
 import pytest
 from fastapi import Cookie, FastAPI, Header, Query
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.applications import Starlette
 from starlette.routing import Route
 from starlette.testclient import TestClient
@@ -38,6 +38,15 @@ class NoteDraft(BaseModel):
 
 class Tree(BaseModel):
     children: list["Tree"] = []
+
+
+class Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str
+
+
+class Aliased(BaseModel):
+    reference: str = Field(alias="$ref")
 
 
 class Extra(BaseModel):
@@ -170,6 +179,79 @@ def test_a_requirement_beside_a_referenced_body_is_refused() -> None:
 
     with pytest.raises(RouteProfileError, match="POST /notes"):
         route_tools(spec, app, mark_route=lambda method, template: (method, template))
+
+
+def edited_body_schema(change: Callable[[dict[str, Any]], None]) -> tuple[FastAPI, Any]:
+    app = application(Registration("POST", "/notes", create_note, tool="a"))
+    spec = app.openapi()
+    change(spec["components"]["schemas"]["NoteDraft"])
+    return app, spec
+
+
+@pytest.mark.parametrize(
+    "extra_keywords",
+    [
+        {"allOf": [{"required": ["title"]}]},
+        {"minProperties": 1},
+        {"additionalProperties": True},
+    ],
+    ids=["allOf", "minProperties", "additionalProperties true"],
+)
+def test_a_body_object_keyword_that_flattening_would_lose_is_refused(
+    extra_keywords: dict[str, Any],
+) -> None:
+    app, spec = edited_body_schema(lambda schema: schema.update(extra_keywords))
+
+    with pytest.raises(RouteProfileError, match="POST /notes"):
+        route_tools(spec, app, mark_route=lambda method, template: (method, template))
+
+
+@pytest.mark.parametrize("model", [NoteDraft, Strict], ids=["plain model", "extra forbid"])
+def test_a_plain_body_model_still_becomes_a_tool(model: type[BaseModel]) -> None:
+    async def endpoint(draft: model) -> Any:  # type: ignore[valid-type]
+        return {}
+
+    result = generated(application(Registration("POST", "/notes", endpoint, tool="a")))
+
+    assert [tool.declaration.name for tool in result.tools] == ["a"]
+
+
+async def aliased_route(draft: Aliased) -> Any:
+    return {}
+
+
+def test_a_body_field_named_ref_is_refused_naming_the_operation() -> None:
+    failure = refused(application(Registration("POST", "/notes", aliased_route, tool="a")))
+
+    assert "POST /notes" in str(failure)
+
+
+@pytest.mark.parametrize("method", ["TRACE", "HEAD", "OPTIONS"])
+def test_a_mark_on_trace_head_or_options_is_refused(method: str) -> None:
+    failure = refused(application(Registration(method, "/notes", nothing, tool="a")))
+
+    assert f"{method} /notes" in str(failure)
+
+
+@pytest.mark.parametrize(
+    "mark",
+    [
+        "a",
+        ["a"],
+        {"effect": "read_only"},
+        {"name": "a"},
+        {"name": "a", "effect": "unknown"},
+        {"name": "a", "effect": ["read_only"]},
+        {"name": 3, "effect": "read_only"},
+    ],
+    ids=["string", "list", "no name", "no effect", "unknown effect", "unhashable effect", "name"],
+)
+def test_a_hand_written_mark_that_agent_tool_does_not_return_is_refused(mark: Any) -> None:
+    app = application(Registration("GET", "/notes", nothing, document={"x-agent-tool": mark}))
+
+    failure = refused(app)
+
+    assert "GET /notes" in str(failure)
 
 
 def test_an_unmarked_route_is_no_tool_and_no_mark() -> None:
