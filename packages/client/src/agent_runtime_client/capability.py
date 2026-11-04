@@ -19,6 +19,8 @@ from uuid import UUID
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 
+from agent_runtime_client.mcp_wire import MCP_ENDPOINT_PATH as MCP_ENDPOINT_PATH
+from agent_runtime_client.mcp_wire import carries_signature_of as carries_signature_of
 from agent_runtime_client.turn import NonEmptyUnicodeText, Principal
 
 CAPABILITY_ISSUER: Final = "agent-service"
@@ -26,7 +28,6 @@ CAPABILITY_TOKEN_TYPE: Final = "agent-capability-2+jwt"  # noqa: S105 - a token 
 MAX_CAPABILITY_CHARACTERS: Final = 8192
 SIGNING_KEY_BITS: Final = 3072
 SIGNING_KEY_EXPONENT: Final = 65537
-MCP_ENDPOINT_PATH: Final = "/mcp"
 
 _HTTPS_SCHEME: Final = "https://"
 _DEFAULT_HTTPS_PORT: Final = 443
@@ -153,16 +154,3 @@ class CapabilityClaims(_StrictClaims):
     def from_claims(cls, claims: Mapping[str, Any]) -> Self:
         """Reads a decoded mapping; strict pydantic refuses a read-only proxy, so it is copied."""
         return cls.model_validate(dict(claims))
-
-
-def carries_signature_of(token: str, data: bytes) -> bool:
-    """Whether ``data`` carries ``token``, whole or as its signature segment.
-
-    One needle is enough: every whole token contains its signature segment, the part
-    after the last ``.``. Bodies the relay writes are ``json.dumps`` output, which
-    writes base64url characters and ``.`` verbatim, and tool results are asked after
-    decoding. A token split across strings, base64-encoded or reversed is not
-    detected: this stops reflection, not an app that encodes its own capability.
-    """
-    signature_segment = token.rsplit(".", 1)[-1]
-    return signature_segment.encode("ascii") in data

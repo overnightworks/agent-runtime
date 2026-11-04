@@ -5,6 +5,13 @@ dependencies, pydantic and ruamel.yaml.
 """
 
 from agent_runtime_client.mcp_server.app import HandlerFailureWithheld, McpServer, McpTool
+from agent_runtime_client.mcp_server.person import (
+    McpPersonFront,
+    PersonRequest,
+    PersonTool,
+    PersonToolHandler,
+    ResolvePerson,
+)
 from agent_runtime_client.mcp_server.verification import (
     CapabilityRefusal,
     CapabilityVerificationKey,
@@ -15,7 +22,12 @@ from agent_runtime_client.mcp_server.verification import (
 __all__ = [
     "HandlerFailureWithheld",
     "McpServer",
+    "McpPersonFront",
     "McpTool",
+    "PersonRequest",
+    "PersonTool",
+    "PersonToolHandler",
+    "ResolvePerson",
     "CapabilityRefusal",
     "CapabilityVerificationKey",
     "UnsoundVerificationKey",

@@ -19,10 +19,10 @@ from __future__ import annotations
 import logging
 import time
 import traceback
-from collections.abc import Awaitable, Callable, MutableMapping, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from http import HTTPStatus
-from typing import Any, Final
+from typing import Final
 
 from pydantic import TypeAdapter
 
@@ -33,6 +33,21 @@ from agent_runtime_client.capability import (
     carries_signature_of,
 )
 from agent_runtime_client.errors import raise_without_chain
+from agent_runtime_client.mcp_server.asgi import (
+    HEADER_ENCODING,
+    LOGGER_NAME,
+    WITHHELD,
+    AsgiApp,
+    Receive,
+    Scope,
+    Send,
+    definition_of,
+    field_values,
+    protocol_version,
+    read_body,
+    request_label,
+    write,
+)
 from agent_runtime_client.mcp_server.verification import (
     CapabilityRefusal,
     CapabilityVerificationKey,
@@ -40,14 +55,11 @@ from agent_runtime_client.mcp_server.verification import (
 )
 from agent_runtime_client.mcp_wire import (
     ACKNOWLEDGEMENT,
-    PROTOCOL_VERSION_HEADER,
     Answered,
     Call,
     HttpAnswer,
     JsonRpcErrorCode,
     Listing,
-    McpMethod,
-    McpWireError,
     Notified,
     RequestId,
     ToolDefinition,
@@ -56,35 +68,17 @@ from agent_runtime_client.mcp_wire import (
     answer_for,
     decide_server_message,
     error_response,
-    parse_message,
     tool_result_response,
     tools_list_response,
 )
 from agent_runtime_client.tools import ToolDeclaration
-from agent_runtime_client.wire import MAX_EVENT_BYTES, JsonObject
+from agent_runtime_client.wire import JsonObject
 
-type Scope = MutableMapping[str, Any]
-type Message = MutableMapping[str, Any]
-type Receive = Callable[[], Awaitable[Message]]
-type Send = Callable[[Message], Awaitable[None]]
-type AsgiApp = Callable[[Scope, Receive, Send], Awaitable[None]]
 type ToolHandler = Callable[[CapabilityClaims, JsonObject], Awaitable[ToolOutcome]]
 
-_LOG: Final = logging.getLogger("agent_runtime_client.mcp_server")
-_UNKNOWN_METHOD: Final = "unknown_method"
-_UNKNOWN_TOOL: Final = "unknown_tool"
-_KNOWN_METHODS: Final = frozenset(McpMethod)
+_LOG: Final = logging.getLogger(LOGGER_NAME)
 _HTTPS_SCHEME: Final = "https://"
 _BEARER_PREFIX: Final = "Bearer "
-_HEADER_ENCODING: Final = "iso-8859-1"
-_VERSION_SEPARATOR: Final = ", "
-_CONTENT_TYPE_FIELD: Final = b"content-type"
-_CONTENT_LENGTH_FIELD: Final = b"content-length"
-_HEADERS_OF_STATUS: Final = {
-    HTTPStatus.UNAUTHORIZED: [(b"www-authenticate", b"Bearer")],
-    HTTPStatus.METHOD_NOT_ALLOWED: [(b"allow", b"POST")],
-}
-_WITHHELD: Final = HttpAnswer(HTTPStatus.INTERNAL_SERVER_ERROR, None, b"")
 _ORIGIN: Final[TypeAdapter[str]] = TypeAdapter(McpOrigin)
 
 
@@ -108,30 +102,11 @@ class _Verified:
     claims: CapabilityClaims
 
 
-def _field_values(scope: Scope, name: bytes) -> list[bytes]:
-    return [value for field_name, value in scope["headers"] if field_name.lower() == name]
-
-
-def _definition_of(declaration: ToolDeclaration) -> ToolDefinition:
-    return ToolDefinition.model_validate(
-        {
-            "name": declaration.name,
-            "description": declaration.description,
-            "inputSchema": declaration.parameters,
-        }
-    )
-
-
 def _is_under_endpoint(scope: Scope) -> bool:
     if scope["type"] != "http":
         return False
     path = scope["path"]
     return path == MCP_ENDPOINT_PATH or path.startswith(f"{MCP_ENDPOINT_PATH}/")
-
-
-def _protocol_version(scope: Scope) -> str | None:
-    values = _field_values(scope, PROTOCOL_VERSION_HEADER.lower().encode("ascii"))
-    return _VERSION_SEPARATOR.join(v.decode(_HEADER_ENCODING) for v in values) if values else None
 
 
 class McpServer:
@@ -152,7 +127,7 @@ class McpServer:
         if len(self._tools) != len(tools):
             raise ValueError("a tool name is declared more than once")
         self._definitions = {
-            name: _definition_of(tool.declaration) for name, tool in self._tools.items()
+            name: definition_of(tool.declaration) for name, tool in self._tools.items()
         }
 
     def in_front_of(self, host_app: AsgiApp) -> AsgiApp:
@@ -169,15 +144,15 @@ class McpServer:
             raise TypeError(f"the MCP server serves http only, not {scope['type']}")
         verified = self._verified_before_anything_else(scope)
         if isinstance(verified, HTTPStatus):
-            await _write(send, HttpAnswer(verified, None, b""))
+            await write(send, HttpAnswer(verified, None, b""))
             return
         answer, body = await self._answered_after_verification(verified, scope, receive)
-        await _write(send, self._cleared(verified, answer, body))
+        await write(send, self._cleared(verified, answer, body))
 
     def _verified_before_anything_else(self, scope: Scope) -> _Verified | HTTPStatus:
-        if _field_values(scope, b"host") != [self._host]:
+        if field_values(scope, b"host") != [self._host]:
             return HTTPStatus.FORBIDDEN
-        if _field_values(scope, b"origin"):
+        if field_values(scope, b"origin"):
             return HTTPStatus.FORBIDDEN
         return self._verified(scope)
 
@@ -189,16 +164,16 @@ class McpServer:
             return HttpAnswer(HTTPStatus.NOT_FOUND, None, b""), b""
         if scope["method"] != "POST":
             return HttpAnswer(HTTPStatus.METHOD_NOT_ALLOWED, None, b""), b""
-        body = await _read_body(receive)
+        body = await read_body(receive)
         if body is None:
             return HttpAnswer(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, None, b""), b""
-        return await self._answer(verified, body, _protocol_version(scope)), body
+        return await self._answer(verified, body, protocol_version(scope)), body
 
     def _verified(self, scope: Scope) -> _Verified | HTTPStatus:
-        authorizations = _field_values(scope, b"authorization")
+        authorizations = field_values(scope, b"authorization")
         if len(authorizations) != 1:
             return HTTPStatus.UNAUTHORIZED
-        value = authorizations[0].decode(_HEADER_ENCODING)
+        value = authorizations[0].decode(HEADER_ENCODING)
         if not value.startswith(_BEARER_PREFIX):
             return HTTPStatus.UNAUTHORIZED
         token = value.removeprefix(_BEARER_PREFIX)
@@ -240,23 +215,8 @@ class McpServer:
     def _cleared(self, verified: _Verified, answer: HttpAnswer, request_body: bytes) -> HttpAnswer:
         if not carries_signature_of(verified.token, answer.body):
             return answer
-        _LOG.warning("an answer was withheld: %s", self._request_label(request_body))
-        return _WITHHELD
-
-    def _request_label(self, body: bytes) -> str:
-        """Only closed words: a profile method and a registered tool name, else a fixed stand-in."""
-        try:
-            message = parse_message(body)
-        except McpWireError:
-            return _UNKNOWN_METHOD
-        method = getattr(message, "method", None)
-        if method not in _KNOWN_METHODS:
-            return _UNKNOWN_METHOD
-        if method != McpMethod.TOOLS_CALL:
-            return method
-        name = message.params.get("name")
-        known = isinstance(name, str) and name in self._tools
-        return f"{method} {name if known else _UNKNOWN_TOOL}"
+        _LOG.warning("an answer was withheld: %s", request_label(request_body, self._tools))
+        return WITHHELD
 
 
 async def _called(
@@ -275,24 +235,3 @@ async def _called(
         name = tool.declaration.name
         _LOG.warning("a failure was withheld: tool %s", name)
         raise_without_chain(HandlerFailureWithheld(name))
-
-
-async def _read_body(receive: Receive) -> bytes | None:
-    """The request body, or ``None`` once it is past ``MAX_EVENT_BYTES``."""
-    body = bytearray()
-    while True:
-        message = await receive()
-        body += message.get("body", b"")
-        if len(body) > MAX_EVENT_BYTES:
-            return None
-        if message["type"] == "http.disconnect" or not message.get("more_body", False):
-            return bytes(body)
-
-
-async def _write(send: Send, answer: HttpAnswer) -> None:
-    headers = [(_CONTENT_LENGTH_FIELD, str(len(answer.body)).encode("ascii"))]
-    if answer.content_type is not None:
-        headers.append((_CONTENT_TYPE_FIELD, answer.content_type.encode("ascii")))
-    headers.extend(_HEADERS_OF_STATUS.get(answer.status, []))
-    await send({"type": "http.response.start", "status": int(answer.status), "headers": headers})
-    await send({"type": "http.response.body", "body": answer.body})

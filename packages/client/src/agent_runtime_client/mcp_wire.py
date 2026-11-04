@@ -36,6 +36,7 @@ from agent_runtime_client.turn import (
 
 JSON_MEDIA_TYPE: Final = "application/json"
 EVENT_STREAM_MEDIA_TYPE: Final = "text/event-stream"
+MCP_ENDPOINT_PATH: Final = "/mcp"
 PROTOCOL_VERSION_HEADER: Final = "MCP-Protocol-Version"
 SESSION_ID_HEADER: Final = "Mcp-Session-Id"
 _SESSION_ID: Final = re.compile(r"[\x21-\x7e]+")
@@ -335,10 +336,20 @@ class ListToolsParams(_Tolerant):
     cursor: UnicodeText | None = None
 
 
+class ToolAnnotations(_Tolerant):
+    read_only_hint: bool | None = None
+
+
 class ToolDefinition(_Tolerant):
     name: UnicodeText
     description: UnicodeText | None = None
     input_schema: JsonObject
+
+
+class AnnotatedToolDefinition(ToolDefinition):
+    """A tool this side lists with its hint; an upstream's ``ToolDefinition`` never keeps one."""
+
+    annotations: ToolAnnotations | None = None
 
 
 class ListToolsResult(_Tolerant):
@@ -487,3 +498,16 @@ def decide_server_message(
             return Answered(
                 answer_for(error_response(message.id, JsonRpcErrorCode.METHOD_NOT_FOUND))
             )
+
+
+def carries_signature_of(token: str, data: bytes) -> bool:
+    """Whether ``data`` carries ``token``, whole or as its signature segment.
+
+    One needle is enough: every whole token contains its signature segment, the part
+    after the last ``.``. Bodies either front writes are ``json.dumps`` output, which
+    writes base64url characters and ``.`` verbatim, and tool results are asked after
+    decoding. A token split across strings, base64-encoded or reversed is not
+    detected: this stops reflection, not an app that encodes its own capability.
+    """
+    signature_segment = token.rsplit(".", 1)[-1]
+    return signature_segment.encode("ascii") in data
