@@ -9,6 +9,8 @@ neither ``tools`` nor ``wire``.
 from __future__ import annotations
 
 import base64
+import hashlib
+import json
 import math
 import re
 from collections.abc import Iterator
@@ -274,6 +276,12 @@ class Principal(StrictModel):
 
     iss: NonEmptyUnicodeText
     sub: NonEmptyUnicodeText
+
+
+def person_fingerprint(principal: Principal) -> str:
+    """One recipe for every caller: a change splits every person's budget."""
+    identity = json.dumps([principal.iss, principal.sub], ensure_ascii=False, separators=(",", ":"))
+    return "fp-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
 
 def _refuse_non_gateway_model(text: str) -> str:

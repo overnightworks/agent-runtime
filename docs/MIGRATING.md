@@ -2,6 +2,12 @@
 
 Read by a host bumping its pin; each release that breaks a host has one section, newest first.
 
+## Migrating to 0.20.0
+
+| Before (0.19.0) | Now |
+| --- | --- |
+| The fingerprint recipe of the gateway's `user` was private to the gateway backend. | `agent_runtime_client.turn.person_fingerprint(principal)` returns it, one recipe for every caller; the gateway's `user` is unchanged. ([wire.md](wire.md#the-gateway-backend)) |
+
 ## Migrating to 0.19.0
 
 | Before (0.18.0) | Now |

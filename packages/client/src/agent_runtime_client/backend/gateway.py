@@ -17,7 +17,6 @@ from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from functools import partial
-from hashlib import sha256
 from pathlib import Path
 from typing import Final, NotRequired, Required, TypedDict
 
@@ -48,11 +47,11 @@ from agent_runtime_client.turn import (
     FailureCode,
     GatewayModelName,
     ModelKind,
-    Principal,
     RejectionCode,
     RunFile,
     base64_length,
     model_kind_of,
+    person_fingerprint,
 )
 from agent_runtime_client.turn_events import (
     AssistantTextEvent,
@@ -138,7 +137,7 @@ class GatewayBackend(AgentBackend):
             key = await _before(deadline, self._authorise(person))
             read = partial(_judged, offered=frozenset(tools))
             messages = _opening_messages(request)
-            user = _fingerprint(person.principal)
+            user = person_fingerprint(person.principal)
             while True:
                 _refuse_after(deadline)
                 body = _bounded(_body(request, messages, user))
@@ -180,7 +179,7 @@ class GatewayBackend(AgentBackend):
     ) -> FinalEvent:
         key = await self._authorise(person)
         _refuse_after(deadline)
-        body = _bounded(_picture_body(request, size, _fingerprint(person.principal)))
+        body = _bounded(_picture_body(request, size, person_fingerprint(person.principal)))
         file = await self._post(_PICTURES_PATH, body, key, _picture_of)
         return FinalEvent(text="", files=(file,))
 
@@ -410,12 +409,6 @@ def _result_event(call: _Call, outcome: ToolOutcome) -> ToolResultEvent:
 
 def _failed_event(call: _Call, text: str) -> ToolResultEvent:
     return ToolResultEvent(tool_use_id=call.id, content=text, is_error=True)
-
-
-def _fingerprint(principal: Principal) -> str:
-    """The budget identity of a person: one contract with every app, so a change splits budgets."""
-    identity = json.dumps([principal.iss, principal.sub], ensure_ascii=False, separators=(",", ":"))
-    return "fp-" + sha256(identity.encode("utf-8")).hexdigest()
 
 
 def _opening_messages(request: TurnRequest) -> list[_Message]:
