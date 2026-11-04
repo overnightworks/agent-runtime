@@ -66,19 +66,12 @@ PAID_AGENT = "paid-agent"
 
 async def service_response(config, **body):
     mint = TokenMint()
-    app = create_app(
-        config,
-        runners=installed_runners(config, None, LoopClock()),
-        fetch_key_set=mint.fetch_key_set,
-    )
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://service"
-    ) as client:
-        return await client.post(
-            "/runs",
-            json=run_body(**body),
-            headers=run_headers(mint.workload(), mint.user(groups=[API_GROUP, APP_GROUP])),
-        )
+    app = create_app(config, runners=installed_runners(config, None, LoopClock()),
+                     fetch_key_set=mint.fetch_key_set)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                 base_url="http://service") as client:
+        return await client.post("/runs", json=run_body(**body), headers=run_headers(
+            mint.workload(), mint.user(groups=[API_GROUP, APP_GROUP])))
 
 
 @pytest.mark.parametrize("model", [CONFIGURED_MODEL, "grok/synthetic"])
@@ -104,11 +97,8 @@ def test_api_only_service_passes_exact_model_and_no_identity(
     assert events[-1].text == "answer"
     assert json.loads(requests[0].content) == {
         "model": model,
-        "messages": [
-            {"role": "system", "content": "You help write songs."},
-            {"role": "user", "content": "Hi"},
-        ],
-        "tools": [],
+        "messages": [{"role": "system", "content": "You help write songs."},
+                     {"role": "user", "content": "Hi"}], "tools": [],
     }
     assert requests[0].headers["authorization"] == "Bearer synthetic-gateway-key"
     assert clients[0].is_closed
@@ -126,23 +116,12 @@ def test_http_refusal_has_no_answer_or_success(tmp_path, monkeypatch, status):
     assert clients[0].is_closed
 
 
-@pytest.mark.parametrize(
-    "url",
-    [
-        "https://gateway/v1/chat/completions",
-        "ftp://gateway/v1/chat/completions",
-        "http://user:secret@gateway/v1/chat/completions",
-        "http://gateway/v1/chat/completions?x=1",
-        "http://gateway:0/v1/chat/completions",
-        "http://gateway:65536/v1/chat/completions",
-        "http://gateway/v1/chat/completions#fragment",
-        "http://gateway/v1/chat/%63ompletions",
-        "http://gateway/other",
-        "http://gateway/V1/chat/completions",
-        "http://gäteway/v1/chat/completions",
-        "http://gateway\n/v1/chat/completions",
-    ],
-)
+@pytest.mark.parametrize("url", ["https://gateway/v1/chat/completions", "ftp://gateway/v1/chat/completions",
+    "http://user:secret@gateway/v1/chat/completions", "http://gateway/v1/chat/completions?x=1",
+    "http://gateway:0/v1/chat/completions", "http://gateway:65536/v1/chat/completions",
+    "http://gateway/v1/chat/completions#fragment", "http://gateway/v1/chat/%63ompletions",
+    "http://gateway/other", "http://gateway/V1/chat/completions",
+    "http://gäteway/v1/chat/completions", "http://gateway\n/v1/chat/completions"])
 def test_invalid_api_url_and_missing_tls_trust_are_refused(tmp_path, url):
     with pytest.raises(ValidationError):
         configured(tmp_path, completion_url=url)
@@ -160,10 +139,7 @@ def test_protocol_refusal_never_emits_answer_or_success(tmp_path, monkeypatch, p
 
 @pytest.mark.parametrize("error_type", [httpx.ConnectError, httpx.ReadError, httpx.ReadTimeout])
 def test_transport_errors_are_unavailable_and_do_not_leak(
-    tmp_path,
-    monkeypatch,
-    caplog,
-    error_type,
+    tmp_path, monkeypatch, caplog, error_type,
 ):
     config = configured(tmp_path)
 
@@ -179,46 +155,26 @@ def test_transport_errors_are_unavailable_and_do_not_leak(
     assert clients[0].is_closed
 
 
-@pytest.mark.parametrize(
-    "status,body", [(204, b""), (200, b"synthetic-gateway-key"), (403, b"synthetic-gateway-key")]
-)
+@pytest.mark.parametrize("status,body", [(204, b""), (200, b"synthetic-gateway-key"),
+                                         (403, b"synthetic-gateway-key")])
 def test_body_errors_are_classified_after_status_without_exposing_body(
-    tmp_path,
-    monkeypatch,
-    caplog,
-    status,
-    body,
+    tmp_path, monkeypatch, caplog, status, body,
 ):
     config = configured(tmp_path)
     fake_gateway(monkeypatch, lambda request: httpx.Response(status, content=body))
     response = asyncio.run(service_response(config))
     events = decoded_events(response.content)
     assert [event.type for event in events] == ["run_started", "failed"]
-    assert events[-1].code is (
-        FailureCode.PROVIDER_UNAVAILABLE if status == 403 else FailureCode.PROVIDER_ERROR
-    )
+    assert events[-1].code is (FailureCode.PROVIDER_UNAVAILABLE if status == 403
+                              else FailureCode.PROVIDER_ERROR)
     assert "synthetic-gateway-key" not in response.text + caplog.text
 
 
-@pytest.mark.parametrize(
-    "document",
-    [
-        None,
-        [],
-        {},
-        {"shared_key": None},
-        {"shared_key": False},
-        {"shared_key": ""},
-        {"shared_key": " token"},
-        {"shared_key": "bad\nkey"},
-        {"shared_key": "key=middle"},
-        {"unknown": "key"},
-        {"app_keys": []},
-        {"app_keys": {"unknown": "key"}},
-        {"app_keys": {"songmaker": {"nested": "key"}}},
-        {"shared_key": "good", "app_keys": {"songmaker": ""}},
-    ],
-)
+@pytest.mark.parametrize("document", [None, [], {}, {"shared_key": None}, {"shared_key": False},
+    {"shared_key": ""}, {"shared_key": " token"}, {"shared_key": "bad\nkey"},
+    {"shared_key": "key=middle"}, {"unknown": "key"}, {"app_keys": []},
+    {"app_keys": {"unknown": "key"}}, {"app_keys": {"songmaker": {"nested": "key"}}},
+    {"shared_key": "good", "app_keys": {"songmaker": ""}}])
 def test_bad_credentials_never_fall_back_or_expose_document(tmp_path, document):
     from agent_runtime_service.api_credentials import InvalidApiCredentials, read_api_credentials
 
@@ -230,16 +186,9 @@ def test_bad_credentials_never_fall_back_or_expose_document(tmp_path, document):
     assert raised.value.__cause__ is None
 
 
-@pytest.mark.parametrize(
-    "contents",
-    [
-        b'{"shared_key":"secret","shared_key":"other"}',
-        b'{"app_keys":{"songmaker":"secret","songmaker":"other"}}',
-        b"\xff",
-        b'{"shared_key":"secret",',
-        b"[" * 1100,
-    ],
-)
+@pytest.mark.parametrize("contents", [b'{"shared_key":"secret","shared_key":"other"}',
+    b'{"app_keys":{"songmaker":"secret","songmaker":"other"}}', b'\xff',
+    b'{"shared_key":"secret",', b'[' * 1100])
 def test_invalid_json_or_duplicate_credentials_have_no_parser_chain(tmp_path, contents):
     from agent_runtime_service.api_credentials import InvalidApiCredentials, read_api_credentials
 
@@ -256,10 +205,8 @@ def test_invalid_json_or_duplicate_credentials_have_no_parser_chain(tmp_path, co
 def test_credentials_are_hidden_and_selected_by_app(tmp_path):
     from agent_runtime_service.api_credentials import read_api_credentials
 
-    path = write_api_credentials(
-        tmp_path / "credentials.json",
-        {"shared_key": "synthetic-shared", "app_keys": {"songmaker": "synthetic-app"}},
-    )
+    path = write_api_credentials(tmp_path / "credentials.json", {
+        "shared_key": "synthetic-shared", "app_keys": {"songmaker": "synthetic-app"}})
     loaded = read_api_credentials(path, frozenset({"songmaker", "presentator"}))
     assert loaded.for_app("songmaker").get_secret_value() == "synthetic-app"
     assert loaded.for_app("presentator").get_secret_value() == "synthetic-shared"
@@ -280,60 +227,30 @@ def test_rotation_to_per_app_only_keys_is_a_file_only_change(tmp_path, monkeypat
 
     async def run():
         mint = TokenMint()
-        app = create_app(
-            config,
-            runners=installed_runners(config, None, LoopClock()),
-            fetch_key_set=mint.fetch_key_set,
-        )
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://service"
-        ) as client:
+        app = create_app(config, runners=installed_runners(config, None, LoopClock()),
+                         fetch_key_set=mint.fetch_key_set)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://service") as client:
             for document, name, workload in [
                 ({"shared_key": "first"}, "songmaker", SONGMAKER_CLIENT),
-                (
-                    {"shared_key": "shared", "app_keys": {"songmaker": "preferred"}},
-                    "songmaker",
-                    SONGMAKER_CLIENT,
-                ),
-                (
-                    {
-                        "app_keys": {
-                            "songmaker": "synthetic-song-key",
-                            "presentator": "synthetic-slides-key",
-                        }
-                    },
-                    "songmaker",
-                    SONGMAKER_CLIENT,
-                ),
-                (
-                    {
-                        "app_keys": {
-                            "songmaker": "synthetic-song-key",
-                            "presentator": "synthetic-slides-key",
-                        }
-                    },
-                    "presentator",
-                    PRESENTATOR_CLIENT,
-                ),
+                ({"shared_key": "shared", "app_keys": {"songmaker": "preferred"}},
+                 "songmaker", SONGMAKER_CLIENT),
+                ({"app_keys": {"songmaker": "synthetic-song-key",
+                               "presentator": "synthetic-slides-key"}},
+                 "songmaker", SONGMAKER_CLIENT),
+                ({"app_keys": {"songmaker": "synthetic-song-key",
+                               "presentator": "synthetic-slides-key"}},
+                 "presentator", PRESENTATOR_CLIENT),
             ]:
                 write_api_credentials(config.api.credential_file, document)
-                response = await client.post(
-                    "/runs",
-                    json=run_body(),
-                    headers=run_headers(
-                        mint.workload(workload),
-                        mint.user(groups=[API_GROUP, f"/apps/{name}"], azp=workload),
-                    ),
-                )
+                response = await client.post("/runs", json=run_body(), headers=run_headers(
+                    mint.workload(workload), mint.user(groups=[API_GROUP, f"/apps/{name}"],
+                                                     azp=workload)))
                 assert isinstance(decoded_events(response.content)[-1], Succeeded)
 
     asyncio.run(run())
-    assert sent == [
-        "Bearer first",
-        "Bearer preferred",
-        "Bearer synthetic-song-key",
-        "Bearer synthetic-slides-key",
-    ]
+    assert sent == ["Bearer first", "Bearer preferred",
+                    "Bearer synthetic-song-key", "Bearer synthetic-slides-key"]
     assert len(clients) == 4
     assert all(client.is_closed for client in clients)
 
@@ -349,12 +266,8 @@ def test_invalid_rotated_credentials_refuse_before_http(tmp_path, monkeypatch, c
     elif change == "malformed":
         config.api.credential_file.write_bytes(b"invalid secret")
     else:
-        write_api_credentials(
-            config.api.credential_file,
-            {"app_keys": {"presentator": "key"}}
-            if change == "no-app"
-            else {"shared_key": "good", "app_keys": {"songmaker": ""}},
-        )
+        write_api_credentials(config.api.credential_file, {"app_keys": {"presentator": "key"}} if
+                    change == "no-app" else {"shared_key": "good", "app_keys": {"songmaker": ""}})
     events = decoded_events(asyncio.run(service_response(config)).content)
     assert events[-1].code is FailureCode.PROVIDER_UNAVAILABLE
     assert not clients
@@ -362,10 +275,7 @@ def test_invalid_rotated_credentials_refuse_before_http(tmp_path, monkeypatch, c
 
 @pytest.mark.parametrize("reflected", ["gateway", "capability"])
 def test_fragmented_reflection_reaches_no_frame_record_or_log(
-    tmp_path,
-    monkeypatch,
-    caplog,
-    reflected,
+    tmp_path, monkeypatch, caplog, reflected,
 ):
     from tests.support.service_support import record_signed_tokens
 
@@ -383,14 +293,10 @@ def test_fragmented_reflection_reaches_no_frame_record_or_log(
 
     async def run():
         mint = TokenMint()
-        app = create_app(
-            config,
-            runners=installed_runners(config, None, LoopClock()),
-            fetch_key_set=mint.fetch_key_set,
-        )
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://service"
-        ) as client:
+        app = create_app(config, runners=installed_runners(config, None, LoopClock()),
+                         fetch_key_set=mint.fetch_key_set)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://service") as client:
             headers = run_headers(mint.workload(), mint.user(groups=[API_GROUP, APP_GROUP]))
             response = await client.post("/runs", json=run_body(), headers=headers)
             events = decoded_events(response.content)
@@ -428,9 +334,7 @@ def test_the_api_runner_is_installed_beside_the_cli_runner(tmp_path):
 @pytest.mark.parametrize("ending", ["answer", "idle", "maximum", "disconnect"])
 @in_loop
 async def test_buffered_http_keeps_heartbeats_and_closes_on_every_ending(
-    tmp_path,
-    monkeypatch,
-    ending,
+    tmp_path, monkeypatch, ending,
 ):
     from tests.support.service_support import ClientSocket, StepClock, shared_mint
 
@@ -452,9 +356,8 @@ async def test_buffered_http_keeps_heartbeats_and_closes_on_every_ending(
     clients = fake_gateway(monkeypatch, upstream)
     mint = shared_mint()
     socket = ClientSocket(user_token=mint.user(groups=[API_GROUP, APP_GROUP]))
-    app = create_app(
-        config, runners=installed_runners(config, None, clock), fetch_key_set=mint.fetch_key_set
-    )
+    app = create_app(config, runners=installed_runners(config, None, clock),
+                     fetch_key_set=mint.fetch_key_set)
     response = asyncio.create_task(app(socket.scope, socket.receive, socket.send))
     try:
         await socket.received(b"event: run_started")
@@ -462,17 +365,14 @@ async def test_buffered_http_keeps_heartbeats_and_closes_on_every_ending(
         clock.advance_to(config.runs.heartbeat_interval_s)
         await clock.parked()
         assert [event.type for event in RunStreamDecoder().feed(socket.body)] == [
-            "run_started",
-            "heartbeat",
-        ]
+            "run_started", "heartbeat"]
         if ending == "answer":
             release.set()
         elif ending == "disconnect":
             socket.leave()
         else:
-            clock.advance_to(
-                config.runs.idle_timeout_s if ending == "idle" else config.runs.max_duration_s
-            )
+            clock.advance_to(config.runs.idle_timeout_s if ending == "idle"
+                             else config.runs.max_duration_s)
         await response
     finally:
         response.cancel()
@@ -483,9 +383,8 @@ async def test_buffered_http_keeps_heartbeats_and_closes_on_every_ending(
     if ending == "answer":
         assert isinstance(events[-1], Succeeded)
     elif ending != "disconnect":
-        assert events[-1].code is (
-            FailureCode.IDLE_TIMEOUT if ending == "idle" else FailureCode.LIMIT_EXCEEDED
-        )
+        assert events[-1].code is (FailureCode.IDLE_TIMEOUT if ending == "idle"
+                                  else FailureCode.LIMIT_EXCEEDED)
     assert asyncio.all_tasks() == {asyncio.current_task()}
 
 
@@ -507,29 +406,19 @@ def test_api_requires_its_groups_and_valid_startup_credentials(tmp_path):
         ServiceConfig.model_validate(fields)
 
 
-@pytest.mark.parametrize(
-    "url",
-    [
-        "http://127.0.0.1:8080/v1/chat/completions",
-        "http://[::1]:8080/v1/chat/completions",
-        "http://gateway.internal/v1/chat/completions",
-    ],
-)
+@pytest.mark.parametrize("url", ["http://127.0.0.1:8080/v1/chat/completions",
+    "http://[::1]:8080/v1/chat/completions", "http://gateway.internal/v1/chat/completions"])
 def test_config_accepts_the_explicit_local_gateway_hosts(tmp_path, url):
     assert configured(tmp_path, completion_url=url).api.completion_url == url
 
 
-@pytest.mark.parametrize(
-    "api",
-    [
-        {"ca_file": "/opt/unused.pem"},
-        {"credential_file": "relative.json"},
-        {"completion_url": "http://[::1]suffix/v1/chat/completions"},
-        {"completion_url": "http://bad..host/v1/chat/completions"},
-        {"completion_url": "http://gateway:/v1/chat/completions"},
-        {"completion_url": "https://gateway/v1/chat/completions", "ca_file": "relative.pem"},
-    ],
-)
+@pytest.mark.parametrize("api", [
+    {"ca_file": "/opt/unused.pem"}, {"credential_file": "relative.json"},
+    {"completion_url": "http://[::1]suffix/v1/chat/completions"},
+    {"completion_url": "http://bad..host/v1/chat/completions"},
+    {"completion_url": "http://gateway:/v1/chat/completions"},
+    {"completion_url": "https://gateway/v1/chat/completions", "ca_file": "relative.pem"},
+])
 def test_config_refuses_partial_or_contradictory_gateway_settings(tmp_path, api):
     with pytest.raises(ValidationError):
         configured(tmp_path, **api)
@@ -541,11 +430,8 @@ def test_https_uses_only_the_explicit_ca_and_hostname_verification(tmp_path, mon
     from tests.support.mcp_app_fake import TestAuthority
 
     authority = TestAuthority(tmp_path)
-    config = configured(
-        tmp_path,
-        completion_url="https://gateway/v1/chat/completions",
-        ca_file=str(authority.ca_file),
-    )
+    config = configured(tmp_path, completion_url="https://gateway/v1/chat/completions",
+                        ca_file=str(authority.ca_file))
     original = api_runner.AsyncClient
     verified = []
 
@@ -555,13 +441,10 @@ def test_https_uses_only_the_explicit_ca_and_hostname_verification(tmp_path, mon
         assert context.check_hostname
         assert context.verify_mode == ssl.CERT_REQUIRED
         assert context.get_ca_certs(binary_form=True) == authority.client_context().get_ca_certs(
-            binary_form=True
-        )
+            binary_form=True)
         verified.append(context)
-        return original(
-            **options,
-            transport=httpx.MockTransport(lambda request: httpx.Response(200, json=answer())),
-        )
+        return original(**options, transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, json=answer())))
 
     monkeypatch.setenv("SSL_CERT_FILE", "/does-not-exist")
     monkeypatch.setenv("HTTPS_PROXY", "http://must-not-be-used.invalid")
@@ -571,11 +454,8 @@ def test_https_uses_only_the_explicit_ca_and_hostname_verification(tmp_path, mon
 
 
 def test_unreadable_ca_stops_runner_installation(tmp_path):
-    config = configured(
-        tmp_path,
-        completion_url="https://gateway/v1/chat/completions",
-        ca_file=str(tmp_path / "missing.pem"),
-    )
+    config = configured(tmp_path, completion_url="https://gateway/v1/chat/completions",
+                        ca_file=str(tmp_path / "missing.pem"))
     clock = LoopClock()
     with pytest.raises(OSError):
         installed_runners(config, None, clock)
@@ -608,37 +488,31 @@ def test_full_cli_capacity_does_not_block_the_real_api_runner(tmp_path, monkeypa
 
     config = configured(tmp_path)
     paid = config.apps["songmaker"].model_copy(
-        update={"agents": {PAID_AGENT: AgentConfig(model="grok/synthetic")}}
-    )
-    config = config.model_copy(
-        update={
-            "runs": config.runs.model_copy(update={"max_parallel_cli_runs": 1}),
-            "apps": {**config.apps, "songmaker": paid},
-        }
-    )
+        update={"agents": {PAID_AGENT: AgentConfig(model="grok/synthetic")}})
+    config = config.model_copy(update={
+        "runs": config.runs.model_copy(update={"max_parallel_cli_runs": 1}),
+        "apps": {**config.apps, "songmaker": paid}})
     fake_gateway(monkeypatch, lambda request: httpx.Response(200, json=answer()))
 
     async def run():
         mint = shared_mint()
         cli = GatedRunner()
-        app = create_app(
-            config,
-            runners=Runners(cli=cli, api=installed_runners(config, None, LoopClock()).api),
-            fetch_key_set=mint.fetch_key_set,
-        )
+        app = create_app(config, runners=Runners(
+            cli=cli, api=installed_runners(config, None, LoopClock()).api),
+            fetch_key_set=mint.fetch_key_set)
         socket = ClientSocket()
         subscription = asyncio.create_task(app(socket.scope, socket.receive, socket.send))
         try:
             await socket.received(b"event: run_started")
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app), base_url="http://service"
-            ) as client:
-                both = run_headers(
-                    mint.workload(), mint.user(groups=[API_GROUP, SUBSCRIPTION_GROUP, APP_GROUP])
-                )
-                busy = await client.post("/runs", json=run_body(), headers=both)
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                         base_url="http://service") as client:
+                both = run_headers(mint.workload(), mint.user(groups=[
+                    API_GROUP, SUBSCRIPTION_GROUP, APP_GROUP]))
+                busy = await client.post(
+                    "/runs", json=run_body(), headers=both)
                 assert busy.status_code == 429
-                paid = await client.post("/runs", json=run_body(agent=PAID_AGENT), headers=both)
+                paid = await client.post(
+                    "/runs", json=run_body(agent=PAID_AGENT), headers=both)
                 assert isinstance(decoded_events(paid.content)[-1], Succeeded)
         finally:
             socket.leave()
@@ -649,9 +523,7 @@ def test_full_cli_capacity_does_not_block_the_real_api_runner(tmp_path, monkeypa
 
 
 def test_process_entry_installs_the_api_route_beside_the_probed_cli_program(
-    tmp_path,
-    monkeypatch,
-    logging_state_restored,
+    tmp_path, monkeypatch, logging_state_restored,
 ):
     import uvicorn
     from tests.support.mcp_app_fake import TestAuthority
@@ -661,31 +533,23 @@ def test_process_entry_installs_the_api_route_beside_the_probed_cli_program(
     from agent_runtime_service.config import McpConfig
 
     config = configured(tmp_path)
-    config = config.model_copy(
-        update={"mcp": McpConfig(ca_file=str(TestAuthority(tmp_path).ca_file))}
-    )
+    config = config.model_copy(update={"mcp": McpConfig(
+        ca_file=str(TestAuthority(tmp_path).ca_file))})
     fake_gateway(monkeypatch, lambda request: httpx.Response(200, json=answer()))
     monkeypatch.setattr(cli, "harden_process", lambda: None)
     monkeypatch.setattr(configuration, "load_config", lambda path: config)
     mint = TokenMint()
     original = create_app
-    monkeypatch.setattr(
-        "agent_runtime_service.app.create_app",
-        lambda config, **options: original(config, **options, fetch_key_set=mint.fetch_key_set),
-    )
+    monkeypatch.setattr("agent_runtime_service.app.create_app", lambda config, **options: original(
+        config, **options, fetch_key_set=mint.fetch_key_set))
     served = []
 
     def serve(app, **options):
         async def run():
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app), base_url="http://service"
-            ) as client:
-                return await client.post(
-                    "/runs",
-                    json=run_body(),
-                    headers=run_headers(mint.workload(), mint.user(groups=[API_GROUP, APP_GROUP])),
-                )
-
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                         base_url="http://service") as client:
+                return await client.post("/runs", json=run_body(), headers=run_headers(
+                    mint.workload(), mint.user(groups=[API_GROUP, APP_GROUP])))
         served.extend(decoded_events(asyncio.run(run()).content))
 
     monkeypatch.setattr(uvicorn, "run", serve)
@@ -742,12 +606,8 @@ async def test_runner_refusal_removes_active_caller_chain(tmp_path, monkeypatch,
 
     config = configured(tmp_path)
     body = run_body()
-    admitted = replace(
-        alice_admitted_run(uuid4()),
-        request=RunRequest.model_validate(body),
-        model=f"{Provider.ANTHROPIC}/synthetic",
-        route=Api(),
-    )
+    admitted = replace(alice_admitted_run(uuid4()), request=RunRequest.model_validate(body),
+                       model=f"{Provider.ANTHROPIC}/synthetic", route=Api())
     if scenario == "credentials":
         config.api.credential_file.unlink()
 
@@ -781,14 +641,10 @@ def test_api_ca_startup_refusal_names_its_own_configuration(tmp_path, monkeypatc
     from agent_runtime_service import config as configuration
     from agent_runtime_service.config import McpConfig
 
-    config = configured(
-        tmp_path,
-        completion_url="https://gateway/v1/chat/completions",
-        ca_file=str(tmp_path / "absent-api.pem"),
-    )
-    config = config.model_copy(
-        update={"mcp": McpConfig(ca_file=str(TestAuthority(tmp_path).ca_file))}
-    )
+    config = configured(tmp_path, completion_url="https://gateway/v1/chat/completions",
+                        ca_file=str(tmp_path / "absent-api.pem"))
+    config = config.model_copy(update={"mcp": McpConfig(
+        ca_file=str(TestAuthority(tmp_path).ca_file))})
     monkeypatch.setattr(cli, "harden_process", lambda: None)
     monkeypatch.setattr(configuration, "load_config", lambda path: config)
     assert cli.main(["--config", str(tmp_path / "service.toml")]) == cli.EXIT_BAD_CONFIG

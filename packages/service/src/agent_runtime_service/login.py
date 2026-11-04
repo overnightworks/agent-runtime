@@ -125,7 +125,7 @@ def _expiry_text(expires_at: int | None) -> str:
     """The expiry in UTC; one beyond ``datetime``'s range is shown as epoch seconds."""
     try:
         return datetime.fromtimestamp(expires_at or 0, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    except OverflowError, ValueError, OSError:
+    except (OverflowError, ValueError, OSError):
         return str(expires_at)
 
 
@@ -206,7 +206,7 @@ def _sibling_left_over(sibling: Path) -> bool:
         os.lstat(sibling)
     except FileNotFoundError:
         return False
-    except OSError, ValueError:
+    except (OSError, ValueError):
         return True
     return True
 

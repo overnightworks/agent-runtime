@@ -364,7 +364,9 @@ def test_a_provider_without_a_table_is_refused_before_anything_is_read(
     stream = Stream(GOOD_DOCUMENTS[provider])
 
     with said.watching():
-        status = main(["--config", str(installation.config), "--provider", provider.value], stream)
+        status = main(
+            ["--config", str(installation.config), "--provider", provider.value], stream
+        )
 
     assert (status, stream.was_read, installation.unchanged()) == (2, False, True)
     assert f"cli.{provider}: no such table" in said.descriptor

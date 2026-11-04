@@ -243,7 +243,9 @@ def test_a_program_printing_where_it_runs_refuses_the_start_without_the_working_
     printed_copy = tmp_path / "printed-copy"
     program = _script(tmp_path, f'{program_body} | tee "{printed_copy}"')
 
-    refusal = refused_on_one_line(written(tmp_path, document_naming(program, configured)), capsys)
+    refusal = refused_on_one_line(
+        written(tmp_path, document_naming(program, configured)), capsys
+    )
     printed_characters = len(printed_copy.read_bytes().decode(errors="replace"))
 
     assert PRIVATE_MARKER not in refusal
@@ -265,9 +267,7 @@ def test_a_nonzero_exit_refuses_the_start_even_when_the_output_looks_valid(
 
 
 def test_a_program_that_does_not_exist_refuses_the_start_as_unstarted(
-    tmp_path,
-    capsys,
-    served_runs,
+    tmp_path, capsys, served_runs,
 ):
     program = tmp_path / "absent-claude"
 
@@ -293,9 +293,7 @@ def test_a_program_that_never_finishes_is_stopped_and_refuses_the_start(
 
 
 def test_output_beyond_the_runner_limit_refuses_the_start_as_incomplete(
-    tmp_path,
-    capsys,
-    served_runs,
+    tmp_path, capsys, served_runs,
 ):
     program = _script(tmp_path, "head -c 70000 /dev/zero | tr '\\0' x")
 
@@ -428,11 +426,7 @@ def test_grok_reads_only_its_exact_version_line(stdout, version):
 
 
 def _a_pin(
-    directory: Path,
-    printed: str,
-    version: str,
-    program_type: type[ProgramPin],
-    login: Path,
+    directory: Path, printed: str, version: str, program_type: type[ProgramPin], login: Path,
     order: Path,
 ) -> ProgramPin:
     """A pin on a program that prints ``printed``; each start first appends its directory name."""
@@ -475,28 +469,16 @@ def test_the_pinned_programs_are_probed_in_order_and_the_first_miss_refuses_and_
     }[missing]
     pins = {
         "anthropic": _a_pin(
-            tmp_path / "anthropic",
-            prints["anthropic"],
-            PINNED_CLAUDE_VERSION,
-            ClaudeProgram,
-            process_token_file(),
-            order,
+            tmp_path / "anthropic", prints["anthropic"], PINNED_CLAUDE_VERSION, ClaudeProgram,
+            process_token_file(), order,
         ),
         "openai": _a_pin(
-            tmp_path / "openai",
-            prints["openai"],
-            "0.163.0",
-            CodexProgram,
-            a_codex_login_file(tmp_path),
-            order,
+            tmp_path / "openai", prints["openai"], "0.163.0", CodexProgram,
+            a_codex_login_file(tmp_path), order,
         ),
         "xai": _a_pin(
-            tmp_path / "xai",
-            prints["xai"],
-            GROK_TABLE.pin,
-            GrokProgram,
-            GROK_TABLE.login_file(tmp_path),
-            order,
+            tmp_path / "xai", prints["xai"], GROK_TABLE.pin, GrokProgram,
+            GROK_TABLE.login_file(tmp_path), order,
         ),
     }
     cli = CliConfig(working_root=str(working_root), **pins)

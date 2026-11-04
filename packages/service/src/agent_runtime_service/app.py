@@ -164,7 +164,9 @@ def create_app(
     installed_records = records or RunRecords(wall_clock)
     subscription_slot = AdmissionSlot(config.runs.max_parallel_cli_runs)
     quarantine = Quarantine(LoopClock(), confirm_group_gone)
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan_of(renewals))
+    app = FastAPI(
+        docs_url=None, redoc_url=None, openapi_url=None, lifespan=_lifespan_of(renewals)
+    )
 
     @app.post("/runs")
     async def start_run(request: Request) -> Response:

@@ -241,7 +241,9 @@ def a_tool_run(
 
         def play(base_url: str) -> tuple[list[RunEvent], RunStatus]:
             events = (
-                post_a_run_naming(base_url, tools) if scenario is None else scenario(base_url, app)
+                post_a_run_naming(base_url, tools)
+                if scenario is None
+                else scenario(base_url, app)
             )
             status = settled_status(base_url, events)
             before_stop(config)

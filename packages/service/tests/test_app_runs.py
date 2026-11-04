@@ -328,7 +328,9 @@ def test_p9_an_unreachable_key_set_is_unavailable_for_the_apps_own_run():
         pytest.param(lambda: {}, id="w1-no-token"),
         pytest.param(lambda: {"Agent-Workload-Token": "garbage"}, id="w2-garbage"),
         pytest.param(lambda: {"Agent-Workload-Token": _expired_workload()}, id="w2-expired"),
-        pytest.param(lambda: {"Agent-Workload-Token": OTHER_MINT.workload()}, id="w2-unknown-key"),
+        pytest.param(
+            lambda: {"Agent-Workload-Token": OTHER_MINT.workload()}, id="w2-unknown-key"
+        ),
     ],
 )
 def test_w1_w2_a_missing_or_unverifiable_workload_token_is_unauthorized(service, make_headers):
@@ -440,19 +442,11 @@ def test_e5_the_roles_of_the_body_are_not_read_for_the_apps_own_run(service):
         pytest.param([API_GROUP], None, CODEX_NAME, Api(), CODEX_NAME, id="r2-the-agents-model"),
         pytest.param([API_GROUP], CODEX_NAME, None, Api(), CODEX_NAME, id="r3-app"),
         pytest.param(
-            [SUBSCRIPTION_GROUP, API_GROUP],
-            CODEX_NAME,
-            LISTED,
-            Cli(Provider.ANTHROPIC),
-            LISTED,
+            [SUBSCRIPTION_GROUP, API_GROUP], CODEX_NAME, LISTED, Cli(Provider.ANTHROPIC), LISTED,
             id="r5-the-agent-over-the-app",
         ),
         pytest.param(
-            [SUBSCRIPTION_GROUP, API_GROUP],
-            None,
-            CODEX_NAME,
-            Cli(Provider.OPENAI),
-            CODEX_NAME,
+            [SUBSCRIPTION_GROUP, API_GROUP], None, CODEX_NAME, Cli(Provider.OPENAI), CODEX_NAME,
             id="r6-the-subscriber-of-the-models-provider",
         ),
     ],

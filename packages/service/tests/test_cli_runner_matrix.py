@@ -65,7 +65,7 @@ from agent_runtime_service.run_events import OUTPUT_REFUSED_MESSAGE
 
 MARKER = "marker-4c1e"
 PICTURE_FOLDER = '"$CODEX_HOME/generated_images/thread"'
-WRITE_A_PICTURE = f"mkdir -p {PICTURE_FOLDER}; printf pixels > {PICTURE_FOLDER}/picture.png"
+WRITE_A_PICTURE = f'mkdir -p {PICTURE_FOLDER}; printf pixels > {PICTURE_FOLDER}/picture.png'
 PARKED = "exec sleep 600"
 
 

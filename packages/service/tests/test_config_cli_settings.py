@@ -320,7 +320,7 @@ PASS_THROUGH = {
     "rules": 'paths.extra_rule_dirs = ["r"]\ncompat.x.rules = true',
     "hooks and display": 'hooks.x = []\nui.theme = "dark"',
     "tool surface": 'permission.allow = ["x"]\nsubagents.models.x = "m"\n'
-    "tools.x = 1\nsandbox.x = 1\nauto_mode.x = 1\nmcp_servers = {}\n"
+    'tools.x = 1\nsandbox.x = 1\nauto_mode.x = 1\nmcp_servers = {}\n'
     "shell_environment_policy.x = 1\nskills.x = 1",
     "the rest": "features.image_gen = true\nmemory = true\ncli.x = 1",
     "arrays of tables": "tools.x.args = [{ a = 1 }]\nhooks.y = [{ b = [{ c = 2 }] }]",
@@ -458,7 +458,7 @@ def test_a_claude_key_another_owner_holds_stops_startup_naming_level_key_and_own
         'settings.permissions.deny = ["Read"]',
         'settings.permissions.defaultMode = "plan"',
         'settings.permissions.ask = ["Bash"]',
-        "settings.hooks.PreToolUse = []",
+        'settings.hooks.PreToolUse = []',
         'settings.outputStyle = "Explanatory"',
         'settings.forceLoginMethod = "claudeai"',
         'settings.modelOverrides = { a = "b" }',
@@ -569,7 +569,6 @@ def test_the_documented_grok_example_reaches_a_grok_runs_config_file_as_written(
 
     run = a_grok_run(*config.cli_settings_levels(DOCUMENTED_APP, "any-agent", Provider.XAI))
 
-    assert (
-        tomllib.loads(run.run_files()["config.toml"].decode())
-        == (tomllib.loads(GROK_EXAMPLE)["apps"][DOCUMENTED_APP]["cli_settings"]["xai"])
+    assert tomllib.loads(run.run_files()["config.toml"].decode()) == (
+        tomllib.loads(GROK_EXAMPLE)["apps"][DOCUMENTED_APP]["cli_settings"]["xai"]
     )

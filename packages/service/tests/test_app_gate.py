@@ -82,7 +82,9 @@ class Gate:
     config: ServiceConfig
 
     def post(self, groups: list[str], **body: object) -> httpx.Response:
-        document = {name: value for name, value in run_body(**body).items() if value is not ABSENT}
+        document = {
+            name: value for name, value in run_body(**body).items() if value is not ABSENT
+        }
         return self.post_document(groups, document)
 
     def post_document(self, groups: list[str], document: dict[str, object]) -> httpx.Response:
@@ -315,7 +317,9 @@ def test_a_person_whose_role_the_agent_lists_runs_on_the_subscription(gate, grou
     ],
 )
 def test_a_member_whose_roles_are_missing_or_malformed_is_told_the_body_is_invalid(gate, roles):
-    gate.refuse(SUBSCRIBER_ROLE_ADMIN, RejectionCode.INVALID_REQUEST, 422, roles=roles)
+    gate.refuse(
+        SUBSCRIBER_ROLE_ADMIN, RejectionCode.INVALID_REQUEST, 422, roles=roles
+    )
 
 
 @pytest.mark.parametrize(

@@ -188,7 +188,9 @@ def test_a_run_without_words_or_a_file_ends_as_an_invalid_event(
         pytest.param(
             f"printf {MARKER} > output/{MARKER}; chmod 000 output/{MARKER}", id="mode-000"
         ),
-        pytest.param(f"printf {MARKER} > \"output/{MARKER}$(printf '\\377')\"", id="non-utf8-name"),
+        pytest.param(
+            f"printf {MARKER} > \"output/{MARKER}$(printf '\\377')\"", id="non-utf8-name"
+        ),
         pytest.param(f"rm -r output; ln -s {MARKER} output", id="folder-replaced-by-a-link"),
     ],
 )

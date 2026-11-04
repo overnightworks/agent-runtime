@@ -365,7 +365,11 @@ def serving(tmp_path, monkeypatch, caplog) -> ServingFactory:
         fetch_key_set=MINT.fetch_key_set,
         capable: bool = True,
     ) -> Iterator[_Service]:
-        config = capable_service_config(tmp_path) if capable else plain_service_config()
+        config = (
+            capable_service_config(tmp_path)
+            if capable
+            else plain_service_config()
+        )
         signed = record_signed_tokens(monkeypatch)
         clock = WallClock()
         installed = runners or Runners(cli=ScriptedRunner(SCRIPT), api=ScriptedRunner(SCRIPT))
@@ -555,7 +559,9 @@ def _unreachable_issuer(_url: str) -> bytes:
         pytest.param(_unreachable_issuer, {}, {}, id="unavailable"),
         pytest.param(MINT.fetch_key_set, {"groups": []}, {}, id="outside-the-app"),
         pytest.param(MINT.fetch_key_set, {}, {"v": 1}, id="unsupported-version"),
-        pytest.param(MINT.fetch_key_set, {}, {"agent": "notes.assistant"}, id="malformed-agent"),
+        pytest.param(
+            MINT.fetch_key_set, {}, {"agent": "notes.assistant"}, id="malformed-agent"
+        ),
         pytest.param(MINT.fetch_key_set, {}, {"turn": {"system": "x", "messages": []}}, id="shape"),
     ],
 )

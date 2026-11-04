@@ -40,14 +40,13 @@ from agent_runtime_service.run_liveness import LoopClock
 async def post_tools(config, authority, *, records=None, **body):
     mint = TokenMint()
     runners = installed_runners(config, authority.client_context(), LoopClock())
-    app = create_app(config, runners=runners, fetch_key_set=mint.fetch_key_set)
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://service"
-    ) as client:
+    app = create_app(config, runners=runners,
+                     fetch_key_set=mint.fetch_key_set)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                base_url="http://service") as client:
         headers = run_headers(mint.workload(), mint.user(groups=[API_GROUP, APP_GROUP]))
-        response = await client.post(
-            "/runs", json=run_body(tools={"echo": "read_only"}, **body), headers=headers
-        )
+        response = await client.post("/runs", json=run_body(tools={"echo": "read_only"}, **body),
+                                     headers=headers)
         events = decoded_events(response.content)
         record = await client.get(f"/runs/{events[0].run_id}", headers=headers)
         assert record.status_code == 200
@@ -58,24 +57,14 @@ async def post_tools(config, authority, *, records=None, **body):
 
 
 def with_origin(config, origin):
-    return config.model_copy(
-        update={
-            "apps": {
-                **config.apps,
-                "songmaker": config.apps["songmaker"].model_copy(update={"mcp_origin": origin}),
-            }
-        }
-    )
+    return config.model_copy(update={"apps": {**config.apps,
+        "songmaker": config.apps["songmaker"].model_copy(update={"mcp_origin": origin})}})
 
 
 @pytest.mark.parametrize("count,rounds", [(2, 1), (4, 1), (1, 9)])
 @pytest.mark.parametrize("model", [CONFIGURED_MODEL, "chosen/provider"])
 def test_real_entry_preserves_order_ids_and_model_across_complete_tool_rounds(
-    tmp_path,
-    monkeypatch,
-    count,
-    rounds,
-    model,
+    tmp_path, monkeypatch, count, rounds, model,
 ):
     authority = TestAuthority(tmp_path)
     requests = []
@@ -85,12 +74,8 @@ def test_real_entry_preserves_order_ids_and_model_across_complete_tool_rounds(
         payload = json.loads(request.content)
         requests.append(payload)
         if len(requests) <= rounds:
-            return httpx.Response(
-                200,
-                json=tool_completion(
-                    [provider_call(f"call-{index}") for index in range(count)], text="prefix "
-                ),
-            )
+            return httpx.Response(200, json=tool_completion([
+                provider_call(f"call-{index}") for index in range(count)], text="prefix "))
         return httpx.Response(200, json=answer(" done "))
 
     clients = fake_gateway(monkeypatch, upstream)
@@ -110,16 +95,13 @@ def test_real_entry_preserves_order_ids_and_model_across_complete_tool_rounds(
     assert requests[0]["model"] == model
     assert requests[-1]["messages"][-count:] == [
         {"role": "tool", "tool_call_id": f"call-{index}", "content": "echo"}
-        for index in range(count)
-    ]
+        for index in range(count)]
     assert all(client.is_closed for client in clients)
 
 
 @pytest.mark.parametrize("cookie_value", ["ordinary-session", "synthetic-gateway-key"])
 def test_gateway_response_cookies_never_continue_outside_authorization(
-    tmp_path,
-    monkeypatch,
-    cookie_value,
+    tmp_path, monkeypatch, cookie_value,
 ):
     authority = TestAuthority(tmp_path)
     requests = []
@@ -127,9 +109,8 @@ def test_gateway_response_cookies_never_continue_outside_authorization(
     def upstream(request):
         requests.append(request)
         payload = tool_completion() if len(requests) <= 2 else answer("done")
-        return httpx.Response(
-            200, json=payload, headers={"Set-Cookie": f"gateway_session={cookie_value}; Path=/"}
-        )
+        return httpx.Response(200, json=payload,
+                              headers={"Set-Cookie": f"gateway_session={cookie_value}; Path=/"})
 
     clients = fake_gateway(monkeypatch, upstream)
     with serving(ScriptedApp(), authority.credentials_for("localhost")) as peer:
@@ -138,24 +119,18 @@ def test_gateway_response_cookies_never_continue_outside_authorization(
     assert isinstance(events[-1], Succeeded)
     assert events[-1].text == "done"
     assert len(requests) == 3
-    assert all(
-        request.headers["authorization"] == "Bearer synthetic-gateway-key" for request in requests
-    )
+    assert all(request.headers["authorization"] == "Bearer synthetic-gateway-key"
+               for request in requests)
     assert all("cookie" not in request.headers for request in requests)
     assert all(client.is_closed for client in clients)
 
 
-@pytest.mark.parametrize(
-    "bad", [provider_call("second", arguments="[]"), provider_call("second", name="not-granted")]
-)
+@pytest.mark.parametrize("bad", [provider_call("second", arguments="[]"),
+                                 provider_call("second", name="not-granted")])
 def test_later_invalid_call_refuses_whole_round_before_text_or_effect(tmp_path, monkeypatch, bad):
     authority = TestAuthority(tmp_path)
-    fake_gateway(
-        monkeypatch,
-        lambda request: httpx.Response(
-            200, json=tool_completion([provider_call(), bad], text="must not escape")
-        ),
-    )
+    fake_gateway(monkeypatch, lambda request: httpx.Response(200, json=tool_completion(
+        [provider_call(), bad], text="must not escape")))
     with serving(ScriptedApp(), authority.credentials_for("localhost")) as peer:
         events = asyncio.run(post_tools(with_origin(configured(tmp_path), peer.origin), authority))
         assert [event.type for event in events] == ["run_started", "failed"]
@@ -166,9 +141,8 @@ def test_later_invalid_call_refuses_whole_round_before_text_or_effect(tmp_path, 
 def test_missing_or_duplicate_granted_offer_refuses_before_gateway(tmp_path, monkeypatch, names):
     authority = TestAuthority(tmp_path)
     clients = fake_gateway(monkeypatch, lambda request: pytest.fail("invalid offer sent HTTP"))
-    with serving(
-        ScriptedApp(pages=[tool_listing(names)]), authority.credentials_for("localhost")
-    ) as peer:
+    with serving(ScriptedApp(pages=[tool_listing(names)]),
+                 authority.credentials_for("localhost")) as peer:
         events = asyncio.run(post_tools(with_origin(configured(tmp_path), peer.origin), authority))
         assert [event.type for event in events] == ["run_started", "failed"]
     assert all(client.is_closed for client in clients)
@@ -183,27 +157,19 @@ def test_checked_offer_alone_supplies_schemas_and_omits_missing_description(tmp_
         return httpx.Response(200, json=answer())
 
     fake_gateway(monkeypatch, upstream)
-    offered = {
-        "tools": [
-            {"name": "echo", "inputSchema": {"type": "object"}},
-            {"name": "other", "inputSchema": {"type": "object"}},
-        ]
-    }
+    offered = {"tools": [{"name": "echo", "inputSchema": {"type": "object"}},
+                         {"name": "other", "inputSchema": {"type": "object"}}]}
     with serving(ScriptedApp(pages=[offered]), authority.credentials_for("localhost")) as peer:
         events = asyncio.run(post_tools(with_origin(configured(tmp_path), peer.origin), authority))
     assert isinstance(events[-1], Succeeded)
-    assert requests[0]["tools"] == [
-        {"type": "function", "function": {"name": "echo", "parameters": {"type": "object"}}}
-    ]
+    assert requests[0]["tools"] == [{"type": "function", "function": {
+        "name": "echo", "parameters": {"type": "object"}}}]
 
 
-@pytest.mark.parametrize(
-    "boundary", ["call-count", "call-bytes", "result-bytes", "call-record", "result-record"]
-)
+@pytest.mark.parametrize("boundary", ["call-count", "call-bytes", "result-bytes",
+                                     "call-record", "result-record"])
 def test_service_budget_or_recording_refusal_preserves_acceptance_boundary(
-    tmp_path,
-    monkeypatch,
-    boundary,
+    tmp_path, monkeypatch, boundary,
 ):
     from tests.support.mcp_app_fake import rpc_result
 
@@ -229,25 +195,13 @@ def test_service_budget_or_recording_refusal_preserves_acceptance_boundary(
     monkeypatch.setattr(RunRecorder, "accepted", record)
     fake_gateway(monkeypatch, upstream)
     content = "x" * 4000 if boundary == "result-bytes" else "accepted"
-    responder = ScriptedApp(
-        overrides={
-            "tools/call": lambda request: rpc_result(
-                request, {"content": [{"type": "text", "text": content}]}
-            )
-        }
-    )
+    responder = ScriptedApp(overrides={"tools/call": lambda request: rpc_result(request,
+        {"content": [{"type": "text", "text": content}]})})
     with serving(responder, authority.credentials_for("localhost")) as peer:
         config = with_origin(configured(tmp_path), peer.origin)
-        config = config.model_copy(
-            update={
-                "runs": config.runs.model_copy(
-                    update={
-                        "max_tool_calls": 1 if boundary == "call-count" else 30,
-                        "max_bytes": 3000 if boundary.endswith("bytes") else config.runs.max_bytes,
-                    }
-                )
-            }
-        )
+        config = config.model_copy(update={"runs": config.runs.model_copy(update={
+            "max_tool_calls": 1 if boundary == "call-count" else 30,
+            "max_bytes": 3000 if boundary.endswith("bytes") else config.runs.max_bytes})})
         if boundary.endswith("record"):
             run = post_tools(config, authority)
             with pytest.raises(RuntimeError, match="synthetic recording refusal"):
@@ -273,19 +227,12 @@ def test_tool_error_and_lost_response_are_results_without_retry(tmp_path, monkey
         return httpx.Response(200, json=tool_completion() if len(requests) == 1 else answer())
 
     fake_gateway(monkeypatch, upstream)
-
     def effect(request):
-        return (
-            DROPPED
-            if outcome == "lost"
-            else rpc_result(
-                request, {"isError": True, "content": [{"type": "text", "text": "app refused"}]}
-            )
-        )
+        return DROPPED if outcome == "lost" else rpc_result(request, {
+            "isError": True, "content": [{"type": "text", "text": "app refused"}]})
 
-    with serving(
-        ScriptedApp(overrides={"tools/call": effect}), authority.credentials_for("localhost")
-    ) as peer:
+    with serving(ScriptedApp(overrides={"tools/call": effect}),
+                 authority.credentials_for("localhost")) as peer:
         events = asyncio.run(post_tools(with_origin(configured(tmp_path), peer.origin), authority))
         assert sum(request.rpc_method == "tools/call" for request in peer.requests) == 1
     assert isinstance(events[-1], Succeeded)
@@ -298,11 +245,7 @@ def test_tool_error_and_lost_response_are_results_without_retry(tmp_path, monkey
 @pytest.mark.parametrize("secret_kind", ["gateway", "capability", "signature"])
 @pytest.mark.parametrize("location", ["offer", "arguments", "result", "later-text"])
 def test_protected_values_never_escape_the_allowed_headers(
-    tmp_path,
-    monkeypatch,
-    caplog,
-    secret_kind,
-    location,
+    tmp_path, monkeypatch, caplog, secret_kind, location,
 ):
     from tests.support.mcp_app_fake import rpc_result
     from tests.support.service_support import record_signed_tokens
@@ -322,57 +265,32 @@ def test_protected_values_never_escape_the_allowed_headers(
         if len(requests) > 1:
             payload = answer(secret())
         else:
-            payload = tool_completion(
-                [
-                    provider_call(
-                        arguments=json.dumps(
-                            {"text": secret() if location == "arguments" else "safe"}
-                        )
-                    )
-                ]
-            )
+            payload = tool_completion([provider_call(arguments=json.dumps({
+                "text": secret() if location == "arguments" else "safe"}))])
         # Escaped ASCII and byte-fragmented delivery exercise decoding before reflection.
         encoded = json.dumps(payload)
         encoded = encoded.replace(secret(), "".join(f"\\u{ord(char):04x}" for char in secret()))
-
         class Fragments(httpx.AsyncByteStream):
             async def __aiter__(self):
                 for byte in encoded.encode():
                     yield bytes([byte])
-
         return httpx.Response(200, stream=Fragments())
 
     def listing(request):
-        return rpc_result(
-            request,
-            {
-                "tools": [
-                    {
-                        "name": "echo",
-                        "inputSchema": {"type": "object"},
-                        "description": secret() if location == "offer" else "safe",
-                    }
-                ]
-            },
-        )
+        return rpc_result(request, {"tools": [{"name": "echo", "inputSchema": {"type": "object"},
+            "description": secret() if location == "offer" else "safe"}]})
 
     def effect(request):
-        return rpc_result(
-            request,
-            {"content": [{"type": "text", "text": secret() if location == "result" else "safe"}]},
-        )
+        return rpc_result(request, {"content": [{"type": "text",
+            "text": secret() if location == "result" else "safe"}]})
 
     clients = fake_gateway(monkeypatch, upstream)
-    with serving(
-        ScriptedApp(overrides={"tools/list": listing, "tools/call": effect}),
-        authority.credentials_for("localhost"),
-    ) as peer:
-        events = asyncio.run(
-            post_tools(with_origin(configured(tmp_path), peer.origin), authority, records=records)
-        )
-        assert all(
-            request.headers["authorization"] == f"Bearer {signed[-1]}" for request in peer.requests
-        )
+    with serving(ScriptedApp(overrides={"tools/list": listing, "tools/call": effect}),
+                 authority.credentials_for("localhost")) as peer:
+        events = asyncio.run(post_tools(with_origin(configured(tmp_path), peer.origin),
+                                        authority, records=records))
+        assert all(request.headers["authorization"] == f"Bearer {signed[-1]}"
+                   for request in peer.requests)
         effect_count = sum(request.rpc_method == "tools/call" for request in peer.requests)
         assert effect_count == (0 if location in {"offer", "arguments"} else 1)
     assert events[-1].type == "failed"
@@ -386,10 +304,7 @@ def test_protected_values_never_escape_the_allowed_headers(
 @pytest.mark.parametrize("secret_kind", ["gateway", "signature"])
 @pytest.mark.parametrize("completing_tool_round", [False, True])
 def test_protected_value_assembled_across_rounds_refuses_completing_round(
-    tmp_path,
-    monkeypatch,
-    secret_kind,
-    completing_tool_round,
+    tmp_path, monkeypatch, secret_kind, completing_tool_round,
 ):
     from tests.support.service_support import record_signed_tokens
 
@@ -401,7 +316,7 @@ def test_protected_value_assembled_across_rounds_refuses_completing_round(
     def upstream(request):
         requests.append(json.loads(request.content))
         secret = "synthetic-gateway-key" if secret_kind == "gateway" else signed[-1].split(".")[-1]
-        fragments[:] = [secret[: len(secret) // 2], secret[len(secret) // 2 :]]
+        fragments[:] = [secret[:len(secret)//2], secret[len(secret)//2:]]
         if len(requests) == 1:
             payload = tool_completion(text=fragments[0])
         elif completing_tool_round:
@@ -415,12 +330,7 @@ def test_protected_value_assembled_across_rounds_refuses_completing_round(
         events = asyncio.run(post_tools(with_origin(configured(tmp_path), peer.origin), authority))
         assert sum(request.rpc_method == "tools/call" for request in peer.requests) == 1
     assert [event.type for event in events] == [
-        "run_started",
-        "assistant_text",
-        "tool_call",
-        "tool_result",
-        "failed",
-    ]
+        "run_started", "assistant_text", "tool_call", "tool_result", "failed"]
     assert events[1].text == fragments[0]
     assert len(requests) == 2
 
@@ -438,22 +348,15 @@ def admitted_tools(origin):
     from agent_runtime_service.routing import Api
 
     capability = capability_carrying(canary_token())
-    return replace(
-        alice_admitted_run(uuid4()),
-        model=f"{Provider.ANTHROPIC}/chosen",
-        route=Api(),
+    return replace(alice_admitted_run(uuid4()), model=f"{Provider.ANTHROPIC}/chosen", route=Api(),
         request=RunRequest.model_validate(run_body(tools={"echo": "read_only"})),
         capability=Capability(
-            capability.claims.model_copy(update={"aud": origin}), capability.token
-        ),
-    )
+            capability.claims.model_copy(update={"aud": origin}), capability.token))
 
 
 @pytest.mark.parametrize("stop_at", [None, "call", "result"])
 def test_runner_waits_for_each_acceptance_and_closes_without_a_listener(
-    tmp_path,
-    monkeypatch,
-    stop_at,
+    tmp_path, monkeypatch, stop_at,
 ):
     from agent_runtime_service.tool_relay import Relay
 
@@ -487,10 +390,7 @@ def test_runner_waits_for_each_acceptance_and_closes_without_a_listener(
                 rest = [event async for event in events]
                 assert rest[-1].type == "final"
                 assert requests[-1]["messages"][-1] == {
-                    "role": "tool",
-                    "tool_call_id": "provider-1",
-                    "content": "echo",
-                }
+                    "role": "tool", "tool_call_id": "provider-1", "content": "echo"}
             finally:
                 await events.aclose()
                 assert asyncio.all_tasks() == {asyncio.current_task()}
@@ -515,23 +415,17 @@ def test_unanswered_or_rpc_refusal_never_becomes_success(tmp_path, monkeypatch, 
     authority = TestAuthority(tmp_path)
     original = RunTools.answer
     requests = []
-
     async def refused(self, request):
         message = parse_message(request.body)
         if message.method == McpMethod.TOOLS_CALL:
-            return (
-                UNANSWERED
-                if answer_kind == "unanswered"
-                else answer_for(error_response(message.id, JsonRpcErrorCode.INVALID_PARAMS))
-            )
+            return UNANSWERED if answer_kind == "unanswered" else answer_for(error_response(
+                message.id, JsonRpcErrorCode.INVALID_PARAMS))
         return await original(self, request)
 
     monkeypatch.setattr(RunTools, "answer", refused)
-
     def upstream(request):
         requests.append(request)
         return httpx.Response(200, json=tool_completion())
-
     fake_gateway(monkeypatch, upstream)
     with serving(ScriptedApp(), authority.credentials_for("localhost")) as peer:
         events = asyncio.run(post_tools(with_origin(configured(tmp_path), peer.origin), authority))
@@ -541,9 +435,7 @@ def test_unanswered_or_rpc_refusal_never_becomes_success(tmp_path, monkeypatch, 
 
 @pytest.mark.parametrize("phase", ["discovery", "composition", "prepared-cancel", "effect"])
 def test_cancellation_and_composition_failure_close_session_and_http_client(
-    tmp_path,
-    monkeypatch,
-    phase,
+    tmp_path, monkeypatch, phase,
 ):
     from tests.support.mcp_app_fake import HeldRequests
 
@@ -558,22 +450,17 @@ def test_cancellation_and_composition_failure_close_session_and_http_client(
     prepared = asyncio.Event()
     if phase == "prepared-cancel":
         original = api_runner.offered_schemas
-
         async def hold(*args):
             await original(*args)
             prepared.set()
             await asyncio.Event().wait()
-
         monkeypatch.setattr(api_runner, "offered_schemas", hold)
     if phase == "composition":
-
         def fail(*args):
             raise RuntimeError("synthetic composition failure")
-
         monkeypatch.setattr(api_runner, "RelayedEvents", fail)
     with serving(responder, authority.credentials_for("localhost")) as peer:
         config = with_origin(configured(tmp_path), peer.origin)
-
         async def run():
             runner = installed_runners(config, authority.client_context(), LoopClock()).api
             events = runner.run(admitted_tools(peer.origin))
@@ -601,7 +488,6 @@ def test_cancellation_and_composition_failure_close_session_and_http_client(
                 await asyncio.gather(step, return_exceptions=True)
                 await events.aclose()
             assert asyncio.all_tasks() == {asyncio.current_task()}
-
         asyncio.run(run())
     assert all(client.is_closed for client in clients)
 
@@ -616,16 +502,15 @@ async def assert_supervised_tool_ending(app, socket, mint, ending):
     elif ending == "maximum":
         assert events[-1].code is FailureCode.LIMIT_EXCEEDED
     if ending in {"idle", "maximum"}:
-        assert sum(event.type in {"succeeded", "failed", "cancelled"} for event in events) == 1
+        assert sum(event.type in {"succeeded", "failed", "cancelled"}
+                   for event in events) == 1
     else:
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://service"
-        ) as client:
-            record = await client.get(
-                f"/runs/{socket.run_id}",
-                headers=run_headers(mint.workload(), mint.user(groups=[API_GROUP, APP_GROUP])),
-            )
-        assert record.json()["state"] == ("cancelled" if ending == "before-call" else "failed")
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),
+                                     base_url="http://service") as client:
+            record = await client.get(f"/runs/{socket.run_id}", headers=run_headers(
+                mint.workload(), mint.user(groups=[API_GROUP, APP_GROUP])))
+        assert record.json()["state"] == (
+            "cancelled" if ending == "before-call" else "failed")
         if ending == "disconnect":
             assert record.json()["failure_code"] == "interrupted"
 
@@ -635,15 +520,11 @@ def tool_socket(mint):
 
     class ToolSocket(ClientSocket):
         first = True
-
         async def receive(self):
             if self.first:
                 self.first = False
-                return {
-                    "type": "http.request",
-                    "body": json.dumps(run_body(tools={"echo": "side_effecting"})).encode(),
-                    "more_body": False,
-                }
+                return {"type": "http.request", "body": json.dumps(run_body(
+                    tools={"echo": "side_effecting"})).encode(), "more_body": False}
             return await super().receive()
 
     return ToolSocket(user_token=mint.user(groups=[API_GROUP, APP_GROUP]))
@@ -657,14 +538,13 @@ async def end_tool_run(socket, clock, limits, ending):
         clock.advance_to(limits.heartbeat_interval_s)
         await socket.received(b"event: heartbeat")
         await clock.parked()
-        clock.advance_to(limits.idle_timeout_s if ending == "idle" else limits.max_duration_s)
+        clock.advance_to(limits.idle_timeout_s if ending == "idle"
+                         else limits.max_duration_s)
 
 
 @pytest.mark.parametrize("ending", ["before-call", "disconnect", "idle", "maximum"])
 def test_service_supervision_closes_tool_run_at_disconnect_or_deadline(
-    tmp_path,
-    monkeypatch,
-    ending,
+    tmp_path, monkeypatch, ending,
 ):
     from tests.support.mcp_app_fake import HeldRequests
     from tests.support.service_support import StepClock, SteppedLoop, shared_mint
@@ -676,9 +556,8 @@ def test_service_supervision_closes_tool_run_at_disconnect_or_deadline(
     later_wait = asyncio.Event()
     closed = asyncio.Event()
     held = HeldRequests()
-    responder = ScriptedApp(
-        overrides={} if ending == "maximum" else {"tools/call": held.responder(ScriptedApp())}
-    )
+    responder = ScriptedApp(overrides={} if ending == "maximum" else {
+        "tools/call": held.responder(ScriptedApp())})
 
     async def upstream(request):
         requests.append(request)
@@ -693,12 +572,12 @@ def test_service_supervision_closes_tool_run_at_disconnect_or_deadline(
     clients = fake_gateway(monkeypatch, upstream)
     with serving(responder, authority.credentials_for("localhost")) as peer:
         config = with_origin(configured(tmp_path), peer.origin)
-
         async def run():
             mint = shared_mint()
             socket = tool_socket(mint)
             runners = installed_runners(config, authority.client_context(), clock)
-            app = create_app(config, runners=runners, fetch_key_set=mint.fetch_key_set)
+            app = create_app(config, runners=runners,
+                             fetch_key_set=mint.fetch_key_set)
             task = asyncio.create_task(app(socket.scope, socket.receive, socket.send))
             waiting = None
             try:
@@ -715,12 +594,10 @@ def test_service_supervision_closes_tool_run_at_disconnect_or_deadline(
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
             assert asyncio.all_tasks() == {asyncio.current_task()}
-
         with asyncio.Runner(loop_factory=SteppedLoop) as runner:
             runner.run(run())
         assert sum(request.rpc_method == "tools/call" for request in peer.requests) == (
-            0 if ending == "before-call" else 1
-        )
+            0 if ending == "before-call" else 1)
     assert len(requests) == (2 if ending == "maximum" else 1)
     assert all(client.is_closed for client in clients)
     if ending in {"before-call", "maximum"}:
@@ -730,10 +607,7 @@ def test_service_supervision_closes_tool_run_at_disconnect_or_deadline(
 @pytest.mark.parametrize("field", ["system", "history"])
 @pytest.mark.parametrize("secret_kind", ["gateway", "signature"])
 def test_initial_reflection_refuses_before_session_or_gateway_and_clears_ambient_chain(
-    tmp_path,
-    monkeypatch,
-    field,
-    secret_kind,
+    tmp_path, monkeypatch, field, secret_kind,
 ):
     from dataclasses import replace
 
@@ -741,11 +615,8 @@ def test_initial_reflection_refuses_before_session_or_gateway_and_clears_ambient
     clients = fake_gateway(monkeypatch, lambda request: pytest.fail("reflected input sent HTTP"))
     with serving(ScriptedApp(), authority.credentials_for("localhost")) as peer:
         admitted = admitted_tools(peer.origin)
-        secret = (
-            "synthetic-gateway-key"
-            if secret_kind == "gateway"
-            else admitted.capability.token.split(".")[-1]
-        )
+        secret = ("synthetic-gateway-key" if secret_kind == "gateway"
+                  else admitted.capability.token.split(".")[-1])
         turn = admitted.request.turn.model_dump()
         if field == "system":
             turn["system"] = secret
@@ -754,7 +625,6 @@ def test_initial_reflection_refuses_before_session_or_gateway_and_clears_ambient
         request = admitted.request.model_validate({**admitted.request.model_dump(), "turn": turn})
         admitted = replace(admitted, request=request)
         config = with_origin(configured(tmp_path), peer.origin)
-
         async def run():
             runner = installed_runners(config, authority.client_context(), LoopClock()).api
             events = runner.run(admitted)
@@ -767,7 +637,6 @@ def test_initial_reflection_refuses_before_session_or_gateway_and_clears_ambient
                 assert_closed_refusal(raised.value)
             finally:
                 await events.aclose()
-
         asyncio.run(run())
         assert not peer.requests
     assert all(client.is_closed for client in clients)
@@ -777,19 +646,10 @@ def test_oversized_later_mcp_call_refuses_the_entire_round(tmp_path, monkeypatch
     from agent_runtime_client.wire import MAX_EVENT_BYTES
 
     authority = TestAuthority(tmp_path)
-    fake_gateway(
-        monkeypatch,
-        lambda request: httpx.Response(
-            200,
-            json=tool_completion(
-                [
-                    provider_call(),
-                    provider_call("second", arguments=json.dumps({"text": "x" * MAX_EVENT_BYTES})),
-                ],
-                text="must stay buffered",
-            ),
-        ),
-    )
+    fake_gateway(monkeypatch, lambda request: httpx.Response(200, json=tool_completion([
+        provider_call(),
+        provider_call("second", arguments=json.dumps({"text": "x" * MAX_EVENT_BYTES}))
+    ], text="must stay buffered")))
     with serving(ScriptedApp(), authority.credentials_for("localhost")) as peer:
         events = asyncio.run(post_tools(with_origin(configured(tmp_path), peer.origin), authority))
         assert not any(request.rpc_method == "tools/call" for request in peer.requests)

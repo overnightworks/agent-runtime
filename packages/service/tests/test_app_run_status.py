@@ -42,7 +42,9 @@ MINT = shared_mint()
 ALICE = Principal(TEST_ISSUER, "user-alice")
 BOB = Principal(TEST_ISSUER, "user-bob")
 ALICE_ELSEWHERE = Principal("https://elsewhere.test/realms/x", "user-alice")
-NOT_FOUND_BODY = f'{{"v":{PROTOCOL_VERSION},"code":"not_found","message":"No such run."}}'.encode()
+NOT_FOUND_BODY = (
+    f'{{"v":{PROTOCOL_VERSION},"code":"not_found","message":"No such run."}}'.encode()
+)
 
 
 @dataclass(frozen=True)
@@ -81,7 +83,9 @@ def _seed() -> Seeded:
     other_app, _ = begin("presentator", ALICE)
     other_subject, _ = begin("songmaker", BOB)
     other_issuer, _ = begin("songmaker", ALICE_ELSEWHERE)
-    return Seeded(records, running, owned, expired, evicted, other_app, other_subject, other_issuer)
+    return Seeded(
+        records, running, owned, expired, evicted, other_app, other_subject, other_issuer
+    )
 
 
 @pytest.fixture(scope="module")
