@@ -8,7 +8,7 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | --- | --- |
 | The fingerprint recipe of the gateway's `user` was private to the gateway backend. | `agent_runtime_client.turn.person_fingerprint(principal)` returns it, one recipe for every caller; the gateway's `user` is unchanged. ([wire.md](wire.md#the-gateway-backend)) |
 | The client's only MCP server was the capability front, `McpServer`. | `agent_runtime_client.mcp_server.McpPersonFront(tools, *, resolve_person)` serves a signed-in person's agent on an app's `/mcp` beside it, with `PersonTool`, `PersonToolHandler`, `PersonRequest` and `ResolvePerson`; the host registers it as the exact route `MCP_ENDPOINT_PATH` behind webauth's gate and binds `resolve_person` to a small adapter over `webauth.middleware.resource_person`, which returns an `AuthenticatedUser`, not a `Principal`. ([wire.md](wire.md#the-person-front)) |
-| `MCP_ENDPOINT_PATH` lived in `agent_runtime_client.capability`. | It lives in `agent_runtime_client.mcp_wire`; `capability` still binds the name. |
+| `MCP_ENDPOINT_PATH` and `carries_signature_of` lived in `agent_runtime_client.capability`. | They live in `agent_runtime_client.mcp_wire`; `capability` still binds both names. |
 | `mcp_wire.ToolDefinition` held `name`, `description` and `input_schema`, and a listed tool dropped its upstream `annotations`. | `ToolDefinition` is unchanged and still drops them, so the service relay's list is unchanged. The new `AnnotatedToolDefinition` adds `annotations` (`ToolAnnotations`, whose `read_only_hint` is read as `readOnlyHint`) for a tool this side lists itself; `tools_list_response` writes it when present. The capability front's own list is unchanged. |
 
 ## Migrating to 0.19.0
