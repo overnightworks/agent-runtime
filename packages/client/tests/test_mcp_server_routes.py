@@ -30,7 +30,7 @@ class Genre(StrEnum):
     ROCK = "rock"
 
 
-class SongDraft(BaseModel):
+class NoteDraft(BaseModel):
     title: str
     genre: Genre
     tags: list[str] = []
@@ -92,34 +92,34 @@ async def named(name: str) -> dict[str, str]:
     return {}
 
 
-async def list_songs(genre: Genre, limit: int = 10, kind: Literal["a", "b"] | None = None) -> Any:
+async def list_notes(genre: Genre, limit: int = 10, kind: Literal["a", "b"] | None = None) -> Any:
     return {}
 
 
-async def create_song(draft: SongDraft) -> Any:
+async def create_note(draft: NoteDraft) -> Any:
     return {"saved": draft.title}
 
 
 def test_a_marked_route_becomes_a_tool_with_its_name_description_and_input_schema() -> None:
-    app = application(Registration("GET", "/songs", list_songs, tool="list_songs"))
+    app = application(Registration("GET", "/notes", list_notes, tool="list_notes"))
 
     result = generated(app)
 
     (tool,) = result.tools
     declaration = tool.declaration
-    assert (declaration.name, declaration.description) == ("list_songs", "Does the thing.")
+    assert (declaration.name, declaration.description) == ("list_notes", "Does the thing.")
     assert declaration.effect is ToolEffect.READ_ONLY
     properties = declaration.parameters["properties"]
     assert properties["genre"]["enum"] == ["pop", "rock"]
     assert properties["kind"]["anyOf"][0]["enum"] == ["a", "b"]
     assert declaration.parameters["required"] == ["genre"]
-    assert result.marks == {("GET", "/songs")}
+    assert result.marks == {("GET", "/notes")}
 
 
 def test_a_body_is_inlined_and_flattened_beside_the_parameters() -> None:
     app = application(
         Registration(
-            "POST", "/songs", create_song, tool="create_song", effect=ToolEffect.SIDE_EFFECTING
+            "POST", "/notes", create_note, tool="create_note", effect=ToolEffect.SIDE_EFFECTING
         )
     )
 
@@ -134,14 +134,14 @@ def test_a_body_is_inlined_and_flattened_beside_the_parameters() -> None:
 
 def test_an_unmarked_route_is_no_tool_and_no_mark() -> None:
     app = application(
-        Registration("GET", "/songs", list_songs, tool="list_songs"),
-        Registration("POST", "/songs/purge", nothing),
+        Registration("GET", "/notes", list_notes, tool="list_notes"),
+        Registration("POST", "/notes/purge", nothing),
     )
 
     result = generated(app)
 
-    assert [tool.declaration.name for tool in result.tools] == ["list_songs"]
-    assert result.marks == {("GET", "/songs")}
+    assert [tool.declaration.name for tool in result.tools] == ["list_notes"]
+    assert result.marks == {("GET", "/notes")}
 
 
 def front_for(app: FastAPI) -> TestClient:
@@ -165,25 +165,25 @@ def test_a_read_only_mark_is_listed_with_the_read_only_hint_and_a_side_effecting
     None
 ):
     app = application(
-        Registration("GET", "/songs", list_songs, tool="list_songs"),
+        Registration("GET", "/notes", list_notes, tool="list_notes"),
         Registration(
-            "POST", "/songs", create_song, tool="create_song", effect=ToolEffect.SIDE_EFFECTING
+            "POST", "/notes", create_note, tool="create_note", effect=ToolEffect.SIDE_EFFECTING
         ),
     )
 
     listed = rpc(front_for(app), "tools/list")["result"]["tools"]
 
     hints = {tool["name"]: tool.get("annotations") for tool in listed}
-    assert hints == {"list_songs": {"readOnlyHint": True}, "create_song": None}
+    assert hints == {"list_notes": {"readOnlyHint": True}, "create_note": None}
 
 
 def test_an_unmarked_route_name_answers_the_unknown_tool_error() -> None:
     app = application(
-        Registration("GET", "/songs", list_songs, tool="list_songs"),
-        Registration("POST", "/songs/{song_id}/delete", nothing, description="Deletes."),
+        Registration("GET", "/notes", list_notes, tool="list_notes"),
+        Registration("POST", "/notes/{note_id}/delete", nothing, description="Deletes."),
     )
 
-    answer = rpc(front_for(app), "tools/call", {"name": "delete_song", "arguments": {}})
+    answer = rpc(front_for(app), "tools/call", {"name": "delete_note", "arguments": {}})
 
     assert "error" in answer
 
@@ -191,12 +191,12 @@ def test_an_unmarked_route_name_answers_the_unknown_tool_error() -> None:
 def test_a_marked_post_reaches_its_handler_through_the_front() -> None:
     app = application(
         Registration(
-            "POST", "/songs", create_song, tool="create_song", effect=ToolEffect.SIDE_EFFECTING
+            "POST", "/notes", create_note, tool="create_note", effect=ToolEffect.SIDE_EFFECTING
         )
     )
     arguments = {"title": "Dawn", "genre": "pop"}
 
-    answer = rpc(front_for(app), "tools/call", {"name": "create_song", "arguments": arguments})
+    answer = rpc(front_for(app), "tools/call", {"name": "create_note", "arguments": arguments})
 
     assert answer["result"]["isError"] is False
     assert json.loads(answer["result"]["content"][0]["text"]) == {"saved": "Dawn"}
@@ -210,7 +210,7 @@ async def cookie_route(token: Annotated[str, Cookie()]) -> Any:
     return {}
 
 
-async def optional_body_route(draft: SongDraft | None = None) -> Any:
+async def optional_body_route(draft: NoteDraft | None = None) -> Any:
     return {}
 
 
@@ -222,26 +222,26 @@ async def shared_name_route(q: Annotated[str, Query()], extra: Extra) -> Any:
     return {}
 
 
-async def integer_path_route(song_id: int) -> Any:
+async def integer_path_route(note_id: int) -> Any:
     return {}
 
 
 @pytest.mark.parametrize(
     "registration",
     [
-        Registration("PUT", "/songs", create_song, tool="a"),
-        Registration("PATCH", "/songs", create_song, tool="a"),
-        Registration("DELETE", "/songs", nothing, tool="a"),
-        Registration("GET", "/songs", header_route, tool="a"),
-        Registration("GET", "/songs", cookie_route, tool="a"),
-        Registration("POST", "/songs", optional_body_route, tool="a"),
+        Registration("PUT", "/notes", create_note, tool="a"),
+        Registration("PATCH", "/notes", create_note, tool="a"),
+        Registration("DELETE", "/notes", nothing, tool="a"),
+        Registration("GET", "/notes", header_route, tool="a"),
+        Registration("GET", "/notes", cookie_route, tool="a"),
+        Registration("POST", "/notes", optional_body_route, tool="a"),
         Registration(
-            "GET", "/songs", nothing, tool="a", extra={"response_class": PlainTextResponse}
+            "GET", "/notes", nothing, tool="a", extra={"response_class": PlainTextResponse}
         ),
-        Registration("POST", "/songs", recursive_route, tool="a"),
-        Registration("POST", "/songs", shared_name_route, tool="a"),
-        Registration("GET", "/songs/{song_id}", integer_path_route, tool="a"),
-        Registration("GET", "/songs", nothing, tool="a", description=None),
+        Registration("POST", "/notes", recursive_route, tool="a"),
+        Registration("POST", "/notes", shared_name_route, tool="a"),
+        Registration("GET", "/notes/{note_id}", integer_path_route, tool="a"),
+        Registration("GET", "/notes", nothing, tool="a", description=None),
     ],
     ids=[
         "put",
@@ -268,8 +268,8 @@ def test_a_marked_route_outside_the_profile_is_refused_naming_the_operation(
 
 def test_two_marks_of_one_name_are_refused() -> None:
     app = application(
-        Registration("GET", "/songs", nothing, tool="same"),
-        Registration("GET", "/albums", nothing, tool="same"),
+        Registration("GET", "/notes", nothing, tool="same"),
+        Registration("GET", "/folders", nothing, tool="same"),
     )
 
     assert "same" in str(refused(app))
@@ -319,7 +319,7 @@ def test_a_marked_template_that_cannot_collide_with_another_operation_is_accepte
 
 def test_an_unmarked_route_is_never_passed_to_the_host_mark_function() -> None:
     app = application(
-        Registration("GET", "/songs", nothing, tool="a"),
+        Registration("GET", "/notes", nothing, tool="a"),
         Registration("GET", "/odd/{rest}", nothing),
     )
     seen: list[str] = []
@@ -330,11 +330,11 @@ def test_an_unmarked_route_is_never_passed_to_the_host_mark_function() -> None:
 
     route_tools(app.openapi(), app, mark_route=mark_route)
 
-    assert seen == ["/songs"]
+    assert seen == ["/notes"]
 
 
 def test_the_host_mark_functions_value_error_becomes_a_profile_error_with_it_as_cause() -> None:
-    app = application(Registration("GET", "/songs", nothing, tool="a"))
+    app = application(Registration("GET", "/notes", nothing, tool="a"))
     hosts_error = ValueError("template outside the grammar")
 
     def mark_route(method: str, template: str) -> Mark:
@@ -345,11 +345,11 @@ def test_the_host_mark_functions_value_error_becomes_a_profile_error_with_it_as_
 
     assert raised.value.__cause__ is hosts_error
     assert "GET" in str(raised.value)
-    assert "/songs" in str(raised.value)
+    assert "/notes" in str(raised.value)
 
 
 def test_another_exception_from_the_host_mark_function_propagates_unchanged() -> None:
-    app = application(Registration("GET", "/songs", nothing, tool="a"))
+    app = application(Registration("GET", "/notes", nothing, tool="a"))
 
     def mark_route(method: str, template: str) -> Mark:
         raise KeyError(template)

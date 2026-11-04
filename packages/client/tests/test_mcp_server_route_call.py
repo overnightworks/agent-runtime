@@ -14,10 +14,10 @@ from agent_runtime_client.tools import ToolOutcome
 from agent_runtime_client.wire import MAX_EVENT_BYTES
 
 OUTER_HEADERS = [
-    (b"host", b"songs.example"),
+    (b"host", b"notes.example"),
     (b"authorization", b"Bearer abc"),
     (b"cookie", b"session=secret"),
-    (b"origin", b"https://songs.example"),
+    (b"origin", b"https://notes.example"),
     (b"accept-encoding", b"gzip"),
     (b"x-forwarded-for", b"203.0.113.9"),
     (b"x-forwarded-for", b"198.51.100.2"),
@@ -26,7 +26,7 @@ OUTER_HEADERS = [
 ]
 
 
-class Song(BaseModel):
+class Note(BaseModel):
     title: str
     count: int
 
@@ -37,7 +37,7 @@ def outer_scope(root_path: str = "") -> dict[str, Any]:
         "asgi": {"version": "3.0"},
         "http_version": "1.1",
         "scheme": "https",
-        "server": ("songs.example", 443),
+        "server": ("notes.example", 443),
         "client": ("203.0.113.9", 4000),
         "root_path": root_path,
         "method": "POST",
@@ -68,11 +68,11 @@ def echo_app() -> FastAPI:
     async def search(request: Request, limit: int | None = None, q: str | None = None) -> Any:
         return {"query_string": request.scope["query_string"].decode(), "q": q, "limit": limit}
 
-    @app.post("/songs")
-    async def create(song: Song, request: Request) -> dict[str, Any]:
+    @app.post("/notes")
+    async def create(note: Note, request: Request) -> dict[str, Any]:
         return {
-            "title": song.title,
-            "count": song.count,
+            "title": note.title,
+            "count": note.count,
             "headers": dict(request.headers),
             "body_length": len(await request.body()),
         }
@@ -86,8 +86,8 @@ def run(app: AsgiApp, target: RouteTarget, arguments: dict[str, Any], **scope: A
 
 ECHO = RouteTarget("GET", "/echo/{value}", path=frozenset({"value"}), query=(), body=None)
 SEARCH = RouteTarget("GET", "/search", path=frozenset(), query=("q", "limit"), body=None)
-SONGS = RouteTarget(
-    "POST", "/songs", path=frozenset(), query=(), body=frozenset({"title", "count"})
+NOTES = RouteTarget(
+    "POST", "/notes", path=frozenset(), query=(), body=frozenset({"title", "count"})
 )
 
 
@@ -112,10 +112,10 @@ def test_path_values_keep_the_decoded_path_apart_from_the_encoded_raw_path(
 
 
 def test_the_outer_root_path_prefixes_the_inner_path(echo_app: FastAPI) -> None:
-    outcome = run(echo_app, ECHO, {"value": "x"}, root_path="/songs")
+    outcome = run(echo_app, ECHO, {"value": "x"}, root_path="/notes")
 
     reached = json.loads(outcome.content)
-    assert (reached["path"], reached["raw_path"]) == ("/songs/echo/x", "/songs/echo/x")
+    assert (reached["path"], reached["raw_path"]) == ("/notes/echo/x", "/notes/echo/x")
 
 
 class RecordingApp:
@@ -217,7 +217,7 @@ def test_the_inner_request_replays_exactly_the_named_headers(echo_app: FastAPI) 
 
     assert json.loads(outcome.content)["headers"] == [
         ["authorization", "Bearer abc"],
-        ["host", "songs.example"],
+        ["host", "notes.example"],
         ["x-forwarded-for", "203.0.113.9"],
         ["x-forwarded-for", "198.51.100.2"],
         ["x-forwarded-proto", "https"],
@@ -228,7 +228,7 @@ def test_the_inner_request_replays_exactly_the_named_headers(echo_app: FastAPI) 
 def test_a_post_sends_its_body_fields_as_one_json_object_with_the_body_headers(
     echo_app: FastAPI,
 ) -> None:
-    outcome = run(echo_app, SONGS, {"title": "Dawn", "count": 2})
+    outcome = run(echo_app, NOTES, {"title": "Dawn", "count": 2})
 
     reached = json.loads(outcome.content)
     assert (reached["title"], reached["count"]) == ("Dawn", 2)
@@ -261,7 +261,7 @@ def replying(status: int, *chunks: bytes, complete: bool = True, started: bool =
     [
         (replying(200, b"fine"), False, "fine"),
         (replying(201, "ü".encode(), b"!"), False, "ü!"),
-        (replying(404, b"no such song"), True, "no such song"),
+        (replying(404, b"no such note"), True, "no such note"),
         (replying(422, b'{"detail":"bad"}'), True, '{"detail":"bad"}'),
     ],
 )
@@ -335,7 +335,7 @@ def test_receive_gives_the_body_once_then_blocks_until_the_response_is_complete(
         await respond(send, 200, b"done")
         seen["second"] = await waiting
 
-    run(app, SONGS, {"title": "Dawn", "count": 2})
+    run(app, NOTES, {"title": "Dawn", "count": 2})
 
     assert seen["first"]["type"] == "http.request"
     assert json.loads(seen["first"]["body"]) == {"title": "Dawn", "count": 2}
