@@ -405,7 +405,7 @@ front-side deadline.
 **The profile.** `GET` and `POST` only. Parameters are string path parameters and scalar query parameters (string,
 integer, number or boolean, with or without `enum`, inline or by `$ref`, nullable through `anyOf [x, null]`); the one
 body is a required `application/json` object whose fields are flattened beside the parameters; `$ref` is inlined from
-`components`; every response is JSON. The tool's description is the operation's `description` (the route's docstring)
+`components`; every success response is JSON and no response carries another media type. The tool's description is the operation's `description` (the route's docstring)
 and is required. Everything else is refused at start with `RouteProfileError`: a mark on `PUT`, `PATCH` or `DELETE`,
 header and cookie parameters, a non-JSON or optional body, a non-JSON response, a recursive schema, a name shared by two
 inputs, two marks of one name, an integer path parameter and a missing description.

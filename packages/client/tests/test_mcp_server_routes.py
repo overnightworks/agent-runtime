@@ -137,7 +137,7 @@ async def described_genre(genre: Annotated[Genre, Query(description="Which genre
     return {}
 
 
-def test_a_reference_keeps_the_constraints_and_metadata_written_beside_it() -> None:
+def test_a_reference_keeps_the_description_written_beside_it() -> None:
     app = application(Registration("GET", "/notes", described_genre, tool="a"))
 
     (tool,) = generated(app).tools
@@ -145,6 +145,20 @@ def test_a_reference_keeps_the_constraints_and_metadata_written_beside_it() -> N
     genre = tool.declaration.parameters["properties"]["genre"]
     assert genre["description"] == "Which genre."
     assert genre["enum"] == ["pop", "rock"]
+
+
+def test_a_constraint_beside_a_reference_narrows_the_component_not_replaces_it() -> None:
+    app = application(Registration("GET", "/notes", list_notes, tool="a"))
+    spec = app.openapi()
+    spec["components"]["schemas"]["Text"] = {"type": "string", "maxLength": 3}
+    (limit,) = [p for p in spec["paths"]["/notes"]["get"]["parameters"] if p["name"] == "genre"]
+    limit["schema"] = {"$ref": "#/components/schemas/Text", "maxLength": 5}
+
+    (tool,) = route_tools(spec, app, mark_route=lambda method, template: (method, template)).tools
+
+    genre = tool.declaration.parameters["properties"]["genre"]
+    assert genre["maxLength"] == 3
+    assert {"maxLength": 5} in genre["allOf"]
 
 
 def test_an_unmarked_route_is_no_tool_and_no_mark() -> None:
@@ -255,11 +269,6 @@ def body_of(*media_types: str) -> dict[str, Any]:
     return {"requestBody": {"required": True, "content": content}}
 
 
-QUERY_TWIN_OF_PATH = {
-    "parameters": [{"name": "note_id", "in": "query", "schema": {"type": "string"}}]
-}
-
-
 @pytest.mark.parametrize(
     "registration",
     [
@@ -281,10 +290,23 @@ QUERY_TWIN_OF_PATH = {
             "POST", "/notes", nothing, tool="a", document=body_of("application/json", "text/plain")
         ),
         Registration(
-            "GET", "/notes/{note_id}", string_path_route, tool="a", document=QUERY_TWIN_OF_PATH
+            "GET",
+            "/notes/{note_id}",
+            string_path_route,
+            tool="a",
+            document={
+                "parameters": [{"name": "note_id", "in": "query", "schema": {"type": "string"}}]
+            },
         ),
         Registration("GET", "/notes", no_content, tool="a", extra={"status_code": 204}),
         Registration("GET", "/notes", nothing, tool="a", extra={"response_model": Tree}),
+        Registration(
+            "GET",
+            "/notes",
+            nothing,
+            tool="a",
+            document={"responses": {"201": {"description": "Made."}}},
+        ),
     ],
     ids=[
         "put",
@@ -303,6 +325,7 @@ QUERY_TWIN_OF_PATH = {
         "name shared by a path and a query parameter",
         "response without content",
         "recursive response schema",
+        "contentless success beside a JSON success",
     ],
 )
 def test_a_marked_route_outside_the_profile_is_refused_naming_the_operation(

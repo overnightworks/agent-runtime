@@ -81,7 +81,9 @@ def _inlined(node: Any, components: Mapping[str, Any], seen: tuple[str, ...] = (
     resolved = _inlined(components[name], components, (*seen, name))
     siblings = {key: _inlined(value, components, seen) for key, value in node.items()}
     siblings.pop("$ref")
-    return {**resolved, **siblings}
+    clashing = {key: value for key, value in siblings.items() if resolved.get(key, value) != value}
+    merged = {**resolved, **{key: value for key, value in siblings.items() if key not in clashing}}
+    return {**merged, "allOf": [*merged.get("allOf", []), clashing]} if clashing else merged
 
 
 def _scalar(schema: Mapping[str, Any]) -> bool:
@@ -126,7 +128,9 @@ def _check_responses(operation: _Operation, components: Mapping[str, Any]) -> No
         if _JSON in content:
             _inlined(content[_JSON].get("schema", {}), components)
         if str(status).startswith("2"):
-            successes += 1 if _JSON in content else 0
+            if _JSON not in content:
+                raise _Breach("a success response must be JSON")
+            successes += 1
     if not successes:
         raise _Breach("a success response must be JSON")
 

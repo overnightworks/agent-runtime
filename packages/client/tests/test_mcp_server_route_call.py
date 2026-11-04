@@ -77,7 +77,6 @@ def echo_app() -> FastAPI:
             "value": value,
             "path": scope["path"],
             "raw_path": scope["raw_path"].decode(),
-            "scope_keys": sorted(scope),
             "headers": [[name.decode(), val.decode()] for name, val in scope["headers"]],
         }
 
