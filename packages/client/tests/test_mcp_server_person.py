@@ -176,9 +176,10 @@ def test_a_resolver_result_that_is_not_a_principal_reaches_the_host_before_the_b
         sent.append(message)
 
     front = McpPersonFront([person.tool("read_note")], resolve_person=resolve)
+    running = front(http_scope(headers_of()), receive, send)
 
     with pytest.raises(TypeError):
-        asyncio.run(front(http_scope(headers_of()), receive, send))
+        asyncio.run(running)
     for item in produced:
         if asyncio.iscoroutine(item):
             item.close()
