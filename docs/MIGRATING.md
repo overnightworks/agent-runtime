@@ -2,6 +2,12 @@
 
 Read by a host bumping its pin; each release that breaks a host has one section, newest first.
 
+## Migrating to 0.21.0
+
+| Before (0.20.0) | Now |
+| --- | --- |
+| A person-front tool was a hand-written `PersonTool`. | `agent_runtime_client.tools.agent_tool(*, name, effect)` marks a route (FastAPI's `openapi_extra`), and `agent_runtime_client.mcp_server.route_tools(openapi, app, *, mark_route)` returns `RouteTools(tools, marks)`: the `PersonTool`s of the marked routes and the host's own marks, which `mark_route` builds from the upper-case method and the template. It raises `RouteProfileError` (a `ValueError`) for a route outside the profile and for a template that overlaps another operation of its method. `app` is the host's whole ASGI application. The `mcp-server` extra now needs `anyio>=4.12,<5`. ([wire.md](wire.md#a-marked-route-as-a-tool)) |
+
 ## Migrating to 0.20.0
 
 | Before (0.19.0) | Now |
