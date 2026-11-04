@@ -132,9 +132,7 @@ def test_a_run_request_body_with_a_utf8_byte_order_mark_is_admitted(service):
 def test_an_api_group_member_of_the_app_runs_on_the_api_route(service, runners):
     response = post_run(
         service,
-        run_headers(
-            MINT.workload(), MINT.user(groups=[APP_GROUP, API_GROUP], sub="user-bob")
-        ),
+        run_headers(MINT.workload(), MINT.user(groups=[APP_GROUP, API_GROUP], sub="user-bob")),
     )
 
     assert decoded_events(response.content)[-1].text == "API answer"
@@ -225,9 +223,7 @@ def test_an_unfetchable_key_set_answers_unavailable_after_the_workload_token_is_
     def unreachable_issuer(_url: str) -> bytes:
         raise KeySetFetchError("the issuer cannot be reached")
 
-    app = create_app(
-        service_config(), runners=unused_runners(), fetch_key_set=unreachable_issuer
-    )
+    app = create_app(service_config(), runners=unused_runners(), fetch_key_set=unreachable_issuer)
     with served(app) as base_url:
         response = post_run(base_url, run_headers(workload(), user()))
 
@@ -325,9 +321,7 @@ def test_tokens_that_do_not_bind_one_app_to_one_user_are_refused(
     headers = run_headers(workload, user)
 
     response = (
-        post_run(service, headers)
-        if route == "POST"
-        else get_run(service, headers, UNKNOWN_RUN)
+        post_run(service, headers) if route == "POST" else get_run(service, headers, UNKNOWN_RUN)
     )
 
     assert_rejected(response, code, 401 if code is UNAUTHORIZED else 403)
@@ -610,9 +604,7 @@ def test_a_single_chunk_over_the_limit_is_refused_without_being_buffered():
     """Driven in-process: uvicorn hands the body over in socket-read pieces, never as one chunk."""
     chunk_size = 16 * MAX_REQUEST_BYTES
     chunk = b"x" * chunk_size
-    app = create_app(
-        service_config(), runners=unused_runners(), fetch_key_set=MINT.fetch_key_set
-    )
+    app = create_app(service_config(), runners=unused_runners(), fetch_key_set=MINT.fetch_key_set)
     headers = run_headers(MINT.workload(), MINT.user())
     tracemalloc.start()
     try:

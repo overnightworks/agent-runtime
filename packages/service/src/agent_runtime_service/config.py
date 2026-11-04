@@ -201,9 +201,7 @@ def _login_reader[Login: _Judged](
     return read
 
 
-read_codex_login = _login_reader(
-    assess_codex_login, CodexLoginVerdict.USABLE, CODEX_LOGIN_REFUSALS
-)
+read_codex_login = _login_reader(assess_codex_login, CodexLoginVerdict.USABLE, CODEX_LOGIN_REFUSALS)
 read_grok_login = _login_reader(assess_grok_login, GrokLoginVerdict.USABLE, GROK_LOGIN_REFUSALS)
 
 
@@ -346,7 +344,8 @@ def _ca_bundle(path: object) -> Path:
 def _completion_url(url: str) -> str:
     matched = re.fullmatch(
         r"[Hh][Tt][Tt][Pp][Ss]?://(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::(\d+))?/v1/chat/completions",
-        url, re.ASCII,
+        url,
+        re.ASCII,
     )
     if matched is not None:
         host, port = matched.groups()

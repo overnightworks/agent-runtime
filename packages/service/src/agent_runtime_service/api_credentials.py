@@ -27,8 +27,9 @@ class ApiCredentials:
     def for_app(self, app: str) -> SecretStr:
         key = self.app_keys.get(app, self.shared_key)
         if key is None:
-            raise_without_chain(InvalidApiCredentials(
-                "No API credential is configured for this app."))
+            raise_without_chain(
+                InvalidApiCredentials("No API credential is configured for this app.")
+            )
         return key
 
 
@@ -71,5 +72,5 @@ def _parsed_credentials(contents: bytes, apps: frozenset[str]) -> ApiCredentials
         if shared is None and not keys:
             return None
         return ApiCredentials(shared, MappingProxyType(keys))
-    except (ValueError, RecursionError):
+    except ValueError, RecursionError:
         return None

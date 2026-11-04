@@ -195,9 +195,7 @@ class CliRunner:
                 )
             )
             events = RelayedEvents(
-                astream_cli_run(
-                    self._working_root, adapter, max_files_bytes=self._max_files_bytes
-                ),
+                astream_cli_run(self._working_root, adapter, max_files_bytes=self._max_files_bytes),
                 None if tools is None else tools.calls,
             )
             async for event in events:

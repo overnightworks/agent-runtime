@@ -614,9 +614,7 @@ def test_a_run_goes_to_the_program_of_the_provider_its_defaults_app_or_agent_mod
         return [
             shown(
                 decoded_events(
-                    post_run(
-                        base_url, who, run_body(turn=THREE_MESSAGE_TURN, agent=agent)
-                    ).content
+                    post_run(base_url, who, run_body(turn=THREE_MESSAGE_TURN, agent=agent)).content
                 )
             )[-1]
             for who, agent in runs

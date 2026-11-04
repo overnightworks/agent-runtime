@@ -12,6 +12,7 @@ from agent_runtime_client.mcp_server.person import (
     PersonToolHandler,
     ResolvePerson,
 )
+from agent_runtime_client.mcp_server.routes import RouteProfileError, RouteTools, route_tools
 from agent_runtime_client.mcp_server.verification import (
     CapabilityRefusal,
     CapabilityVerificationKey,
@@ -28,8 +29,11 @@ __all__ = [
     "PersonTool",
     "PersonToolHandler",
     "ResolvePerson",
+    "RouteProfileError",
+    "RouteTools",
     "CapabilityRefusal",
     "CapabilityVerificationKey",
     "UnsoundVerificationKey",
+    "route_tools",
     "verify_capability",
 ]

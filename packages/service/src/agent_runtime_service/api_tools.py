@@ -52,39 +52,64 @@ def _reply(answer: HttpAnswer | Unanswered) -> JsonRpcResponse:
 
 
 async def offered_schemas(
-    tools: RunTools, key: str, capability: Capability,
+    tools: RunTools,
+    key: str,
+    capability: Capability,
 ) -> list[dict[str, Any]]:
     request = _request(JsonRpcRequest(id=0, method=McpMethod.TOOLS_LIST))
     listing = _reply(await tools.answer(request))
     offered = read_payload(ListToolsResult, listing.result)
-    schemas = [openai_tool_schema(tool.name, tool.description, tool.input_schema)
-               for tool in offered.tools]
+    schemas = [
+        openai_tool_schema(tool.name, tool.description, tool.input_schema) for tool in offered.tools
+    ]
     require_unprotected(schemas, key, capability)
     return schemas
 
 
 def _prepared_calls(
-    calls: Sequence[ToolCall], offered_names: Collection[str],
+    calls: Sequence[ToolCall],
+    offered_names: Collection[str],
 ) -> list[RelayRequest]:
-    prepared = [_request(JsonRpcRequest(id=call.tool_use_id, method=McpMethod.TOOLS_CALL,
-        params={"name": call.name, "arguments": call.arguments})) for call in calls]
-    if not all(isinstance(decide_server_message(request.body, request.protocol_version,
-                                               offered_names), Call) for request in prepared):
+    prepared = [
+        _request(
+            JsonRpcRequest(
+                id=call.tool_use_id,
+                method=McpMethod.TOOLS_CALL,
+                params={"name": call.name, "arguments": call.arguments},
+            )
+        )
+        for call in calls
+    ]
+    if not all(
+        isinstance(
+            decide_server_message(request.body, request.protocol_version, offered_names), Call
+        )
+        for request in prepared
+    ):
         raise_without_chain(ValueError("The API requested an invalid tool call."))
     return prepared
 
 
 async def tool_conversation(
-    conversation: OpenAIConversation, initial: InitialTurn, tools: RunTools,
-    offered_names: Collection[str], key: str, capability: Capability,
+    conversation: OpenAIConversation,
+    initial: InitialTurn,
+    tools: RunTools,
+    offered_names: Collection[str],
+    key: str,
+    capability: Capability,
 ) -> AsyncGenerator[StreamEvent, None]:
     message: InitialTurn | ToolResultBatch = initial
     text = ""
     while True:
         completed = await conversation.complete(message)
-        require_unprotected([completed.text, [
-            [call.tool_use_id, call.name, call.arguments] for call in completed.calls
-        ]], key, capability)
+        require_unprotected(
+            [
+                completed.text,
+                [[call.tool_use_id, call.name, call.arguments] for call in completed.calls],
+            ],
+            key,
+            capability,
+        )
         prospective = text + completed.text
         require_unprotected(prospective, key, capability)
         prepared = _prepared_calls(completed.calls, offered_names)

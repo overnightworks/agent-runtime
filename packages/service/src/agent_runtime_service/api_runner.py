@@ -24,7 +24,11 @@ from agent_runtime_service.runners import AdmittedRun, ApiUnavailable
 
 class ApiRunner:
     def __init__(
-        self, config: ServiceConfig, *, tls_context: ssl.SSLContext | None, clock: RunClock,
+        self,
+        config: ServiceConfig,
+        *,
+        tls_context: ssl.SSLContext | None,
+        clock: RunClock,
     ) -> None:
         assert config.api is not None  # noqa: S101 - the host builds this runner only with an api section
         self._tls_context = tls_context
@@ -49,27 +53,42 @@ class ApiRunner:
         failure = None
         try:
             async with AsyncClient(
-                trust_env=False, follow_redirects=False, timeout=self._timeout, verify=self._verify,
+                trust_env=False,
+                follow_redirects=False,
+                timeout=self._timeout,
+                verify=self._verify,
                 cookies=CookieJar(policy=DefaultCookiePolicy(allowed_domains=[])),
             ) as client:
-                initial = InitialTurn(admitted.request.turn.system, [
-                    {"role": message.role, "content": message.text}
-                    for message in admitted.request.turn.messages
-                ])
-                require_unprotected([initial.system, initial.messages],
-                                    key.get_secret_value(), admitted.capability)
+                initial = InitialTurn(
+                    admitted.request.turn.system,
+                    [
+                        {"role": message.role, "content": message.text}
+                        for message in admitted.request.turn.messages
+                    ],
+                )
+                require_unprotected(
+                    [initial.system, initial.messages], key.get_secret_value(), admitted.capability
+                )
                 if admitted.request.tools:
-                    async with aclosing(self._tool_events(
-                        admitted, client, key.get_secret_value(), initial,
-                    )) as events:
+                    async with aclosing(
+                        self._tool_events(
+                            admitted,
+                            client,
+                            key.get_secret_value(),
+                            initial,
+                        )
+                    ) as events:
                         async for event in events:
                             yield event
                     return
                 text = await complete_openai_compatible_text(
-                    client=client, provider="api", api_url=self._config.completion_url,
+                    client=client,
+                    provider="api",
+                    api_url=self._config.completion_url,
                     api_key=key.get_secret_value(),
                     model=admitted.model,
-                    system=initial.system, messages=initial.messages,
+                    system=initial.system,
+                    messages=initial.messages,
                 )
         except ProviderUnavailableError as error:
             assert error.reason is not None  # noqa: S101 - ProviderUnavailableError is raised here only with a reason
@@ -89,26 +108,44 @@ class ApiRunner:
         yield FinalEvent(text=text)
 
     async def _tool_events(
-        self, admitted: AdmittedRun, client: AsyncClient, key: str, initial: InitialTurn,
+        self,
+        admitted: AdmittedRun,
+        client: AsyncClient,
+        key: str,
+        initial: InitialTurn,
     ) -> AsyncGenerator[StreamEvent, None]:
         assert admitted.capability is not None and self._tls_context is not None  # noqa: S101 - tools are offered only to a capability run with a TLS context
         async with AsyncExitStack() as lifetime:
             tools = await RunTools.open_session(
-                str(admitted.run_id), admitted.capability.claims.aud, admitted.capability,
-                self._tls_context, self._clock,
+                str(admitted.run_id),
+                admitted.capability.claims.aud,
+                admitted.capability,
+                self._tls_context,
+                self._clock,
             )
             # The close callback also owns failures before a merged source exists.
             core_lifetime = AsyncExitStack()
             lifetime.push_async_callback(tools.close, core_lifetime.aclose)
             schemas = await offered_schemas(tools, key, admitted.capability)
             conversation = OpenAIConversation(
-                client=client, provider="api", api_url=self._config.completion_url,
-                api_key=key, model=admitted.model, tool_schemas=schemas,
+                client=client,
+                provider="api",
+                api_url=self._config.completion_url,
+                api_key=key,
+                model=admitted.model,
+                tool_schemas=schemas,
             )
-            events = RelayedEvents(tool_conversation(
-                conversation, initial, tools, {schema["function"]["name"] for schema in schemas},
-                key, admitted.capability,
-            ), tools.calls)
+            events = RelayedEvents(
+                tool_conversation(
+                    conversation,
+                    initial,
+                    tools,
+                    {schema["function"]["name"] for schema in schemas},
+                    key,
+                    admitted.capability,
+                ),
+                tools.calls,
+            )
             core_lifetime.push_async_callback(events.close)
             async for event in events:
                 require_unprotected(event.model_dump(mode="json"), key, admitted.capability)

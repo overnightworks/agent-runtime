@@ -162,7 +162,7 @@ def _client_lost_when_closed(wire: _WireRun, failures: RunFailures) -> Iterator[
     """
     try:
         yield
-    except (asyncio.CancelledError, GeneratorExit):
+    except asyncio.CancelledError, GeneratorExit:
         failures.attempt(FailedPart.CLEANUP, lambda: wire.client_lost(ClientLoss.DISCONNECTED))
         raise
 
@@ -278,8 +278,11 @@ class _WireRun:
             case RunnerRaised(error=error):
                 if not reported_by_the_quarantine(error):
                     log_failure(log, f"The runner of run {self._run_id} failed", error)
-                code = (FailureCode.PROVIDER_UNAVAILABLE if isinstance(error, ApiUnavailable)
-                        else FailureCode.PROVIDER_ERROR)
+                code = (
+                    FailureCode.PROVIDER_UNAVAILABLE
+                    if isinstance(error, ApiUnavailable)
+                    else FailureCode.PROVIDER_ERROR
+                )
                 self.decide_failure(code, RUNNER_FAILED_MESSAGE)
             case RunnerYielded(event=FinalEvent() as final):
                 self._decide_success(final)

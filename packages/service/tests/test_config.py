@@ -119,9 +119,7 @@ def test_a_leftover_tools_table_of_an_app_stops_startup_naming_the_field(tmp_pat
 def test_o11_a_leftover_models_table_of_an_app_stops_startup_naming_the_field(tmp_path, capsys):
     text = VALID_CONFIG + f'\n[apps.songmaker.models]\ncowriter = "{Provider.ANTHROPIC}/sonnet"\n'
 
-    assert refused_on_one_line(written(tmp_path, text), capsys).startswith(
-        "apps.songmaker.models"
-    )
+    assert refused_on_one_line(written(tmp_path, text), capsys).startswith("apps.songmaker.models")
 
 
 LEFTOVER_PROFILES = f'\n[profiles.claude-main]\nprovider = "claude"\n{TOKEN_FILE_LINE}\n'
@@ -1345,9 +1343,7 @@ def test_the_former_flat_program_keys_stop_the_start_naming_each_key(
 
 
 @pytest.mark.parametrize("provider", ["claude", "codex", "grok"])
-def test_a_table_for_an_obsolete_or_unknown_provider_stops_the_start(
-    tmp_path, capsys, provider
-):
+def test_a_table_for_an_obsolete_or_unknown_provider_stops_the_start(tmp_path, capsys, provider):
     probe_log = tmp_path / "probe-starts"
     program = fake_cli_executable(tmp_path, {("--version",): "any"}, calls_log=probe_log)
     table = f'[cli.{provider}]\nbinary = {json.dumps(str(program))}\nversion = "1.0.60"\n\n'

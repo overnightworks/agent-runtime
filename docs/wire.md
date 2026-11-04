@@ -388,6 +388,53 @@ handler that raises, or returns an outcome that cannot be written, answers a fai
 names the tool and the exception's class, and nothing of its message reaches the
 wire or the log. An answer that carries the signature of the request's own bearer is replaced by an empty 500, as the capability front does for its capability.
 
+## A marked route as a tool
+
+A host turns the routes of its FastAPI app into person-front tools. `tools.agent_tool(name=…, effect=…)`
+is the mark, passed as a route's `openapi_extra`; an unmarked route is never a tool, and the client imports no
+FastAPI. `mcp_server.route_tools(openapi, app, *, mark_route)` reads the host's own `app.openapi()` and returns
+`RouteTools(tools, marks)`: the `PersonTool`s, and a `frozenset` of what `mark_route(METHOD, template)` returned for
+each marked operation, in the host's own mark type (webauth's `MarkedRoute` for `ProtectedResource(marked_routes=…)`).
+`mark_route` runs only on marked operations; its `ValueError` becomes a `RouteProfileError` naming the operation, with
+the host's error as its cause, and any other exception propagates.
+
+The host wires in this order: register every route, read `app.openapi()` (FastAPI caches it), run `route_tools`, then
+build the gate with the marks. The host router answers `/mcp/` with a 307 to `/mcp`, and a slow request body has no
+front-side deadline.
+
+**The profile.** `GET` and `POST` only. Parameters are string path parameters and scalar query parameters (string,
+integer, number or boolean, with or without `enum`, inline or by `$ref`, nullable through `anyOf [x, null]`); the one
+body is a required `application/json` object whose fields are flattened beside the parameters; `$ref` is inlined from
+`components`; every response is JSON. The tool's description is the operation's `description` (the route's docstring)
+and is required. Everything else is refused at start with `RouteProfileError`: a mark on `PUT`, `PATCH` or `DELETE`,
+header and cookie parameters, a non-JSON or optional body, a non-JSON response, a recursive schema, a name shared by two
+inputs, two marks of one name, an integer path parameter and a missing description.
+
+**Overlap.** Templates are split into segments. Two templates of one method overlap when they have the same number of
+segments and every pair of segments at a position could match one string: two literals only when equal, and any pair
+holding a parameter (whole `{name}` or partial `{name}.json`) always. A marked template that overlaps any other
+operation of its method is refused whatever the order, so an unmarked `GET /files/{name}.json` refuses a marked
+`GET /files/report.json`; a partial segment may refuse a pair that never collides, never the reverse. Unmarked templates
+are read, never passed to `mark_route`. The document cannot show converters, routes hidden from it, a `Mount`, a
+catch-all or a second registration of one method and path; proving those is the host's duty under webauth's host contract.
+
+**The call.** Each tool call is one in-process ASGI request into `app`, which must be the host's whole application, so
+the request passes every middleware. An argument the schema does not name, a path value that is missing, not a string,
+empty, `.`, `..` or holding `/`, and an object or array query value fail the call before any inner request. `path` is the
+outer `root_path` followed by the template with each value as given, and `raw_path` has each value percent-encoded as
+UTF-8; nothing decodes either again. An absent or `null` query value is omitted, the empty string is sent as `name=`, a
+string as itself and any other scalar as its JSON text. The inner scope holds only `type`, `asgi`, `http_version`,
+`scheme`, `server`, `client` and `root_path` from the outer one, plus the call's own method, path, `raw_path`, query and
+headers: `Authorization`, `Host`, every `X-Forwarded-For` line, `X-Forwarded-Proto`, and the generated `Content-Length`
+(and `Content-Type: application/json` with a body). It carries no cookie, `Origin`, `Accept-Encoding` or `state`, so the
+host's gate admits the inner request on its own, and a route reading lifespan state from `scope["state"]` fails visibly.
+`receive` gives the body once, then waits until the response is complete and answers `http.disconnect`.
+
+**Outcomes.** A 2xx gives the body text and a 4xx a failed result with the route's body. A 3xx, a 5xx, a body over
+`MAX_EVENT_BYTES` (no byte past it is kept), a body that is not UTF-8 and an app that returns before its response is
+complete give a failed result with one fixed text; only the status is logged. An exception the app raises propagates to
+the front, which answers its own fixed text and logs the class.
+
 ## What a run keeps
 
 The service has no database. The messages, the tool calls and results, the
