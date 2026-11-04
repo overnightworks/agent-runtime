@@ -1,7 +1,0 @@
-claim_id = "3f77502f0da44b79989485f9859e633e"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "b8d20be9783429b7b789e220d535526c45ea7cdb"
-branch = "claude/issue-734-ar-n-privacy-section"
-scope = ["legal/datenschutz.html", "quality/config.toml"]
-opened_commit = "ddd85c2b29cb9312a328affac64d810aa8b9fa7b"
