@@ -104,9 +104,7 @@ def _parameter_schema(parameter: JsonObject, components: JsonObject) -> JsonObje
     return schema
 
 
-def _body(
-    operation: _Operation, components: JsonObject
-) -> tuple[JsonObject, Sequence[str]] | None:
+def _body(operation: _Operation, components: JsonObject) -> tuple[JsonObject, Sequence[str]] | None:
     """The body's properties and required names, or ``None`` for an operation without one."""
     body = operation.node.get("requestBody")
     if body is None:
