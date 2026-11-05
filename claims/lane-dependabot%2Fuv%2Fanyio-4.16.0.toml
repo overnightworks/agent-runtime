@@ -1,0 +1,7 @@
+claim_id = "5b12a060213b4225b5fd883e10f05aed"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "2ce1c0876d5b77dac8583a93e28f0c3d9d345611"
+branch = "dependabot/uv/anyio-4.16.0"
+scope = ["uv.lock"]
+opened_commit = "a77f1bfa54f3d25f7cc4f977a08cf6966f4612d1"
