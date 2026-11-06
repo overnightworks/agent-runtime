@@ -39,6 +39,24 @@ flowchart TB
 *Which module an app reaches and what each reaches in turn. Source: `src/agent_runtime_client`,
 `.importlinter`.*
 
+## Building blocks
+
+- The **base** depends on `pydantic` and `ruamel.yaml` only: `agents` (the agent-file reader),
+  `tools` (the tool contract), `turn` (the turn's vocabulary, the one owner of `JsonObject`,
+  the size bounds and the failure codes), `turn_events`, `config` and the `backend` port.
+- The **`backend` extra** adds `httpx2` for `backend.gateway.GatewayBackend`, the one
+  implementation of the port, and `backend.fake_gateway`, its scripted transport for tests.
+- The **`mcp-server` extra** adds `anyio` for `agent_runtime_client.mcp_server`, plain ASGI
+  that serves an app's tools to one signed-in person's agent; `mcp_wire` holds its pure
+  JSON-RPC rules and imports no extra.
+
+## Runtime
+
+A turn runs inside the app's process. `GatewayBackend.run` admits the person, reads the key
+file, sends one chat completion per round and, when a round asks for tools, runs the app's
+handlers in order before the next request. One deadline bounds the whole turn. Nothing
+persists: the client holds no state between turns, and the gateway holds the budget.
+
 One gateway turn with a tool call:
 
 ```mermaid
@@ -62,16 +80,9 @@ sequenceDiagram
 
 *Source: `backend/gateway.py`, `GatewayBackend.run`.*
 
-## Building blocks
-
-- The **base** depends on `pydantic` and `ruamel.yaml` only: `agents` (the agent-file reader),
-  `tools` (the tool contract), `turn` (the turn's vocabulary, the one owner of `JsonObject`,
-  the size bounds and the failure codes), `turn_events`, `config` and the `backend` port.
-- The **`backend` extra** adds `httpx2` for `backend.gateway.GatewayBackend`, the one
-  implementation of the port, and `backend.fake_gateway`, its scripted transport for tests.
-- The **`mcp-server` extra** adds `anyio` for `agent_runtime_client.mcp_server`, plain ASGI
-  that serves an app's tools to one signed-in person's agent; `mcp_wire` holds its pure
-  JSON-RPC rules and imports no extra.
+The MCP person front is mounted by the host behind the host's own authentication gate. It
+resolves the person through a port, answers `tools/list` and `tools/call`, and replays a
+marked route as an in-process request into the host's whole application.
 
 ## Deployment
 
@@ -80,17 +91,6 @@ read from the app's own disk and the key from a file the app's configuration nam
 person front is mounted in the host's ASGI application. The LiteLLM gateway is the one
 outside service, reached over HTTP with the app's key; the signed-in person's agent reaches
 the person front only through the host.
-
-## Runtime
-
-A turn runs inside the app's process. `GatewayBackend.run` admits the person, reads the key
-file, sends one chat completion per round and, when a round asks for tools, runs the app's
-handlers in order before the next request. One deadline bounds the whole turn. Nothing
-persists: the client holds no state between turns, and the gateway holds the budget.
-
-The MCP person front is mounted by the host behind the host's own authentication gate. It
-resolves the person through a port, answers `tools/list` and `tools/call`, and replays a
-marked route as an in-process request into the host's whole application.
 
 ## Crosscutting concepts
 
