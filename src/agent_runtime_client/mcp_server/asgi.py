@@ -16,7 +16,7 @@ from agent_runtime_client.mcp_wire import (
     parse_message,
 )
 from agent_runtime_client.tools import ToolDeclaration
-from agent_runtime_client.wire import MAX_EVENT_BYTES
+from agent_runtime_client.turn import MAX_EVENT_BYTES
 
 type Scope = MutableMapping[str, Any]
 type Message = MutableMapping[str, Any]

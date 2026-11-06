@@ -1,9 +1,7 @@
 """The words an app uses for a turn: its conversation, files and failure codes.
 
-This module is the one owner of the turn's vocabulary, shared by the agent
-service's wire (``agent_runtime_client.wire``, which composes it and re-exports
-every name) and by the modules that need none of the run protocol. It imports
-neither ``tools`` nor ``wire``.
+This module is the one owner of the turn's vocabulary, shared by the backend, the tool contract
+and the MCP person front. It imports neither ``tools`` nor ``mcp_wire``.
 """
 
 from __future__ import annotations

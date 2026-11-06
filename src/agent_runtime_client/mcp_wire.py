@@ -1,15 +1,13 @@
-"""The JSON-only MCP wire profile the service speaks with an app and with the CLI.
+"""The JSON-only MCP wire profile an app's MCP endpoint speaks.
 
 The profile is POST only, answered in ``application/json`` only, carries
 ``MCP-Protocol-Version`` on every request after ``initialize`` and answers a
-notification with 202 and an empty body. This
-module holds the pure rules: parse, encode, negotiate, decide a header, decide
-a content type. It opens no socket and reads no clock or environment, so the
-relay (towards the CLI) and the upstream client (towards the app) both build
-on it.
+notification with 202 and an empty body. This module holds the pure rules: parse, encode,
+negotiate, decide a header, decide a content type. It opens no socket and reads no clock or
+environment, so the person front builds on it.
 
 Every refusal is one closed ``McpWireError`` that names only the rule, never
-the input: a body, a header or a result may carry the capability.
+the input: a body, a header or a result may carry a credential.
 """
 
 from __future__ import annotations

@@ -49,8 +49,7 @@ from agent_runtime_client.mcp_wire import (
     tools_list_response,
 )
 from agent_runtime_client.tools import ToolDeclaration, ToolEffect, ToolOutcome
-from agent_runtime_client.turn import Principal
-from agent_runtime_client.wire import JsonObject
+from agent_runtime_client.turn import JsonObject, Principal
 
 type ResolvePerson = Callable[[Scope], Principal]
 

@@ -1,12 +1,12 @@
 """The agent file an app ships, and the definition read from it.
 
-An agent file is Claude Code's subagent format (YAML front matter between two
-``---`` lines, read as YAML 1.2 by ruamel.yaml, then the prompt as Markdown) with one
-extra key, ``appRoles``, and two required ones: ``model``, a
-``text/<model>`` name for a text agent, and ``maxDurationSeconds``. ``maxToolCalls`` is required
-exactly when ``tools`` is not empty. ``picture: {size: <width>x<height>}`` makes a picture
-agent: its ``model`` is an ``image/<model>`` name and it selects no tools. ``offered_to`` is a
-display filter for the app's own UI; the boundary is the gateway's group check.
+An agent file is Claude Code's subagent format (YAML front matter between two ``---`` lines,
+read as YAML 1.2 by ruamel.yaml, then the prompt as Markdown) with one extra key, ``appRoles``,
+and two required ones: ``model``, a ``text/<model>`` name for a text agent, and
+``maxDurationSeconds``. ``maxToolCalls`` is required exactly when ``tools`` is not empty.
+``picture: {size: <width>x<height>}`` makes a picture agent: its ``model`` is an
+``image/<model>`` name and it selects no tools. ``offered_to`` is a display filter for the app's
+own UI; the boundary is the gateway's group check.
 """
 
 from __future__ import annotations
