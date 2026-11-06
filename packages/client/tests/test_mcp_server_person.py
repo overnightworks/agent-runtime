@@ -13,10 +13,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
+from packages.client.tests.support.mcp_server_support import declaration
 from starlette.applications import Starlette
 from starlette.routing import Route
 from starlette.testclient import TestClient
-from tests.support.mcp_server_support import declaration
 
 from agent_runtime_client.mcp_server import McpPersonFront, PersonRequest, PersonTool
 from agent_runtime_client.mcp_server.asgi import LOGGER_NAME as LOGGER

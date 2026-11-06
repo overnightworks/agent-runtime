@@ -13,8 +13,15 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
+from packages.client.tests.support.wire_builders import (
+    call,
+    heartbeat,
+    result,
+    started,
+    succeeded,
+    text,
+)
 from pydantic import ValidationError
-from tests.support.wire_builders import call, heartbeat, result, started, succeeded, text
 
 from agent_runtime_client import sse as sse_module
 from agent_runtime_client.run_stream import StreamViolation, ViolationKind

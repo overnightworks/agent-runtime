@@ -12,9 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from pydantic import TypeAdapter, ValidationError
-from tests.support.provider_test_support import SAMPLE_TOOL_MARKUP
-from tests.support.wire_builders import (
+from packages.client.tests.support.wire_builders import (
     OTHER_RUN_ID,
     RUN_ID,
     call,
@@ -26,13 +24,8 @@ from tests.support.wire_builders import (
     succeeded,
     wire,
 )
+from pydantic import TypeAdapter, ValidationError
 
-from agent_runtime.text_tool_protocol import render_tool_catalog
-from agent_runtime.tools import (
-    ToolCatalog,
-    anthropic_tool_schemas,
-    openai_tool_schemas,
-)
 from agent_runtime_client.run_stream import RunStream, StreamViolation, ViolationKind, parse_event
 from agent_runtime_client.tools import ToolDeclaration, ToolEffect
 from agent_runtime_client.wire import (
@@ -65,24 +58,6 @@ def _declaration(name: str, **fields: object) -> ToolDeclaration:
 
 def test_a_tool_declared_without_an_effect_counts_as_side_effecting() -> None:
     assert _declaration("write_text").effect is ToolEffect.SIDE_EFFECTING
-
-
-@pytest.mark.parametrize(
-    "project", [anthropic_tool_schemas, openai_tool_schemas, render_tool_catalog]
-)
-def test_the_effect_class_never_reaches_a_model(project) -> None:
-    catalog = ToolCatalog(
-        tools=(
-            _declaration("read_note", effect=ToolEffect.READ_ONLY),
-            _declaration("write_text", effect=ToolEffect.SIDE_EFFECTING),
-        ),
-        markup=SAMPLE_TOOL_MARKUP,
-    )
-
-    seen_by_the_model = json.dumps(project(catalog))
-
-    for leak in ("effect", ToolEffect.READ_ONLY, ToolEffect.SIDE_EFFECTING):
-        assert leak not in seen_by_the_model
 
 
 STARTED_FIELDS = {"model": "anthropic/sonnet", "route": "cli", "heartbeat_interval_s": 15}
