@@ -1,0 +1,7 @@
+claim_id = "8560bcd4b8a74173ac0d12fc813532a9"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "94cbab7a58f1b5f2350fcac361dd59ef9d2960ea"
+branch = "fix/drop-body-contract"
+scope = [".aco/board.toml"]
+opened_commit = "9750ce2b3e1ec264313aef5489de9a517219dab4"
