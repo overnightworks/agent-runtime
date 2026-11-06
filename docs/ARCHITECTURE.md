@@ -2,9 +2,7 @@
 
 The mental model of this repository, for an engineer who changes it or decides
 how an app builds on it. It is an overview: the code and its docstrings own
-behaviour, the decision record [0003](decisions/0003-client-only.md) owns the
-shape of what ships, and `AGENTS.md` owns the layout, the checks and the
-release rules.
+behaviour, and `AGENTS.md` owns the layout, the checks and the release rules.
 
 ## What it is
 
@@ -13,8 +11,7 @@ on a model gateway. An app declares its agents in files and its tools in code,
 and the client sends each turn to the app's LiteLLM gateway with the app's own
 key, runs the tool calls in the app's process and streams the turn back as
 typed events. No service, no provider CLI and no subscription login sit in
-between. Model providers are reached only through the gateway
-([decision 0002](decisions/0002-library-and-app-keys.md)).
+between. Model providers are reached only through the gateway.
 
 ## The client
 
@@ -50,7 +47,7 @@ flowchart TB
 - The **`backend` extra** adds `httpx2` for `backend.gateway.GatewayBackend`,
   the one implementation of the port, and `backend.fake_gateway`, its scripted
   transport for tests.
-- The **`mcp-server` extra** adds PyJWT with cryptography for
+- The **`mcp-server` extra** adds PyJWT with cryptography, and anyio, for
   `agent_runtime_client.mcp_server`, an app's MCP endpoint that verifies the
   run capability (`capability`) and speaks the JSON-only profile (`mcp_wire`).
   It is plain ASGI, and no base module imports it.
@@ -74,7 +71,12 @@ value fails loud.
   in a file the configuration names, is read per turn and is written to no log.
   Model providers stay reachable only through the gateway.
 - *The app owns its tools and their effects.* Tools run in the app, and the app
-  alone decides what a call may do.
+  alone decides what a call may do. A tool's effect class, `read_only` or
+  `side_effecting`, defaults to side-effecting and never reaches a model.
+- *An agent file is read strictly.* It is Claude Code's subagent format, YAML front
+  matter between `---` lines with the Markdown body as the prompt, and each
+  front-matter field is validated by its own type: a limit must be an integer, and a
+  quoted number is refused.
 - *A person is known to the gateway only as a fingerprint* of their issuer and
   subject, so no real identifier leaves the app.
 - *A capability is verified, not trusted.* The capability front (`McpServer`) accepts a call only

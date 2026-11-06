@@ -24,11 +24,8 @@ app's MCP endpoint (PyJWT with cryptography).
 |---|---|
 | anyone new | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the client, its extras, trust |
 | an app author running agent turns | [docs/wire.md](docs/wire.md): the run contract, agent files, the tool contract, the gateway backend, the MCP endpoint |
-| bumping a pin | [docs/MIGRATING.md](docs/MIGRATING.md): one section per release |
 
-The code and its docstrings own behaviour. The decision record
-[docs/decisions/0003-client-only.md](docs/decisions/0003-client-only.md)
-owns what ships, and `AGENTS.md` owns the layout, the boundaries, the checks and the
+The code and its docstrings own behaviour, and `AGENTS.md` owns the layout, the boundaries, the checks and the
 release rules.
 
 ## Checks

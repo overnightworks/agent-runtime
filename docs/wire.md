@@ -8,9 +8,7 @@ reference; `agent_runtime_client.wire` owns the wire (its stream rules sit in
 `agent_runtime_client.run_stream` and `agent_runtime_client.sse`), `agent_runtime_client.turn` the
 turn's vocabulary that the wire composes, `agent_runtime_client.agents` the agent
 file, `agent_runtime_client.tools` the tool contract and `agent_runtime_client.mcp_server` the
-tool endpoint, and their docstrings are exact where this file is short. The
-decision record [0003](decisions/0003-client-only.md) owns the rulings behind
-them. Install the client as [host.md](host.md) describes; who may run what is the
+tool endpoint, and their docstrings are exact where this file is short. Install the client as [host.md](host.md) describes; who may run what is the
 operator's configuration ([operations.md](operations.md)).
 
 ## The run

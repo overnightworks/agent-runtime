@@ -28,7 +28,6 @@ jobs:
       contents: read
       actions: read # reads CI's run on the commit
     outputs:
-      notice: ${{ steps.notice.outputs.notice }}
       install: ${{ steps.install.outputs.install }}
     env:
       GH_TOKEN: ${{ github.token }}
@@ -115,16 +114,6 @@ jobs:
             exit 1
           fi
 
-      - name: Point a release at its migration section
-        id: notice
-        run: |
-          notice=""
-          if grep -qxF "## Migrating to ${VERSION}" docs/MIGRATING.md; then
-            anchor="migrating-to-${VERSION//./}"
-            notice="**Before you bump your pin,** read [Migrating to ${VERSION}](https://github.com/${GITHUB_REPOSITORY}/blob/v${VERSION}/docs/MIGRATING.md#${anchor})."
-          fi
-          echo "notice=${notice}" >> "$GITHUB_OUTPUT"
-
       - name: List the wheels with their hashes
         id: install
         run: |
@@ -162,7 +151,6 @@ jobs:
       GH_REPO: ${{ github.repository }}
       VERSION: ${{ inputs.version }}
       COMMIT: ${{ inputs.commit }}
-      NOTICE: ${{ needs.gate.outputs.notice }}
       INSTALL: ${{ needs.gate.outputs.install }}
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -184,8 +172,4 @@ jobs:
 
       - name: Publish the release on the tag with the wheels the gate built
         run: |
-          notes="$INSTALL"
-          if [ -n "$NOTICE" ]; then
-            notes="${NOTICE}"$'\n\n'"${INSTALL}"
-          fi
-          gh release create "v$VERSION" dist/*.whl --verify-tag --title "v$VERSION" --generate-notes --notes "$notes"
+          gh release create "v$VERSION" dist/*.whl --verify-tag --title "v$VERSION" --generate-notes --notes "$INSTALL"

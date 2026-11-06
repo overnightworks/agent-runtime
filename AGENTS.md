@@ -1,6 +1,6 @@
 # Repository agent guidance
 
-`agent-runtime` is the light client library `overnightworks-agent-runtime-client` (import name `agent_runtime_client`); every change here is a change to a public contract that a tag has already frozen elsewhere. Overview: README; decisions: `docs/decisions/`; breaking changes: `docs/MIGRATING.md`.
+`agent-runtime` is the light client library `overnightworks-agent-runtime-client` (import name `agent_runtime_client`); every change here is a change to a public contract that a tag has already frozen elsewhere. Overview: README.
 
 ## Boundaries
 
@@ -43,8 +43,6 @@ owns the allowed hits. The required check is `quality / verdict`
 
 A release is dispatched, not pushed: `gh workflow run release.yml -f version=X.Y.Z -f commit=<main's head>`.
 The head gives the operator that line with the version and commit filled in; only the operator runs it, as only he tagged. `.github/workflows/release.yml` gates first, then creates the tag at that commit through the API and attaches exactly
-the one client wheel, built by the gate, to the GitHub release; hosts pin that wheel URL or the git tag (`@v<version>`), and never install by name from PyPI. A release whose `docs/MIGRATING.md`
-holds `## Migrating to <version>` gets a release page that opens with a link to
-that section, so a breaking release writes that section before the tag. A tag
+the one client wheel, built by the gate, to the GitHub release; hosts pin that wheel URL or the git tag (`@v<version>`), and never install by name from PyPI. A tag
 is never moved — a broken release gets the next patch tag — so the pull
 request that precedes the tag raises the one version literal, `version` in `pyproject.toml`.
