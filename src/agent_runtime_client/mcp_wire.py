@@ -19,7 +19,7 @@ from enum import IntEnum, StrEnum
 from http import HTTPStatus
 from typing import Annotated, Any, Final, Literal, NoReturn, Self, TypeVar
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pydantic.alias_generators import to_camel
 
 from agent_runtime_client.errors import raise_without_chain
@@ -274,10 +274,6 @@ def initialize_response(request_id: RequestId, requested_version: str) -> JsonRp
     return JsonRpcResponse(id=request_id, result=result.model_dump(mode="json", by_alias=True))
 
 
-class ListToolsParams(_Tolerant):
-    cursor: UnicodeText | None = None
-
-
 class ToolAnnotations(_Tolerant):
     read_only_hint: bool | None = None
 
@@ -315,18 +311,8 @@ class _TextBlock(_Tolerant):
     text: UnicodeText
 
 
-def _refuse_text_type(block_type: str) -> str:
-    if block_type == "text":
-        raise ValueError("a text block that is malformed is not a block of another type")
-    return block_type
-
-
-class _OtherBlock(_Tolerant):
-    type: Annotated[UnicodeText, AfterValidator(_refuse_text_type)]
-
-
 class _CallToolResult(_Tolerant):
-    content: _JsonArray[Annotated[_TextBlock | _OtherBlock, Field(union_mode="left_to_right")]]
+    content: _JsonArray[_TextBlock]
     is_error: bool = False
 
 

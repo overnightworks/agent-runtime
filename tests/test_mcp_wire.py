@@ -24,7 +24,6 @@ from agent_runtime_client.mcp_wire import (
     JsonRpcRequest,
     JsonRpcResponse,
     Listing,
-    ListToolsParams,
     McpWireError,
     Notified,
     ProtocolVersion,
@@ -184,13 +183,6 @@ def test_the_initialize_result_is_built_from_constants_and_echoes_no_client_memb
     assert SECRET.encode() not in encoded
 
 
-def test_tools_list_reads_its_cursor() -> None:
-    cursor = read_payload(ListToolsParams, REQUEST["params"]).cursor
-
-    assert cursor == "c1"
-    assert read_payload(ListToolsParams, None).cursor is None
-
-
 def test_tools_call_params_default_to_no_arguments() -> None:
     assert read_payload(CallToolParams, {"name": "echo"}).arguments == {}
 
@@ -206,13 +198,11 @@ def test_a_number_that_overflows_to_infinity_is_not_accepted_as_a_message() -> N
     [
         (InitializeParams, {"protocol_version": "2025-11-25"}),
         (CallToolParams, {"name": "echo", "arguments": {"a": float("inf")}}),
-        (ListToolsParams, {"cursor": "\ud800"}),
         (InitializeParams, {"protocolVersion": "\ud800"}),
     ],
     ids=[
         "snake-case protocol version",
         "infinite argument",
-        "surrogate",
         "surrogate protocol version",
     ],
 )
