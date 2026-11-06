@@ -157,8 +157,8 @@ every person's budget, so every caller computes it with
 | 200, `finish_reason: tool_calls`, whole round | the calls run in order (see below), then the next request |
 | 200 otherwise (malformed JSON, no choices, empty text, another `finish_reason`, a lone surrogate, a longer reply, a round that is not whole) | `failed: provider_error` |
 | 429 | `refused: busy`; `retry_after_s` from the `Retry-After` seconds, at most `MAX_RETRY_AFTER_S`; an HTTP-date or no header gives none |
-| another 4xx, a budget refusal included | `failed: provider_unavailable`, detail `gateway_refused`, body unread |
-| 1xx, a 2xx other than 200, 3xx or 5xx (a `Retry-After` is ignored) | `failed: provider_unavailable`, detail `gateway_failed` |
+| another 4xx, a budget refusal included | `failed: provider_unavailable`, detail `gateway_refused`; the body is read within `MAX_EVENT_BYTES` only for the logged error type and code |
+| 1xx, a 2xx other than 200, 3xx or 5xx (a `Retry-After` is ignored) | `failed: provider_unavailable`, detail `gateway_failed`; the body is read as for a 4xx |
 | connection refused or reset, TLS failure, an origin the HTTP library refuses | `failed: provider_unavailable` |
 
 Proved by `tests/test_backend_gateway.py`: `test_a_text_turn_ends_with_the_answer`,

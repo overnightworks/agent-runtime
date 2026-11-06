@@ -39,6 +39,29 @@ flowchart TB
 *Which module an app reaches and what each reaches in turn. Source: `src/agent_runtime_client`,
 `.importlinter`.*
 
+One gateway turn with a tool call:
+
+```mermaid
+sequenceDiagram
+    participant App as app (host)
+    participant GB as GatewayBackend
+    participant GW as LiteLLM gateway
+    participant H as app's tool handler
+    App->>GB: run(request, person)
+    GB->>GB: admit the person, read the key file
+    GB->>GW: chat completion (messages, declared tools)
+    GW-->>GB: finish_reason tool_calls
+    GB-->>App: ToolCallEvent
+    GB->>H: handler(person, arguments)
+    H-->>GB: outcome
+    GB-->>App: ToolResultEvent
+    GB->>GW: chat completion (with the result)
+    GW-->>GB: finish_reason stop
+    GB-->>App: AssistantTextEvent, FinalEvent
+```
+
+*Source: `backend/gateway.py`, `GatewayBackend.run`.*
+
 ## Building blocks
 
 - The **base** depends on `pydantic` and `ruamel.yaml` only: `agents` (the agent-file reader),
@@ -49,6 +72,14 @@ flowchart TB
 - The **`mcp-server` extra** adds `anyio` for `agent_runtime_client.mcp_server`, plain ASGI
   that serves an app's tools to one signed-in person's agent; `mcp_wire` holds its pure
   JSON-RPC rules and imports no extra.
+
+## Deployment
+
+The client is a library: every block runs inside the host app's process, the agent files are
+read from the app's own disk and the key from a file the app's configuration names. The
+person front is mounted in the host's ASGI application. The LiteLLM gateway is the one
+outside service, reached over HTTP with the app's key; the signed-in person's agent reaches
+the person front only through the host.
 
 ## Runtime
 
@@ -119,3 +150,13 @@ size and clone ratchets, and coverage over the whole suite.
 - Folding `AnnotatedToolDefinition` into `ToolDefinition`: the person front's listing carries
   `readOnlyHint`, which a plain definition does not. Reopens if the annotation leaves the
   listing.
+
+## Risks and technical debt
+
+- `RejectionCode` has eight members the client never raises (everything but `NOT_ENABLED`,
+  `BUSY` and `FORBIDDEN`); they remain from the service that once produced them.
+- Gateway replies are parsed with plain `json.loads`, while MCP request bodies go through the
+  strict reader that refuses `NaN`, `Infinity` and duplicate keys. A gateway is trusted more
+  than a person's agent, but the two paths do not share one rule.
+- A tool's result travels to the gateway and the provider as conversation text; the client
+  bounds its size but cannot know what it holds.

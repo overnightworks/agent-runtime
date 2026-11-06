@@ -45,7 +45,7 @@ from agent_runtime_client.mcp_wire import (
 )
 from agent_runtime_client.turn import MAX_EVENT_BYTES, MAX_TOOL_INPUT_DEPTH
 
-SECRET = "capability-token-must-not-leak"
+SECRET = "bearer-token-must-not-leak"
 NEGOTIATED = ProtocolVersion.V2025_11_25
 REQUEST = {"jsonrpc": "2.0", "id": 7, "method": "tools/list", "params": {"cursor": "c1"}}
 NOTIFICATION = {"jsonrpc": "2.0", "method": "notifications/initialized"}
