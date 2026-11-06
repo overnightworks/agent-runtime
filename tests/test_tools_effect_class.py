@@ -1,4 +1,4 @@
-"""The tool effect class decides how a cut-short run ends and is never shown to a model."""
+"""The tool effect class is never shown to a model."""
 
 from __future__ import annotations
 
