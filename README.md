@@ -1,38 +1,67 @@
 # agent-runtime
 
-The light client for apps that run agent turns on a model gateway. An app ships its
-agents as files and declares its tools in code; the client sends each turn to the
-app's LiteLLM gateway with the app's own key, runs the tool calls in the app and
-streams the turn back as typed events. It also carries the run contract and an MCP
-endpoint that verifies the run capability. One distribution,
-`overnightworks-agent-runtime-client`, imported as `agent_runtime_client`.
+A small client library for apps that run agent turns on a model gateway. An app ships its
+agents as Markdown files and declares its tools in code. The client sends each turn to the
+app's LiteLLM gateway with the app's own key, runs the tool calls in the app's process and
+hands the turn back as typed events. It can also serve the app's tools to a signed-in
+person's agent over MCP.
+
+The distribution is `overnightworks-agent-runtime-client`, imported as `agent_runtime_client`.
+It is a client only: no service, no provider CLI and no subscription login sit between an app
+and its gateway.
 
 ## Install
 
-The distribution is not on PyPI. Install the wheel that the
-[latest release](https://github.com/overnightworks/agent-runtime/releases/latest)
-lists: its page gives it as a `name @ URL#sha256=…` requirement for `pip install`
-or `uv add`. A host may instead install by git tag:
-`overnightworks-agent-runtime-client @ git+https://github.com/overnightworks/agent-runtime@v<version>`.
+The distribution is not on PyPI. A host pins one of two sources:
 
-The `backend` extra adds the gateway backend (`httpx2`); the `mcp-server` extra adds an
-app's MCP endpoint (PyJWT with cryptography).
+- the git tag:
+  `overnightworks-agent-runtime-client @ git+https://github.com/overnightworks/agent-runtime@v<version>`;
+- the release wheel: the [latest release](https://github.com/overnightworks/agent-runtime/releases/latest)
+  lists it as a `name @ URL#sha256=…` requirement for `pip install` or `uv add`.
+
+The base depends on `pydantic` and `ruamel.yaml` only. Two extras are optional:
+
+| Extra | Adds | For |
+|---|---|---|
+| `backend` | `httpx2` | `GatewayBackend`, the one backend, and `FakeGateway`, its scripted transport for tests |
+| `mcp-server` | `anyio` | `agent_runtime_client.mcp_server`, an app's MCP endpoint |
+
+## Use
+
+An app loads an agent file, builds the backend from its `agent` configuration section and
+consumes the turn inside `aclosing`:
+
+```python
+from contextlib import aclosing
+from importlib.resources import files
+
+from agent_runtime_client.agents import load_agent
+from agent_runtime_client.backend.gateway import GatewayBackend
+
+agent = load_agent(files("my_app") / "agents" / "assistant.md", declarations)
+backend = GatewayBackend(settings.agent, tools=hand_tools)
+
+async with aclosing(backend.run(agent.request(messages), person)) as events:
+    async for event in events:
+        ...
+```
+
+`person` is a `TurnPerson`, always the verified person. A turn that ends short of its answer
+raises `TurnStopped`, which says whether it was refused, failed or cancelled and whether a
+side-effecting tool had already started. [docs/connector.md](docs/connector.md) has the full
+contract.
 
 ## Where to read
 
 | You are | Read |
 |---|---|
-| anyone new | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the client, its extras, trust |
-| an app author running agent turns | [docs/wire.md](docs/wire.md): the run contract, agent files, the tool contract, the gateway backend, the MCP endpoint |
+| deciding whether this fits | [docs/VISION.md](docs/VISION.md): why it exists and what it is not |
+| changing the client | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): building blocks, trust, constraints |
+| an app author | [docs/connector.md](docs/connector.md): agent files, tools, the gateway backend, the MCP person front |
+| an agent working here | [AGENTS.md](AGENTS.md): commands, traps, release rules |
 
-The code and its docstrings own behaviour, and `AGENTS.md` owns the layout, the boundaries, the checks and the
-release rules.
-
-## Checks
-
-`AGENTS.md` lists the commands (sync, suite, ruff, the quality gate's hygiene, build) and what CI
-adds. The suite runs without a live provider.
+The docstrings own the exact behaviour of each module.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).

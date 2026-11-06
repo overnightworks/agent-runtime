@@ -63,7 +63,7 @@ class FailureCode(StrEnum):
 
 
 class RejectionCode(StrEnum):
-    """Why the service refused a request: to start a run, or to read one."""
+    """Why a turn is refused before it starts."""
 
     NOT_ENABLED = "not_enabled"
     BUSY = "busy"
@@ -81,8 +81,8 @@ class RejectionCode(StrEnum):
 def refuse_non_json_constant(constant: str) -> object:
     """The one decider of NaN and Infinity in text being parsed: JSON has no word for them.
 
-    Passed as ``parse_constant`` by every reader of untrusted JSON text: the SSE
-    frame decoder, the text tool-call protocol and the service's request body.
+    Passed as ``parse_constant`` by every reader of untrusted JSON text, the
+    MCP request body included.
     """
     raise ValueError(f"{constant} is not a JSON value")
 
@@ -164,7 +164,7 @@ UnicodeText = Annotated[str, AfterValidator(_refuse_non_unicode_text)]
 NonEmptyUnicodeText = Annotated[UnicodeText, Field(min_length=1)]
 """The one owner of non-empty wire text.
 
-It covers a call id, a tool's name, an assistant text and a capability's identifying
+It covers a call id, a tool's name, an assistant text and a principal's identifying
 claims.
 """
 
@@ -261,8 +261,8 @@ class TurnMessage(StrictModel):
 class Turn(StrictModel):
     """The conversation a run answers: the system prompt and the messages so far.
 
-    It names no provider, model, route, user or MCP endpoint: the service
-    decides those from the caller's identity and the app's registration.
+    It names no provider, model, route, user or MCP endpoint: the backend
+    decides those from the caller's identity and the app's configuration.
     """
 
     system: UnicodeText
@@ -270,7 +270,7 @@ class Turn(StrictModel):
 
 
 class Principal(StrictModel):
-    """The verified caller exactly as the service saw it: no bound, no normalization."""
+    """The verified caller exactly as the app bound it: no bound, no normalization."""
 
     iss: NonEmptyUnicodeText
     sub: NonEmptyUnicodeText

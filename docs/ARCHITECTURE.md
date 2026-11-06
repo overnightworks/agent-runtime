@@ -1,87 +1,120 @@
 # Architecture
 
-The mental model of this repository, for an engineer who changes it or decides
-how an app builds on it. It is an overview: the code and its docstrings own
-behaviour, and `AGENTS.md` owns the layout, the checks and the release rules.
+The mental model of this repository, for an engineer who changes the client or decides how an
+app builds on it. The code and its docstrings own behaviour, `docs/connector.md` is the
+reference for apps and `AGENTS.md` owns the checks and the release rules.
 
-## What it is
+## Context
 
-One light client library, `agent_runtime_client`, for apps that run agent turns
-on a model gateway. An app declares its agents in files and its tools in code,
-and the client sends each turn to the app's LiteLLM gateway with the app's own
-key, runs the tool calls in the app's process and streams the turn back as
-typed events. No service, no provider CLI and no subscription login sit in
-between. Model providers are reached only through the gateway.
-
-## The client
+One library, `agent_runtime_client`, for apps that run agent turns. An app ships its agents as
+files and declares its tools in code. The client sends each turn to the app's LiteLLM gateway
+with the app's own key, runs the tool calls in the app's process and streams the turn back as
+typed events. Model providers are reached only through the gateway.
 
 ```mermaid
 flowchart TB
-    app["an app"]
-    agents["agents<br/>agent files"]
-    tools["tools<br/>the tool contract, hand tools"]
-    backend["backend<br/>the AgentBackend port<br/>gateway and fake_gateway"]
-    wire["wire, run_stream, sse<br/>the run contract"]
+    app["an app (host)"]
+    agents["agents<br/>the agent file"]
+    tools["tools<br/>declarations, hand tools"]
+    config["config<br/>AgentConfig"]
+    backend["backend<br/>the AgentBackend port<br/>gateway, fake_gateway"]
     turn["turn, turn_events<br/>the turn vocabulary"]
-    mcp["mcp_server, mcp_wire, capability<br/>an app's MCP endpoint"]
+    mcp["mcp_server, mcp_wire<br/>the MCP person front"]
     gateway["LiteLLM gateway<br/>(external)"]
+    person["a signed-in person's agent<br/>(external)"]
 
     app --> agents
+    app --> config
     app --> backend
     app --> mcp
+    agents --> tools
     backend --> tools
     backend --> turn
-    backend -->|"one chat completion per round"| gateway
-    wire --> turn
     mcp --> tools
+    mcp --> turn
+    backend -->|"one chat completion per round"| gateway
+    person -->|"JSON-RPC over POST"| mcp
 ```
 
-*Which module an app and its neighbours reach. Source: `src/agent_runtime_client`,
+*Which module an app reaches and what each reaches in turn. Source: `src/agent_runtime_client`,
 `.importlinter`.*
 
-- The **base** depends on `pydantic` and `ruamel.yaml` only. It holds the
-  agent-file reader (`agents`), the tool contract (`tools`), the turn's
-  vocabulary (`turn`) and the in-process turn events (`turn_events`), the run
-  contract with its stream rules (`wire`, `run_stream`, `sse`), and the backend
-  port (`backend`).
-- The **`backend` extra** adds `httpx2` for `backend.gateway.GatewayBackend`,
-  the one implementation of the port, and `backend.fake_gateway`, its scripted
-  transport for tests.
-- The **`mcp-server` extra** adds PyJWT with cryptography, and anyio, for
-  `agent_runtime_client.mcp_server`, an app's MCP endpoint that verifies the
-  run capability (`capability`) and speaks the JSON-only profile (`mcp_wire`).
-  It is plain ASGI, and no base module imports it.
+## Building blocks
 
-The run contract has one owner, `agent_runtime_client.wire`; the turn's
-vocabulary has one, `agent_runtime_client.turn`, which `wire` composes.
-`agent_runtime_client.turn_events` is the in-process turn event, never a second
-wire. The app-facing reference is [wire.md](wire.md).
+- The **base** depends on `pydantic` and `ruamel.yaml` only: `agents` (the agent-file reader),
+  `tools` (the tool contract), `turn` (the turn's vocabulary, the one owner of `JsonObject`,
+  the size bounds and the failure codes), `turn_events`, `config` and the `backend` port.
+- The **`backend` extra** adds `httpx2` for `backend.gateway.GatewayBackend`, the one
+  implementation of the port, and `backend.fake_gateway`, its scripted transport for tests.
+- The **`mcp-server` extra** adds `anyio` for `agent_runtime_client.mcp_server`, plain ASGI
+  that serves an app's tools to one signed-in person's agent; `mcp_wire` holds its pure
+  JSON-RPC rules and imports no extra.
+
+## Runtime
+
+A turn runs inside the app's process. `GatewayBackend.run` admits the person, reads the key
+file, sends one chat completion per round and, when a round asks for tools, runs the app's
+handlers in order before the next request. One deadline bounds the whole turn. Nothing
+persists: the client holds no state between turns, and the gateway holds the budget.
+
+The MCP person front is mounted by the host behind the host's own authentication gate. It
+resolves the person through a port, answers `tools/list` and `tools/call`, and replays a
+marked route as an in-process request into the host's whole application.
 
 ## Crosscutting concepts
 
-**Host facts come from the host.** The client reaches back into no host. The
-gateway origin and key file arrive in the app's `agent` configuration section
-(`AgentConfig`), the tool set arrives as `HandTool`s and the MCP tools as the
-app's own handlers. No path invents a default for a host fact, and a malformed
-value fails loud.
+**Host facts come from the host.** The client reaches back into no host. The gateway origin and
+key file arrive in the app's `agent` configuration section, the tool set as `HandTool`s and
+the MCP tools as the app's own handlers. No path invents a default for a host fact, and a
+malformed value fails loud.
 
 **Trust.**
 
-- *An app holds its own gateway key.* The key has its own budget and limit, sits
-  in a file the configuration names, is read per turn and is written to no log.
-  Model providers stay reachable only through the gateway.
-- *The app owns its tools and their effects.* Tools run in the app, and the app
-  alone decides what a call may do. A tool's effect class, `read_only` or
-  `side_effecting`, defaults to side-effecting. The class itself never reaches a
-  model; the person front shows MCP clients only whether a tool is read-only, as
-  `readOnlyHint`.
-- *An agent file is read strictly.* It is Claude Code's subagent format, YAML front
-  matter between `---` lines with the Markdown body as the prompt, and each
-  front-matter field is validated by its own type: a limit must be an integer, and a
-  quoted number is refused.
-- *A person is known to the gateway only as a fingerprint* of their issuer and
-  subject, so no real identifier leaves the app.
-- *A capability is verified, not trusted.* The capability front (`McpServer`) accepts a call only
-  with a signature that verifies against the public key the app holds. The person front
-  (`McpPersonFront`) carries no capability: the host's own authentication gate resolves the
-  person before the front serves a call.
+- *An app holds its own gateway key.* The key has its own budget and limit, sits in a file the
+  configuration names, is read per turn and is written to no log or exception frame.
+- *The app owns its tools and their effects.* A tool's effect class defaults to
+  side-effecting. It never reaches a model; the person front shows MCP clients only whether a
+  tool is read-only, as `readOnlyHint`.
+- *An agent file is read strictly.* Each front-matter field is validated by its own type: a
+  limit must be an integer, and a quoted number is refused.
+- *A person is known to the gateway only as a fingerprint* of issuer and subject, so no real
+  identifier leaves the app.
+- *The person front trusts the host's gate.* It carries no credential check of its own; a
+  front reached without the gate's admission is a host defect, and it withholds any answer
+  that carries the request's own bearer.
+
+**Proof strategy.** Behaviour is proven through the real entry points: `GatewayBackend.run`
+against `FakeGateway`'s scripted transport, `load_agent` against files, and the person front
+as an ASGI app driven with real scopes. Pure rules (`mcp_wire`, the turn vocabulary) are called
+directly. The suite needs no live provider. `quality / verdict` holds the import contracts,
+size and clone ratchets, and coverage over the whole suite.
+
+## Constraints and reasons
+
+- Base modules import no HTTP library and no MCP extra, so an app that only reads agent files
+  installs two dependencies.
+- The client imports no web framework: the person front is plain ASGI, so a host keeps its own
+  framework and its own authentication gate.
+- Tool handlers run in the app's process, so a handler sees the app's own state and the client
+  never moves a tool's data anywhere else.
+- The key is read per turn, so a rotated key needs no restart.
+- A turn's `person` is always the verified person and the gateway sees a fingerprint, so one
+  person has one budget across text and pictures.
+- A round is judged whole before anything shows or runs, so a malformed round never runs a
+  handler.
+
+## Not chosen
+
+- A service between app and gateway: each app reaches the gateway directly and a shared
+  process would add a hop and a second place to hold keys. Reopens if several apps need a
+  budget or a policy the gateway cannot hold.
+- A capability front that verifies run tokens minted elsewhere: no minter remains, because the
+  person front authenticates the person through the host's gate. Reopens if a component other
+  than the person's agent must call an app's tools.
+- Streaming gateway responses: rounds are buffered so a round is judged whole before it shows.
+  Reopens if an app needs token-by-token output.
+- Provider CLIs and subscription logins: the gateway is the only route to a model. Reopens if
+  the gateway cannot reach a model an app needs.
+- Folding `AnnotatedToolDefinition` into `ToolDefinition`: the person front's listing carries
+  `readOnlyHint`, which a plain definition does not. Reopens if the annotation leaves the
+  listing.

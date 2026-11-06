@@ -267,7 +267,7 @@ def require_session_id(value: str) -> str:
 
 
 def protocol_header_status(header_value: str | None) -> HTTPStatus:
-    """The relay's decision for a request after ``initialize``; an absent header is not a pass."""
+    """The decision for a request after ``initialize``; an absent header is not a pass."""
     effective = _ASSUMED_PROTOCOL_VERSION if header_value is None else header_value
     if effective in SUPPORTED_PROTOCOL_VERSIONS:
         return HTTPStatus.OK
@@ -505,7 +505,7 @@ def carries_signature_of(token: str, data: bytes) -> bool:
     after the last ``.``. Bodies either front writes are ``json.dumps`` output, which
     writes base64url characters and ``.`` verbatim, and tool results are asked after
     decoding. A token split across strings, base64-encoded or reversed is not
-    detected: this stops reflection, not an app that encodes its own capability.
+    detected: this stops reflection, not an app that encodes its own bearer.
     """
     signature_segment = token.rsplit(".", 1)[-1]
     return signature_segment.encode("ascii") in data

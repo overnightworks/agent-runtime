@@ -1,26 +1,27 @@
 # Repository agent guidance
 
-`agent-runtime` is the light client library `overnightworks-agent-runtime-client` (import name `agent_runtime_client`); every change here is a change to a public contract that a tag has already frozen elsewhere. Overview: README.
+`agent-runtime` is the client library `overnightworks-agent-runtime-client` (import name
+`agent_runtime_client`); every change here is a change to a public contract that a tag has
+already frozen elsewhere. Overview: README; reasons and what was not chosen: docs/ARCHITECTURE.md.
 
 ## Boundaries
 
-`.importlinter` owns the layering and the forbidden imports; the gate's
-`import-contract` rule proves it (`quality hygiene .`). The traps it cannot show:
+`.importlinter` owns the layering and the forbidden imports; the gate's `import-contract` rule
+proves it (`quality hygiene .`). The traps it cannot show:
 
-- The run wire has one owner, `agent_runtime_client.wire`; the turn's vocabulary has one,
-  `agent_runtime_client.turn`, which `wire` composes.
-- `agent_runtime_client.turn_events` is the in-process turn event, never a second wire.
-- The `backend` and `mcp-server` extras stay optional: their libraries are imported only inside the module that needs them.
+- The turn's vocabulary has one owner, `agent_runtime_client.turn`; `turn_events` is the
+  in-process event, never a wire format.
+- The `backend` and `mcp-server` extras stay optional: their libraries are imported only inside
+  the module that needs them.
 
 ## Code patterns
 
-- Deployment facts come from the host, never from an environment variable or a
-  module default. The gateway origin and key file arrive in the app's `agent`
-  configuration section (`AgentConfig`); no path invents a default for a host fact.
-- Host obligations are ports, passed in. The app's `HandTool`s and the MCP server's
+- Deployment facts come from the host, never from an environment variable or a module default.
+  The gateway origin and key file arrive in the app's `agent` configuration section
+  (`AgentConfig`); no path invents a default for a host fact.
+- Host obligations are ports, passed in. The app's `HandTool`s and the MCP person front's
   handlers arrive from the host; the library never invents them.
-- Tests use the builders in `tests/support` (`wire_builders`, `gateway_turn_support`,
-  `mcp_server_support`) rather than a second set of fakes.
+- Tests use the builders in `tests/support` rather than a second set of fakes.
 
 ## Checks
 
@@ -32,17 +33,18 @@ uvx --from git+https://github.com/overnightworks/quality@v0.9.2 quality hygiene 
 uv build
 ```
 
-The suite needs no live provider. CI's "Host vocabulary" step greps
-`src tests docs` for host words; `.github/host-vocabulary-allowed.txt`
-owns the allowed hits. The required check is `quality / verdict`
-(`quality/config.toml`, `.github/workflows/ci.yml`).
+The suite needs no live provider. CI's "Host vocabulary" step greps `src tests docs` for host
+words; `.github/host-vocabulary-allowed.txt` owns the allowed hits. The required check is
+`quality / verdict` (`quality/config.toml`, `.github/workflows/ci.yml`).
 
 ## Releasing
 
 `main` is protected.
 
 A release is dispatched, not pushed: `gh workflow run release.yml -f version=X.Y.Z -f commit=<main's head>`.
-The head gives the operator that line with the version and commit filled in; only the operator runs it, as only he tagged. `.github/workflows/release.yml` gates first, then creates the tag at that commit through the API and attaches exactly
-the one client wheel, built by the gate, to the GitHub release; hosts pin that wheel URL or the git tag (`@v<version>`), and never install by name from PyPI. A tag
-is never moved — a broken release gets the next patch tag — so the pull
-request that precedes the tag raises the one version literal, `version` in `pyproject.toml`.
+The head gives the operator that line with the version and commit filled in; only the operator
+runs it, as only he tagged. `.github/workflows/release.yml` gates first, then creates the tag at
+that commit through the API and attaches exactly the one client wheel, built by the gate, to the
+GitHub release. Hosts pin that wheel URL or the git tag (`@v<version>`) and never install by name
+from PyPI. A tag is never moved: a broken release gets the next patch tag, so the pull request
+that precedes the tag raises the one version literal, `version` in `pyproject.toml`.
