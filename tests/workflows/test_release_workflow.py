@@ -25,9 +25,7 @@ class _Release:
     other_commit: str = "f" * 40
     repository: str = "overnightworks/agent-runtime"
     wheel_contents: tuple[tuple[str, bytes], ...] = (
-        ("overnightworks_agent_runtime-{}-py3-none-any.whl", b"core"),
         ("overnightworks_agent_runtime_client-{}-py3-none-any.whl", b"client"),
-        ("overnightworks_agent_runtime_service-{}-py3-none-any.whl", b"service"),
     )
 
     @property
@@ -41,9 +39,8 @@ class _Release:
     @property
     def install_lines(self) -> list[str]:
         return [
-            f"overnightworks-agent-runtime{suffix} @ "
-            f"https://example.test/overnightworks-agent-runtime{suffix}.whl#sha256={digest}"
-            for suffix, digest in (("-client", "aa"), ("", "bb"), ("-service", "cc"))
+            "overnightworks-agent-runtime-client @ "
+            "https://example.test/overnightworks-agent-runtime-client.whl#sha256=aa"
         ]
 
 
@@ -312,13 +309,13 @@ def test_the_commit_needs_a_green_push_run_with_a_green_quality_verdict(
     [(None, True), ("0.2.0", False)],
     ids=["at the version", "at another version"],
 )
-def test_the_build_must_hold_exactly_the_three_wheels_at_the_version(
+def test_the_build_must_hold_exactly_the_client_wheel_at_the_version(
     tmp_path, release, built_version, passes
 ):
     _wheels_in(tmp_path, release, built_version)
 
     result = _run_step(
-        "Refuse unless the build holds exactly the three wheels at the version",
+        "Refuse unless the build holds exactly the client wheel at the version",
         tmp_path,
         release,
     )
@@ -330,7 +327,7 @@ def test_the_build_must_hold_exactly_the_three_wheels_at_the_version(
 def test_a_missing_or_extra_wheel_is_refused(tmp_path, release):
     wheels = _wheels_in(tmp_path, release)
     (tmp_path / "dist" / next(iter(wheels))).unlink()
-    step = "Refuse unless the build holds exactly the three wheels at the version"
+    step = "Refuse unless the build holds exactly the client wheel at the version"
 
     missing = _run_step(step, tmp_path, release)
     _wheels_in(tmp_path, release)
@@ -443,11 +440,11 @@ def test_the_published_notes_without_a_migration_section_are_the_install_lines_o
     assert arguments[-2:] == ["--notes", "\n".join(release.install_lines)]
 
 
-def test_the_release_is_created_on_the_verified_tag_with_the_three_wheels(tmp_path, release):
+def test_the_release_is_created_on_the_verified_tag_with_the_client_wheel(tmp_path, release):
     arguments = _publish("", tmp_path, release)
 
     assert arguments[:3] == ["release", "create", f"v{release.version}"]
-    assert len([argument for argument in arguments if argument.startswith("dist/")]) == 3
+    assert len([argument for argument in arguments if argument.startswith("dist/")]) == 1
     assert "--verify-tag" in arguments
     assert "--generate-notes" in arguments
 

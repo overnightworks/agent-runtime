@@ -3,15 +3,8 @@ mandatory_jobs = [
   "test (3.14)",
   "test (3.15)",
   "checks",
-  "keycloak-token-shapes",
   "dependency-floors",
 ]
-
-[[gate.loosened]]
-what = 'import contract "inside the core, only the routers import a provider package; the machinery below them never does" changes source_modules'
-item = "#674"
-date = 2026-11-01
-reason = "agent_runtime.events moved into agent_runtime_client.turn_events, so it leaves the core contract's source_modules; the module no longer exists in the core"
 
 [[gate.loosened]]
 what = 'mandatory job "test (3.12)" removed'
@@ -25,40 +18,55 @@ item = "#566"
 date = 2026-11-02
 reason = "the operator's ruling „ich will das alles auf 3.14“ (quality#38): the wheels' floor is Python 3.14, so CI no longer tests Python 3.13"
 
+[[gate.loosened]]
+what = 'mandatory job "keycloak-token-shapes" removed'
+item = "#697"
+date = 2026-11-06
+reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; the agent service and its Keycloak token tests are deleted, so the job has nothing to run"
+
+[[gate.loosened]]
+what = 'import contract "agent_runtime_service reaches back into no host" removed'
+item = "#697"
+date = 2026-11-06
+reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; agent_runtime_service is deleted, so the contract has no source module"
+
+[[gate.loosened]]
+what = 'import contract "agent_runtime_service builds on agent_runtime, which builds on agent_runtime_client, never the reverse" removed'
+item = "#697"
+date = 2026-11-06
+reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; agent_runtime_service and agent_runtime are deleted, so no layers remain to order"
+
+[[gate.loosened]]
+what = 'import contract "agent_runtime and agent_runtime_client reach back into no host" removed'
+item = "#697"
+date = 2026-11-06
+reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; replaced by a contract that names the client alone, because agent_runtime is deleted"
+
+[[gate.loosened]]
+what = 'import contract "inside the core, only the routers import a provider package; the machinery below them never does" removed'
+item = "#697"
+date = 2026-11-06
+reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; agent_runtime is deleted, so its routers and the machinery below them are gone"
+
+[[gate.loosened]]
+what = 'import contract "only the service imports a web framework" removed'
+item = "#697"
+date = 2026-11-06
+reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; replaced by a contract that keeps web frameworks out of the client, because the service is deleted"
+
+[[gate.loosened]]
+what = 'import contract "the core imports neither agent_runtime_client.mcp_server nor its extras" removed'
+item = "#697"
+date = 2026-11-06
+reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; agent_runtime is deleted, so the core has no imports to keep out"
+
+[[gate.loosened]]
+what = 'import-linter changes root_packages'
+item = "#697"
+date = 2026-11-06
+reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; root_packages shrinks to agent_runtime_client because agent_runtime and agent_runtime_service are deleted"
+
 [secrets]
 allow = [
   { rule = "generic-api-key", file = ".github/workflows/ci.yml", secret_sha256 = "97c7929ce592d4b4ff33087e015faa6948c7ecee9b1e54c5eee600128be26027", reason = "wheel SHA-256 digest in a CI env value (commit d0a85fbd), not a key" },
 ]
-
-[[root.allow]]
-entry = "packages/"
-reason = "the uv workspace's member distributions"
-
-[[root.allow]]
-entry = "conftest.py"
-reason = "the pytest root plugin that loads the suite fixtures for the whole tree"
-
-[[layout.allow]]
-path = "tests/test_anchored_support.py"
-rule = "test-layout"
-reason = "tests the test child owner tests/support/anchored_support.py"
-
-[[layout.allow]]
-path = "tests/test_zombie_anchor.py"
-rule = "test-layout"
-reason = "tests the session zombie anchor in tests/support/anchored_support.py"
-
-[[layout.allow]]
-path = "tests/test_bounds.py"
-rule = "test-layout"
-reason = "tests the wait bounds in tests/support/bounds.py"
-
-[[layout.allow]]
-path = "tests/test_mcp_app_fake_held_response.py"
-rule = "test-layout"
-reason = "tests the fake app in tests/support/mcp_app_fake.py"
-
-[[layout.allow]]
-path = "tests/test_async_claude_spawn_seam.py"
-rule = "test-layout"
-reason = "tests the async Claude child seam in tests/support/provider_test_support.py and guards that it stays the only door"
