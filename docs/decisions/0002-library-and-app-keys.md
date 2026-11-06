@@ -5,14 +5,14 @@
   [#672](https://github.com/overnightworks/agent-runtime/issues/672): every app moves
   directly to LiteLLM, and agent-runtime ships the client (O1 a: each app holds its own
   LiteLLM key).
-- **Amends:** [0001](0001-agent-service.md).
+- **Amends:** the record 0001 of the agent service, replaced by [0003](0003-client-only.md).
 
 ## Decision
 
 agent-runtime becomes a library. An app runs its agent turns through
 `agent_runtime_client.backend.gateway.GatewayBackend`, which posts one chat completion to
 the inference gateway with the app's own key. The service and the CLI route stop being the
-way an app starts a run; 0001 keeps its history.
+way an app starts a run; the record of the service is gone with it (see [0003](0003-client-only.md)).
 
 Each app holds its own LiteLLM key, given by the gateway's operator with its own budget and
 limit. Model vendors stay reachable only through the gateway, so the key reaches nothing
