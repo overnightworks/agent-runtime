@@ -121,7 +121,7 @@ unchanged; an `api_group` the person lacks is `refused: not_enabled`. Proved by
 **The key** is read per turn after admission: one printable ASCII line of at most 1024 bytes,
 opaque whatever its prefix; any other content is `failed: provider_unavailable`. Proved by
 `test_an_unusable_key_file_is_provider_unavailable_and_sends_nothing` and
-`test_a_key_with_any_prefix_is_sent_as_it_is`. No log record and no exception frame holds it
+`test_a_key_with_any_prefix_is_sent_as_it_is`. No log record holds it
 (`test_debug_logging_writes_the_key_into_no_record`).
 
 **The deadline.** `request.max_duration_seconds` is one deadline around the whole turn, every

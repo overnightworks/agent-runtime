@@ -71,7 +71,7 @@ malformed value fails loud.
 **Trust.**
 
 - *An app holds its own gateway key.* The key has its own budget and limit, sits in a file the
-  configuration names, is read per turn and is written to no log or exception frame.
+  configuration names, is read per turn and is written to no log record.
 - *The app owns its tools and their effects.* A tool's effect class defaults to
   side-effecting. It never reaches a model; the person front shows MCP clients only whether a
   tool is read-only, as `readOnlyHint`.
@@ -96,7 +96,8 @@ size and clone ratchets, and coverage over the whole suite.
 - The client imports no web framework: the person front is plain ASGI, so a host keeps its own
   framework and its own authentication gate.
 - Tool handlers run in the app's process, so a handler sees the app's own state and the client
-  never moves a tool's data anywhere else.
+  never runs a tool anywhere else. What a tool returns still travels to the gateway and the
+  provider as part of the conversation.
 - The key is read per turn, so a rotated key needs no restart.
 - A turn's `person` is always the verified person and the gateway sees a fingerprint, so one
   person has one budget across text and pictures.
