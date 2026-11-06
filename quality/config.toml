@@ -6,66 +6,6 @@ mandatory_jobs = [
   "dependency-floors",
 ]
 
-[[gate.loosened]]
-what = 'mandatory job "test (3.12)" removed'
-item = "#566"
-date = 2026-11-02
-reason = "the operator's ruling „ich will das alles auf 3.14“ (quality#38): the wheels' floor is Python 3.14, so CI no longer tests Python 3.12"
-
-[[gate.loosened]]
-what = 'mandatory job "test (3.13)" removed'
-item = "#566"
-date = 2026-11-02
-reason = "the operator's ruling „ich will das alles auf 3.14“ (quality#38): the wheels' floor is Python 3.14, so CI no longer tests Python 3.13"
-
-[[gate.loosened]]
-what = 'mandatory job "keycloak-token-shapes" removed'
-item = "#697"
-date = 2026-11-06
-reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; the agent service and its Keycloak token tests are deleted, so the job has nothing to run"
-
-[[gate.loosened]]
-what = 'import contract "agent_runtime_service reaches back into no host" removed'
-item = "#697"
-date = 2026-11-06
-reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; agent_runtime_service is deleted, so the contract has no source module"
-
-[[gate.loosened]]
-what = 'import contract "agent_runtime_service builds on agent_runtime, which builds on agent_runtime_client, never the reverse" removed'
-item = "#697"
-date = 2026-11-06
-reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; agent_runtime_service and agent_runtime are deleted, so no layers remain to order"
-
-[[gate.loosened]]
-what = 'import contract "agent_runtime and agent_runtime_client reach back into no host" removed'
-item = "#697"
-date = 2026-11-06
-reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; replaced by a contract that names the client alone, because agent_runtime is deleted"
-
-[[gate.loosened]]
-what = 'import contract "inside the core, only the routers import a provider package; the machinery below them never does" removed'
-item = "#697"
-date = 2026-11-06
-reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; agent_runtime is deleted, so its routers and the machinery below them are gone"
-
-[[gate.loosened]]
-what = 'import contract "only the service imports a web framework" removed'
-item = "#697"
-date = 2026-11-06
-reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; replaced by a contract that keeps web frameworks out of the client, because the service is deleted"
-
-[[gate.loosened]]
-what = 'import contract "the core imports neither agent_runtime_client.mcp_server nor its extras" removed'
-item = "#697"
-date = 2026-11-06
-reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; agent_runtime is deleted, so the core has no imports to keep out"
-
-[[gate.loosened]]
-what = 'import-linter changes root_packages'
-item = "#697"
-date = 2026-11-06
-reason = "the operator's ruling of 06.11.2026 on #697 (AR-R3 folding AR-R4, #749): agent-runtime ships only the client; root_packages shrinks to agent_runtime_client because agent_runtime and agent_runtime_service are deleted"
-
 [secrets]
 allow = [
   { rule = "generic-api-key", file = ".github/workflows/ci.yml", secret_sha256 = "97c7929ce592d4b4ff33087e015faa6948c7ecee9b1e54c5eee600128be26027", reason = "wheel SHA-256 digest in a CI env value (commit d0a85fbd), not a key" },
