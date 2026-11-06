@@ -30,7 +30,7 @@ release rules.
 
 ## Checks
 
-`AGENTS.md` lists the commands (sync, suite, ruff, `lint-imports`, build) and what CI
+`AGENTS.md` lists the commands (sync, suite, ruff, the quality gate's hygiene, build) and what CI
 adds. The suite runs without a live provider.
 
 ## Licence

@@ -5,8 +5,8 @@
 # __init__ included) imports agent_runtime_client.mcp_server, PyJWT or
 # cryptography. The client imports no web framework; its MCP server is plain
 # ASGI.
-# CI runs `lint-imports` over the real import graph, so an indirect chain is
-# caught as well as a direct import.
+# The gate's `import-contract` rule (`quality hygiene .`) checks them over the
+# real import graph, so an indirect chain is caught as well as a direct import.
 [importlinter]
 include_external_packages = True
 root_packages =
