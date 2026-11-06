@@ -13,7 +13,6 @@ the input: a body, a header or a result may carry a credential.
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
@@ -33,17 +32,12 @@ from agent_runtime_client.turn import (
 )
 
 JSON_MEDIA_TYPE: Final = "application/json"
-EVENT_STREAM_MEDIA_TYPE: Final = "text/event-stream"
 MCP_ENDPOINT_PATH: Final = "/mcp"
 PROTOCOL_VERSION_HEADER: Final = "MCP-Protocol-Version"
-SESSION_ID_HEADER: Final = "Mcp-Session-Id"
-_SESSION_ID: Final = re.compile(r"[\x21-\x7e]+")
 _ASSUMED_PROTOCOL_VERSION: Final = "2025-03-26"
 _SERVER_NAME: Final = "agent-service"
 _SERVER_VERSION: Final = "1"
 _JSON_RPC_VERSION: Final = "2.0"
-NON_TEXT_BLOCK_MESSAGE: Final = "the tool returned content that is not text"
-_TEXT_BLOCK_SEPARATOR: Final = "\n"
 
 
 class ProtocolVersion(StrEnum):
@@ -72,12 +66,7 @@ class WireRefusal(StrEnum):
     TOO_LARGE = "too_large"
     BATCH = "batch"
     NOT_A_MESSAGE = "not_a_message"
-    UNEXPECTED_MESSAGE = "unexpected_message"
     INVALID_PAYLOAD = "invalid_payload"
-    NOT_JSON_ANSWER = "not_json_answer"
-    NOT_ACKNOWLEDGED = "not_acknowledged"
-    UNSUPPORTED_VERSION = "unsupported_version"
-    INVALID_SESSION_ID = "invalid_session_id"
 
 
 class McpWireError(Exception):
@@ -160,7 +149,7 @@ def _object_without_duplicate_members(members: list[tuple[str, Any]]) -> dict[st
     return document
 
 
-def read_strict_json(text: str) -> Any:
+def _read_strict_json(text: str) -> Any:
     """The one strict JSON reader: no repeated member, no ``NaN`` or infinity.
 
     The only exception that leaves is ``ValueError``; nesting past the recursion limit is
@@ -190,7 +179,7 @@ def parse_message(body: bytes) -> JsonRpcMessage:
     if len(body) > MAX_EVENT_BYTES:
         _refuse(WireRefusal.TOO_LARGE)
     try:
-        document = read_strict_json(body.decode("utf-8"))
+        document = _read_strict_json(body.decode("utf-8"))
     except ValueError:
         _refuse(WireRefusal.MALFORMED_JSON)
     if isinstance(document, list):
@@ -225,45 +214,11 @@ def answer_for(reply: Reply | None) -> HttpAnswer:
     return HttpAnswer(HTTPStatus.OK, JSON_MEDIA_TYPE, encode_message(reply))
 
 
-def require_acknowledgement(status: int, body: bytes) -> None:
-    if (status, body) != (ACKNOWLEDGEMENT.status, ACKNOWLEDGEMENT.body):
-        _refuse(WireRefusal.NOT_ACKNOWLEDGED)
-
-
-def require_json_answer(content_type: str | None) -> None:
-    """The answer to a request is only ``application/json``, never an event stream."""
-    media_type = (content_type or "").split(";", 1)[0].strip().lower()
-    if media_type != JSON_MEDIA_TYPE:
-        _refuse(WireRefusal.NOT_JSON_ANSWER)
-
-
-def read_answer(content_type: str | None, body: bytes) -> Reply:
-    require_json_answer(content_type)
-    message = parse_message(body)
-    if not isinstance(message, JsonRpcResponse | JsonRpcError):
-        _refuse(WireRefusal.UNEXPECTED_MESSAGE)
-    return message
-
-
 def negotiate_protocol_version(requested: str) -> ProtocolVersion:
     """A requested version inside the set is kept; any other gets the latest one."""
     if requested in SUPPORTED_PROTOCOL_VERSIONS:
         return ProtocolVersion(requested)
     return LATEST_PROTOCOL_VERSION
-
-
-def require_supported_version(offered: str) -> ProtocolVersion:
-    """The client's check of the version a server answered ``initialize`` with."""
-    if offered not in SUPPORTED_PROTOCOL_VERSIONS:
-        _refuse(WireRefusal.UNSUPPORTED_VERSION)
-    return ProtocolVersion(offered)
-
-
-def require_session_id(value: str) -> str:
-    """The client's check of a session id before it is echoed: visible ASCII, never empty."""
-    if _SESSION_ID.fullmatch(value) is None:
-        _refuse(WireRefusal.INVALID_SESSION_ID)
-    return value
 
 
 def protocol_header_status(header_value: str | None) -> HTTPStatus:
@@ -272,17 +227,6 @@ def protocol_header_status(header_value: str | None) -> HTTPStatus:
     if effective in SUPPORTED_PROTOCOL_VERSIONS:
         return HTTPStatus.OK
     return HTTPStatus.BAD_REQUEST
-
-
-def request_headers(negotiated: ProtocolVersion | None) -> dict[str, str]:
-    """The client's headers; ``initialize`` is the one request sent before a version exists."""
-    headers = {
-        "Content-Type": JSON_MEDIA_TYPE,
-        "Accept": f"{JSON_MEDIA_TYPE}, {EVENT_STREAM_MEDIA_TYPE}",
-    }
-    if negotiated is not None:
-        headers[PROTOCOL_VERSION_HEADER] = negotiated.value
-    return headers
 
 
 def read_payload[Payload: _Model](
@@ -345,14 +289,9 @@ class ToolDefinition(_Tolerant):
 
 
 class AnnotatedToolDefinition(ToolDefinition):
-    """A tool this side lists with its hint; an upstream's ``ToolDefinition`` never keeps one."""
+    """A tool this side lists with its read-only hint."""
 
     annotations: ToolAnnotations | None = None
-
-
-class ListToolsResult(_Tolerant):
-    tools: _JsonArray[ToolDefinition]
-    next_cursor: UnicodeText | None = None
 
 
 def error_response(request_id: RequestId, code: JsonRpcErrorCode) -> JsonRpcError:
@@ -389,15 +328,6 @@ class _OtherBlock(_Tolerant):
 class _CallToolResult(_Tolerant):
     content: _JsonArray[Annotated[_TextBlock | _OtherBlock, Field(union_mode="left_to_right")]]
     is_error: bool = False
-
-
-def read_tool_outcome(result: Mapping[str, Any]) -> ToolOutcome:
-    """What a model is shown of a ``tools/call`` result: its text blocks, joined."""
-    called = read_payload(_CallToolResult, result)
-    if not all(isinstance(block, _TextBlock) for block in called.content):
-        return ToolOutcome(NON_TEXT_BLOCK_MESSAGE, is_error=True)
-    texts = (block.text for block in called.content if isinstance(block, _TextBlock))
-    return ToolOutcome(_TEXT_BLOCK_SEPARATOR.join(texts), called.is_error)
 
 
 def tool_result_response(request_id: RequestId, outcome: ToolOutcome) -> JsonRpcResponse:
@@ -502,7 +432,7 @@ def carries_signature_of(token: str, data: bytes) -> bool:
     """Whether ``data`` carries ``token``, whole or as its signature segment.
 
     One needle is enough: every whole token contains its signature segment, the part
-    after the last ``.``. Bodies either front writes are ``json.dumps`` output, which
+    after the last ``.``. Bodies the person front writes are ``json.dumps`` output, which
     writes base64url characters and ``.`` verbatim, and tool results are asked after
     decoding. A token split across strings, base64-encoded or reversed is not
     detected: this stops reflection, not an app that encodes its own bearer.

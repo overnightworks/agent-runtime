@@ -63,7 +63,7 @@ class FailureCode(StrEnum):
 
 
 class RejectionCode(StrEnum):
-    """Why a turn is refused before it starts."""
+    """Why a turn is refused."""
 
     NOT_ENABLED = "not_enabled"
     BUSY = "busy"
@@ -81,8 +81,8 @@ class RejectionCode(StrEnum):
 def refuse_non_json_constant(constant: str) -> object:
     """The one decider of NaN and Infinity in text being parsed: JSON has no word for them.
 
-    Passed as ``parse_constant`` by every reader of untrusted JSON text, the
-    MCP request body included.
+    Passed as ``parse_constant`` by the MCP request body reader,
+    ``mcp_wire.parse_message``.
     """
     raise ValueError(f"{constant} is not a JSON value")
 
