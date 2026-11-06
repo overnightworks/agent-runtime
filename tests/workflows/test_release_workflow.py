@@ -384,6 +384,18 @@ def _wheel_list_output(tmp_path: Path, release: _Release) -> tuple[dict[str, byt
     return wheels, (tmp_path / "github_output").read_text(encoding="utf-8")
 
 
+def test_a_failing_sha256sum_fails_the_wheel_list_step(tmp_path, release):
+    _wheels_in(tmp_path, release)
+    failing = tmp_path / "bin" / "sha256sum"
+    failing.parent.mkdir(exist_ok=True)
+    failing.write_text("#!/bin/bash\nexit 1\n", encoding="utf-8")
+    failing.chmod(0o755)
+
+    result = _run_step("List the wheels with their hashes", tmp_path, release)
+
+    assert result.returncode != 0
+
+
 def test_the_release_page_lists_each_wheel_with_its_url_and_sha256(tmp_path, release):
     wheels, install = _wheel_list_output(tmp_path, release)
     for name, content in wheels.items():
@@ -508,6 +520,10 @@ def test_the_tag_is_created_before_the_release_and_a_failed_publication_is_retri
     ]
 
 
-@pytest.mark.parametrize("step_name", _run_names())
-def test_a_release_script_never_interpolates_an_expression(step_name):
-    assert "${{" not in _run_script(step_name)
+def test_a_release_run_value_never_interpolates_an_expression():
+    run_values = re.findall(
+        r"^ +run: (.*(?:\n(?: {10}.*|)$)*)", _WORKFLOW.read_text(encoding="utf-8"), re.MULTILINE
+    )
+
+    assert run_values
+    assert not [value for value in run_values if "${{" in value]

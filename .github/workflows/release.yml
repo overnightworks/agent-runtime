@@ -139,7 +139,8 @@ jobs:
             for wheel in dist/*.whl; do
               file="$(basename "$wheel")"
               name="${file%%-*}"
-              hash="$(sha256sum "$wheel" | cut -d ' ' -f 1)"
+              listing="$(sha256sum "$wheel")"
+              hash="${listing%% *}"
               echo "${name//_/-} @ https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/${file}#sha256=${hash}"
             done
             echo '```'
