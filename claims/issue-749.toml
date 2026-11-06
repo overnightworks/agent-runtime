@@ -1,0 +1,8 @@
+claim_id = "5c243be0c18441bf8ae31badffebb23b"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "94cbab7a58f1b5f2350fcac361dd59ef9d2960ea"
+branch = "claude/issue-749-ar-r3-the-service-and-the-core-leave-and"
+scope = [".github", ".importlinter", "AGENTS.md", "README.md", "conftest.py", "docs", "packages", "pyproject.toml", "quality", "sonar-project.properties", "src", "tests", "uv.lock"]
+opened_commit = "3de13efac276f3c50add4b40453b56dda18106a0"
+whole_reason = "Removing the workspace members breaks the lock, the import contracts, a mandatory job, the release wheel list and the root suite in one stroke, and the root cannot be core and client at once, so the deletion, the flattening and their closure land together."
