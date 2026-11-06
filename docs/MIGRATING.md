@@ -11,6 +11,7 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | `overnightworks-agent-runtime` (the core, import `agent_runtime`) and `overnightworks-agent-runtime-service` (import `agent_runtime_service`) were built from the repository, and the core routed Grok. | They are gone, Grok with them, and are not released again. A host that still installs them stays on the 0.21.0 release wheels or moves to the client's gateway backend on LiteLLM. ([wire.md](wire.md#the-gateway-backend)) |
 | The client wheel was `overnightworks_agent_runtime_client-<version>-py3-none-any.whl`. | The wheel name, the distribution name and the import name `agent_runtime_client` are unchanged. |
 | `StreamEvent.correlation_id` was an optional field of every turn event, excluded from serialization. | It is gone: the core was the only code that set or read it, so a host that passes `correlation_id=` to an event constructor drops the argument. |
+| The client required `pydantic>=2.7,<3`. | It requires `pydantic>=2.12,<3`, the lowest pydantic with a CPython 3.14 wheel; a host on an older pydantic upgrades it with the pin. |
 
 ## Migrating to 0.21.0
 

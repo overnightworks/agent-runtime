@@ -1,6 +1,6 @@
 """The SSE framing of a run's events, owned by ``agent_runtime_client.sse``.
 
-These tests pin the A0b sub-ruling of decision record 0001: one frame per
+These tests pin one frame per
 event, decoded the same however the bytes arrive, and the first frame or
 event off the contract named once, with nothing decoded after it.
 """

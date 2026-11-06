@@ -1,6 +1,6 @@
 """The agent service's streamed run contract, owned by ``agent_runtime_client``.
 
-These tests pin decision record 0001, H6 and its A0b sub-ruling: the closed
+These tests pin the closed
 wire union, the run-stream rules, and the tool effect class that decides how
 a cut-short run ends.
 """

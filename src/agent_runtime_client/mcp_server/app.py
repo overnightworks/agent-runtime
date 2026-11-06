@@ -6,7 +6,7 @@ a redirect or a middleware. It answers the first failing head check with an empt
 this order: Host, Origin, authorization, path, method, body size. It is stateless: each handler
 gets exactly the claims of its own request's capability. The capability proves the signed run
 id and nothing about the run being live, so the handler's ownership check stays mandatory
-(decision record 0001, O4 and H3).
+(decision record 0003).
 
 Once a capability is verified, every body written for that request is asked
 ``carries_signature_of(token, body)``; a hit writes an empty 500 instead. A handler failure

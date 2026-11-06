@@ -1,4 +1,4 @@
-"""The JSON-only MCP wire profile (decision record 0001, HD1): pure rules, driven directly."""
+"""The JSON-only MCP wire profile: pure rules, driven directly."""
 
 from __future__ import annotations
 

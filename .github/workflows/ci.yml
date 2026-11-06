@@ -78,7 +78,7 @@ jobs:
           python3 -I -m zipfile -e dist/overnightworks_agent_runtime_client-*-py3-none-any.whl "$licence"
           cmp LICENSE "$licence"/overnightworks_agent_runtime_client-*.dist-info/licenses/LICENSE
 
-      - name: The client wheel imports alone, outside the workspace
+      - name: The client wheel imports alone, without its extras
         run: |
           proof="$(mktemp -d "$RUNNER_TEMP/client-only.XXXXXX")"
           uv venv "$proof/venv"
@@ -114,8 +114,6 @@ jobs:
           uv pip install --python "$proof/venv/bin/python" "$client_wheel[mcp-server]"
           cd "$proof"
           "$proof/venv/bin/python" -I -c '
-          import importlib.util
-
           import agent_runtime_client.mcp_server
 
           print("imported", agent_runtime_client.mcp_server.__name__)
@@ -129,8 +127,6 @@ jobs:
           uv pip install --python "$proof/venv/bin/python" "$client_wheel[backend]"
           cd "$proof"
           "$proof/venv/bin/python" -I -c '
-          import importlib.util
-
           import agent_runtime_client.backend.fake_gateway
           import agent_runtime_client.backend.gateway
 

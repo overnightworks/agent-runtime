@@ -9,7 +9,7 @@ reference; `agent_runtime_client.wire` owns the wire (its stream rules sit in
 turn's vocabulary that the wire composes, `agent_runtime_client.agents` the agent
 file, `agent_runtime_client.tools` the tool contract and `agent_runtime_client.mcp_server` the
 tool endpoint, and their docstrings are exact where this file is short. The
-decision record [0001](decisions/0001-agent-service.md) owns the rulings behind
+decision record [0003](decisions/0003-client-only.md) owns the rulings behind
 them. Install the client as [host.md](host.md) describes; who may run what is the
 operator's configuration ([operations.md](operations.md)).
 
@@ -493,7 +493,7 @@ or the app.
 
 **What the CLI writes.** Every subscription run passes switches that limit what the
 CLI keeps and sends ([host.md](host.md), "The child environment is closed").
-[Decision record 0001](decisions/0001-agent-service.md) measured the CLI's own
+A measurement of the CLI's own
 writes with `--no-session-persistence` and without the telemetry switches: without
 a login (A1b-0a c5), which also found an empty `/tmp/cc-socks-<uid>/` outside the
 home, and with a login (A1b-0b1 c3), which lists the home only. A turn with the

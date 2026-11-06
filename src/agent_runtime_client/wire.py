@@ -1,7 +1,7 @@
 """The run contract between the agent service and its clients.
 
 This module is the one owner of what travels between a client and the
-service (decision record 0001, H6): the request that starts a run, the run's
+service: the request that starts a run, the run's
 event stream as a closed union discriminated on ``type`` with every event
 carrying the protocol version, the run id and its sequence number, and the
 typed body the service answers with when it refuses a request, the status

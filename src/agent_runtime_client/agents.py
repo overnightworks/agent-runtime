@@ -2,7 +2,7 @@
 
 An agent file is Claude Code's subagent format (YAML front matter between two
 ``---`` lines, read as YAML 1.2 by ruamel.yaml, then the prompt as Markdown) with one
-extra key, ``appRoles`` (decision record 0001, H9), and two required ones: ``model``, a
+extra key, ``appRoles`` (decision record 0003), and two required ones: ``model``, a
 ``text/<model>`` name for a text agent, and ``maxDurationSeconds``. ``maxToolCalls`` is required
 exactly when ``tools`` is not empty. ``picture: {size: <width>x<height>}`` makes a picture
 agent: its ``model`` is an ``image/<model>`` name and it selects no tools. ``offered_to`` is a

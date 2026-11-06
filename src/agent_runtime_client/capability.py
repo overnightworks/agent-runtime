@@ -1,8 +1,8 @@
 """The run capability: the claims the service signs and an app's MCP server verifies.
 
-The service mints one capability per run (decision record 0001, H3 and the A1a4
-ruling) and hands it to the runner as a bearer token of type
-``agent-capability-2+jwt``. ``agent_runtime_client.mcp_server`` verifies against this module:
+The service mints one capability per run (decision record 0003) and hands it to the
+runner as a bearer token of type ``agent-capability-2+jwt``.
+``agent_runtime_client.mcp_server`` verifies against this module:
 it pins RS256 itself, trusts the one configured public key, checks the token type, the
 issuer, the audience (its own ``McpOrigin``), the length bound and these claims,
 refuses a token issued in the future, and checks each call's tool against

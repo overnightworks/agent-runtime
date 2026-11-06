@@ -2,7 +2,7 @@
 
 The profile is POST only, answered in ``application/json`` only, carries
 ``MCP-Protocol-Version`` on every request after ``initialize`` and answers a
-notification with 202 and an empty body (decision record 0001, HD1). This
+notification with 202 and an empty body. This
 module holds the pure rules: parse, encode, negotiate, decide a header, decide
 a content type. It opens no socket and reads no clock or environment, so the
 relay (towards the CLI) and the upstream client (towards the app) both build
