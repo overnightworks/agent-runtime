@@ -72,7 +72,9 @@ value fails loud.
   Model providers stay reachable only through the gateway.
 - *The app owns its tools and their effects.* Tools run in the app, and the app
   alone decides what a call may do. A tool's effect class, `read_only` or
-  `side_effecting`, defaults to side-effecting and never reaches a model.
+  `side_effecting`, defaults to side-effecting. The class itself never reaches a
+  model; the person front shows MCP clients only whether a tool is read-only, as
+  `readOnlyHint`.
 - *An agent file is read strictly.* It is Claude Code's subagent format, YAML front
   matter between `---` lines with the Markdown body as the prompt, and each
   front-matter field is validated by its own type: a limit must be an integer, and a

@@ -129,11 +129,6 @@ def _calls(tmp_path: Path) -> list[list[str]]:
     return [call.split(_FIELD)[:-1] for call in recorded.split(_CALL)[:-1]]
 
 
-def _output_value(tmp_path: Path, name: str) -> str:
-    text = (tmp_path / "github_output").read_text(encoding="utf-8")
-    return text.removeprefix(f"{name}=").removesuffix("\n")
-
-
 def _commit_in(tmp_path: Path) -> str:
     identity = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t"}
     environment = {**identity, "GIT_COMMITTER_EMAIL": "t@t", "PATH": "/usr/bin:/bin"}
