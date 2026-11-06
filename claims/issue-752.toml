@@ -1,0 +1,8 @@
+claim_id = "82ebec53c6b44730bdfe61a04bb5ab96"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "ed5394b05790baee65e0890e05c68a3396ee5b62"
+branch = "claude/issue-752-the-gate-alone-proves-the-import-contrac"
+scope = [".github/workflows/ci.yml", ".importlinter", "AGENTS.md", "README.md", "pyproject.toml", "quality/config.toml", "tests/workflows/test_ci_workflow.py", "uv.lock"]
+opened_commit = "b161b8a8172668de020f4358ef7e4fd5788b0073"
+whole_reason = "One duplicate check spans its CI step, its pin and the three texts that name it; removing any part alone leaves a dangling mention or a dead dependency. The inherited loosening entries sit in the same gate configuration."
