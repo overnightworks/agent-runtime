@@ -2,12 +2,12 @@
 
 ## What it is
 
-The one interface through which every app runs its agents. Every app writes its agents as
-files in the subagent format of Claude Code, declares its tools in code with an effect class,
-read-only or side-effecting, and runs a turn that comes back as the same typed events and ends
-short of its answer with the same stop codes. The turn reaches the app's LiteLLM gateway with
-the app's own key, in the gateway's OpenAI-compatible dialect: chat completions for text,
-image generations for pictures. The same interface serves the app's tools to a signed-in
+The one interface through which every app runs its agents. Every app writes its agents as files in
+the subagent format of Claude Code, declares its tools in code with an effect class, read-only or
+side-effecting, and runs a turn that comes back as the same typed events and, when it cannot
+finish, stops the same way: refused, failed or cancelled. The turn reaches the app's LiteLLM
+gateway with the app's own key, in the gateway's OpenAI-compatible dialect: chat completions for
+text, image generations for pictures. The same interface serves the app's tools to a signed-in
 person's agent over MCP.
 
 ## Why
