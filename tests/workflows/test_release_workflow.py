@@ -325,7 +325,7 @@ def test_a_missing_or_extra_wheel_is_refused(tmp_path, release):
 
 def _wheel_list_output(tmp_path: Path, release: _Release) -> tuple[dict[str, bytes], str]:
     wheels = _wheels_in(tmp_path, release)
-    result = _run_step("List the wheels with their hashes", tmp_path, release)
+    result = _run_step("List the wheel with its hash", tmp_path, release)
     assert result.returncode == 0
     return wheels, (tmp_path / "github_output").read_text(encoding="utf-8")
 
@@ -337,7 +337,7 @@ def test_a_failing_sha256sum_fails_the_wheel_list_step(tmp_path, release):
     failing.write_text("#!/bin/bash\nexit 1\n", encoding="utf-8")
     failing.chmod(0o755)
 
-    result = _run_step("List the wheels with their hashes", tmp_path, release)
+    result = _run_step("List the wheel with its hash", tmp_path, release)
 
     assert result.returncode != 0
 
@@ -360,7 +360,7 @@ def test_the_wheel_list_is_written_in_the_multiline_output_form(tmp_path, releas
     assert lines[-1] == delimiter
 
 
-_PUBLISH = "Publish the release on the tag with the wheels the gate built"
+_PUBLISH = "Publish the release on the tag with the wheel the gate built"
 _TAG = "Create the tag at the gated commit"
 
 

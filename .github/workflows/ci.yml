@@ -89,8 +89,7 @@ jobs:
 
           import agent_runtime_client
 
-          assert importlib.util.find_spec("jwt") is None, "the mcp-server extra leaked in"
-          assert importlib.util.find_spec("cryptography") is None, "cryptography leaked in"
+          assert importlib.util.find_spec("anyio") is None, "the mcp-server extra leaked in"
           for module in pkgutil.walk_packages(agent_runtime_client.__path__, "agent_runtime_client."):
               if module.name == "agent_runtime_client.mcp_server" or module.name.startswith(
                   "agent_runtime_client.mcp_server."
