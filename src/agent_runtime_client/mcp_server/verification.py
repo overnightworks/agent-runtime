@@ -3,8 +3,8 @@
 The service signs the capability (``agent_runtime_client.capability`` owns its format) and an app
 trusts one PEM public key exported from the service's signing key. The capability is valid
 until ``exp`` and is never revoked, so a verified capability proves the signed run id and
-nothing about the run being live: the app's ownership check stays mandatory. Nothing here reads the environment, a file or
-the network.
+nothing about the run being live: the app's ownership check stays mandatory.
+Nothing here reads the environment, a file or the network.
 """
 
 from __future__ import annotations
