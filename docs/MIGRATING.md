@@ -8,6 +8,7 @@ Read by a host bumping its pin; each release that breaks a host has one section,
 | --- | --- |
 | A person-front tool was a hand-written `PersonTool`. | `agent_runtime_client.tools.agent_tool(*, name, effect)` marks a route (FastAPI's `openapi_extra`), and `agent_runtime_client.mcp_server.route_tools(openapi, app, *, mark_route)` returns `RouteTools(tools, marks)`: the `PersonTool`s of the marked routes and the host's own marks, which `mark_route` builds from the upper-case method and the template. It raises `RouteProfileError` (a `ValueError`) for a route outside the profile and for a template that overlaps another operation of its method. `app` is the host's whole ASGI application. The `mcp-server` extra now needs `anyio>=4.12,<5`. ([wire.md](wire.md#a-marked-route-as-a-tool)) |
 | The core `overnightworks-agent-runtime` and the service `overnightworks-agent-runtime-service` were released with the client in lockstep. | 0.21.0 is the last release of the core and the service. From the next release the repository ships only `overnightworks-agent-runtime-client`. A host that installs the core or the service moves to the client's gateway backend on LiteLLM. ([wire.md](wire.md#the-gateway-backend)) |
+| The core's `api` extra pinned `anthropic>=0.26,<2`. | The extra pins `anthropic>=0.26,<3`, so a fresh install of `overnightworks-agent-runtime[api]` resolves to the anthropic 2.x SDK. A host that stays on 1.x pins `anthropic>=0.26,<2` itself. |
 
 ## Migrating to 0.20.0
 
