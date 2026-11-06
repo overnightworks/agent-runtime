@@ -92,7 +92,7 @@ description, arguments and a `ToolEffect`, `read_only` or `side_effecting`. The 
 host (`GatewayBackend` reads it for `after_side_effect`) and never reaches a prompt; it defaults
 to side-effecting, because a tool nobody classified must be assumed to change state. Proved by
 `test_the_request_carries_only_model_messages_user_and_tools_without_the_effect` in
-`tests/test_backend_gateway.py`.
+`tests/test_backend_gateway_tools.py`.
 
 `HandTool` is a declaration with the async handler `(Principal, JsonObject) -> ToolOutcome` that
 serves it in the app's own process; `ToolOutcome` is `content` and `is_error`. The module
