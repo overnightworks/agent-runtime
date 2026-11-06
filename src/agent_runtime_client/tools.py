@@ -37,7 +37,7 @@ class ToolEffect(StrEnum):
 
     The effect class decides how a cut-short run ends: once a side-effecting
     call was emitted, a cancel or a disconnect is reported as ``failed:
-    interrupted`` rather than ``cancelled`` (decision record 0003).
+    interrupted`` rather than ``cancelled``.
     """
 
     READ_ONLY = "read_only"

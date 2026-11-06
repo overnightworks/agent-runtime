@@ -5,8 +5,7 @@ and everything under ``MCP_ENDPOINT_PATH + "/"``, so no router of the host answe
 a redirect or a middleware. It answers the first failing head check with an empty body, in
 this order: Host, Origin, authorization, path, method, body size. It is stateless: each handler
 gets exactly the claims of its own request's capability. The capability proves the signed run
-id and nothing about the run being live, so the handler's ownership check stays mandatory
-(decision record 0003).
+id and nothing about the run being live, so the handler's ownership check stays mandatory.
 
 Once a capability is verified, every body written for that request is asked
 ``carries_signature_of(token, body)``; a hit writes an empty 500 instead. A handler failure

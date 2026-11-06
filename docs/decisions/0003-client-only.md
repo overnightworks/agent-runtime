@@ -24,8 +24,9 @@ What still holds of 0001, now owned by the client's code and [wire.md](../wire.m
   `read_only` or `side_effecting`. The class defaults to side-effecting and never reaches a
   model.
 - An agent file is Claude Code's subagent format: YAML front matter between `---` lines, the
-  Markdown body as the prompt. The client reads it strictly and refuses every front-matter
-  value that is not text.
+  Markdown body as the prompt. The client reads it strictly and validates each front-matter
+  field by its own type: a limit must be an integer, `tools` and the roles are lists, and
+  a quoted number is refused.
 - The app owns its tools and their effects. They run in the app, and an app's MCP endpoint
   accepts a call only with a capability that verifies against the public key the app holds.
 
