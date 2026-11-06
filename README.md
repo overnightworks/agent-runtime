@@ -1,50 +1,37 @@
 # agent-runtime
 
-The reusable agent provider layer: it routes a turn to Claude, Grok or Codex —
-over each provider's CLI or its HTTP API — and owns the machinery a host
-application should not rebuild: live model catalogs and readiness probes, the
-streaming turn transport, the tool loop, a bounded subprocess runner and the
-sandbox directory-name constants. It also hosts the agent service, the one
-authenticated entrance through which apps start agent runs.
-
-Three distributions are released together from one tag: the provider core
-`overnightworks-agent-runtime`, the light client `overnightworks-agent-runtime-client`
-for apps, and the agent service `overnightworks-agent-runtime-service`.
+The light client for apps that run agent turns on a model gateway. An app ships its
+agents as files and declares its tools in code; the client sends each turn to the
+app's LiteLLM gateway with the app's own key, runs the tool calls in the app and
+streams the turn back as typed events. It also carries the run contract and an MCP
+endpoint that verifies the run capability. One distribution,
+`overnightworks-agent-runtime-client`, imported as `agent_runtime_client`.
 
 ## Install
 
-No distribution is on PyPI. Install the wheels that the
+The distribution is not on PyPI. Install the wheel that the
 [latest release](https://github.com/overnightworks/agent-runtime/releases/latest)
-lists: its page gives each as a `name @ URL#sha256=…` requirement for `pip install`
+lists: its page gives it as a `name @ URL#sha256=…` requirement for `pip install`
 or `uv add`. A host may instead install by git tag:
-`name @ git+https://github.com/overnightworks/agent-runtime@v<version>`, with
-`#subdirectory=packages/client` or `#subdirectory=packages/service` for those two
-distributions and core at the root.
+`overnightworks-agent-runtime-client @ git+https://github.com/overnightworks/agent-runtime@v<version>`.
 
-hal's image installs with `--require-hashes`, which refuses git sources, so it stays on the release's
-hashed wheels while webauth#543's line 4 is open; [docs/MIGRATING.md](docs/MIGRATING.md) states the condition.
+The `backend` extra adds the gateway backend (`httpx2`); the `mcp-server` extra adds an
+app's MCP endpoint (PyJWT with cryptography).
 
 ## Where to read
 
 | You are | Read |
 |---|---|
-| anyone new | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the three distributions, the route decision, trust |
-| a host developer integrating the library | [docs/host.md](docs/host.md): install, what the host supplies, the child environment, the sandbox |
-| an app author starting agent runs | [docs/wire.md](docs/wire.md): wire v6, agent files, the tool contract, the MCP endpoint, what a run keeps |
-| the operator running the service | [docs/operations.md](docs/operations.md): who may run what, the subscription login and its renewal |
-| bumping a pin | [docs/MIGRATING.md](docs/MIGRATING.md): one section per release |
+| anyone new | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the client, its extras, trust |
+| an app author running agent turns | [docs/wire.md](docs/wire.md): the run contract, agent files, the tool contract, the gateway backend, the MCP endpoint |
 
-The code and its docstrings own behaviour. The decision record
-[docs/decisions/0001-agent-service.md](docs/decisions/0001-agent-service.md)
-owns the service's rulings, and `AGENTS.md` owns the layout, the boundaries, the
-checks and the release rules.
+The code and its docstrings own behaviour, and `AGENTS.md` owns the layout, the boundaries, the checks and the
+release rules.
 
 ## Checks
 
-`AGENTS.md` lists the commands (sync, suite, ruff, `lint-imports`, the three-wheel
-build) and what CI adds. The suite runs without a live provider; the service's
-end-to-end proof, `packages/service/tests/test_app_keycloak.py`, runs only where `KEYCLOAK_URL`
-names the test Keycloak of the `keycloak-token-shapes` CI job.
+`AGENTS.md` lists the commands (sync, suite, ruff, the quality gate's hygiene, build) and what CI
+adds. The suite runs without a live provider.
 
 ## Licence
 

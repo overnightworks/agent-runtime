@@ -26,7 +26,7 @@ def test_the_test_job_uses_the_matrix_for_the_python_version_only():
 
 def test_every_test_matrix_leg_is_a_mandatory_job_of_the_verdict():
     config = tomllib.loads((_REPOSITORY / "quality" / "config.toml").read_text(encoding="utf-8"))
-    matrix = re.search(r'^        python-version: \[(.*)\]$', _job_body("test"), re.M)
+    matrix = re.search(r"^        python-version: \[(.*)\]$", _job_body("test"), re.M)
     assert matrix
     legs = {f"test ({minor})" for minor in re.findall(r'"([\d.]+)"', matrix.group(1))}
 
