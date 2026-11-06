@@ -11,9 +11,7 @@ and nothing more.
 
 ## For whom
 
-The apps that run agent turns in their own process, and the operator who ships them. Today
-that is the apps that depend on a tagged release and the operator's own host until its
-cutover. A host pins a release and owns everything deployment-specific: the gateway origin,
+The apps that run agent turns in their own process, and the operator who ships them. A host pins a release and owns everything deployment-specific: the gateway origin,
 the key file, the tools and the person's identity.
 
 ## What it deliberately is not
