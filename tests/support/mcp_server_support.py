@@ -1,19 +1,18 @@
-"""Shared arrangement for the MCP server suites: one trusted key, minted capabilities, tools."""
+"""The service's signer minting the capabilities that the client's MCP server verifies."""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
 from uuid import UUID
 
-from cryptography.hazmat.primitives import serialization
-from tests.support.service_support import generated_rsa_key
+from packages.client.tests.support.capability_minting import LIFETIME
+from packages.client.tests.support.mcp_server_support import (
+    ALLOWED_TOOLS,
+    ISSUED_AT,
+    PRIVATE_KEY,
+    RUN_ID,
+)
 
-from agent_runtime_client.capability import CapabilityClaims
-from agent_runtime_client.mcp_server import CapabilityVerificationKey, McpTool
-from agent_runtime_client.mcp_wire import ToolOutcome
-from agent_runtime_client.tools import ToolDeclaration, ToolEffect
-from agent_runtime_client.wire import JsonObject
 from agent_runtime_service.capability import (
     Capability,
     CapabilityScope,
@@ -22,20 +21,7 @@ from agent_runtime_service.capability import (
 )
 from agent_runtime_service.signing import SigningKey
 
-ISSUED_AT = 1_792_152_000
-LIFETIME = 600
-RUN_ID = UUID("8c2f6c1e-3b5a-4d8e-9f10-2a7b4c6d8e01")
-OTHER_RUN_ID = UUID("1d4e7a90-5c3b-4f2a-8e6d-0b9c7a5f3e21")
-ALLOWED_TOOLS = ("read_note", "edit_note", "ghost_tool")
-DONE = ToolOutcome("done", is_error=False)
-
-_PRIVATE_KEY = generated_rsa_key()
-SIGNING_KEY = SigningKey.from_private_key(_PRIVATE_KEY)
-VERIFICATION_KEY = CapabilityVerificationKey.from_pem(
-    _PRIVATE_KEY.public_key().public_bytes(
-        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
-    )
-)
+SIGNING_KEY = SigningKey.from_private_key(PRIVATE_KEY)
 
 
 def minted_capability(
@@ -57,34 +43,3 @@ def minted_capability(
         max_duration_s=LIFETIME,
     )
     return signed_capability(scope, claims)
-
-
-def signature_segment_of(capability: Capability) -> str:
-    return capability.token.rsplit(".", 1)[-1]
-
-
-def declaration(name: str, effect: ToolEffect = ToolEffect.READ_ONLY) -> ToolDeclaration:
-    return ToolDeclaration(
-        name=name,
-        description=f"{name} for tests",
-        parameters={"type": "object", "properties": {"note": {"type": "string"}}},
-        effect=effect,
-    )
-
-
-@dataclass
-class RecordingHandlers:
-    """Tool handlers that record each call and answer with a settable outcome or failure."""
-
-    calls: list[tuple[str, CapabilityClaims, JsonObject]] = field(default_factory=list)
-    outcome: ToolOutcome = DONE
-    failure: Exception | None = None
-
-    def tool(self, name: str, effect: ToolEffect = ToolEffect.READ_ONLY) -> McpTool:
-        async def handler(claims: CapabilityClaims, arguments: JsonObject) -> ToolOutcome:
-            self.calls.append((name, claims, arguments))
-            if self.failure is not None:
-                raise self.failure
-            return self.outcome
-
-        return McpTool(declaration(name, effect), handler)

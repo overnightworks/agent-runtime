@@ -13,7 +13,12 @@ from uuid import UUID
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
-from tests.support.service_support import generated_rsa_key, pem_of
+from packages.client.tests.support.capability_minting import (
+    LIFETIME,
+    minted_claims,
+    signed_capability,
+)
+from packages.client.tests.support.rsa_keys import generated_rsa_key, pem_of
 
 from agent_runtime_client.capability import CAPABILITY_TOKEN_TYPE, MAX_CAPABILITY_CHARACTERS
 from agent_runtime_client.mcp_server import (
@@ -22,24 +27,16 @@ from agent_runtime_client.mcp_server import (
     UnsoundVerificationKey,
     verify_capability,
 )
-from agent_runtime_service.capability import (
-    CapabilityScope,
-    capability_claims,
-    signed_capability,
-)
-from agent_runtime_service.signing import SigningKey
 
 ORIGIN = "https://notes.internal"
 OTHER_ORIGIN = "https://other.internal"
 ISSUED_AT = 1_792_152_000
-LIFETIME = 600
 EXPIRES_AT = ISSUED_AT + LIFETIME
 RUN_ID = UUID("8c2f6c1e-3b5a-4d8e-9f10-2a7b4c6d8e01")
 TOOLS = ("edit_note", "read_note")
 
 TRUSTED_PRIVATE_KEY = generated_rsa_key()
 OTHER_PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=3072)
-TRUSTED_SIGNING_KEY = SigningKey.from_private_key(TRUSTED_PRIVATE_KEY)
 
 
 def _verification_key(private_key: Any) -> CapabilityVerificationKey:
@@ -54,24 +51,14 @@ def _public_pem(private_key: Any) -> bytes:
 
 TRUSTED = _verification_key(TRUSTED_PRIVATE_KEY)
 OTHER = _verification_key(OTHER_PRIVATE_KEY)
-SCOPE = CapabilityScope(ORIGIN, TOOLS, TRUSTED_SIGNING_KEY)
 
 
 def _minted_claims(now: float = ISSUED_AT):
-    return capability_claims(
-        SCOPE,
-        run_id=RUN_ID,
-        app="notes",
-        issuer="https://keycloak.test/realms/agent-test",
-        subject="user-alice",
-        agent="notes.assistant",
-        now=now,
-        max_duration_s=LIFETIME,
-    )
+    return minted_claims(ORIGIN, TOOLS, run_id=RUN_ID, now=now)
 
 
 def _minted_token() -> str:
-    return signed_capability(SCOPE, _minted_claims()).token
+    return signed_capability(_minted_claims(), TRUSTED_PRIVATE_KEY).token
 
 
 def _base64url(data: bytes) -> str:

@@ -13,7 +13,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from tests.support.gateway_turn_support import SkewedLoop, a_gateway_config, a_person, ending
+from packages.client.tests.support.gateway_turn_support import (
+    SkewedLoop,
+    a_gateway_config,
+    a_person,
+    ending,
+)
 
 from agent_runtime_client.agents import TurnRequest
 from agent_runtime_client.backend import TurnStopKind, TurnStopped

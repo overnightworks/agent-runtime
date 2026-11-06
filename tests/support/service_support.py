@@ -44,10 +44,11 @@ import httpx
 import jwt
 import pytest
 import uvicorn
-from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from fastapi import FastAPI
 from jwt.algorithms import RSAAlgorithm
+from packages.client.tests.support.rsa_keys import generated_rsa_key, pem_of
 from pydantic import ValidationError
 from tests.support.api_support import API_COMPLETION_URL, process_api_credential_file
 from tests.support.bounds import TEST_WAIT_SECONDS
@@ -685,20 +686,6 @@ def _merged(claims: dict[str, object], overrides: Mapping[str, object]) -> dict[
     """Overrides replace claims; an override of ``None`` removes the claim."""
     merged = {**claims, **overrides}
     return {name: value for name, value in merged.items() if value is not None}
-
-
-@functools.cache
-def generated_rsa_key(bits: int = 3072, exponent: int = 65537) -> rsa.RSAPrivateKey:
-    """One throwaway key per shape for the whole session; no private key is ever committed."""
-    return rsa.generate_private_key(public_exponent=exponent, key_size=bits)
-
-
-def pem_of(private_key: Any) -> bytes:
-    return private_key.private_bytes(
-        serialization.Encoding.PEM,
-        serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption(),
-    )
 
 
 def written_key_file(directory: Path, key: Any, mode: int = 0o600) -> Path:
