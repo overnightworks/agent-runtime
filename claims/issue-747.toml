@@ -3,5 +3,6 @@ agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
 role = "builder"
 base = "ed5394b05790baee65e0890e05c68a3396ee5b62"
 branch = "claude/issue-747-the-client-names-litellm-s-closed-error"
-scope = ["src/agent_runtime_client/backend/gateway.py", "tests/test_backend_gateway.py"]
+scope = ["src/agent_runtime_client/backend/gateway.py", "tests/support/gateway_turn_support.py", "tests/test_backend_gateway.py", "tests/test_backend_gateway_refusal.py"]
 opened_commit = "bd8fcdea34d37ba8552c934014ff3607e1d7919e"
+whole_reason = "One log line and its tests; the tests split only because the gateway test module would exceed the file-size limit, and the shared arrangement moves with them."
