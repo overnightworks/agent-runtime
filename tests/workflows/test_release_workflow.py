@@ -449,9 +449,10 @@ def test_the_tag_is_created_at_the_gated_commit(tmp_path, release):
 
     creations = _tag_creations(tmp_path)
     assert result.returncode == 0
-    assert [
-        argument for argument in creations[0] if argument.startswith(("ref=", "sha="))
-    ] == [f"ref=refs/tags/v{release.version}", f"sha={'a' * 40}"]
+    assert [argument for argument in creations[0] if argument.startswith(("ref=", "sha="))] == [
+        f"ref=refs/tags/v{release.version}",
+        f"sha={'a' * 40}",
+    ]
 
 
 def test_a_rerun_keeps_the_tag_that_already_points_at_the_commit(tmp_path, release):
