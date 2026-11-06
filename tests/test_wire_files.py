@@ -11,7 +11,6 @@ import base64
 import json
 
 import pytest
-from tests.support.wire_builders import succeeded, wire
 from pydantic import ValidationError
 
 from agent_runtime_client.run_stream import StreamViolation, ViolationKind, parse_event
@@ -21,6 +20,7 @@ from agent_runtime_client.wire import (
     RunFile,
     Succeeded,
 )
+from tests.support.wire_builders import succeeded, wire
 
 SECRET_MARKER = "SECRETMARKER"
 

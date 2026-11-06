@@ -10,14 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from tests.support.gateway_turn_support import (
-    FailingTransport,
-    HangingTransport,
-    SkewedLoop,
-    a_gateway_config,
-    a_person,
-    ending,
-)
 
 from agent_runtime_client.agents import TurnRequest
 from agent_runtime_client.backend import TurnPerson, TurnStopKind, TurnStopped
@@ -36,6 +28,14 @@ from agent_runtime_client.turn import (
     base64_length,
 )
 from agent_runtime_client.turn_events import FinalEvent
+from tests.support.gateway_turn_support import (
+    FailingTransport,
+    HangingTransport,
+    SkewedLoop,
+    a_gateway_config,
+    a_person,
+    ending,
+)
 
 PROVIDER_ERROR = (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
 UNAVAILABLE = (TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE)

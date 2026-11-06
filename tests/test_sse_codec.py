@@ -13,14 +13,6 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-from tests.support.wire_builders import (
-    call,
-    heartbeat,
-    result,
-    started,
-    succeeded,
-    text,
-)
 from pydantic import ValidationError
 
 from agent_runtime_client import sse as sse_module
@@ -45,6 +37,14 @@ from agent_runtime_client.wire import (
     RunFile,
     RunRejection,
     Succeeded,
+)
+from tests.support.wire_builders import (
+    call,
+    heartbeat,
+    result,
+    started,
+    succeeded,
+    text,
 )
 
 A_RUN: list[RunEvent] = [

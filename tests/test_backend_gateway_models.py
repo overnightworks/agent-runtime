@@ -9,13 +9,6 @@ from pathlib import Path
 
 import httpx2
 import pytest
-from tests.support.gateway_turn_support import (
-    GATEWAY_KEY,
-    FailingTransport,
-    HangingTransport,
-    SkewedLoop,
-    a_gateway_config,
-)
 
 from agent_runtime_client.agents import AgentDefinition
 from agent_runtime_client.backend.fake_gateway import FakeGateway, Reply, model_list
@@ -26,6 +19,13 @@ from agent_runtime_client.backend.gateway import (
 )
 from agent_runtime_client.config import ChatGateway
 from agent_runtime_client.turn import MAX_EVENT_BYTES
+from tests.support.gateway_turn_support import (
+    GATEWAY_KEY,
+    FailingTransport,
+    HangingTransport,
+    SkewedLoop,
+    a_gateway_config,
+)
 
 DEADLINE_SECONDS = 10
 

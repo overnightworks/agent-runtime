@@ -15,6 +15,14 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
+from starlette.applications import Starlette
+from starlette.responses import PlainTextResponse
+from starlette.routing import Route
+
+from agent_runtime_client.mcp_server import HandlerFailureWithheld, McpServer, McpTool
+from agent_runtime_client.mcp_wire import ToolOutcome
+from agent_runtime_client.tools import ToolEffect
+from agent_runtime_client.wire import MAX_EVENT_BYTES
 from tests.support.capability_minting import LIFETIME
 from tests.support.mcp_server_support import (
     ISSUED_AT,
@@ -26,14 +34,6 @@ from tests.support.mcp_server_support import (
     minted_capability,
     signature_segment_of,
 )
-from starlette.applications import Starlette
-from starlette.responses import PlainTextResponse
-from starlette.routing import Route
-
-from agent_runtime_client.mcp_server import HandlerFailureWithheld, McpServer, McpTool
-from agent_runtime_client.mcp_wire import ToolOutcome
-from agent_runtime_client.tools import ToolEffect
-from agent_runtime_client.wire import MAX_EVENT_BYTES
 
 ORIGIN = "https://notes.internal"
 HOST = b"notes.internal"

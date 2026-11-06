@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
-from tests.support.mcp_server_support import declaration
 from starlette.applications import Starlette
 from starlette.routing import Route
 from starlette.testclient import TestClient
@@ -28,6 +27,7 @@ from agent_runtime_client.mcp_wire import (
 )
 from agent_runtime_client.tools import Principal, ToolEffect
 from agent_runtime_client.wire import MAX_EVENT_BYTES, JsonObject
+from tests.support.mcp_server_support import declaration
 
 VERSION = str(LATEST_PROTOCOL_VERSION)
 Headers = list[tuple[bytes, bytes]]

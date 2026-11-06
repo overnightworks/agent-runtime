@@ -1,11 +1,8 @@
 """The event family a provider turn streams to its in-process caller.
 
-Every backend — Claude's CLI/MCP stream, the OpenAI-compatible HTTP
-adapters, the tool loop — yields these types. They are the in-process turn
-events, not the agent service's wire: the streamed run contract has one owner,
-``agent_runtime_client.wire``, onto which the agent service maps a turn's events
-(slice A1a). Hosts that call the core directly still consume these types, so
-their field names and defaults stay a public contract.
+Every backend yields these types. They are the in-process turn events, not
+the streamed run contract, which has one owner, ``agent_runtime_client.wire``.
+Their field names and defaults are a public contract.
 """
 
 from __future__ import annotations
@@ -18,17 +15,9 @@ from agent_runtime_client.turn import RunFile
 
 
 class StreamEvent(BaseModel):
-    """Base class for every event a provider turn streams.
-
-    ``correlation_id`` is the host's own handle for the turn that produced
-    the event — a job id, a request id — carried so the host can log and
-    group events without threading a second value beside them. It is
-    excluded from serialization: the serialised event is the same with it as
-    without it.
-    """
+    """Base class for every event a provider turn streams."""
 
     type: str
-    correlation_id: str | None = Field(default=None, exclude=True)
 
 
 class AssistantTextEvent(StreamEvent):

@@ -13,12 +13,6 @@ from uuid import UUID
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
-from tests.support.capability_minting import (
-    LIFETIME,
-    minted_claims,
-    signed_capability,
-)
-from tests.support.rsa_keys import generated_rsa_key, pem_of
 
 from agent_runtime_client.capability import CAPABILITY_TOKEN_TYPE, MAX_CAPABILITY_CHARACTERS
 from agent_runtime_client.mcp_server import (
@@ -27,6 +21,12 @@ from agent_runtime_client.mcp_server import (
     UnsoundVerificationKey,
     verify_capability,
 )
+from tests.support.capability_minting import (
+    LIFETIME,
+    minted_claims,
+    signed_capability,
+)
+from tests.support.rsa_keys import generated_rsa_key, pem_of
 
 ORIGIN = "https://notes.internal"
 OTHER_ORIGIN = "https://other.internal"

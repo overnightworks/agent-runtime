@@ -12,19 +12,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from tests.support.wire_builders import (
-    OTHER_RUN_ID,
-    RUN_ID,
-    call,
-    cancelled,
-    heartbeat,
-    interrupted,
-    result,
-    started,
-    succeeded,
-    tool_declaration,
-    wire,
-)
 from pydantic import TypeAdapter, ValidationError
 
 from agent_runtime_client.run_stream import RunStream, StreamViolation, ViolationKind, parse_event
@@ -45,6 +32,19 @@ from agent_runtime_client.wire import (
     RunStatus,
     TurnRole,
     is_run_event,
+)
+from tests.support.wire_builders import (
+    OTHER_RUN_ID,
+    RUN_ID,
+    call,
+    cancelled,
+    heartbeat,
+    interrupted,
+    result,
+    started,
+    succeeded,
+    tool_declaration,
+    wire,
 )
 
 

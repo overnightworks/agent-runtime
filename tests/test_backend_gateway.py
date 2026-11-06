@@ -20,7 +20,6 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
-from tests.support.gateway_turn_support import FailingTransport, ending
 
 from agent_runtime_client.agents import TurnRequest
 from agent_runtime_client.backend import MAX_RETRY_AFTER_S, TurnPerson, TurnStopKind, TurnStopped
@@ -38,6 +37,7 @@ from agent_runtime_client.turn import (
     person_fingerprint,
 )
 from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent
+from tests.support.gateway_turn_support import FailingTransport, ending
 
 FINGERPRINT_VECTORS = [
     (
