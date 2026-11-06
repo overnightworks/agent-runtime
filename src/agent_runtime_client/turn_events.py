@@ -1,7 +1,6 @@
 """The event family a provider turn streams to its in-process caller.
 
-Every backend yields these types. They are the in-process turn events, not
-the streamed run contract, which has one owner, ``agent_runtime_client.wire``.
+Every backend yields these types. They are in-process events and no wire format.
 Their field names and defaults are a public contract.
 """
 

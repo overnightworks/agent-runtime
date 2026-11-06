@@ -114,12 +114,12 @@ jobs:
             exit 1
           fi
 
-      - name: List the wheels with their hashes
+      - name: List the wheel with its hash
         id: install
         run: |
           {
             echo 'install<<INSTALL_LINES'
-            echo '**Install.** Pin each wheel by URL and hash.'
+            echo '**Install.** Pin the wheel by URL and hash.'
             echo
             echo '```'
             for wheel in dist/*.whl; do
@@ -170,6 +170,6 @@ jobs:
             exit 1
           fi
 
-      - name: Publish the release on the tag with the wheels the gate built
+      - name: Publish the release on the tag with the wheel the gate built
         run: |
           gh release create "v$VERSION" dist/*.whl --verify-tag --title "v$VERSION" --generate-notes --notes "$INSTALL"

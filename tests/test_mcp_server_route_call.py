@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from agent_runtime_client.mcp_server.asgi import AsgiApp
 from agent_runtime_client.mcp_server.route_call import RouteTarget, call_route
 from agent_runtime_client.tools import ToolOutcome
-from agent_runtime_client.wire import MAX_EVENT_BYTES
+from agent_runtime_client.turn import MAX_EVENT_BYTES
 
 
 class Note(BaseModel):

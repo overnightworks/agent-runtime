@@ -1,10 +1,9 @@
 # The client is independent of its hosts and of the sibling auth library:
 # everything host-specific reaches it through the ports a host supplies. An app
-# verifies run capabilities through agent_runtime_client.mcp_server, whose
-# libraries stay an extra, so neither a client base module (the package
-# __init__ included) imports agent_runtime_client.mcp_server, PyJWT or
-# cryptography. The client imports no web framework; its MCP server is plain
-# ASGI.
+# serves its tools through agent_runtime_client.mcp_server, whose library stays
+# an extra, so no client base module (the package __init__ included) imports
+# agent_runtime_client.mcp_server. The client imports no web framework; its MCP
+# server is plain ASGI.
 # The gate's `import-contract` rule (`quality hygiene .`) checks them over the
 # real import graph, so an indirect chain is caught as well as a direct import.
 [importlinter]
@@ -44,21 +43,16 @@ source_modules =
     agent_runtime_client.backend
     agent_runtime_client.backend.fake_gateway
     agent_runtime_client.backend.gateway
-    agent_runtime_client.capability
     agent_runtime_client.config
     agent_runtime_client.errors
     agent_runtime_client.mcp_wire
-    agent_runtime_client.run_stream
-    agent_runtime_client.sse
     agent_runtime_client.tools
     agent_runtime_client.turn
     agent_runtime_client.turn_events
-    agent_runtime_client.wire
 forbidden_modules =
     agent_runtime_client.mcp_server
     agent_runtime_client.mcp_server.**
-    jwt
-    cryptography
+    anyio
 
 # The backend extra stays an extra: backend.gateway and backend.fake_gateway import
 # httpx2, so no base module (the package __init__ and the backend port included) does.
@@ -70,25 +64,20 @@ source_modules =
     agent_runtime_client
     agent_runtime_client.agents
     agent_runtime_client.backend
-    agent_runtime_client.capability
     agent_runtime_client.config
     agent_runtime_client.errors
     agent_runtime_client.mcp_wire
-    agent_runtime_client.run_stream
-    agent_runtime_client.sse
     agent_runtime_client.tools
     agent_runtime_client.turn
     agent_runtime_client.turn_events
-    agent_runtime_client.wire
 forbidden_modules =
     httpx2
     httpx
 
 [importlinter:contract:hand-tools-stay-below-the-wire]
-name = agent_runtime_client.tools imports neither agent_runtime_client.wire nor agent_runtime_client.mcp_wire
+name = agent_runtime_client.tools does not import agent_runtime_client.mcp_wire
 type = forbidden
 source_modules =
     agent_runtime_client.tools
 forbidden_modules =
-    agent_runtime_client.wire
     agent_runtime_client.mcp_wire

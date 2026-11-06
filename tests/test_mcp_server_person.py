@@ -26,7 +26,7 @@ from agent_runtime_client.mcp_wire import (
     ToolOutcome,
 )
 from agent_runtime_client.tools import Principal, ToolEffect
-from agent_runtime_client.wire import MAX_EVENT_BYTES, JsonObject
+from agent_runtime_client.turn import MAX_EVENT_BYTES, JsonObject
 from tests.support.mcp_server_support import declaration
 
 VERSION = str(LATEST_PROTOCOL_VERSION)
