@@ -1,0 +1,8 @@
+claim_id = "4b40ca8595e44401b106e58146920dc3"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "e687d6d9e383a5dcd5a6c4a8ab4d6286d672112c"
+branch = "claude/issue-746-client-tests-alone"
+scope = ["packages/client/tests", "packages/service/tests", "tests"]
+opened_commit = "56b80595e846f2b8d16f64b1a2521661d6893ad7"
+whole_reason = "The client suite's ties to the root test tree, the core and the service span three test directories and must be cut in one pass, because a half-cut leaves the client suite or the root suite broken; it touches no production code."
