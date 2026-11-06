@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-from packages.client.tests.support.wire_builders import (
+from tests.support.wire_builders import (
     call,
     heartbeat,
     result,

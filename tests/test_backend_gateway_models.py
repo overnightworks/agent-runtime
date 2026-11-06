@@ -9,7 +9,7 @@ from pathlib import Path
 
 import httpx2
 import pytest
-from packages.client.tests.support.gateway_turn_support import (
+from tests.support.gateway_turn_support import (
     GATEWAY_KEY,
     FailingTransport,
     HangingTransport,

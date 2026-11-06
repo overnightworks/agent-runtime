@@ -15,8 +15,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
-from packages.client.tests.support.capability_minting import LIFETIME
-from packages.client.tests.support.mcp_server_support import (
+from tests.support.capability_minting import LIFETIME
+from tests.support.mcp_server_support import (
     ISSUED_AT,
     OTHER_RUN_ID,
     RUN_ID,

@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from packages.client.tests.support.wire_builders import (
+from tests.support.wire_builders import (
     OTHER_RUN_ID,
     RUN_ID,
     call,

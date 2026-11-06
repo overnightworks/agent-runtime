@@ -7,12 +7,12 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from cryptography.hazmat.primitives import serialization
-from packages.client.tests.support.capability_minting import (
+from tests.support.capability_minting import (
     MintedCapability,
     minted_claims,
     signed_capability,
 )
-from packages.client.tests.support.rsa_keys import generated_rsa_key
+from tests.support.rsa_keys import generated_rsa_key
 
 from agent_runtime_client.capability import CapabilityClaims
 from agent_runtime_client.mcp_server import CapabilityVerificationKey, McpTool
