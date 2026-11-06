@@ -25,7 +25,6 @@ dev = [
     "pytest>=9.1,<10",
     "pytest-cov>=7.1,<8",
     "ruff>=0.17,<1",
-    "import-linter>=2.15,<3",
     "fastapi>=0.133,<1",
 ]
 

@@ -4,8 +4,8 @@
 
 ## Boundaries
 
-`.importlinter` owns the layering and the forbidden imports; `uv run lint-imports`
-proves it. The traps it cannot show:
+`.importlinter` owns the layering and the forbidden imports; the gate's
+`import-contract` rule proves it (`quality hygiene .`). The traps it cannot show:
 
 - The run wire has one owner, `agent_runtime_client.wire`; the turn's vocabulary has one,
   `agent_runtime_client.turn`, which `wire` composes.
@@ -28,7 +28,7 @@ proves it. The traps it cannot show:
 uv sync --locked --extra dev
 uv run pytest -q
 uv run ruff check src tests
-uv run lint-imports
+uvx --from git+https://github.com/overnightworks/quality@v0.9.2 quality hygiene .
 uv build
 ```
 

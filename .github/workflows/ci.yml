@@ -56,9 +56,6 @@ jobs:
       - name: Ruff
         run: uv run --locked --no-sync ruff check src tests
 
-      - name: Import boundaries
-        run: uv run --locked --no-sync lint-imports
-
       - name: Tests
         run: uv run --locked --no-sync pytest -q --cov=src --cov-report=xml:coverage.xml
 
