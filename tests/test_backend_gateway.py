@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import ipaddress
 import json
 import logging
 import re
 import ssl
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -21,23 +19,27 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
-from agent_runtime_client.agents import TurnRequest
 from agent_runtime_client.backend import MAX_RETRY_AFTER_S, TurnPerson, TurnStopKind, TurnStopped
 from agent_runtime_client.backend.fake_gateway import FakeGateway, Reply, completion
 from agent_runtime_client.backend.gateway import GatewayBackend, GatewayDetail
-from agent_runtime_client.config import AgentConfig
 from agent_runtime_client.turn import (
     MAX_EVENT_BYTES,
     FailureCode,
     Principal,
     RejectionCode,
-    Turn,
-    TurnMessage,
-    TurnRole,
     person_fingerprint,
 )
 from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent
-from tests.support.gateway_turn_support import FailingTransport, ending
+from tests.support import gateway_turn_support
+from tests.support.gateway_turn_support import (
+    UNAVAILABLE,
+    FailingTransport,
+    _turn,
+    a_request,
+    ending,
+)
+
+scenario = gateway_turn_support.scenario
 
 FINGERPRINT_VECTORS = [
     (
@@ -75,92 +77,6 @@ PINNED_ABSENT_BODY_KEYS = {
 }
 
 
-@dataclass(frozen=True)
-class Scenario:
-    """The example app, key, group and person every test of this file runs as."""
-
-    directory: Path
-    key: str = "stand-in-key-0001"
-    api_group: str = "/apps/example"
-    issuer: str = "https://issuer.example"
-    subject: str = "subject-1"
-
-    def config(
-        self,
-        *,
-        origin: str = "http://gateway.test",
-        key: bytes | None = None,
-        ca_file: Path | None = None,
-    ) -> AgentConfig:
-        key_file = self.directory / "key"
-        key_file.write_bytes(f"{self.key}\n".encode() if key is None else key)
-        gateway = {"origin": origin, "key_file": str(key_file)}
-        if ca_file is not None:
-            gateway["ca_file"] = str(ca_file)
-        section = {"backend": "litellm", "gateway": gateway, "api_group": self.api_group}
-        return AgentConfig.model_validate(section)
-
-    def person(self, groups=None, *, iss=None, sub=None, role="user"):
-        calls = []
-        member_of_groups = frozenset({self.api_group}) if groups is None else groups
-
-        async def member_of() -> frozenset[str]:
-            calls.append(1)
-            if isinstance(member_of_groups, Exception):
-                raise member_of_groups
-            return member_of_groups
-
-        principal = Principal(iss=iss or self.issuer, sub=sub or self.subject)
-        return TurnPerson(principal=principal, role=role, groups=member_of), calls
-
-    def fingerprint(self, iss=None, sub=None) -> str:
-        gateway = FakeGateway(completion("ok"))
-        person, _ = self.person(iss=iss, sub=sub)
-        self.outcome(GatewayBackend(self.config(), transport=gateway), person=person)
-        return json.loads(gateway.requests[0].content)["user"]
-
-    def outcome(self, backend, request=None, person=None):
-        return asyncio.run(_turn(backend, request or a_request(), person or self.person()[0]))
-
-
-@pytest.fixture
-def scenario(tmp_path) -> Scenario:
-    return Scenario(tmp_path)
-
-
-def a_request(**changes) -> TurnRequest:
-    turn = Turn(
-        system="Answer briefly.",
-        messages=[
-            TurnMessage(role=TurnRole.USER, text="Hello"),
-            TurnMessage(role=TurnRole.ASSISTANT, text="Hi"),
-            TurnMessage(role=TurnRole.USER, text="Again"),
-        ],
-    )
-    fields = {
-        "agent": "helper",
-        "turn": turn,
-        "roles": ["admin", "user"],
-        "tools": (),
-        "model": "text/standin",
-        "max_duration_seconds": 30,
-        "max_tool_calls": None,
-    }
-    return TurnRequest(**{**fields, **changes})
-
-
-async def _turn(backend, request, person):
-    events = []
-    try:
-        async with contextlib.aclosing(backend.run(request, person)) as stream:
-            async for event in stream:
-                events.append(event)
-    except TurnStopped as stopped:
-        return events, stopped
-    return events, None
-
-
-UNAVAILABLE = (TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE)
 PROVIDER_ERROR = (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
 
 
@@ -375,13 +291,12 @@ def test_a_refusal_status_is_provider_unavailable_as_gateway_refused(scenario, r
     assert str(reply.status) in caplog.text
 
 
-def test_a_refusal_body_is_never_read_and_the_response_is_closed(scenario):
+def test_a_refusal_response_is_closed_after_its_body_is_read(scenario):
     refusal = _Streamed((b'{"error":"budget_exceeded"}',), status=422)
 
     _, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=refusal))
 
     assert (ending(stopped), stopped.detail) == (UNAVAILABLE, "gateway_refused")
-    assert not refusal.read
     assert refusal.closed.is_set()
 
 

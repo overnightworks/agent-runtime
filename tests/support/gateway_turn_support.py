@@ -3,13 +3,26 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx2
+import pytest
 
-from agent_runtime_client.backend import TurnPerson, TurnStopped
+from agent_runtime_client.agents import TurnRequest
+from agent_runtime_client.backend import TurnPerson, TurnStopKind, TurnStopped
+from agent_runtime_client.backend.fake_gateway import FakeGateway, completion
+from agent_runtime_client.backend.gateway import GatewayBackend
 from agent_runtime_client.config import AgentConfig
-from agent_runtime_client.turn import Principal
+from agent_runtime_client.turn import (
+    FailureCode,
+    Principal,
+    Turn,
+    TurnMessage,
+    TurnRole,
+)
 
 API_GROUP = "/apps/example"
 GATEWAY_ORIGIN = "http://gateway.test"
@@ -77,3 +90,91 @@ def a_gateway_config(directory: Path) -> AgentConfig:
             "gateway": {"origin": GATEWAY_ORIGIN, "key_file": str(key_file)},
         }
     )
+
+
+@dataclass(frozen=True)
+class Scenario:
+    """The example app, key, group and person every test of this file runs as."""
+
+    directory: Path
+    key: str = "stand-in-key-0001"
+    api_group: str = "/apps/example"
+    issuer: str = "https://issuer.example"
+    subject: str = "subject-1"
+
+    def config(
+        self,
+        *,
+        origin: str = "http://gateway.test",
+        key: bytes | None = None,
+        ca_file: Path | None = None,
+    ) -> AgentConfig:
+        key_file = self.directory / "key"
+        key_file.write_bytes(f"{self.key}\n".encode() if key is None else key)
+        gateway = {"origin": origin, "key_file": str(key_file)}
+        if ca_file is not None:
+            gateway["ca_file"] = str(ca_file)
+        section = {"backend": "litellm", "gateway": gateway, "api_group": self.api_group}
+        return AgentConfig.model_validate(section)
+
+    def person(self, groups=None, *, iss=None, sub=None, role="user"):
+        calls = []
+        member_of_groups = frozenset({self.api_group}) if groups is None else groups
+
+        async def member_of() -> frozenset[str]:
+            calls.append(1)
+            if isinstance(member_of_groups, Exception):
+                raise member_of_groups
+            return member_of_groups
+
+        principal = Principal(iss=iss or self.issuer, sub=sub or self.subject)
+        return TurnPerson(principal=principal, role=role, groups=member_of), calls
+
+    def fingerprint(self, iss=None, sub=None) -> str:
+        gateway = FakeGateway(completion("ok"))
+        person, _ = self.person(iss=iss, sub=sub)
+        self.outcome(GatewayBackend(self.config(), transport=gateway), person=person)
+        return json.loads(gateway.requests[0].content)["user"]
+
+    def outcome(self, backend, request=None, person=None):
+        return asyncio.run(_turn(backend, request or a_request(), person or self.person()[0]))
+
+
+@pytest.fixture
+def scenario(tmp_path) -> Scenario:
+    return Scenario(tmp_path)
+
+
+def a_request(**changes) -> TurnRequest:
+    turn = Turn(
+        system="Answer briefly.",
+        messages=[
+            TurnMessage(role=TurnRole.USER, text="Hello"),
+            TurnMessage(role=TurnRole.ASSISTANT, text="Hi"),
+            TurnMessage(role=TurnRole.USER, text="Again"),
+        ],
+    )
+    fields = {
+        "agent": "helper",
+        "turn": turn,
+        "roles": ["admin", "user"],
+        "tools": (),
+        "model": "text/standin",
+        "max_duration_seconds": 30,
+        "max_tool_calls": None,
+    }
+    return TurnRequest(**{**fields, **changes})
+
+
+async def _turn(backend, request, person):
+    events = []
+    try:
+        async with contextlib.aclosing(backend.run(request, person)) as stream:
+            async for event in stream:
+                events.append(event)
+    except TurnStopped as stopped:
+        return events, stopped
+    return events, None
+
+
+UNAVAILABLE = (TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE)

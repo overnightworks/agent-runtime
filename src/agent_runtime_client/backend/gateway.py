@@ -66,6 +66,8 @@ _PICTURES_PATH: Final = "/v1/images/generations"
 _MODELS_PATH: Final = "/v1/models"
 _MODEL_LIST_DEADLINE_SECONDS: Final = 10
 _PICTURE_FILE_NAME: Final = "picture"
+_ERROR_TYPE: Final = re.compile(r"[a-z0-9_]{1,64}")
+_ERROR_CODE: Final = re.compile(r"\d{3}", re.ASCII)
 # A DEBUG record of either library may carry request headers, and the key is one.
 _TRANSPORT_LOGGERS: Final = ("httpx2", "httpcore2")
 _MAX_KEY_BYTES: Final = 1024
@@ -485,10 +487,27 @@ async def _reply_of[Result](
     if status == httpx2.codes.TOO_MANY_REQUESTS:
         wait = _wait_seconds(response.headers.get("Retry-After"))
         raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.BUSY, retry_after_s=wait)
-    _LOGGER.warning("the gateway answered with status %d", status)
+    _LOGGER.warning("the gateway answered with status %d%s", status, await _error_kind_of(response))
     is_refusal = httpx2.codes.BAD_REQUEST <= status < httpx2.codes.INTERNAL_SERVER_ERROR
     detail = GatewayDetail.GATEWAY_REFUSED if is_refusal else GatewayDetail.GATEWAY_FAILED
     raise _unavailable(detail)
+
+
+async def _error_kind_of(response: httpx2.Response) -> str:
+    """The error body's ``type`` and ``code`` when both are well formed; never its other fields."""
+    try:
+        error = json.loads(await _read_body(response, MAX_EVENT_BYTES))["error"]
+        error_type, code = error["type"], error["code"]
+    except (TurnStopped, *_UNREADABLE_REPLY):
+        return ", no error type given"
+    if (
+        isinstance(error_type, str)
+        and _ERROR_TYPE.fullmatch(error_type)
+        and isinstance(code, str)
+        and _ERROR_CODE.fullmatch(code)
+    ):
+        return f", error type {error_type}, code {code}"
+    return ", no error type given"
 
 
 async def _read_body(response: httpx2.Response, limit: int) -> bytes:
