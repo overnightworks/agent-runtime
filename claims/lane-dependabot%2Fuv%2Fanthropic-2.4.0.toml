@@ -1,0 +1,7 @@
+claim_id = "b094b988613141fe85e5547733b3420c"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "e11d40801c8f9938aa359011a732ef4ae1625246"
+branch = "dependabot/uv/anthropic-2.4.0"
+scope = ["pyproject.toml", "uv.lock"]
+opened_commit = "e9ff3594d841508491da571e3fd0e1510dccf4b0"
