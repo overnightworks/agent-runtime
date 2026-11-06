@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from uuid import UUID
 
+from packages.client.tests.support.capability_minting import LIFETIME
 from packages.client.tests.support.mcp_server_support import (
     ALLOWED_TOOLS,
     ISSUED_AT,
@@ -19,8 +20,6 @@ from agent_runtime_service.capability import (
     signed_capability,
 )
 from agent_runtime_service.signing import SigningKey
-
-LIFETIME = 600
 
 SIGNING_KEY = SigningKey.from_private_key(PRIVATE_KEY)
 

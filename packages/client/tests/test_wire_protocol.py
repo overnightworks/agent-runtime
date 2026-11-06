@@ -22,12 +22,13 @@ from packages.client.tests.support.wire_builders import (
     result,
     started,
     succeeded,
+    tool_declaration,
     wire,
 )
 from pydantic import TypeAdapter, ValidationError
 
 from agent_runtime_client.run_stream import RunStream, StreamViolation, ViolationKind, parse_event
-from agent_runtime_client.tools import ToolDeclaration, ToolEffect
+from agent_runtime_client.tools import ToolEffect
 from agent_runtime_client.wire import (
     MAX_AGENT_LENGTH,
     MAX_MESSAGE_LENGTH,
@@ -47,17 +48,8 @@ from agent_runtime_client.wire import (
 )
 
 
-def _declaration(name: str, **fields: object) -> ToolDeclaration:
-    return ToolDeclaration(
-        name=name,
-        description=f"{name} does one thing",
-        parameters={"type": "object", "properties": {}},
-        **fields,
-    )
-
-
 def test_a_tool_declared_without_an_effect_counts_as_side_effecting() -> None:
-    assert _declaration("write_text").effect is ToolEffect.SIDE_EFFECTING
+    assert tool_declaration("write_text").effect is ToolEffect.SIDE_EFFECTING
 
 
 STARTED_FIELDS = {"model": "anthropic/sonnet", "route": "cli", "heartbeat_interval_s": 15}

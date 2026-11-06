@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from agent_runtime_client.tools import ToolEffect
+from agent_runtime_client.tools import ToolDeclaration, ToolEffect
 from agent_runtime_client.wire import (
     PROTOCOL_VERSION,
     AssistantText,
@@ -23,6 +23,15 @@ from agent_runtime_client.wire import (
 
 RUN_ID = UUID("8c2f6c1e-3b5a-4d8e-9f10-2a7b4c6d8e01")
 OTHER_RUN_ID = UUID("0d5e7f90-1a2b-4c3d-8e4f-5a6b7c8d9e02")
+
+
+def tool_declaration(name: str, **fields: object) -> ToolDeclaration:
+    return ToolDeclaration(
+        name=name,
+        description=f"{name} does one thing",
+        parameters={"type": "object", "properties": {}},
+        **fields,
+    )
 
 
 def wire(type_: str, seq: int, **payload: object) -> dict[str, object]:
