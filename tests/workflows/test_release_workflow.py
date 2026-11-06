@@ -21,6 +21,7 @@ class _Release:
     """The scenario every test of one release arranges: what is dispatched and what it builds."""
 
     version: str = "0.3.0"
+    migration_anchor: str = "migrating-to-030"
     other_commit: str = "f" * 40
     repository: str = "overnightworks/agent-runtime"
     wheel_contents: tuple[tuple[str, bytes], ...] = (
@@ -34,7 +35,7 @@ class _Release:
         return (
             f"**Before you bump your pin,** read [Migrating to {self.version}]"
             f"(https://github.com/{self.repository}/blob/v{self.version}/docs/MIGRATING.md"
-            f"#migrating-to-{self.version.replace('.', '')})."
+            f"#{self.migration_anchor})."
         )
 
     @property
@@ -489,6 +490,7 @@ def test_the_tag_is_created_before_the_release_and_a_failed_publication_is_retri
     environment = {"COMMIT": commit, **_tag_environment(release)}
     _wheels_in(tmp_path, release)
 
+    assert _run_names().index(_TAG) < _run_names().index(_PUBLISH)
     tagged = _run_step(_TAG, tmp_path, release, environment, refs=[])
     published = _run_step(_PUBLISH, tmp_path, release, environment, release_fails="")
     (tmp_path / "fixtures" / "release_fails").unlink()
