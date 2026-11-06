@@ -1,0 +1,8 @@
+claim_id = "1f9c4ec60f00457ca4eecd256168d245"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "2a3e142966e842b5ba85f17c20a3183bae290a1c"
+branch = "claude/issue-756-ar-r5-the-client-drops-the-run-protocol"
+scope = [".github", ".importlinter", "AGENTS.md", "README.md", "docs", "pyproject.toml", "quality", "src", "tests", "uv.lock"]
+opened_commit = "2c3b7bba5f1592a43f5e19f295ef3e80cc61123f"
+whole_reason = "Deleting the run protocol and the capability front breaks their tests, the import contracts, the extras and every document that describes them at once, and the operator ruled that the documents are written once for the finished client, so the cut and the rewrite land together."
