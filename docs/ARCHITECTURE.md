@@ -77,5 +77,7 @@ value fails loud.
   alone decides what a call may do.
 - *A person is known to the gateway only as a fingerprint* of their issuer and
   subject, so no real identifier leaves the app.
-- *A capability is verified, not trusted.* The MCP endpoint accepts a call only
-  with a signature that verifies against the public key the app holds.
+- *A capability is verified, not trusted.* The capability front (`McpServer`) accepts a call only
+  with a signature that verifies against the public key the app holds. The person front
+  (`McpPersonFront`) carries no capability: the host's own authentication gate resolves the
+  person before the front serves a call.
