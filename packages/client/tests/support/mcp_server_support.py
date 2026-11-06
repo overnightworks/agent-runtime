@@ -26,9 +26,9 @@ OTHER_RUN_ID = UUID("1d4e7a90-5c3b-4f2a-8e6d-0b9c7a5f3e21")
 ALLOWED_TOOLS = ("read_note", "edit_note", "ghost_tool")
 DONE = ToolOutcome("done", is_error=False)
 
-_PRIVATE_KEY = generated_rsa_key()
+PRIVATE_KEY = generated_rsa_key()
 VERIFICATION_KEY = CapabilityVerificationKey.from_pem(
-    _PRIVATE_KEY.public_key().public_bytes(
+    PRIVATE_KEY.public_key().public_bytes(
         serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
     )
 )
@@ -42,7 +42,7 @@ def minted_capability(
     issued_at: float = ISSUED_AT,
 ) -> MintedCapability:
     return signed_capability(
-        minted_claims(origin, tools, run_id=run_id, now=issued_at), _PRIVATE_KEY
+        minted_claims(origin, tools, run_id=run_id, now=issued_at), PRIVATE_KEY
     )
 
 

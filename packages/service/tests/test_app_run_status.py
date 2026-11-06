@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
+from packages.client.tests.support.wire_builders import started, succeeded
 from tests.support.service_support import (
     TEST_ISSUER,
     WallClock,
@@ -30,7 +31,6 @@ from tests.support.service_support import (
     unused_runners,
 )
 from tests.support.token_rejection_support import TOKEN_REJECTIONS
-from tests.support.wire_builders import started, succeeded
 from webauth.https_client import KeySetFetchError
 from webauth.service_callers import Principal
 

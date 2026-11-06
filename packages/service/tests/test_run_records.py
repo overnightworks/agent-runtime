@@ -14,9 +14,7 @@ from collections.abc import Callable
 from uuid import UUID, uuid4
 
 import pytest
-from pydantic import ValidationError
-from tests.support.service_support import WallClock, instant, reaches_text
-from tests.support.wire_builders import (
+from packages.client.tests.support.wire_builders import (
     RUN_ID,
     call,
     cancelled,
@@ -26,6 +24,8 @@ from tests.support.wire_builders import (
     started,
     succeeded,
 )
+from pydantic import ValidationError
+from tests.support.service_support import WallClock, instant, reaches_text
 from webauth.service_callers import Principal
 
 from agent_runtime_client.wire import (

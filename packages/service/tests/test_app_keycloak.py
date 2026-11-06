@@ -17,6 +17,7 @@ from collections.abc import Iterator
 from uuid import uuid4
 
 import pytest
+from packages.client.tests.support.wire_builders import started
 from tests.support.keycloak_realm import (
     CLIENT_SECRETS,
     KEYCLOAK_URL,
@@ -47,7 +48,6 @@ from tests.support.service_support import (
     unused_runners,
     with_placeholder_run_id,
 )
-from tests.support.wire_builders import started
 from webauth.https_client import KeySetFetchError
 from webauth.jwt_verification import KEY_SET_REFRESH_COOLDOWN_SECONDS
 from webauth.service_callers import Principal

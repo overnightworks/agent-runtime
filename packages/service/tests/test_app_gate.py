@@ -18,6 +18,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
+from packages.client.tests.support.wire_builders import started
 from tests.support.service_support import (
     API_GROUP,
     APP_GROUP,
@@ -40,7 +41,6 @@ from tests.support.service_support import (
     run_headers,
     served,
 )
-from tests.support.wire_builders import started
 from webauth.service_callers import Principal
 
 from agent_runtime_client.turn import AgentRole, Turn
