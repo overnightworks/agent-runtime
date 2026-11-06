@@ -35,7 +35,7 @@ jobs:
             echo "$allowed has an empty line, which would allow every hit"
             exit 1
           fi
-          matches=$(git grep -n -i -E "$HOST_VOCABULARY" -- src packages tests docs) || [ $? -eq 1 ]
+          matches=$(git grep -n -i -E "$HOST_VOCABULARY" -- src tests docs) || [ $? -eq 1 ]
           hits=
           if [ -n "$matches" ]; then
             hits=$(printf '%s\n' "$matches" | grep -v -E -f "$allowed") || [ $? -eq 1 ]
@@ -50,32 +50,17 @@ jobs:
           enable-cache: true
           python-version: ${{ matrix.python-version }}
 
-      # The workspace's own packages are put on the path rather than built.
-      # The first command installs every locked package without building any;
-      # the second builds only webauth from its pinned git commit, because
-      # everything else is already installed.
       - name: Install dependencies
-        run: |
-          uv sync --locked --all-packages --extra dev --no-install-workspace --no-build --no-install-package overnightworks-webauth
-          uv sync --locked --all-packages --extra dev --no-install-workspace
+        run: uv sync --locked --extra dev
 
       - name: Ruff
-        env:
-          PYTHONPATH: src:packages/client/src:packages/service/src
-        run: uv run --locked --no-sync --no-build ruff check src tests packages conftest.py
+        run: uv run --locked --no-sync ruff check src tests
 
       - name: Import boundaries
-        env:
-          PYTHONPATH: src:packages/client/src:packages/service/src
-        run: uv run --locked --no-sync --no-build lint-imports
+        run: uv run --locked --no-sync lint-imports
 
       - name: Tests
-        env:
-          PYTHONPATH: src:packages/client/src:packages/service/src
-        run: >-
-          uv run --locked --no-sync --no-build pytest -q
-          --cov=src --cov=packages/client/src --cov=packages/service/src
-          --cov-report=xml:coverage.xml
+        run: uv run --locked --no-sync pytest -q --cov=src --cov-report=xml:coverage.xml
 
       - name: Upload the coverage report for the quality gate
         if: matrix.python-version == '3.14'
@@ -84,8 +69,8 @@ jobs:
           name: coverage
           path: coverage.xml
 
-      - name: Build the three distributions
-        run: uv build --all-packages
+      - name: Build the distribution
+        run: uv build
 
       - name: The client wheel carries the repository licence
         run: |
@@ -93,7 +78,7 @@ jobs:
           python3 -I -m zipfile -e dist/overnightworks_agent_runtime_client-*-py3-none-any.whl "$licence"
           cmp LICENSE "$licence"/overnightworks_agent_runtime_client-*.dist-info/licenses/LICENSE
 
-      - name: The client wheel imports alone, outside the workspace
+      - name: The client wheel imports alone, without its extras
         run: |
           proof="$(mktemp -d "$RUNNER_TEMP/client-only.XXXXXX")"
           uv venv "$proof/venv"
@@ -107,7 +92,6 @@ jobs:
 
           import agent_runtime_client
 
-          assert importlib.util.find_spec("agent_runtime") is None, "core leaked in"
           assert importlib.util.find_spec("jwt") is None, "the mcp-server extra leaked in"
           assert importlib.util.find_spec("cryptography") is None, "cryptography leaked in"
           for module in pkgutil.walk_packages(agent_runtime_client.__path__, "agent_runtime_client."):
@@ -130,11 +114,8 @@ jobs:
           uv pip install --python "$proof/venv/bin/python" "$client_wheel[mcp-server]"
           cd "$proof"
           "$proof/venv/bin/python" -I -c '
-          import importlib.util
-
           import agent_runtime_client.mcp_server
 
-          assert importlib.util.find_spec("agent_runtime") is None, "core leaked in"
           print("imported", agent_runtime_client.mcp_server.__name__)
           '
 
@@ -146,58 +127,11 @@ jobs:
           uv pip install --python "$proof/venv/bin/python" "$client_wheel[backend]"
           cd "$proof"
           "$proof/venv/bin/python" -I -c '
-          import importlib.util
-
           import agent_runtime_client.backend.fake_gateway
           import agent_runtime_client.backend.gateway
 
-          assert importlib.util.find_spec("agent_runtime") is None, "core leaked in"
           print("imported", agent_runtime_client.backend.gateway.__name__)
           '
-
-      - name: Both wheels install together and the core imports dispatch
-        run: |
-          proof="$(mktemp -d "$RUNNER_TEMP/two-wheels.XXXXXX")"
-          uv venv "$proof/venv"
-          uv pip install --python "$proof/venv/bin/python" \
-            "$GITHUB_WORKSPACE"/dist/overnightworks_agent_runtime_client-*-py3-none-any.whl \
-            "$GITHUB_WORKSPACE"/dist/overnightworks_agent_runtime-*-py3-none-any.whl
-          cd "$proof"
-          "$proof/venv/bin/python" -I -c '
-          import agent_runtime_client.tools
-          import agent_runtime.dispatch
-          import agent_runtime.tools
-
-          assert agent_runtime.tools.ToolDeclaration is agent_runtime_client.tools.ToolDeclaration
-          print("imported", agent_runtime.dispatch.__name__, "from", agent_runtime.__file__)
-          '
-          printf 'from agent_runtime.tools import ToolCatalog, ToolDeclaration\n' > consumer.py
-          uvx pyright@1.1.414 --pythonpath "$proof/venv/bin/python" consumer.py
-
-      - name: The three wheels install together and both commands refuse a bad config
-        run: |
-          proof="$(mktemp -d "$RUNNER_TEMP/three-wheels.XXXXXX")"
-          uv venv "$proof/venv"
-          uv pip install --python "$proof/venv/bin/python" \
-            "$GITHUB_WORKSPACE"/dist/overnightworks_agent_runtime_client-*-py3-none-any.whl \
-            "$GITHUB_WORKSPACE"/dist/overnightworks_agent_runtime-*-py3-none-any.whl \
-            "$GITHUB_WORKSPACE"/dist/overnightworks_agent_runtime_service-*-py3-none-any.whl
-          cd "$proof"
-          "$proof/venv/bin/python" -I -c 'import agent_runtime_service.app; print("imported", agent_runtime_service.app.__name__)'
-          "$proof/venv/bin/python" -I "$GITHUB_WORKSPACE/packages/service/tests/e2e/app_tools_discovery.py"
-          printf 'from agent_runtime_service.tool_relay import RelayAccess\n' > relay_consumer.py
-          uvx pyright@1.1.414 --pythonpath "$proof/venv/bin/python" relay_consumer.py
-          printf '[identity]\nissuer = "https://issuer.test"\n' > bad.toml
-          status=0
-          "$proof/venv/bin/agent-runtime-service" --config bad.toml 2> refused.txt || status=$?
-          cat refused.txt
-          test "$status" -eq 2
-          grep -q 'identity.jwks_url' refused.txt
-          status=0
-          "$proof/venv/bin/agent-runtime-service-login" --config bad.toml --provider anthropic --check 2> login_refused.txt || status=$?
-          cat login_refused.txt
-          test "$status" -eq 2
-          grep -q 'identity.jwks_url' login_refused.txt
 
   checks:
     name: checks
@@ -209,79 +143,6 @@ jobs:
         env:
           TEST_RESULT: ${{ needs.test.result }}
         run: test "$TEST_RESULT" = success
-
-  keycloak-token-shapes:
-    name: keycloak-token-shapes
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      KEYCLOAK_IMAGE: quay.io/keycloak/keycloak:26.8.1@sha256:79c623a22abacf3fe6c00a5fb30f5b7843d717b234033b80995891c06116d244
-      KEYCLOAK_URL: http://localhost:8080
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
-        with:
-          enable-cache: true
-          cache-dependency-glob: packages/service/tests/fixtures/keycloak/*.txt
-
-      - name: Start Keycloak with the test realm
-        run: |
-          docker run --detach --name keycloak --publish 8080:8080 \
-            --volume "$GITHUB_WORKSPACE/packages/service/tests/fixtures/keycloak:/opt/keycloak/data/import:ro" \
-            "$KEYCLOAK_IMAGE" start-dev --import-realm
-
-      - name: Install the job's hash-locked environment
-        run: |
-          uv venv --python 3.14 "$RUNNER_TEMP/venv"
-          uv pip install --python "$RUNNER_TEMP/venv/bin/python" \
-            --require-hashes --no-build \
-            -r packages/service/tests/fixtures/keycloak/requirements.txt
-          # The git commit sha is the integrity pin; hash mode refuses git sources.
-          uv pip install --python "$RUNNER_TEMP/venv/bin/python" --no-deps \
-            -r packages/service/tests/fixtures/keycloak/webauth-pin.txt
-
-      - name: Wait until the test realm is served
-        run: |
-          for attempt in $(seq 60); do
-            if curl --fail --silent "$KEYCLOAK_URL/realms/agent-test/.well-known/openid-configuration" > /dev/null; then
-              exit 0
-            fi
-            sleep 3
-          done
-          docker logs keycloak
-          exit 1
-
-      - name: Token shapes
-        run: >-
-          "$RUNNER_TEMP/venv/bin/python" -m pytest --noconftest -p no:cacheprovider
-          packages/service/tests/test_identity_keycloak_token_shapes.py -m keycloak -q -rP
-
-      # The workspace's own packages are put on the path rather than built.
-      # The first command installs every locked package without building any;
-      # the second builds only webauth from its pinned git commit, because
-      # everything else is already installed.
-      - name: Install the workspace's locked wheels for the service's end-to-end proof
-        run: |
-          uv sync --locked --all-packages --extra dev --no-install-workspace --no-build --no-install-package overnightworks-webauth
-          uv sync --locked --all-packages --extra dev --no-install-workspace
-
-      - name: The service admits real Keycloak tokens end to end
-        env:
-          PYTHONPATH: src:packages/client/src:packages/service/src
-        run: >-
-          uv run --locked --no-sync --no-build pytest -p no:cacheprovider
-          packages/service/tests/test_app_keycloak.py -m keycloak -q -rP
-
-      - name: Keycloak log on failure
-        if: failure()
-        run: docker logs keycloak
-
-      - name: Stop Keycloak
-        if: always()
-        run: docker rm --force keycloak
 
   dependency-floors:
     name: dependency-floors
@@ -299,26 +160,19 @@ jobs:
           enable-cache: false
           python-version: "3.14"
 
-      # Webauth's version is dynamic, so its metadata comes from a build and
-      # re-resolving may build it; `uv lock` has no switch that allows one
-      # package to build. The installs then run frozen: the first builds
-      # nothing, the second builds only webauth.
       - name: Install the lowest declared direct dependencies
         run: |
           uv lock
-          uv sync --frozen --all-packages --extra dev --no-install-workspace --no-build --no-install-package overnightworks-webauth
-          uv sync --frozen --all-packages --extra dev --no-install-workspace
+          uv sync --frozen --extra dev
 
       - name: Versions the suite runs against
         run: uv pip list
 
       - name: Tests
-        env:
-          PYTHONPATH: src:packages/client/src:packages/service/src
-        run: uv run --no-sync --no-build pytest -q
+        run: uv run --no-sync pytest -q
 
   quality:
-    needs: [checks, keycloak-token-shapes, dependency-floors]
+    needs: [checks, dependency-floors]
     if: always()
     permissions:
       contents: read

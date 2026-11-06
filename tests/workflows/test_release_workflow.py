@@ -21,29 +21,17 @@ class _Release:
     """The scenario every test of one release arranges: what is dispatched and what it builds."""
 
     version: str = "0.3.0"
-    migration_anchor: str = "migrating-to-030"
     other_commit: str = "f" * 40
     repository: str = "overnightworks/agent-runtime"
     wheel_contents: tuple[tuple[str, bytes], ...] = (
-        ("overnightworks_agent_runtime-{}-py3-none-any.whl", b"core"),
         ("overnightworks_agent_runtime_client-{}-py3-none-any.whl", b"client"),
-        ("overnightworks_agent_runtime_service-{}-py3-none-any.whl", b"service"),
     )
-
-    @property
-    def migration_link(self) -> str:
-        return (
-            f"**Before you bump your pin,** read [Migrating to {self.version}]"
-            f"(https://github.com/{self.repository}/blob/v{self.version}/docs/MIGRATING.md"
-            f"#{self.migration_anchor})."
-        )
 
     @property
     def install_lines(self) -> list[str]:
         return [
-            f"overnightworks-agent-runtime{suffix} @ "
-            f"https://example.test/overnightworks-agent-runtime{suffix}.whl#sha256={digest}"
-            for suffix, digest in (("-client", "aa"), ("", "bb"), ("-service", "cc"))
+            "overnightworks-agent-runtime-client @ "
+            "https://example.test/overnightworks-agent-runtime-client.whl#sha256=aa"
         ]
 
 
@@ -139,11 +127,6 @@ def _run_step(
 def _calls(tmp_path: Path) -> list[list[str]]:
     recorded = (tmp_path / "fixtures" / "calls").read_text(encoding="utf-8")
     return [call.split(_FIELD)[:-1] for call in recorded.split(_CALL)[:-1]]
-
-
-def _output_value(tmp_path: Path, name: str) -> str:
-    text = (tmp_path / "github_output").read_text(encoding="utf-8")
-    return text.removeprefix(f"{name}=").removesuffix("\n")
 
 
 def _commit_in(tmp_path: Path) -> str:
@@ -312,13 +295,13 @@ def test_the_commit_needs_a_green_push_run_with_a_green_quality_verdict(
     [(None, True), ("0.2.0", False)],
     ids=["at the version", "at another version"],
 )
-def test_the_build_must_hold_exactly_the_three_wheels_at_the_version(
+def test_the_build_must_hold_exactly_the_client_wheel_at_the_version(
     tmp_path, release, built_version, passes
 ):
     _wheels_in(tmp_path, release, built_version)
 
     result = _run_step(
-        "Refuse unless the build holds exactly the three wheels at the version",
+        "Refuse unless the build holds exactly the client wheel at the version",
         tmp_path,
         release,
     )
@@ -330,7 +313,7 @@ def test_the_build_must_hold_exactly_the_three_wheels_at_the_version(
 def test_a_missing_or_extra_wheel_is_refused(tmp_path, release):
     wheels = _wheels_in(tmp_path, release)
     (tmp_path / "dist" / next(iter(wheels))).unlink()
-    step = "Refuse unless the build holds exactly the three wheels at the version"
+    step = "Refuse unless the build holds exactly the client wheel at the version"
 
     missing = _run_step(step, tmp_path, release)
     _wheels_in(tmp_path, release)
@@ -338,43 +321,6 @@ def test_a_missing_or_extra_wheel_is_refused(tmp_path, release):
     extra = _run_step(step, tmp_path, release)
 
     assert (missing.returncode, extra.returncode) == (1, 1)
-
-
-def _notice_for(release: _Release, version: str, migrating: str, tmp_path: Path) -> str:
-    (tmp_path / "docs").mkdir()
-    (tmp_path / "docs" / "MIGRATING.md").write_text(migrating, encoding="utf-8")
-    result = _run_step(
-        "Point a release at its migration section", tmp_path, release, {"VERSION": version}
-    )
-    assert result.returncode == 0
-    return _output_value(tmp_path, "notice")
-
-
-def test_the_release_notice_links_the_migration_section_of_a_version_that_has_one(
-    tmp_path, release
-):
-    migrating = f"# Title\n\n## Migrating to {release.version}\n\ntext\n"
-
-    notice = _notice_for(release, release.version, migrating, tmp_path)
-
-    assert notice == release.migration_link
-
-
-@pytest.mark.parametrize(
-    ("version", "heading"),
-    [
-        ("0.3.1", "## Migrating to {}"),
-        (None, "## Install"),
-        (None, "### Migrating to {}"),
-    ],
-    ids=["version of another section", "no section", "section one level down"],
-)
-def test_the_release_notice_is_empty_for_a_version_without_its_migration_section(
-    tmp_path, release, version, heading
-):
-    migrating = f"# Title\n\n{heading.format(release.version)}\n\ntext\n"
-
-    assert _notice_for(release, version or release.version, migrating, tmp_path) == ""
 
 
 def _wheel_list_output(tmp_path: Path, release: _Release) -> tuple[dict[str, bytes], str]:
@@ -418,36 +364,28 @@ _PUBLISH = "Publish the release on the tag with the wheels the gate built"
 _TAG = "Create the tag at the gated commit"
 
 
-def _tag_environment(release: _Release, notice: str = "") -> dict[str, str]:
-    return {"NOTICE": notice, "INSTALL": "\n".join(release.install_lines)}
+def _tag_environment(release: _Release) -> dict[str, str]:
+    return {"INSTALL": "\n".join(release.install_lines)}
 
 
-def _publish(notice: str, tmp_path: Path, release: _Release) -> list[str]:
+def _publish(tmp_path: Path, release: _Release) -> list[str]:
     _wheels_in(tmp_path, release)
-    result = _run_step(_PUBLISH, tmp_path, release, _tag_environment(release, notice))
+    result = _run_step(_PUBLISH, tmp_path, release, _tag_environment(release))
     assert result.returncode == 0
     return _calls(tmp_path)[0]
 
 
-def test_the_published_notes_open_with_the_migration_link_then_the_install_lines(tmp_path, release):
-    notes = _publish(release.migration_link, tmp_path, release)[-1]
-
-    assert notes == "\n".join([release.migration_link, "", *release.install_lines])
-
-
-def test_the_published_notes_without_a_migration_section_are_the_install_lines_only(
-    tmp_path, release
-):
-    arguments = _publish("", tmp_path, release)
+def test_the_published_notes_are_the_install_lines(tmp_path, release):
+    arguments = _publish(tmp_path, release)
 
     assert arguments[-2:] == ["--notes", "\n".join(release.install_lines)]
 
 
-def test_the_release_is_created_on_the_verified_tag_with_the_three_wheels(tmp_path, release):
-    arguments = _publish("", tmp_path, release)
+def test_the_release_is_created_on_the_verified_tag_with_the_client_wheel(tmp_path, release):
+    arguments = _publish(tmp_path, release)
 
     assert arguments[:3] == ["release", "create", f"v{release.version}"]
-    assert len([argument for argument in arguments if argument.startswith("dist/")]) == 3
+    assert len([argument for argument in arguments if argument.startswith("dist/")]) == 1
     assert "--verify-tag" in arguments
     assert "--generate-notes" in arguments
 
