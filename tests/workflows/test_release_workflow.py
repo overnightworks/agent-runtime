@@ -6,24 +6,51 @@ import hashlib
 import json
 import re
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
 _WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
-_REPOSITORY = "overnightworks/agent-runtime"
-_VERSION = "0.3.0"
-_OTHER_COMMIT = "f" * 40
-_MIGRATION_LINK = (
-    f"**Before you bump your pin,** read [Migrating to {_VERSION}]"
-    f"(https://github.com/{_REPOSITORY}/blob/v{_VERSION}/docs/MIGRATING.md#migrating-to-030)."
-)
-_WHEELS = {
-    "overnightworks_agent_runtime-{}-py3-none-any.whl": b"core",
-    "overnightworks_agent_runtime_client-{}-py3-none-any.whl": b"client",
-    "overnightworks_agent_runtime_service-{}-py3-none-any.whl": b"service",
-}
+_WITHIN_STEP = r"(?:(?!      - ).*\n)*?"
 _FIELD, _CALL = "\x1f", "\x1e"
+
+
+@dataclass(frozen=True)
+class _Release:
+    """The scenario every test of one release arranges: what is dispatched and what it builds."""
+
+    version: str = "0.3.0"
+    other_commit: str = "f" * 40
+    repository: str = "overnightworks/agent-runtime"
+    wheel_contents: tuple[tuple[str, bytes], ...] = (
+        ("overnightworks_agent_runtime-{}-py3-none-any.whl", b"core"),
+        ("overnightworks_agent_runtime_client-{}-py3-none-any.whl", b"client"),
+        ("overnightworks_agent_runtime_service-{}-py3-none-any.whl", b"service"),
+    )
+
+    @property
+    def migration_link(self) -> str:
+        return (
+            f"**Before you bump your pin,** read [Migrating to {self.version}]"
+            f"(https://github.com/{self.repository}/blob/v{self.version}/docs/MIGRATING.md"
+            f"#migrating-to-{self.version.replace('.', '')})."
+        )
+
+    @property
+    def install_lines(self) -> list[str]:
+        return [
+            f"overnightworks-agent-runtime{suffix} @ "
+            f"https://example.test/overnightworks-agent-runtime{suffix}.whl#sha256={digest}"
+            for suffix, digest in (("-client", "aa"), ("", "bb"), ("-service", "cc"))
+        ]
+
+
+@pytest.fixture
+def release() -> _Release:
+    return _Release()
+
+
 # Stands in for `gh`: records every call and answers from fixtures, applying `--jq` like gh does.
 _FAKE_GH = """#!/bin/bash
 printf '%s\\037' "$@" >> "$FAKE_DIR/calls"
@@ -31,8 +58,14 @@ printf '\\036' >> "$FAKE_DIR/calls"
 case "$*" in
   *commits/main*) fixture=main_head ;;
   *matching-refs*) fixture=refs ;;
-  "run list"*) fixture=runs ;;
-  "run view"*) fixture=jobs ;;
+  "run list"*)
+    fixture=empty
+    if [[ "$*" == *"--workflow ci.yml"* && "$*" == *"--event push"* \\
+      && "$*" == *"--commit $COMMIT"* ]]; then
+      fixture=runs
+    fi ;;
+  "run view"*) fixture="jobs_$3" ;;
+  "release create"*) if [ -f "$FAKE_DIR/release_fails" ]; then exit 1; fi; exit 0 ;;
   *) exit 0 ;;
 esac
 filter=""
@@ -40,13 +73,14 @@ while [ $# -gt 0 ]; do
   if [ "$1" = "--jq" ]; then filter="$2"; fi
   shift
 done
+[ -f "$FAKE_DIR/$fixture" ] || exit 1
 if [ -n "$filter" ]; then jq -r "$filter" "$FAKE_DIR/$fixture"; else cat "$FAKE_DIR/$fixture"; fi
 """
 
 
 def _run_script(step_name: str) -> str:
     step = re.search(
-        rf"- name: {re.escape(step_name)}\n(?:.*\n)*?        run: \|\n((?:          .*\n|\n)+)",
+        rf"- name: {re.escape(step_name)}\n{_WITHIN_STEP}        run: \|\n((?:          .*\n|\n)+)",
         _WORKFLOW.read_text(encoding="utf-8"),
     )
     assert step, f"release.yml has no run script for {step_name}"
@@ -55,12 +89,13 @@ def _run_script(step_name: str) -> str:
 
 def _run_names() -> list[str]:
     text = _WORKFLOW.read_text(encoding="utf-8")
-    return re.findall(r"- name: (.*)\n(?:.*\n)*?        run: \|", text)
+    return re.findall(rf"- name: (.*)\n{_WITHIN_STEP}        run: \|", text)
 
 
 def _write_fixtures(tmp_path: Path, **fixtures: object) -> None:
     directory = tmp_path / "fixtures"
     directory.mkdir(exist_ok=True)
+    (directory / "empty").write_text("[]", encoding="utf-8")
     for name, value in fixtures.items():
         text = value if isinstance(value, str) else json.dumps(value)
         (directory / name).write_text(text, encoding="utf-8")
@@ -69,6 +104,7 @@ def _write_fixtures(tmp_path: Path, **fixtures: object) -> None:
 def _run_step(
     step_name: str,
     tmp_path: Path,
+    release: _Release,
     environment: dict[str, str] | None = None,
     **fixtures: object,
 ) -> subprocess.CompletedProcess[str]:
@@ -88,9 +124,9 @@ def _run_step(
             "PATH": f"{bin_directory}:/usr/bin:/bin",
             "FAKE_DIR": str(tmp_path / "fixtures"),
             "GITHUB_OUTPUT": str(output),
-            "GITHUB_REPOSITORY": _REPOSITORY,
-            "VERSION": _VERSION,
-            "COMMIT": _OTHER_COMMIT,
+            "GITHUB_REPOSITORY": release.repository,
+            "VERSION": release.version,
+            "COMMIT": release.other_commit,
             **(environment or {}),
         },
         capture_output=True,
@@ -124,8 +160,10 @@ def _commit_in(tmp_path: Path) -> str:
     ).stdout.strip()
 
 
-def _wheels_in(tmp_path: Path, version: str = _VERSION) -> dict[str, bytes]:
-    wheels = {name.format(version): content for name, content in _WHEELS.items()}
+def _wheels_in(tmp_path: Path, release: _Release, version: str | None = None) -> dict[str, bytes]:
+    wheels = {
+        name.format(version or release.version): content for name, content in release.wheel_contents
+    }
     (tmp_path / "dist").mkdir(exist_ok=True)
     for name, content in wheels.items():
         (tmp_path / "dist" / name).write_bytes(content)
@@ -141,8 +179,8 @@ def _wheels_in(tmp_path: Path, version: str = _VERSION) -> dict[str, bytes]:
     ],
     ids=["main", "another branch", "a tag"],
 )
-def test_only_a_dispatch_from_main_passes_the_ref_gate(tmp_path, dispatch_ref, passes):
-    result = _run_step("Refuse any ref but main", tmp_path, {"DISPATCH_REF": dispatch_ref})
+def test_only_a_dispatch_from_main_passes_the_ref_gate(tmp_path, release, dispatch_ref, passes):
+    result = _run_step("Refuse any ref but main", tmp_path, release, {"DISPATCH_REF": dispatch_ref})
 
     assert (result.returncode == 0) is passes
     assert passes or result.stderr.startswith("Refused: dispatched from")
@@ -160,10 +198,11 @@ def test_only_a_dispatch_from_main_passes_the_ref_gate(tmp_path, dispatch_ref, p
         ("0.21.0", "g" * 40, "the commit"),
     ],
 )
-def test_a_malformed_version_or_commit_is_refused(tmp_path, version, commit, line):
+def test_a_malformed_version_or_commit_is_refused(tmp_path, release, version, commit, line):
     result = _run_step(
         "Refuse a malformed version or commit",
         tmp_path,
+        release,
         {"VERSION": version, "COMMIT": commit},
     )
 
@@ -171,8 +210,10 @@ def test_a_malformed_version_or_commit_is_refused(tmp_path, version, commit, lin
     assert result.stderr.startswith(f"Refused: {line}")
 
 
-def test_a_full_version_and_commit_pass_the_format_gate(tmp_path):
-    result = _run_step("Refuse a malformed version or commit", tmp_path, {"COMMIT": "a" * 40})
+def test_a_full_version_and_commit_pass_the_format_gate(tmp_path, release):
+    result = _run_step(
+        "Refuse a malformed version or commit", tmp_path, release, {"COMMIT": "a" * 40}
+    )
 
     assert result.returncode == 0
 
@@ -187,13 +228,14 @@ def test_a_full_version_and_commit_pass_the_format_gate(tmp_path):
     ids=["pass", "checkout moved", "main moved"],
 )
 def test_the_commit_must_be_the_checked_out_head_and_main_s_head(
-    tmp_path, main_head, checked_out, line
+    tmp_path, release, main_head, checked_out, line
 ):
     head = _commit_in(tmp_path)
-    commits = {"same": head, "other": _OTHER_COMMIT}
+    commits = {"same": head, "other": release.other_commit}
     result = _run_step(
         "Refuse unless the commit is the checked-out head of main",
         tmp_path,
+        release,
         {"COMMIT": commits[checked_out]},
         main_head=json.dumps({"sha": commits[main_head]}),
     )
@@ -211,8 +253,8 @@ def test_the_commit_must_be_the_checked_out_head_and_main_s_head(
     ],
     ids=["no tag", "a longer tag name", "the tag exists"],
 )
-def test_a_version_whose_tag_exists_is_refused(tmp_path, refs, passes):
-    result = _run_step("Refuse a tag that exists", tmp_path, refs=refs)
+def test_a_version_whose_tag_exists_is_refused(tmp_path, release, refs, passes):
+    result = _run_step("Refuse a tag that exists", tmp_path, release, refs=refs)
 
     assert (result.returncode == 0) is passes
     assert passes or result.stderr.startswith("Refused: the tag v0.3.0 exists")
@@ -248,12 +290,16 @@ def test_a_version_whose_tag_exists_is_refused(tmp_path, refs, passes):
         "red verdict",
     ],
 )
-def test_the_commit_needs_a_green_push_run_with_a_green_quality_verdict(tmp_path, runs, jobs, line):
+def test_the_commit_needs_a_green_push_run_with_a_green_quality_verdict(
+    tmp_path, release, runs, jobs, line
+):
+    # The fake answers a run list only for CI's push runs on COMMIT, and a run view only by its id.
     result = _run_step(
         "Refuse unless CI's push run on the commit is green with the quality verdict",
         tmp_path,
+        release,
         runs=runs,
-        jobs={"jobs": [{"name": name, "conclusion": ok} for name, ok in jobs]},
+        jobs_7={"jobs": [{"name": name, "conclusion": ok} for name, ok in jobs]},
     )
 
     assert result.returncode == (0 if line is None else 1)
@@ -262,157 +308,201 @@ def test_the_commit_needs_a_green_push_run_with_a_green_quality_verdict(tmp_path
 
 @pytest.mark.parametrize(
     ("built_version", "passes"),
-    [(_VERSION, True), ("0.2.0", False)],
+    [(None, True), ("0.2.0", False)],
     ids=["at the version", "at another version"],
 )
 def test_the_build_must_hold_exactly_the_three_wheels_at_the_version(
-    tmp_path, built_version, passes
+    tmp_path, release, built_version, passes
 ):
-    _wheels_in(tmp_path, built_version)
+    _wheels_in(tmp_path, release, built_version)
 
     result = _run_step(
-        "Refuse unless the build holds exactly the three wheels at the version", tmp_path
+        "Refuse unless the build holds exactly the three wheels at the version",
+        tmp_path,
+        release,
     )
 
     assert (result.returncode == 0) is passes
     assert passes or result.stderr.startswith("Refused:")
 
 
-def test_a_missing_or_extra_wheel_is_refused(tmp_path):
-    wheels = _wheels_in(tmp_path)
+def test_a_missing_or_extra_wheel_is_refused(tmp_path, release):
+    wheels = _wheels_in(tmp_path, release)
     (tmp_path / "dist" / next(iter(wheels))).unlink()
     step = "Refuse unless the build holds exactly the three wheels at the version"
 
-    missing = _run_step(step, tmp_path)
-    _wheels_in(tmp_path)
-    (tmp_path / "dist" / f"extra-{_VERSION}-py3-none-any.whl").touch()
-    extra = _run_step(step, tmp_path)
+    missing = _run_step(step, tmp_path, release)
+    _wheels_in(tmp_path, release)
+    (tmp_path / "dist" / f"extra-{release.version}-py3-none-any.whl").touch()
+    extra = _run_step(step, tmp_path, release)
 
     assert (missing.returncode, extra.returncode) == (1, 1)
 
 
-def _notice_for(version: str, migrating: str, tmp_path: Path) -> str:
+def _notice_for(release: _Release, version: str, migrating: str, tmp_path: Path) -> str:
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "MIGRATING.md").write_text(migrating, encoding="utf-8")
-    result = _run_step("Point a release at its migration section", tmp_path, {"VERSION": version})
+    result = _run_step(
+        "Point a release at its migration section", tmp_path, release, {"VERSION": version}
+    )
     assert result.returncode == 0
     return _output_value(tmp_path, "notice")
 
 
-def test_the_release_notice_links_the_migration_section_of_a_version_that_has_one(tmp_path):
-    notice = _notice_for(_VERSION, f"# Title\n\n## Migrating to {_VERSION}\n\ntext\n", tmp_path)
+def test_the_release_notice_links_the_migration_section_of_a_version_that_has_one(
+    tmp_path, release
+):
+    migrating = f"# Title\n\n## Migrating to {release.version}\n\ntext\n"
 
-    assert notice == _MIGRATION_LINK
+    notice = _notice_for(release, release.version, migrating, tmp_path)
+
+    assert notice == release.migration_link
 
 
 @pytest.mark.parametrize(
     ("version", "heading"),
     [
-        ("0.3.1", "## Migrating to 0.3.0"),
-        (_VERSION, "## Install"),
-        (_VERSION, "### Migrating to 0.3.0"),
+        ("0.3.1", "## Migrating to {}"),
+        (None, "## Install"),
+        (None, "### Migrating to {}"),
     ],
     ids=["version of another section", "no section", "section one level down"],
 )
 def test_the_release_notice_is_empty_for_a_version_without_its_migration_section(
-    tmp_path, version, heading
+    tmp_path, release, version, heading
 ):
-    assert _notice_for(version, f"# Title\n\n{heading}\n\ntext\n", tmp_path) == ""
+    migrating = f"# Title\n\n{heading.format(release.version)}\n\ntext\n"
+
+    assert _notice_for(release, version or release.version, migrating, tmp_path) == ""
 
 
-def _wheel_list_output(tmp_path: Path) -> tuple[dict[str, bytes], str]:
-    wheels = _wheels_in(tmp_path)
-    result = _run_step("List the wheels with their hashes", tmp_path)
+def _wheel_list_output(tmp_path: Path, release: _Release) -> tuple[dict[str, bytes], str]:
+    wheels = _wheels_in(tmp_path, release)
+    result = _run_step("List the wheels with their hashes", tmp_path, release)
     assert result.returncode == 0
     return wheels, (tmp_path / "github_output").read_text(encoding="utf-8")
 
 
-def test_the_release_page_lists_each_wheel_with_its_url_and_sha256(tmp_path):
-    wheels, install = _wheel_list_output(tmp_path)
+def test_the_release_page_lists_each_wheel_with_its_url_and_sha256(tmp_path, release):
+    wheels, install = _wheel_list_output(tmp_path, release)
     for name, content in wheels.items():
         distribution = name.split("-")[0].replace("_", "-")
-        url = f"https://github.com/{_REPOSITORY}/releases/download/v{_VERSION}/{name}"
+        base = f"https://github.com/{release.repository}/releases/download"
+        url = f"{base}/v{release.version}/{name}"
         digest = hashlib.sha256(content).hexdigest()
         assert f"{distribution} @ {url}#sha256={digest}\n" in install
 
 
-def test_the_wheel_list_is_written_in_the_multiline_output_form(tmp_path):
-    _, install = _wheel_list_output(tmp_path)
+def test_the_wheel_list_is_written_in_the_multiline_output_form(tmp_path, release):
+    _, install = _wheel_list_output(tmp_path, release)
     lines = install.splitlines()
 
     _, delimiter = lines[0].split("<<")
     assert lines[-1] == delimiter
 
 
-_INSTALL_LINES = [
-    f"overnightworks-agent-runtime{suffix} @ "
-    f"https://example.test/overnightworks-agent-runtime{suffix}.whl#sha256={digest}"
-    for suffix, digest in (("-client", "aa"), ("", "bb"), ("-service", "cc"))
-]
 _PUBLISH = "Publish the release on the tag with the wheels the gate built"
 _TAG = "Create the tag at the gated commit"
 
 
-def _tag_environment(notice: str = "") -> dict[str, str]:
-    return {"NOTICE": notice, "INSTALL": "\n".join(_INSTALL_LINES)}
+def _tag_environment(release: _Release, notice: str = "") -> dict[str, str]:
+    return {"NOTICE": notice, "INSTALL": "\n".join(release.install_lines)}
 
 
-def _publish(notice: str, tmp_path: Path) -> list[str]:
-    _wheels_in(tmp_path)
-    result = _run_step(_PUBLISH, tmp_path, _tag_environment(notice))
+def _publish(notice: str, tmp_path: Path, release: _Release) -> list[str]:
+    _wheels_in(tmp_path, release)
+    result = _run_step(_PUBLISH, tmp_path, release, _tag_environment(release, notice))
     assert result.returncode == 0
     return _calls(tmp_path)[0]
 
 
-def test_the_published_notes_open_with_the_migration_link_then_the_install_lines(tmp_path):
-    notes = _publish(_MIGRATION_LINK, tmp_path)[-1]
+def test_the_published_notes_open_with_the_migration_link_then_the_install_lines(tmp_path, release):
+    notes = _publish(release.migration_link, tmp_path, release)[-1]
 
-    assert notes == "\n".join([_MIGRATION_LINK, "", *_INSTALL_LINES])
-
-
-def test_the_published_notes_without_a_migration_section_are_the_install_lines_only(tmp_path):
-    arguments = _publish("", tmp_path)
-
-    assert arguments[-2:] == ["--notes", "\n".join(_INSTALL_LINES)]
+    assert notes == "\n".join([release.migration_link, "", *release.install_lines])
 
 
-def test_the_release_is_created_on_the_verified_tag_with_the_three_wheels(tmp_path):
-    arguments = _publish("", tmp_path)
+def test_the_published_notes_without_a_migration_section_are_the_install_lines_only(
+    tmp_path, release
+):
+    arguments = _publish("", tmp_path, release)
 
-    assert arguments[:3] == ["release", "create", f"v{_VERSION}"]
+    assert arguments[-2:] == ["--notes", "\n".join(release.install_lines)]
+
+
+def test_the_release_is_created_on_the_verified_tag_with_the_three_wheels(tmp_path, release):
+    arguments = _publish("", tmp_path, release)
+
+    assert arguments[:3] == ["release", "create", f"v{release.version}"]
     assert len([argument for argument in arguments if argument.startswith("dist/")]) == 3
     assert "--verify-tag" in arguments
     assert "--generate-notes" in arguments
 
 
-def test_the_tag_is_created_at_the_gated_commit(tmp_path):
-    result = _run_step(_TAG, tmp_path, {"COMMIT": "a" * 40}, refs=[])
+def _tag_creations(tmp_path: Path) -> list[list[str]]:
+    return [call for call in _calls(tmp_path) if "POST" in call]
 
-    creations = [call for call in _calls(tmp_path) if "POST" in call]
+
+def test_the_tag_is_created_at_the_gated_commit(tmp_path, release):
+    result = _run_step(_TAG, tmp_path, release, {"COMMIT": "a" * 40}, refs=[])
+
+    creations = _tag_creations(tmp_path)
     assert result.returncode == 0
-    assert [f"ref=refs/tags/v{_VERSION}", f"sha={'a' * 40}"] == [
+    assert [f"ref=refs/tags/v{release.version}", f"sha={'a' * 40}"] == [
         argument for argument in creations[0] if argument.startswith(("ref=", "sha="))
     ]
 
 
-def test_a_rerun_keeps_the_tag_that_already_points_at_the_commit(tmp_path):
+def test_a_rerun_keeps_the_tag_that_already_points_at_the_commit(tmp_path, release):
     commit = "a" * 40
-    refs = [{"ref": f"refs/tags/v{_VERSION}", "object": {"sha": commit}}]
+    refs = [{"ref": f"refs/tags/v{release.version}", "object": {"sha": commit}}]
 
-    result = _run_step(_TAG, tmp_path, {"COMMIT": commit}, refs=refs)
+    result = _run_step(_TAG, tmp_path, release, {"COMMIT": commit}, refs=refs)
 
     assert result.returncode == 0
-    assert not [call for call in _calls(tmp_path) if "POST" in call]
+    assert not _tag_creations(tmp_path)
 
 
-def test_a_tag_at_another_commit_fails_the_job_without_creating_anything(tmp_path):
-    refs = [{"ref": f"refs/tags/v{_VERSION}", "object": {"sha": _OTHER_COMMIT}}]
+def test_a_tag_at_another_commit_fails_the_job_without_creating_anything(tmp_path, release):
+    refs = [{"ref": f"refs/tags/v{release.version}", "object": {"sha": release.other_commit}}]
 
-    result = _run_step(_TAG, tmp_path, {"COMMIT": "a" * 40}, refs=refs)
+    result = _run_step(_TAG, tmp_path, release, {"COMMIT": "a" * 40}, refs=refs)
 
     assert result.returncode == 1
     assert result.stderr.startswith("Refused:")
-    assert not [call for call in _calls(tmp_path) if "POST" in call]
+    assert not _tag_creations(tmp_path)
+
+
+def _operations(tmp_path: Path) -> list[str]:
+    names = {"POST": "create the tag", "release": "create the release"}
+    return [
+        names["POST" if "POST" in call else call[0]]
+        for call in _calls(tmp_path)
+        if "POST" in call or call[:2] == ["release", "create"]
+    ]
+
+
+def test_the_tag_is_created_before_the_release_and_a_failed_publication_is_retried_on_it(
+    tmp_path, release
+):
+    commit = "a" * 40
+    environment = {"COMMIT": commit, **_tag_environment(release)}
+    _wheels_in(tmp_path, release)
+
+    tagged = _run_step(_TAG, tmp_path, release, environment, refs=[])
+    published = _run_step(_PUBLISH, tmp_path, release, environment, release_fails="")
+    (tmp_path / "fixtures" / "release_fails").unlink()
+    created = [{"ref": f"refs/tags/v{release.version}", "object": {"sha": commit}}]
+    retagged = _run_step(_TAG, tmp_path, release, environment, refs=created)
+    republished = _run_step(_PUBLISH, tmp_path, release, environment)
+
+    assert (tagged.returncode, published.returncode) == (0, 1)
+    assert (retagged.returncode, republished.returncode) == (0, 0)
+    assert _operations(tmp_path) == [
+        "create the tag",
+        "create the release",
+        "create the release",
+    ]
 
 
 @pytest.mark.parametrize("step_name", _run_names())

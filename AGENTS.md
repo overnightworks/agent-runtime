@@ -60,7 +60,7 @@ owns the allowed hits. The required check is `quality / verdict`
 `main` is protected.
 
 A release is dispatched, not pushed: `gh workflow run release.yml -f version=X.Y.Z -f commit=<main's head>`,
-and the three distributions move in lockstep. `.github/workflows/release.yml` gates first
+and the three distributions move in lockstep. The head gives the operator that line with the version and commit filled in; only the operator runs it, as only he tagged. `.github/workflows/release.yml` gates first
 (main's head, a free tag, a green CI run with its `quality / verdict`, three wheels
 at the version), then creates the tag at that commit through the API and attaches exactly
 those three wheels, built by the gate, to the GitHub release; hosts pin those wheel URLs (hal's image, which installs with `--require-hashes`, stays on them while webauth#543's line 4 is open; `docs/MIGRATING.md` owns the condition) or the git tag (`@v<version>`, with `#subdirectory=packages/client` or `packages/service`, core at the root), and never install by name from PyPI. A release whose `docs/MIGRATING.md`
