@@ -59,10 +59,9 @@ owns the allowed hits. The required check is `quality / verdict`
 
 `main` is protected.
 
-A release is a tag, and the three distributions move in lockstep. On a `v*`
-tag `.github/workflows/release.yml` builds the three wheels, checks that their
-names carry the tag's version, and attaches exactly those three wheels to the
-GitHub release; hosts pin those wheel URLs (hal's image, which installs with `--require-hashes`, stays on them while webauth#543's line 4 is open; `docs/MIGRATING.md` owns the condition) or the git tag (`@v<version>`, with `#subdirectory=packages/client` or `packages/service`, core at the root), and never install by name from PyPI. A release whose `docs/MIGRATING.md`
+A release is dispatched, not pushed: `gh workflow run release.yml -f version=X.Y.Z -f commit=<main's head>`,
+and the three distributions move in lockstep. The head gives the operator that line with the version and commit filled in; only the operator runs it, as only he tagged. `.github/workflows/release.yml` gates first, then creates the tag at that commit through the API and attaches exactly
+those three wheels, built by the gate, to the GitHub release; hosts pin those wheel URLs (hal's image, which installs with `--require-hashes`, stays on them while webauth#543's line 4 is open; `docs/MIGRATING.md` owns the condition) or the git tag (`@v<version>`, with `#subdirectory=packages/client` or `packages/service`, core at the root), and never install by name from PyPI. A release whose `docs/MIGRATING.md`
 holds `## Migrating to <version>` gets a release page that opens with a link to
 that section, so a breaking release writes that section before the tag. A tag
 is never moved — a broken release gets the next patch tag — so the pull

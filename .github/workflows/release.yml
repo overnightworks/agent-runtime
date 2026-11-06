@@ -1,17 +1,60 @@
 name: Release
 
+# The tag is immutable under the ruleset, so every gate runs before it exists.
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The version to release, X.Y.Z"
+        required: true
+        type: string
+      commit:
+        description: "The approved commit, 40 lowercase hex characters, main's head"
+        required: true
+        type: string
 
-permissions:
-  contents: write
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions: {}
 
 jobs:
-  release:
-    name: release
+  gate:
+    name: Gate
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read # reads CI's run on the commit
+    outputs:
+      notice: ${{ steps.notice.outputs.notice }}
+      install: ${{ steps.install.outputs.install }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ inputs.version }}
+      COMMIT: ${{ inputs.commit }}
     steps:
+      - name: Refuse any ref but main
+        env:
+          DISPATCH_REF: ${{ github.ref }}
+        run: |
+          if [ "$DISPATCH_REF" != "refs/heads/main" ]; then
+            echo "Refused: dispatched from $DISPATCH_REF, a release is dispatched from main." >&2
+            exit 1
+          fi
+
+      - name: Refuse a malformed version or commit
+        run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Refused: the version is not a full X.Y.Z." >&2
+            exit 1
+          fi
+          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Refused: the commit is not a full 40-character lowercase SHA." >&2
+            exit 1
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
@@ -20,33 +63,68 @@ jobs:
         with:
           enable-cache: false
 
+      - name: Refuse unless the commit is the checked-out head of main
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$COMMIT" ]; then
+            echo "Refused: the commit is not the one checked out, main's head." >&2
+            exit 1
+          fi
+          main_head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$main_head" != "$COMMIT" ]; then
+            echo "Refused: the commit is not main's head ($main_head)." >&2
+            exit 1
+          fi
+
+      - name: Refuse a tag that exists
+        run: |
+          taken=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v$VERSION" \
+            --jq '[.[] | select(.ref == "refs/tags/v" + env.VERSION)] | length')
+          if [ "$taken" != "0" ]; then
+            echo "Refused: the tag v$VERSION exists." >&2
+            exit 1
+          fi
+
+      - name: Refuse unless CI's push run on the commit is green with the quality verdict
+        run: |
+          gh run list --workflow ci.yml --event push --commit "$COMMIT" \
+            --json databaseId,conclusion > runs.json
+          run_id=$(jq -r 'map(select(.conclusion == "success")) | first | .databaseId // empty' runs.json)
+          if [ -z "$run_id" ]; then
+            echo "Refused: CI has no green push run on $COMMIT." >&2
+            exit 1
+          fi
+          verdicts=$(gh run view "$run_id" --json jobs \
+            --jq '[.jobs[] | select(.name == "quality / verdict" and .conclusion == "success")] | length')
+          if [ "$verdicts" != "1" ]; then
+            echo "Refused: run $run_id has no green quality / verdict." >&2
+            exit 1
+          fi
+
       - name: Build the three distributions
         run: uv build --all-packages
 
-      - name: The tag names the version all three wheels were built at
+      - name: Refuse unless the build holds exactly the three wheels at the version
         run: |
-          version="${GITHUB_REF_NAME#v}"
           expected="$(printf '%s\n' \
-            "overnightworks_agent_runtime-${version}-py3-none-any.whl" \
-            "overnightworks_agent_runtime_client-${version}-py3-none-any.whl" \
-            "overnightworks_agent_runtime_service-${version}-py3-none-any.whl")"
+            "overnightworks_agent_runtime-${VERSION}-py3-none-any.whl" \
+            "overnightworks_agent_runtime_client-${VERSION}-py3-none-any.whl" \
+            "overnightworks_agent_runtime_service-${VERSION}-py3-none-any.whl")"
           built="$(cd dist && ls -- *.whl | sort)"
           if [ "$built" != "$expected" ]; then
-            echo "Tag $GITHUB_REF_NAME expects exactly:" >&2
+            echo "Refused: the build must hold exactly these wheels:" >&2
             echo "$expected" >&2
-            echo "but the build produced:" >&2
+            echo "but it holds:" >&2
             echo "$built" >&2
             exit 1
           fi
 
-      - name: Point a breaking release at its migration section
+      - name: Point a release at its migration section
         id: notice
         run: |
-          version="${GITHUB_REF_NAME#v}"
           notice=""
-          if grep -qxF "## Migrating to ${version}" docs/MIGRATING.md; then
-            anchor="migrating-to-${version//./}"
-            notice="**Breaking release.** Read [Migrating to ${version}](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/docs/MIGRATING.md#${anchor}) before you bump your pin."
+          if grep -qxF "## Migrating to ${VERSION}" docs/MIGRATING.md; then
+            anchor="migrating-to-${VERSION//./}"
+            notice="**Before you bump your pin,** read [Migrating to ${VERSION}](https://github.com/${GITHUB_REPOSITORY}/blob/v${VERSION}/docs/MIGRATING.md#${anchor})."
           fi
           echo "notice=${notice}" >> "$GITHUB_OUTPUT"
 
@@ -61,21 +139,56 @@ jobs:
             for wheel in dist/*.whl; do
               file="$(basename "$wheel")"
               name="${file%%-*}"
-              hash="$(sha256sum "$wheel" | cut -d ' ' -f 1)"
-              echo "${name//_/-} @ https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/${file}#sha256=${hash}"
+              listing="$(sha256sum "$wheel")"
+              hash="${listing%% *}"
+              echo "${name//_/-} @ https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/${file}#sha256=${hash}"
             done
             echo '```'
             echo 'INSTALL_LINES'
           } >> "$GITHUB_OUTPUT"
 
-      - name: Publish the release with the wheels the check admitted
-        env:
-          GH_TOKEN: ${{ github.token }}
-          NOTICE: ${{ steps.notice.outputs.notice }}
-          INSTALL: ${{ steps.install.outputs.install }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wheels
+          path: dist/*.whl
+          if-no-files-found: error
+
+  tag:
+    name: Tag
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # creates the tag and the release
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ inputs.version }}
+      COMMIT: ${{ inputs.commit }}
+      NOTICE: ${{ needs.gate.outputs.notice }}
+      INSTALL: ${{ needs.gate.outputs.install }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wheels
+          path: dist
+
+      - name: Create the tag at the gated commit
+        run: |
+          at=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v$VERSION" \
+            --jq '[.[] | select(.ref == "refs/tags/v" + env.VERSION)] | first | .object.sha // empty')
+          if [ -z "$at" ]; then
+            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f "ref=refs/tags/v$VERSION" -f "sha=$COMMIT"
+          elif [ "$at" != "$COMMIT" ]; then
+            echo "Refused: the tag v$VERSION exists at $at, not at the gated commit." >&2
+            exit 1
+          fi
+
+      - name: Publish the release on the tag with the wheels the gate built
         run: |
           notes="$INSTALL"
           if [ -n "$NOTICE" ]; then
             notes="${NOTICE}"$'\n\n'"${INSTALL}"
           fi
-          gh release create "$GITHUB_REF_NAME" dist/*.whl --title "$GITHUB_REF_NAME" --generate-notes --notes "$notes"
+          gh release create "v$VERSION" dist/*.whl --verify-tag --title "v$VERSION" --generate-notes --notes "$notes"
