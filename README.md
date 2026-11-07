@@ -46,10 +46,9 @@ async with aclosing(backend.run(agent.request(messages), person)) as events:
         ...
 ```
 
-`person` is a `TurnPerson`, always the verified person. A turn that ends short of its answer
-raises `TurnStopped`, which says whether it was refused or failed and whether a
-side-effecting tool had already started. [docs/connector.md](docs/connector.md) has the full
-contract.
+`person` is a `TurnPerson`, always the verified person. A turn that ends short of its answer raises
+`TurnStopped`, which says whether it was refused or failed and whether a side-effecting tool had
+already started. [docs/connector.md](docs/connector.md) has the full contract.
 
 ## Where to read
 

@@ -1,4 +1,4 @@
-"""The port's request side: who a turn is for."""
+"""The port's two sides: who a turn is for, and how a turn ends short of its answer."""
 
 from __future__ import annotations
 
@@ -25,5 +25,5 @@ def test_a_turn_person_is_frozen():
 
 
 def test_a_turn_stop_is_not_constructible_without_a_code() -> None:
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="code"):
         TurnStopped(TurnStopKind.REFUSED)  # type: ignore[call-arg]
