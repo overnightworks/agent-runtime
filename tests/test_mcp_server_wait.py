@@ -299,7 +299,7 @@ def test_a_cancelled_wait_sends_nothing_and_leaves_every_other_wait_of_the_membe
 
         async def cancelled() -> None:
             body = tool_call_body("wait", {"after": cursor})
-            sent.extend(await post(scenario.front, a_member(), body))
+            await post(scenario.front, a_member(), body, sent)
 
         async def waiting() -> None:
             results.append(await scenario.wait(a_member(), after=cursor))
@@ -376,15 +376,19 @@ def test_the_in_memory_changes_grow_with_neither_changes_nor_finished_waits() ->
     async def changed_and_waited() -> int:
         for member in members:
             changes.changed(member)
-        tracemalloc.start()
-        before = tracemalloc.get_traced_memory()[0]
-        for member in members:
-            for _ in range(10):
-                changes.changed(member)
-            cursor = await changes.wait(member, None, 1)
-            await changes.wait(member, cursor, 1)
-        grown = tracemalloc.get_traced_memory()[0] - before
-        tracemalloc.stop()
-        return grown
+        was_tracing = tracemalloc.is_tracing()
+        if not was_tracing:
+            tracemalloc.start()
+        try:
+            before = tracemalloc.get_traced_memory()[0]
+            for member in members:
+                for _ in range(10):
+                    changes.changed(member)
+                cursor = await changes.wait(member, None, 1)
+                await changes.wait(member, cursor, 1)
+            return tracemalloc.get_traced_memory()[0] - before
+        finally:
+            if not was_tracing:
+                tracemalloc.stop()
 
     assert in_virtual_time(changed_and_waited()) < 32 * 1024

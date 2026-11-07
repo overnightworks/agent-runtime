@@ -50,8 +50,9 @@ class _JumpingSelector(selectors.DefaultSelector):
 
 
 class VirtualTimeLoop(asyncio.SelectorEventLoop):
-    """An event loop whose clock jumps to the next timer whenever it would sleep.
+    """An event loop whose clock is synthetic and jumps to the next timer whenever it would sleep.
 
+    Only the selector moves the clock, so real scheduling delays never show in a measurement.
     Deadlines and timeouts pass in no real time, and a call that would block forever fails
     loud instead of hanging the suite.
     """
@@ -61,7 +62,7 @@ class VirtualTimeLoop(asyncio.SelectorEventLoop):
         super().__init__(_JumpingSelector(self))
 
     def time(self) -> float:
-        return super().time() + self.skew_seconds
+        return self.skew_seconds
 
 
 def in_virtual_time[T](main: Coroutine[Any, Any, T]) -> T:
@@ -146,9 +147,18 @@ def member_scope(member: Principal) -> dict[str, Any]:
     }
 
 
-async def post(front: McpPersonFront, member: Principal, body: bytes) -> list[dict[str, Any]]:
-    """Posts ``body`` as ``member`` and returns every ASGI message the front sent."""
-    sent: list[dict[str, Any]] = []
+async def post(
+    front: McpPersonFront,
+    member: Principal,
+    body: bytes,
+    sent: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Posts ``body`` as ``member`` and returns every ASGI message the front sent.
+
+    A caller that may cancel the post passes the list ``sent`` it owns, so messages sent before
+    the cancellation stay visible.
+    """
+    sent = [] if sent is None else sent
 
     async def receive() -> dict[str, Any]:
         return {"type": "http.request", "body": body, "more_body": False}
