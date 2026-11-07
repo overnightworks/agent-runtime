@@ -3,6 +3,6 @@ agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
 role = "builder"
 base = "8de4e2e8ab32c673a11d5f0e5fb43428cb9664c9"
 branch = "claude/issue-767-one-support-driver-and-clock"
-scope = ["tests/support/gateway_turn_support.py", "tests/support/mcp_server_support.py", "tests/test_backend_gateway_models.py", "tests/test_mcp_server_person.py", "tests/test_mcp_server_wait.py"]
+scope = ["tests/support/gateway_turn_support.py", "tests/support/mcp_server_support.py", "tests/test_backend_gateway_models.py", "tests/test_backend_gateway_pictures.py", "tests/test_mcp_server_person.py", "tests/test_mcp_server_wait.py"]
 opened_commit = "d01b185b8bb147842d1ec79df436bf27ac5d61c0"
 whole_reason = "One test-only cleanup: the person front's two drivers and the two clocks each fold into one support owner, and every suite that uses them moves with it."
