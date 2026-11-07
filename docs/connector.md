@@ -385,9 +385,11 @@ past it is the tool's failed result, never an empty standing, so a call ends wit
 
 The app passes two ports in. `CurrentStandings`, `(recipient) -> standings`, is its own read of
 its participation state, the one source of truth, and answers well inside the read bound.
-`MemberChanges` is `changed(recipient)`, which never blocks, and `wait(recipient, after,
-timeout) -> cursor`. `InMemoryMemberChanges` serves one process: a change counter per member
-that ever had one, a run token in every cursor and no history, so it needs no capacity setting.
+`MemberChanges` is `changed(recipient)`, which never blocks and runs on the event loop that serves
+the front, or from a thread through `anyio.from_thread.run_sync`, and `wait(recipient, after,
+seconds) -> cursor`. `InMemoryMemberChanges` serves one process: a change counter per member
+that ever had one, a run token in every cursor and no history, so it needs no capacity setting. Proved by
+`test_the_in_memory_changes_grow_with_neither_changes_nor_finished_waits`.
 
 The consistency rule every app keeps: it calls `changed(recipient)` only after the new state is
 visible to `CurrentStandings`. The tool takes the cursor before it reads, so a change after a

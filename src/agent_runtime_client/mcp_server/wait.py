@@ -35,12 +35,16 @@ class MemberChanges(Protocol):
     """The signal that something changed for a recipient; it keeps no history."""
 
     def changed(self, recipient: Principal) -> None:
-        """Signals a change, without blocking, once the new state is visible to the read."""
+        """Signals a change, without blocking, once the new state is visible to the read.
+
+        It runs on the event loop that serves the front, or from a thread through
+        ``anyio.from_thread.run_sync``.
+        """
         ...
 
-    async def wait(self, recipient: Principal, after: str | None, timeout: float) -> str:
+    async def wait(self, recipient: Principal, after: str | None, seconds: float) -> str:
         """The recipient's cursor: at once when ``after`` is not it, else after a change or
-        ``timeout`` seconds."""
+        ``seconds`` seconds."""
         ...
 
 
@@ -61,7 +65,7 @@ class InMemoryMemberChanges:
         if signal is not None:
             signal.set()
 
-    async def wait(self, recipient: Principal, after: str | None, timeout: float) -> str:
+    async def wait(self, recipient: Principal, after: str | None, seconds: float) -> str:
         cursor = self._cursor_of(recipient)
         if after != cursor:
             return cursor
@@ -71,7 +75,7 @@ class InMemoryMemberChanges:
         if signal is None:
             signal = self._signals[recipient] = anyio.Event()
         try:
-            with anyio.move_on_after(timeout):
+            with anyio.move_on_after(seconds):
                 await signal.wait()
         finally:
             self._forget_unawaited(recipient, signal)
