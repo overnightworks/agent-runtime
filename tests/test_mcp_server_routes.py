@@ -397,6 +397,34 @@ def body_of(*media_types: str) -> dict[str, Any]:
             tool="a",
             document={"responses": {"201": {"description": "Made."}}},
         ),
+        Registration(
+            "GET",
+            "/notes",
+            nothing,
+            tool="a",
+            document={
+                "responses": {
+                    "200": {
+                        "description": "Answer.",
+                        "content": {"application/problem+json": {"schema": {"type": "object"}}},
+                    }
+                }
+            },
+        ),
+        Registration(
+            "GET",
+            "/notes",
+            nothing,
+            tool="a",
+            document={
+                "responses": {
+                    "404": {
+                        "description": "Answer.",
+                        "content": {"text/plain": {"schema": {"type": "object"}}},
+                    }
+                }
+            },
+        ),
         Registration("TRACE", "/notes", nothing, tool="a"),
         Registration("HEAD", "/notes", nothing, tool="a"),
         Registration("OPTIONS", "/notes", nothing, tool="a"),
@@ -420,6 +448,8 @@ def body_of(*media_types: str) -> dict[str, Any]:
         "response without content",
         "recursive response schema",
         "contentless success beside a JSON success",
+        "success declared as problem details",
+        "error declared as plain text",
         "trace",
         "head",
         "options",
@@ -439,6 +469,19 @@ def test_a_marked_route_outside_the_profile_is_refused_naming_the_operation(
     assert registration.method in str(failure)
     assert registration.path in str(failure)
     assert operation_id in str(failure)
+
+
+@pytest.mark.parametrize(
+    "media_types",
+    [("application/problem+json",), ("application/json", "application/problem+json")],
+    ids=["instead of JSON", "beside JSON"],
+)
+def test_an_error_status_may_declare_problem_details(media_types: tuple[str, ...]) -> None:
+    answer = {media_type: {"schema": {"type": "object"}} for media_type in media_types}
+    document = {"responses": {"404": {"description": "Missing.", "content": answer}}}
+    app = application(Registration("GET", "/notes", nothing, tool="a", document=document))
+
+    assert generated(app).marks == {("GET", "/notes")}
 
 
 def test_two_marks_of_one_name_are_refused() -> None:

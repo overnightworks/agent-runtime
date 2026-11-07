@@ -351,13 +351,17 @@ parameters (string, integer, number or boolean, with or without `enum`, inline o
 nullable through `anyOf [x, null]`); the one body is a required `application/json` object whose
 fields are flattened beside the parameters; `$ref` is inlined from `components`, and an
 annotation beside a reference is kept and wins over the component's own; every success response
-is JSON. The tool's description is the operation's `description` (the route's docstring) and is
-required. Everything else is refused at start with `RouteProfileError`: a mark on any other
-method, a mark that is not the mapping `agent_tool` returns, header and cookie parameters, a
-non-JSON or optional body, a non-JSON response, a recursive schema, a body object carrying any
-keyword flattening would lose, a `$ref` beside any keyword that is not an annotation, a name
-shared by two inputs, two marks of one name, an integer path parameter and a missing
-description. Proved by `test_a_marked_route_outside_the_profile_is_refused_naming_the_operation`,
+is JSON, and an error status may also declare RFC 9457 problem details
+(`application/problem+json`), beside or instead of JSON. The tool's description is the
+operation's `description` (the route's docstring) and is required. Everything else is refused at
+start with `RouteProfileError`: a mark on any other method, a mark that is not the mapping
+`agent_tool` returns, header and cookie parameters, a non-JSON or optional body, a success
+response that is not JSON, an error response that is neither JSON nor problem details, a
+recursive schema, a body object carrying any keyword flattening would lose, a `$ref` beside any
+keyword that is not an annotation, a name shared by two inputs, two marks of one name, an integer
+path parameter and a missing description. Proved by
+`test_a_marked_route_outside_the_profile_is_refused_naming_the_operation`,
+`test_an_error_status_may_declare_problem_details`,
 `test_a_hand_written_mark_that_agent_tool_does_not_return_is_refused`,
 `test_a_body_object_keyword_that_flattening_would_lose_is_refused`,
 `test_a_constraint_beside_a_reference_is_refused` and `test_two_marks_of_one_name_are_refused`.
