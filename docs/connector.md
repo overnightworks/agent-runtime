@@ -24,11 +24,11 @@ Proved by `tests/test_agents_file.py`: `test_request_carries_the_files_prompt_mo
 
 `person` is a `TurnPerson` (frozen, always a person): `principal` (the verified `(iss, sub)`),
 `role` (the app role) and `groups`, an async callable returning the person's groups. Proved by
-`tests/test_backend_port.py`: `test_c11_a_turn_person_is_not_constructible_without_a_principal`.
+`tests/test_backend_port.py`: `test_a_turn_person_is_not_constructible_without_a_principal`.
 
 A turn ends short of its answer with one exception, `TurnStopped(kind, code, retry_after_s,
-after_side_effect, detail)`: `refused` carries a `RejectionCode`, `failed` a `FailureCode`,
-`cancelled` none. `after_side_effect` is true once a side-effecting tool call started in the
+after_side_effect, detail)`: `refused` carries a `RejectionCode`, `failed` a `FailureCode`. A cancel
+reaches the caller as `CancelledError`. `after_side_effect` is true once a side-effecting tool call started in the
 turn, whatever ended it, `refused: busy` included, so an app does not retry a turn that may have
 written. Proved by `tests/test_backend_gateway_tools.py`:
 `test_a_busy_gateway_at_round_two_reports_whether_a_call_may_have_written`.
@@ -38,8 +38,8 @@ The app's configuration embeds `agent_runtime_client.config.AgentConfig` as the 
 `ChatGateway` is `origin` (scheme, host and optional port; no path, query, fragment or
 userinfo), `key_file` and `ca_file`, both absolute paths. `ca_file` is required for HTTPS and
 forbidden for HTTP. A missing or malformed value fails loud. Proved by
-`tests/test_backend_config.py`: `test_c8_a_missing_host_fact_fails_loud`,
-`test_c9_a_malformed_origin_fails_loud`, `test_c10_a_malformed_file_setting_fails_loud`.
+`tests/test_backend_config.py`: `test_a_missing_host_fact_fails_loud`,
+`test_a_malformed_origin_fails_loud`, `test_a_malformed_file_setting_fails_loud`.
 
 ### What every app does the same
 
