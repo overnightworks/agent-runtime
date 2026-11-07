@@ -47,8 +47,10 @@ def test_a_standing_carrying_an_invitation_other_than_exactly_when_invited_is_re
     ids=["negative-epoch", "fractional-epoch", "naive-expiry", "empty-id"],
 )
 def test_an_invitation_with_a_malformed_field_is_refused(fields: dict[str, Any]) -> None:
+    malformed = INVITATION.model_dump() | fields
+
     with pytest.raises(ValidationError):
-        Invitation.model_validate(INVITATION.model_dump() | fields)
+        Invitation.model_validate(malformed)
 
 
 def test_only_an_invited_standing_carries_its_invitations_id_epoch_and_expiry_on_the_wire() -> None:
@@ -80,5 +82,7 @@ def test_a_wait_answer_reads_back_from_its_json_unchanged() -> None:
 def test_a_standing_in_a_state_the_protocol_does_not_name_is_refused_on_the_wire() -> None:
     wire = {"cursor": "c", "standings": [{"place": {"kind": "call", "id": "c-1"}, "state": "gone"}]}
 
+    payload = json.dumps(wire)
+
     with pytest.raises(ValidationError):
-        WaitAnswer.model_validate_json(json.dumps(wire))
+        WaitAnswer.model_validate_json(payload)
