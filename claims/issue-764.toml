@@ -1,0 +1,8 @@
+claim_id = "44459d7eb1f145cd81f71ca399fbccca"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "1ea997c301c9c2bb42c392cc06f5f3d49be018c1"
+branch = "claude/issue-764-problem-details-on-error-statuses"
+scope = ["docs/connector.md", "pyproject.toml", "src/agent_runtime_client/mcp_server/routes.py", "tests/test_mcp_server_routes.py", "uv.lock"]
+opened_commit = "5cd022d411428060958202d0b3539cf8c4f239cf"
+whole_reason = "One release: the profile check, its test, its contract sentence and the version literal change together."
