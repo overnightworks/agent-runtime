@@ -29,15 +29,6 @@ GATEWAY_ORIGIN = "http://gateway.test"
 GATEWAY_KEY = "stand-in-key-0001"
 
 
-class SkewedLoop(asyncio.SelectorEventLoop):
-    """An event loop whose clock the app side can move on, so a deadline needs no waiting."""
-
-    skew_seconds: float = 0
-
-    def time(self) -> float:
-        return super().time() + self.skew_seconds
-
-
 class FailingTransport(httpx2.AsyncBaseTransport):
     """Refuses every request with ``error`` (a connection error by default); it counts attempts."""
 

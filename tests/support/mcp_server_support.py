@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import selectors
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -31,42 +30,6 @@ def declaration(name: str, effect: ToolEffect = ToolEffect.READ_ONLY) -> ToolDec
         parameters={"type": "object", "properties": {"note": {"type": "string"}}},
         effect=effect,
     )
-
-
-class _JumpingSelector(selectors.DefaultSelector):
-    """Polls instead of sleeping, and moves its loop's clock on by the sleep it skipped."""
-
-    def __init__(self, loop: VirtualTimeLoop) -> None:
-        super().__init__()
-        self._loop = loop
-
-    def select(self, timeout: float | None = None) -> list[Any]:
-        if timeout is None:
-            raise RuntimeError("the loop has nothing left to run and no timer to wait for")
-        ready = super().select(0)
-        if not ready:
-            self._loop.skew_seconds += timeout
-        return ready
-
-
-class VirtualTimeLoop(asyncio.SelectorEventLoop):
-    """An event loop whose clock is synthetic and jumps to the next timer whenever it would sleep.
-
-    Only the selector moves the clock, so real scheduling delays never show in a measurement.
-    Deadlines and timeouts pass in no real time, and a call that would block forever fails
-    loud instead of hanging the suite.
-    """
-
-    def __init__(self) -> None:
-        self.skew_seconds = 0.0
-        super().__init__(_JumpingSelector(self))
-
-    def time(self) -> float:
-        return self.skew_seconds
-
-
-def in_virtual_time[T](main: Coroutine[Any, Any, T]) -> T:
-    return asyncio.run(main, loop_factory=VirtualTimeLoop)
 
 
 def now() -> float:
@@ -132,19 +95,48 @@ def tool_call_body(name: str, arguments: dict[str, Any]) -> bytes:
     return json.dumps(message | {"params": {"name": name, "arguments": arguments}}).encode()
 
 
-def member_scope(member: Principal) -> dict[str, Any]:
-    headers = [
-        (b"x-iss", member.iss.encode()),
-        (b"x-sub", member.sub.encode()),
-        (b"mcp-protocol-version", str(LATEST_PROTOCOL_VERSION).encode()),
-    ]
+def http_scope(headers: list[tuple[bytes, bytes]], *, method: str = "POST") -> dict[str, Any]:
     return {
         "type": "http",
-        "method": "POST",
+        "method": method,
         "path": MCP_ENDPOINT_PATH,
         "query_string": b"",
         "headers": headers,
     }
+
+
+def member_scope(member: Principal) -> dict[str, Any]:
+    return http_scope(
+        [
+            (b"x-iss", member.iss.encode()),
+            (b"x-sub", member.sub.encode()),
+            (b"mcp-protocol-version", str(LATEST_PROTOCOL_VERSION).encode()),
+        ]
+    )
+
+
+async def drive(
+    front: McpPersonFront,
+    scope: dict[str, Any],
+    body: bytes,
+    sent: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Sends ``body`` to the front under ``scope`` and returns every ASGI message it sent.
+
+    A caller that may cancel the drive passes the list ``sent`` it owns, so messages sent before
+    the cancellation stay visible.
+    """
+    sent = [] if sent is None else sent
+
+    async def receive() -> dict[str, Any]:
+        await asyncio.sleep(0)
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    async def send(message: dict[str, Any]) -> None:
+        sent.append(message)
+
+    await front(scope, receive, send)
+    return sent
 
 
 async def post(
@@ -153,21 +145,7 @@ async def post(
     body: bytes,
     sent: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Posts ``body`` as ``member`` and returns every ASGI message the front sent.
-
-    A caller that may cancel the post passes the list ``sent`` it owns, so messages sent before
-    the cancellation stay visible.
-    """
-    sent = [] if sent is None else sent
-
-    async def receive() -> dict[str, Any]:
-        return {"type": "http.request", "body": body, "more_body": False}
-
-    async def send(message: dict[str, Any]) -> None:
-        sent.append(message)
-
-    await front(member_scope(member), receive, send)
-    return sent
+    return await drive(front, member_scope(member), body, sent)
 
 
 def result_of(sent: list[dict[str, Any]]) -> Any:

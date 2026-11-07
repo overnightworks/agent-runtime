@@ -23,9 +23,9 @@ from tests.support.gateway_turn_support import (
     GATEWAY_KEY,
     FailingTransport,
     HangingTransport,
-    SkewedLoop,
     a_gateway_config,
 )
+from tests.support.virtual_time import VirtualTimeLoop
 
 DEADLINE_SECONDS = 10
 
@@ -49,7 +49,7 @@ def an_agent(*, picture_size: str | None = None) -> AgentDefinition:
 
 
 def list_models(gateway: ChatGateway, transport: httpx2.AsyncBaseTransport) -> GatewayModels:
-    with asyncio.Runner(loop_factory=SkewedLoop) as runner:
+    with asyncio.Runner(loop_factory=VirtualTimeLoop) as runner:
         return runner.run(list_gateway_models(gateway, transport=transport))
 
 

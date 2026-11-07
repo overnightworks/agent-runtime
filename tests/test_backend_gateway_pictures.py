@@ -31,11 +31,11 @@ from agent_runtime_client.turn_events import FinalEvent
 from tests.support.gateway_turn_support import (
     FailingTransport,
     HangingTransport,
-    SkewedLoop,
     a_gateway_config,
     a_person,
     ending,
 )
+from tests.support.virtual_time import VirtualTimeLoop
 
 PROVIDER_ERROR = (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
 UNAVAILABLE = (TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE)
@@ -78,7 +78,7 @@ class Studio:
     def run(self, *replies: Reply, request: TurnRequest | None = None, person=None, transport=None):
         gateway = FakeGateway(*replies) if transport is None else transport
         backend = GatewayBackend(self.config(), transport=gateway)
-        with asyncio.Runner(loop_factory=SkewedLoop) as runner:
+        with asyncio.Runner(loop_factory=VirtualTimeLoop) as runner:
             events, stopped = runner.run(
                 _turn(backend, request or a_picture_request(), person or a_person())
             )
@@ -296,7 +296,7 @@ def test_closing_the_stream_while_the_call_is_open_cancels_it_and_sends_no_other
             await task
         await stream.aclose()
 
-    with asyncio.Runner(loop_factory=SkewedLoop) as runner:
+    with asyncio.Runner(loop_factory=VirtualTimeLoop) as runner:
         runner.run(close_open_call())
 
     assert (slow.attempts, slow.cancelled) == (1, True)
