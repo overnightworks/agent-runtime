@@ -1,4 +1,4 @@
-"""The one way the client and the provider core raise an error that carries no chain."""
+"""The one way the client raises an error that carries no chain."""
 
 from __future__ import annotations
 

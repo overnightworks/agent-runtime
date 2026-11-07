@@ -178,7 +178,7 @@ def test_the_initialize_result_is_built_from_constants_and_echoes_no_client_memb
     assert json.loads(encoded)["result"] == {
         "protocolVersion": "2025-11-25",
         "capabilities": {"tools": {"listChanged": False}},
-        "serverInfo": {"name": "agent-service", "version": "1"},
+        "serverInfo": {"name": "overnightworks-agent-runtime-client", "version": "1"},
     }
     assert SECRET.encode() not in encoded
 

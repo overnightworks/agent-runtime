@@ -52,14 +52,11 @@ _GATEWAY_MODEL_NAME: Final = re.compile(
 
 
 class FailureCode(StrEnum):
-    """Why a run ended as ``failed``."""
+    """Why a turn ended as failed."""
 
-    INTERRUPTED = "interrupted"
     PROVIDER_UNAVAILABLE = "provider_unavailable"
     PROVIDER_ERROR = "provider_error"
     LIMIT_EXCEEDED = "limit_exceeded"
-    IDLE_TIMEOUT = "idle_timeout"
-    INTERNAL_ERROR = "internal_error"
 
 
 class RejectionCode(StrEnum):
@@ -67,15 +64,7 @@ class RejectionCode(StrEnum):
 
     NOT_ENABLED = "not_enabled"
     BUSY = "busy"
-    UNSUPPORTED_VERSION = "unsupported_version"
-    UNAUTHORIZED = "unauthorized"
     FORBIDDEN = "forbidden"
-    INVALID_REQUEST = "invalid_request"
-    TOO_LARGE = "too_large"
-    UNAVAILABLE = "unavailable"
-    NOT_FOUND = "not_found"
-    CAPABILITY_TOO_LARGE = "capability_too_large"
-    MODEL_NOT_OFFERED = "model_not_offered"
 
 
 def refuse_non_json_constant(constant: str) -> object:
@@ -167,9 +156,6 @@ NonEmptyUnicodeText = Annotated[UnicodeText, Field(min_length=1)]
 It covers a call id, a tool's name, an assistant text and a principal's identifying
 claims.
 """
-
-ToolUseId = NonEmptyUnicodeText
-"""The one decider of a valid call id, so a call and its result accept the same ids."""
 
 
 def _refuse_non_agent(text: str) -> str:

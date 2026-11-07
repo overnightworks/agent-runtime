@@ -12,7 +12,7 @@ async def _no_groups() -> frozenset[str]:
     return frozenset()
 
 
-def test_c11_a_turn_person_is_not_constructible_without_a_principal():
+def test_a_turn_person_is_not_constructible_without_a_principal():
     with pytest.raises(TypeError, match="principal"):
         TurnPerson(role="user", groups=_no_groups)  # type: ignore[call-arg]
 
