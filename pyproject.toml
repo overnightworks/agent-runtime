@@ -48,7 +48,6 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
-external = ["S", "T20"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
