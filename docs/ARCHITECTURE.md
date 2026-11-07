@@ -20,6 +20,7 @@ flowchart TB
     backend["backend<br/>the AgentBackend port<br/>gateway, fake_gateway"]
     turn["turn, turn_events<br/>the turn vocabulary"]
     mcp["mcp_server, mcp_wire<br/>the MCP person front"]
+    wait["wait<br/>the wait answer"]
     gateway["LiteLLM gateway<br/>(external)"]
     person["a signed-in person's agent<br/>(external)"]
 
@@ -32,6 +33,7 @@ flowchart TB
     backend --> turn
     mcp --> tools
     mcp --> turn
+    mcp --> wait
     backend -->|"one chat completion per round"| gateway
     person -->|"JSON-RPC over POST"| mcp
 ```
@@ -43,12 +45,14 @@ flowchart TB
 
 - The **base** depends on `pydantic` and `ruamel.yaml` only: `agents` (the agent-file reader),
   `tools` (the tool contract), `turn` (the turn's vocabulary, the one owner of `JsonObject`,
-  the size bounds and the failure codes), `turn_events`, `config` and the `backend` port.
+  the size bounds and the failure codes), `turn_events`, `config`, the `backend` port and
+  `wait` (the answer records and protocol constants of the wait tool, base so that an agent's
+  runner parses an answer without an extra).
 - The **`backend` extra** adds `httpx2` for `backend.gateway.GatewayBackend`, the one
   implementation of the port, and `backend.fake_gateway`, its scripted transport for tests.
 - The **`mcp-server` extra** adds `anyio` for `agent_runtime_client.mcp_server`, plain ASGI
-  that serves an app's tools to one signed-in person's agent; `mcp_wire` holds its pure
-  JSON-RPC rules and imports no extra.
+  that serves an app's tools to one signed-in person's agent, the `wait` tool with its two ports
+  among them; `mcp_wire` holds its pure JSON-RPC rules and imports no extra.
 
 ## Runtime
 
