@@ -1,6 +1,6 @@
 [project]
 name = "overnightworks-agent-runtime-client"
-version = "0.22.0"
+version = "0.23.0"
 description = "Light client for apps that run agents: the agent file, the tool contract an app declares and the gateway backend"
 authors = [{ name = "Flex0r (Felix Hummert)", email = "felix.hummert@gmail.com" }]
 license = { text = "MIT" }
