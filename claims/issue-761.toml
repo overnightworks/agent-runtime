@@ -1,8 +1,0 @@
-claim_id = "532102a6f990440e9d01d7b50523e50f"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "20481c61fda1e6d63c8e86cf5b9a0141ee03fd88"
-branch = "claude/issue-761-client-drops-service-leftovers"
-scope = [".github", "AGENTS.md", "README.md", "docs", "pyproject.toml", "quality/config.toml", "src/agent_runtime_client", "tests", "uv.lock"]
-opened_commit = "5b70aaffd8ed2ca59f36fa45a85a99da7af66b73"
-whole_reason = "One public-contract cut and its docs, tests, config and version bump must land together so 0.23.0 ships one consistent vocabulary; split, a tag would fall between a code change and its documents."
