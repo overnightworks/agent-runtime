@@ -1,0 +1,8 @@
+claim_id = "49fe016c7eb54afbbd8846615b30b0bb"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "bebc22b140bac80b268f0e9878fd7b46fb60b494"
+branch = "claude/issue-763-uniform-wait-tool"
+scope = [".importlinter", "docs/ARCHITECTURE.md", "docs/connector.md", "pyproject.toml", "src/agent_runtime_client/mcp_server/__init__.py", "src/agent_runtime_client/mcp_server/wait.py", "src/agent_runtime_client/wait.py", "tests/support/mcp_server_support.py", "tests/test_mcp_server_wait.py", "tests/test_wait.py", "uv.lock"]
+opened_commit = "92f3f93934de9a4e98867f8747cc6a42b93a554a"
+whole_reason = "One public contract: the records, the ports, the tool, the import contract and the standard's text ship together in one release, or a host would build on half a contract."
