@@ -41,26 +41,25 @@ class TurnPerson:
 class TurnStopKind(StrEnum):
     REFUSED = "refused"
     FAILED = "failed"
-    CANCELLED = "cancelled"
 
 
 class TurnStopped(Exception):
     """The one way a turn ends short of its answer.
 
-    ``code`` is a ``RejectionCode`` when refused, a ``FailureCode`` when failed and none when
-    cancelled. ``detail`` is a closed label, never text from the wire or a token.
+    ``code`` is required: a ``RejectionCode`` when refused, a ``FailureCode`` when failed.
+    ``detail`` is a closed label, never text from the wire or a token.
     """
 
     def __init__(
         self,
         kind: TurnStopKind,
-        code: RejectionCode | FailureCode | None = None,
+        code: RejectionCode | FailureCode,
         *,
         retry_after_s: int | None = None,
         after_side_effect: bool = False,
         detail: str | None = None,
     ) -> None:
-        super().__init__(f"{kind.value}: {code.value if code else 'no code'}")
+        super().__init__(f"{kind.value}: {code.value}")
         self.kind = kind
         self.code = code
         self.retry_after_s = retry_after_s

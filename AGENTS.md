@@ -34,7 +34,7 @@ uv build
 ```
 
 The suite needs no live provider. CI's "Host vocabulary" step greps `src tests docs` for host
-words; `.github/host-vocabulary-allowed.txt` owns the allowed hits. The required check is
+words and fails on any hit. The required check is
 `quality / verdict` (`quality/config.toml`, `.github/workflows/ci.yml`).
 
 ## Releasing

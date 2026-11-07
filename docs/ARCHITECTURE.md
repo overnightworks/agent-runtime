@@ -153,8 +153,6 @@ size and clone ratchets, and coverage over the whole suite.
 
 ## Risks and technical debt
 
-- `RejectionCode` has eight members the client never raises (everything but `NOT_ENABLED`,
-  `BUSY` and `FORBIDDEN`); dependents import the type, so removing them changes a public contract.
 - Gateway replies are parsed with plain `json.loads`, while MCP request bodies go through the
   strict reader that refuses `NaN`, `Infinity` and duplicate keys. A gateway is trusted more
   than a person's agent, but the two paths do not share one rule.

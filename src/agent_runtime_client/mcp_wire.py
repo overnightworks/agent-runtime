@@ -35,7 +35,7 @@ JSON_MEDIA_TYPE: Final = "application/json"
 MCP_ENDPOINT_PATH: Final = "/mcp"
 PROTOCOL_VERSION_HEADER: Final = "MCP-Protocol-Version"
 _ASSUMED_PROTOCOL_VERSION: Final = "2025-03-26"
-_SERVER_NAME: Final = "agent-service"
+_SERVER_NAME: Final = "overnightworks-agent-runtime-client"
 _SERVER_VERSION: Final = "1"
 _JSON_RPC_VERSION: Final = "2.0"
 

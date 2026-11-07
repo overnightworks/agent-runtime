@@ -187,7 +187,7 @@ def test_a_group_the_person_lacks_is_not_enabled_and_sends_nothing(scenario):
 
 def test_a_refusal_the_groups_lookup_raises_reaches_the_app_unchanged(scenario):
     gateway = FakeGateway(completion("ok"))
-    refusal = TurnStopped(TurnStopKind.REFUSED, RejectionCode.UNAVAILABLE)
+    refusal = TurnStopped(TurnStopKind.REFUSED, RejectionCode.FORBIDDEN)
     person, calls = scenario.person(refusal)
 
     _, stopped = scenario.outcome(

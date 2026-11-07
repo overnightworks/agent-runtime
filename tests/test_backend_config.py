@@ -16,7 +16,7 @@ HTTPS_GATEWAY = {
 SECTION = {"backend": "litellm", "gateway": GATEWAY, "api_group": "/apps/example"}
 
 
-def test_c7_the_litellm_backend_with_a_gateway_and_group_builds():
+def test_the_litellm_backend_with_a_gateway_and_group_builds():
     config = AgentConfig.model_validate(SECTION)
 
     assert config.gateway.origin == "http://gateway.test:4000"
@@ -26,7 +26,7 @@ def test_c7_the_litellm_backend_with_a_gateway_and_group_builds():
 @pytest.mark.parametrize(
     "gateway", [GATEWAY, HTTPS_GATEWAY, {**GATEWAY, "origin": "http://[::1]:80"}]
 )
-def test_c7_a_http_or_https_origin_builds(gateway):
+def test_a_http_or_https_origin_builds(gateway):
     assert AgentConfig.model_validate({**SECTION, "gateway": gateway}).gateway.origin
 
 
@@ -36,18 +36,18 @@ def test_c7_a_http_or_https_origin_builds(gateway):
         pytest.param({**SECTION, "backend": "service"}, id="service-backend"),
         pytest.param({**SECTION, "backend": "x"}, id="unknown-backend"),
         pytest.param({**SECTION, "backend": None}, id="null-backend"),
-        pytest.param({**SECTION, "service_url": "http://agent.test"}, id="old-service-url"),
-        pytest.param({**SECTION, "workload_scope": "agent"}, id="old-workload-scope"),
+        pytest.param({**SECTION, "service_url": "http://agent.test"}, id="service-url"),
+        pytest.param({**SECTION, "workload_scope": "agent"}, id="workload-scope"),
         pytest.param({**SECTION, "api_group": ""}, id="empty-api-group"),
     ],
 )
-def test_c8_a_malformed_section_fails_loud(section):
+def test_a_malformed_section_fails_loud(section):
     with pytest.raises(ValidationError):
         AgentConfig.model_validate(section)
 
 
 @pytest.mark.parametrize("missing", ["backend", "gateway", "api_group"])
-def test_c8_a_missing_host_fact_fails_loud(missing):
+def test_a_missing_host_fact_fails_loud(missing):
     section = {name: value for name, value in SECTION.items() if name != missing}
 
     with pytest.raises(ValidationError, match=missing):
@@ -71,7 +71,7 @@ def test_c8_a_missing_host_fact_fails_loud(missing):
         "",
     ],
 )
-def test_c9_a_malformed_origin_fails_loud(origin):
+def test_a_malformed_origin_fails_loud(origin):
     with pytest.raises(ValidationError, match="origin"):
         AgentConfig.model_validate({**SECTION, "gateway": {**GATEWAY, "origin": origin}})
 
@@ -88,6 +88,6 @@ def test_c9_a_malformed_origin_fails_loud(origin):
         pytest.param({**GATEWAY, "extra": 1}, "extra", id="unknown-key"),
     ],
 )
-def test_c10_a_malformed_file_setting_fails_loud(gateway, field):
+def test_a_malformed_file_setting_fails_loud(gateway, field):
     with pytest.raises(ValidationError, match=field):
         AgentConfig.model_validate({**SECTION, "gateway": gateway})

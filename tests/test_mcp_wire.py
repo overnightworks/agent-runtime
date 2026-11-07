@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from http import HTTPStatus
+from importlib.metadata import metadata
 from typing import Any
 
 import pytest
@@ -174,11 +175,12 @@ def test_the_initialize_result_is_built_from_constants_and_echoes_no_client_memb
     )
 
     encoded = encode_message(initialize_response(1, params.protocol_version))
+    distribution_name = metadata("overnightworks-agent-runtime-client")["Name"]
 
     assert json.loads(encoded)["result"] == {
         "protocolVersion": "2025-11-25",
         "capabilities": {"tools": {"listChanged": False}},
-        "serverInfo": {"name": "agent-service", "version": "1"},
+        "serverInfo": {"name": distribution_name, "version": "1"},
     }
     assert SECRET.encode() not in encoded
 

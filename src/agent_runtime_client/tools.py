@@ -34,9 +34,8 @@ AGENT_TOOL_EXTENSION: Final = "x-agent-tool"
 class ToolEffect(StrEnum):
     """Whether running a tool can change state outside the run.
 
-    The effect class decides how a cut-short run ends: once a side-effecting
-    call was emitted, a cancel or a disconnect is reported as ``failed:
-    interrupted`` rather than ``cancelled``.
+    The effect class decides ``TurnStopped.after_side_effect``: a turn that ended
+    after a side-effecting call started tells the app it may have written.
     """
 
     READ_ONLY = "read_only"
