@@ -27,7 +27,7 @@ from agent_runtime_client.mcp_wire import (
 )
 from agent_runtime_client.tools import Principal, ToolEffect
 from agent_runtime_client.turn import MAX_EVENT_BYTES, JsonObject
-from tests.support.mcp_server_support import declaration
+from tests.support.mcp_server_support import declaration, drive, http_scope
 
 VERSION = str(LATEST_PROTOCOL_VERSION)
 Headers = list[tuple[bytes, bytes]]
@@ -59,27 +59,8 @@ def call_params(name: str, **arguments: Any) -> dict[str, Any]:
     return {"name": name, "arguments": arguments}
 
 
-def http_scope(headers: Headers, *, method: str = "POST") -> dict[str, Any]:
-    return {
-        "type": "http",
-        "method": method,
-        "path": MCP_ENDPOINT_PATH,
-        "query_string": b"",
-        "headers": headers,
-    }
-
-
 async def drive_scope(front: McpPersonFront, scope: dict[str, Any], body: bytes) -> Reply:
-    sent: list[dict[str, Any]] = []
-
-    async def receive() -> dict[str, Any]:
-        await asyncio.sleep(0)
-        return {"type": "http.request", "body": body, "more_body": False}
-
-    async def send(message: dict[str, Any]) -> None:
-        sent.append(message)
-
-    await front(scope, receive, send)
+    sent = await drive(front, scope, body)
     [start] = [m for m in sent if m["type"] == "http.response.start"]
     return Reply(start["status"], start["headers"], b"".join(m.get("body", b"") for m in sent))
 

@@ -48,11 +48,11 @@ from agent_runtime_client.turn_events import (
     ToolResultEvent,
 )
 from tests.support.gateway_turn_support import (
-    SkewedLoop,
     a_gateway_config,
     a_person,
     ending,
 )
+from tests.support.virtual_time import VirtualTimeLoop
 
 PROVIDER_ERROR = (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
 LIMIT_EXCEEDED = (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
@@ -98,7 +98,7 @@ class Shop:
         chosen = [t for t in self.tools if selected is None or t.declaration.name in selected]
         request = a_request(chosen, max_tool_calls)
         backend = GatewayBackend(self.config(), tools=self.tools, transport=gateway)
-        with asyncio.Runner(loop_factory=SkewedLoop) as runner:
+        with asyncio.Runner(loop_factory=VirtualTimeLoop) as runner:
             events, stopped = runner.run(_turn(backend, request, late_after))
         return events, stopped, gateway
 

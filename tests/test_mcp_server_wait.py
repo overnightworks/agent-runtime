@@ -20,11 +20,11 @@ from tests.support.mcp_server_support import (
     WaitScenario,
     a_member,
     a_standing,
-    in_virtual_time,
     post,
     result_of,
     tool_call_body,
 )
+from tests.support.virtual_time import in_virtual_time
 
 INVITED = a_standing("p-1", StandingState.INVITED)
 ACTIVE = a_standing("p-2", StandingState.ACTIVE)
