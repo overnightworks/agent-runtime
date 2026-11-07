@@ -26,6 +26,7 @@ _OPERATION_METHODS: Final = frozenset(
 )
 _SCALAR_TYPES: Final = frozenset({"string", "integer", "number", "boolean"})
 _JSON: Final = "application/json"
+_PROBLEM_JSON: Final = "application/problem+json"
 _SCHEMA_REFERENCE: Final = "#/components/schemas/"
 _ANNOTATIONS: Final = frozenset({"title", "description", "default", "examples", "deprecated"})
 _BODY_KEYWORDS: Final = _ANNOTATIONS | {"type", "properties", "required", "additionalProperties"}
@@ -132,14 +133,14 @@ def _check_responses(operation: _Operation, components: JsonObject) -> None:
     successes = 0
     for status, response in operation.node.get("responses", {}).items():
         content = response.get("content", {})
-        if not set(content) <= {_JSON}:
-            raise _Breach("a response must be JSON")
-        if _JSON in content:
-            _inlined(content[_JSON].get("schema", {}), components)
         if str(status).startswith("2"):
-            if _JSON not in content:
+            if set(content) != {_JSON}:
                 raise _Breach("a success response must be JSON")
             successes += 1
+        elif not set(content) <= {_JSON, _PROBLEM_JSON}:
+            raise _Breach("an error response must be JSON or RFC 9457 problem details")
+        for declared in content.values():
+            _inlined(declared.get("schema", {}), components)
     if not successes:
         raise _Breach("a success response must be JSON")
 
