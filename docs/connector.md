@@ -28,9 +28,9 @@ Proved by `tests/test_agents_file.py`: `test_request_carries_the_files_prompt_mo
 
 A turn ends short of its answer with one exception, `TurnStopped(kind, code, retry_after_s,
 after_side_effect, detail)`: `refused` carries a `RejectionCode`, `failed` a `FailureCode`. A cancel
-reaches the caller as `CancelledError`. `after_side_effect` is true once a side-effecting tool call started in the
-turn, whatever ended it, `refused: busy` included, so an app does not retry a turn that may have
-written. Proved by `tests/test_backend_gateway_tools.py`:
+reaches the caller as `CancelledError`. `after_side_effect` is true once a side-effecting tool call
+started in the turn, whatever ended it, `refused: busy` included, so an app does not retry a turn
+that may have written. Proved by `tests/test_backend_gateway_tools.py`:
 `test_a_busy_gateway_at_round_two_reports_whether_a_call_may_have_written`.
 
 The app's configuration embeds `agent_runtime_client.config.AgentConfig` as the `agent` section:

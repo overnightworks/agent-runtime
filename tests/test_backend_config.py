@@ -36,8 +36,8 @@ def test_a_http_or_https_origin_builds(gateway):
         pytest.param({**SECTION, "backend": "service"}, id="service-backend"),
         pytest.param({**SECTION, "backend": "x"}, id="unknown-backend"),
         pytest.param({**SECTION, "backend": None}, id="null-backend"),
-        pytest.param({**SECTION, "service_url": "http://agent.test"}, id="a_service_url"),
-        pytest.param({**SECTION, "workload_scope": "agent"}, id="a_workload_scope"),
+        pytest.param({**SECTION, "service_url": "http://agent.test"}, id="service-url"),
+        pytest.param({**SECTION, "workload_scope": "agent"}, id="workload-scope"),
         pytest.param({**SECTION, "api_group": ""}, id="empty-api-group"),
     ],
 )
