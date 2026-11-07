@@ -12,9 +12,18 @@ from agent_runtime_client.mcp_server.person import (
     ResolvePerson,
 )
 from agent_runtime_client.mcp_server.routes import RouteProfileError, RouteTools, route_tools
+from agent_runtime_client.mcp_server.wait import (
+    CurrentStandings,
+    InMemoryMemberChanges,
+    MemberChanges,
+    wait_tool,
+)
 
 __all__ = [
+    "CurrentStandings",
+    "InMemoryMemberChanges",
     "McpPersonFront",
+    "MemberChanges",
     "PersonRequest",
     "PersonTool",
     "PersonToolHandler",
@@ -22,4 +31,5 @@ __all__ = [
     "RouteProfileError",
     "RouteTools",
     "route_tools",
+    "wait_tool",
 ]

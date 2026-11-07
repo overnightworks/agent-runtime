@@ -2,9 +2,9 @@
 
 For the developer of an app that runs agent turns through `agent_runtime_client`: the turn an
 app starts, the agent files it ships, the tools it declares, the gateway backend and the MCP
-person front. Each rule names the test that proves it. The docstrings of `agents`, `tools`,
-`turn`, `backend` and `mcp_server` are exact where this file is short; the shape of the client
-is in [ARCHITECTURE.md](ARCHITECTURE.md).
+person front with its wait tool. Each rule names the test that proves it. The docstrings of
+`agents`, `tools`, `turn`, `wait`, `backend` and `mcp_server` are exact where this file is
+short; the shape of the client is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## The turn
 
@@ -327,6 +327,86 @@ message reaches the wire or the log
 `test_an_outcome_that_cannot_be_written_answers_the_failed_result_and_leaks_nothing`). An answer
 that carries the signature of the request's own bearer is replaced by an empty 500
 (`test_a_result_carrying_the_request_bearer_is_withheld_and_the_log_names_no_caller_text`).
+
+## The wait tool
+
+Every app tells a member what concerns it the same way: through one bounded tool, `wait`, served
+on its person front beside its other tools and read by the member's runner in a loop. The
+records and the protocol constants are in the base module `agent_runtime_client.wait`, so a
+runner parses an answer without the `mcp-server` extra; the tool and its ports are in
+`agent_runtime_client.mcp_server`.
+
+An answer is `WaitAnswer(cursor, standings)`: an opaque cursor and every place the member is in
+now, never a list of changes. A `Standing` is a `PlaceRef(kind, id)`, opaque to all but the app,
+a `StandingState` (`invited`, `active` or `paused`) and, exactly when invited, an
+`Invitation(id, epoch, expires_at)`; any other combination is refused at construction. `epoch`
+is the place's removal epoch, so the app refuses an accept after a removal. A paused place is
+listed and a place the member left is absent, so a pause is told from a removal. Because each
+answer is the whole standing, a late, repeated or lost answer leaves no stale state: the next
+one is the truth again. Proved by `tests/test_wait.py`:
+`test_a_standing_carrying_an_invitation_other_than_exactly_when_invited_is_refused`,
+`test_only_an_invited_standing_carries_its_invitations_id_epoch_and_expiry_on_the_wire`, and by
+`tests/test_mcp_server_wait.py`: `test_a_paused_place_is_listed_and_a_place_left_is_absent`.
+
+`wait_tool(changes, standings)` builds the read-only tool `wait(after?, timeout_seconds?)`. Its
+recipient is the request's resolved `Principal`, `iss` and `sub` together; no argument names
+one. `after` is a string of at most 128 characters and `timeout_seconds` an integer from 1 to
+`WAIT_BOUND_SECONDS` (50), the bound when absent; anything else, or an extra argument, is the
+tool's error naming the argument. Proved by
+`test_the_listed_wait_tool_is_read_only_and_names_no_recipient`,
+`test_one_subject_at_two_issuers_is_two_members_that_wake_and_read_apart` and
+`test_a_refused_argument_is_the_tools_error_naming_it_with_no_standing`.
+
+The cursor rules:
+
+- Without `after`, with a string that is no cursor of this run, or with a cursor older than the
+  member's latest change, the tool answers at once. A cursor of an earlier run, after a
+  restart, is no cursor of this run. Proved by
+  `test_a_first_wait_answers_at_once_with_every_standing_and_a_cursor`,
+  `test_an_admitted_string_that_is_no_cursor_answers_at_once`,
+  `test_a_retry_with_a_cursor_older_than_the_latest_change_answers_at_once` and
+  `test_a_cursor_of_an_earlier_run_answers_at_once_after_a_restart`.
+- With the current cursor it answers as soon as a change is signalled for the member, every
+  wait of the member at once, or when `timeout_seconds` runs out with the unchanged standing; a
+  retry with that cursor waits again. Proved by
+  `test_a_signalled_change_ends_the_wait_before_its_timeout_with_the_new_standing`,
+  `test_two_waits_of_one_member_both_answer_one_change` and
+  `test_a_wait_with_the_current_cursor_answers_the_unchanged_standing_at_its_timeout_each_time`.
+- Every answer carries the cursor taken before its standings were read. A cancelled wait sends
+  nothing and consumes nothing. Proved by
+  `test_a_cancelled_wait_sends_nothing_and_leaves_every_other_wait_of_the_member_wakeable`.
+
+The read of the standings is bounded by `STANDINGS_READ_SECONDS` (5). A read that fails or runs
+past it is the tool's failed result, never an empty standing, so a call ends within
+`timeout_seconds` plus that bound, at most 55 seconds. Proved by
+`test_a_failing_read_is_the_tools_error_and_the_front_answers_the_next_call`,
+`test_a_read_past_its_deadline_is_the_tools_error_within_the_timeout_plus_the_deadline` and
+`test_a_wait_without_a_timeout_ends_at_the_bound_plus_the_read`.
+
+The app passes two ports in. `CurrentStandings`, `(recipient) -> standings`, is its own read of
+its participation state, the one source of truth, and answers well inside the read bound.
+`MemberChanges` is `changed(recipient)`, which never blocks and runs on the event loop that serves
+the front, or from a thread through `anyio.from_thread.run_sync`, and `wait(recipient, after,
+seconds) -> cursor`. `InMemoryMemberChanges` serves one process: a change counter per member
+that ever had one, a run token in every cursor and no history, so it needs no capacity setting. Proved by
+`test_the_in_memory_changes_grow_with_neither_changes_nor_finished_waits`.
+
+The consistency rule every app keeps: it calls `changed(recipient)` only after the new state is
+visible to `CurrentStandings`. The tool takes the cursor before it reads, so a change after a
+read, even before its answer reaches the runner, lies after that answer's cursor, and the next
+wait answers at once with a fresh read. A runner that keeps one wait in flight therefore loses
+no change and never sees a standing older than the one before. A change signalled while a wait
+starts is never lost. Proved by
+`test_a_change_during_the_read_makes_the_next_wait_answer_at_once_with_the_new_standing` and
+`test_a_change_signalled_at_any_step_of_a_starting_wait_is_never_lost`.
+
+The lease: every call a member makes is an admitted call, and the app renews the member's lease
+on each, `wait` included. A runner that calls again within `LEASE_SECONDS` (120) keeps its
+lease, so a loop of waits, each ending within 55 seconds, renews itself.
+
+What each app owns: its places and who stands where, the invitation, its expiry and the epoch
+check at accept, the participation and permission decisions, calling `changed` after each
+visible change, and enforcing the lease, removing a member whose lease ran out.
 
 ## A marked route as a tool
 
