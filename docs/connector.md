@@ -2,8 +2,10 @@
 
 For the developer of an app that runs agent turns through `agent_runtime_client`: the turn an
 app starts, the agent files it ships, the tools it declares, the gateway backend and the MCP
-person front. Each rule names the test that proves it. The docstrings of
-`agents`, `tools`, `turn`, `backend` and `mcp_server` are exact where this file is
+person front. The standard path is that the app serves its member's standing as MCP resources and
+announces a change through the standard's subscriptions; [the standard path](#the-standard-path)
+says what a host wires and what a runner relies on. Each rule names the test that proves it. The
+docstrings of `agents`, `tools`, `turn`, `backend` and `mcp_server` are exact where this file is
 short; the shape of the client is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## The turn
@@ -294,11 +296,12 @@ there (`test_the_transport_loggers_that_could_carry_the_key_are_not_enabled_for_
 an app for the agent of one signed-in person. It serves MCP revision 2026-07-28 on the official
 SDK and nothing older: there is no `initialize` handshake and no legacy path. `server/discover`,
 `tools/list` and `tools/call` are POST only and answered in `application/json`. It is an ASGI 3 app
-the host registers as the exact route `MCP_ENDPOINT_PATH`, never a `Mount`, which redirects `/mcp`
-to `/mcp/`, and behind the middleware that admits the caller: the host's gate answers every 401
-and 403 before routing, so the front answers no challenge. The host enters
-`async with front.running():` once in its own lifespan, the one thing the SDK's session manager
-needs; a request outside it raises `RuntimeError`. Proved by `tests/test_mcp_server_person.py`:
+the host registers as the exact route `MCP_ENDPOINT_PATH` (in `agent_runtime_client.mcp_wire`),
+never a `Mount`, which redirects `/mcp` to `/mcp/`, and behind the middleware that admits the
+caller: the host's gate answers every 401 and 403 before routing, so the front answers no challenge.
+The host enters `async with front.running():` once in its own lifespan, the one thing the SDK's
+session manager needs; a request outside it raises `RuntimeError`. Proved by
+`tests/test_mcp_server_person.py`:
 `test_an_exact_starlette_route_serves_discovery_list_and_call_without_a_redirect`,
 `test_a_request_outside_running_fails_loud`.
 
@@ -318,42 +321,8 @@ which holds the bearer, `Host` and client address a handler replays. A name give
 `test_concurrent_calls_each_get_the_person_and_the_scope_of_their_own_request` and
 `test_two_tools_of_one_name_are_refused_at_construction`.
 
-With `resources=` the front also serves `resources/list` and `resources/read` from one port,
-`MemberResources` in `agent_runtime_client.mcp_server.resources`: `current(principal)` returns every
-URI that principal may read now, and `read(principal, uri)` returns the app's current
-`MemberStanding` or `PlaceWindow` for it, or `None` when it is not that principal's. The principal
-is always the request's verified one and no argument names a recipient; the app keeps its own
-participation and permission decisions, and a URI is no credential. `resources/list` answers
-exactly `current`, sorted, each entry with the URI as its `name` and `application/json`.
-`resources/read` answers one text content with the requested URI, `application/json` and the
-record's JSON. A `None` answers `-32602` with one fixed text that does not echo the URI, so an
-unknown, a foreign and a non-canonical URI look alike. A port that raises answers `-32603` with one
-fixed text and logs only the exception's type. Both answers carry `ttlMs: 0` and
-`cacheScope: "private"`, because their content is per principal. Without the port neither method is
-registered and `server/discover` advertises no `resources`; with it, it advertises `resources` and
-no `subscribe`. `resources/templates/list` is not served. Proved by
-`tests/test_mcp_server_resources.py`.
-
-With `changes=` beside `resources=` the front also serves `subscriptions/listen`, and `changes`
-without the port is a `ValueError`. The host creates one `ResourceChanges` and calls
-`changes.changed(recipient, uri)` after the change is visible to a read, on the front's event loop
-or through `anyio.from_thread.run_sync`. The recipient is a `Principal`, and a call for a principal
-with no open stream does nothing. `server/discover` then advertises `resources.subscribe` true and
-no `listChanged`. A client listens with `resourceSubscriptions`, waits for the acknowledgement,
-which is the first frame and holds the requested URIs in `current(principal)`, retains what arrives
-and only then reads, so a change in a gap between streams is never lost. A notification says only
-that something changed: after a lost, repeated or late one, the next read shows today's truth. A
-subscriber of `member://standing` also receives the URI of a place window `current` holds; a
-subscriber of one place gets that place alone. Every pulse is checked against `current` when it is
-drained from the stream's pending URIs, so a removal ends delivery on an open stream, and `current`
-runs once per pulse, so it must be cheap. The check is not at the socket: after a removal, up to two
-already-checked URI-only frames can still reach a client that stalled, and a host relies on the read
-for revocation, not on the absence of a pulse. The stream ends after `LISTEN_BOUND_SECONDS` with the
-completion result carrying the subscription id, so a runner listens again; a stream cut without one
-is `SubscriptionLost` at the SDK's client. The `listChanged` flags stay unhonored. A port that
-raises at the acknowledgement answers `-32603` with one fixed text, one that raises later ends the
-stream with the completion, and both log only the exception's type. A listen needs an SSE `Accept`,
-else it is `406`. Proved by `tests/test_mcp_server_listen.py`.
+Resources and subscriptions, the standard's way for an agent to learn what changed, are one
+more port and one more object on the front: see [the standard path](#the-standard-path).
 
 A thin ASGI shell stands before the SDK and keeps this order. A request with an `Origin` header is
 403 (its clients are agents, which send none), anything but `POST` is 405 with `Allow: POST`, a
@@ -405,17 +374,60 @@ A `Standing` is a `PlaceRef(kind, id)`, opaque to all but the app, a `StandingSt
 `active` or `paused`) and, exactly when invited, an `Invitation(id, epoch, expires_at)`; any
 other combination is refused at construction. `epoch` is the place's removal epoch, so the app
 refuses an accept after a removal. A paused place is listed and a place the member left is
-absent, so a pause is told from a removal. Because `MemberStanding` is the whole standing, a
-late, repeated or lost answer leaves no stale state: the next one is the truth again.
+absent, so a pause is told from a removal. Proved by `tests/test_member.py`.
 
-The lease: every call a member makes is an admitted call, and the app renews the member's lease
-on each. A runner that calls again within `LEASE_SECONDS` keeps its lease.
+## The standard path
 
-What each app owns: its places and who stands where, the invitation, its expiry and the epoch
-check at accept, the participation and permission decisions, and enforcing the lease, removing
-a member whose lease ran out.
+An agent learns what changes through the standard's resources and subscriptions, never by
+polling a tool: the app serves `member://standing` and one window per place, and tells the
+agent when one changed. This section is what a host wires and what a runner may rely on.
 
-Proved by `tests/test_member.py`.
+**The host** passes `resources=` and `changes=` to `McpPersonFront` and enters
+`async with front.running():` in its lifespan (see above). `resources` is one port,
+`MemberResources` (exported by `agent_runtime_client.mcp_server`): `current(principal)` returns
+every URI that principal may read now, and `read(principal, uri)` returns the app's current
+`MemberStanding` or `PlaceWindow` for it, or `None` when it is not that principal's. The principal
+is always the request's verified one and no argument names a recipient. `changes` is one
+`ResourceChanges` (exported by `agent_runtime_client.mcp_server`), without the port a `ValueError`:
+the host calls `changes.changed(recipient, uri)` for the recipient's `Principal` only after the
+change is visible to a read, on the front's event loop or through `anyio.from_thread.run_sync`; a
+call for a principal with no open stream does nothing. `server/discover` advertises `resources`
+with the port and `resources.subscribe` true with `changes`, and no `listChanged`.
+
+**The answers.** `resources/list` answers exactly `current`, sorted, each entry with the URI as its
+`name` and `application/json`. `resources/read` answers one text content with the requested URI,
+`application/json` and the record's JSON. A `None` answers `-32602` with one fixed text that does
+not echo the URI, so an unknown, a foreign and a non-canonical URI look alike. A port that raises
+answers `-32603` with one fixed text and logs only the exception's type. Both carry `ttlMs: 0` and
+`cacheScope: "private"`. `resources/templates/list` is not served. Proved by
+`tests/test_mcp_server_resources.py`.
+
+**The runner** listens with `resourceSubscriptions`, waits for the acknowledgement, which is the
+first frame and holds the requested URIs in `current(principal)`, retains what arrives and only
+then reads, so a change in a gap between streams is never lost. A notification says only that
+something changed: `MemberStanding` is the whole standing, so after a lost, repeated or late one
+the next read shows today's truth. A subscriber of `member://standing` also receives the URI of a
+place window `current` holds; a subscriber of one place gets that place alone. The stream ends
+after `LISTEN_BOUND_SECONDS` with a completion result carrying the subscription id; a stream cut
+without one is `SubscriptionLost` at the SDK's client. After either the runner listens again, and
+reads again once acknowledged. A listen needs an SSE `Accept`, else it is `406`.
+
+**Revocation.** Every pulse is checked against `current` when it is drained from the stream's
+pending URIs, so a removal ends delivery on an open stream, and `current` runs once per pulse, so
+it must be cheap. The check is not at the socket: after a removal, up to two already-checked
+URI-only frames can still reach a client that stalled, so a host relies on the read for
+revocation, not on the absence of a pulse. A port that raises at the acknowledgement answers
+`-32603` with one fixed text, one that raises later ends the stream with the completion, and both
+log only the exception's type. Proved by `tests/test_mcp_server_listen.py`.
+
+**The lease.** Every call a member makes is an admitted call, each opening of a stream included,
+and the app renews the member's lease on each. A runner that calls again within `LEASE_SECONDS`
+keeps its lease.
+
+**What each app owns:** its places and who stands where, the invitation, its expiry and the epoch
+check at accept, the participation and permission decisions, and enforcing the lease, removing a
+member whose lease ran out.
+
 
 ## A marked route as a tool
 
