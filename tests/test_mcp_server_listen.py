@@ -194,19 +194,21 @@ def test_a_change_around_the_acknowledgement_arrives_after_it(
 
 
 def test_a_parent_subscription_receives_a_new_place_only_when_the_principal_may_read_it(
-    front: McpPersonFront, alice: Principal, changes: ResourceChanges
+    front: McpPersonFront, app: MemberApp, alice: Principal, changes: ResourceChanges
 ) -> None:
     connection = listen_connection(front, alice, [STANDING_URI])
+    new_place = window_uri("opened-after-the-acknowledgement")
 
     async def scenario() -> None:
         async with front.running(), open_stream(connection):
+            app.readable[alice][new_place] = an_empty_record()
             changes.changed(alice, window_uri("foreign"))
-            changes.changed(alice, window_uri("first"))
+            changes.changed(alice, new_place)
             await settled()
 
     served(scenario())
 
-    assert connection.updated_uris == [window_uri("first")]
+    assert connection.updated_uris == [new_place]
 
 
 def test_an_exact_place_subscriber_gets_that_place_and_no_standing(
@@ -678,13 +680,15 @@ def test_the_sdk_client_is_acknowledged_receives_changes_and_ends_at_the_gracefu
     front: McpPersonFront, app: MemberApp, alice: Principal, changes: ResourceChanges
 ) -> None:
     foreign = window_uri("foreign")
+    new_place = window_uri("opened-after-the-acknowledgement")
 
     async def through_a_socket() -> tuple[list[str] | None, list[str], list[str] | None]:
         async with loopback_client(front, alice) as client:
             async with client.listen(resource_subscriptions=[STANDING_URI, foreign]) as stream:
                 honored = stream.honored.resource_subscriptions
+                app.readable[alice][new_place] = an_empty_record()
                 changes.changed(alice, foreign)
-                changes.changed(alice, window_uri("first"))
+                changes.changed(alice, new_place)
                 changes.changed(alice, STANDING_URI)
                 delivered: list[str] = []
                 async for event in stream:
@@ -699,7 +703,7 @@ def test_the_sdk_client_is_acknowledged_receives_changes_and_ends_at_the_gracefu
 
     assert asyncio.run(through_a_socket()) == (
         [STANDING_URI],
-        [window_uri("first"), STANDING_URI],
+        [new_place, STANDING_URI],
         [STANDING_URI],
     )
 
