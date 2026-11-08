@@ -244,10 +244,6 @@ async def sdk_client(front: McpPersonFront) -> AsyncIterator[Client]:
         yield client
 
 
-def result_of(sent: list[dict[str, Any]]) -> Any:
-    return json.loads(b"".join(message.get("body", b"") for message in sent))["result"]
-
-
 async def settled() -> None:
     """One virtual second: every task that can run has run, and no real time passed."""
     await asyncio.sleep(1)
