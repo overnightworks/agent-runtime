@@ -387,7 +387,7 @@ def test_a_disconnect_while_the_port_answers_is_no_failure_and_writes_no_complet
 
     assert connection.returned_after is not None
     assert [frame.get("method") for frame in connection.frames] == frames
-    assert not any("raised" in record.getMessage() for record in caplog.records)
+    assert not [record for record in caplog.records if record.levelno >= logging.ERROR]
 
 
 def test_a_port_that_never_answers_ends_at_the_bound_with_the_completion_alone(
