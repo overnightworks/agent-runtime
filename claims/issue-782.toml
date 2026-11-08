@@ -1,0 +1,8 @@
+claim_id = "ceb74c8cc8bc40538efc4bdc4e805438"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "ba5ab7bc52383f7094495bed4c3a095d10ccdbd9"
+branch = "claude/issue-782-the-person-front-serves-each-member-s-re"
+scope = ["docs/ARCHITECTURE.md", "docs/connector.md", "src/agent_runtime_client/mcp_server/__init__.py", "src/agent_runtime_client/mcp_server/asgi.py", "src/agent_runtime_client/mcp_server/person.py", "src/agent_runtime_client/mcp_server/resources.py", "tests/support/mcp_server_support.py", "tests/test_mcp_server_resources.py"]
+opened_commit = "2a3553155931d986a00ad0fb0573b341000e2086"
+whole_reason = "One port, the two methods it answers, their tests and the documents that name them."
