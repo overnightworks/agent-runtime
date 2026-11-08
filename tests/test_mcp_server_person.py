@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -607,6 +607,39 @@ def test_a_front_serves_again_after_its_lifespan_ended(front: McpPersonFront) ->
     assert [reply.status for reply in asyncio.run(twice())] == [200, 200]
 
 
+@pytest.fixture
+def unset_sdk_loggers() -> Iterator[dict[str, logging.Logger]]:
+    """The SDK's server loggers as a host that configured neither leaves them, restored after."""
+    loggers = {name: logging.getLogger(name) for name in ("mcp.server", "mcp.shared")}
+    levels = {name: logger.level for name, logger in loggers.items()}
+    for logger in loggers.values():
+        logger.setLevel(logging.NOTSET)
+    yield loggers
+    for name, logger in loggers.items():
+        logger.setLevel(levels[name])
+
+
+@pytest.mark.parametrize(
+    ("host_level", "critical_reaches_a_handler"),
+    [(logging.NOTSET, False), (logging.DEBUG, True)],
+    ids=["left unset is held", "set by the host wins"],
+)
+def test_running_holds_only_an_sdk_logger_the_host_left_unset(
+    front: McpPersonFront,
+    unset_sdk_loggers: dict[str, logging.Logger],
+    host_level: int,
+    critical_reaches_a_handler: bool,
+) -> None:
+    logger = unset_sdk_loggers["mcp.server"]
+    logger.setLevel(host_level)
+
+    async def enabled_inside_running() -> bool:
+        async with front.running():
+            return logger.isEnabledFor(logging.CRITICAL)
+
+    assert asyncio.run(enabled_inside_running()) is critical_reaches_a_handler
+
+
 _MARKED_SCOPES: dict[str, Any] = {
     "raising handler": (
         rpc_body("tools/call", call_params("read_note")),
@@ -630,6 +663,7 @@ _MARKED_SCOPES: dict[str, Any] = {
 
 @pytest.mark.parametrize("level", [logging.DEBUG, logging.INFO], ids=["debug", "normal"])
 @pytest.mark.parametrize("case", _MARKED_SCOPES, ids=list(_MARKED_SCOPES))
+@pytest.mark.usefixtures("unset_sdk_loggers")
 def test_no_credential_marker_reaches_any_log_under_debug_or_normal_logging(
     person: Person,
     front: McpPersonFront,

@@ -342,10 +342,12 @@ message reaches the wire or the log
 that carries the signature of the request's own bearer is replaced by an empty 500
 (`test_a_result_carrying_the_request_bearer_is_withheld_and_the_log_names_no_caller_text`).
 
-The SDK's server loggers (`mcp.server`, `mcp.shared`) are held above every level while the front
-runs, so a credential the SDK would log (a request's method, a handler failure) reaches no log
-even when the host sets its root logger to DEBUG; setting one of those loggers itself is the
-host's explicit choice. The front's own logger names only the tool and the exception's class
+From the first `running()` on, whichever of the SDK's server loggers (`mcp.server`, `mcp.shared`)
+the host left unset is held above every level, and stays held after `running()` ends, so a
+credential the SDK would log (a request's method, a handler failure) reaches no log even when the
+host sets its root logger to DEBUG. A level the host sets on one of those loggers itself wins
+(`test_running_holds_only_an_sdk_logger_the_host_left_unset`). The front's own logger names only
+the tool and the exception's class
 (`test_no_credential_marker_reaches_any_log_under_debug_or_normal_logging`).
 
 ## The member module
