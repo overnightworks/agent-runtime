@@ -1,0 +1,8 @@
+claim_id = "83d9981d279a4e3595e95fc349eaf55b"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "891d953987f5e9aead1c5eee7ee57fb384d80351"
+branch = "claude/issue-779-one-base-module-owns-what-an-app-and-an"
+scope = [".importlinter", "docs/ARCHITECTURE.md", "docs/connector.md", "src/agent_runtime_client/member.py", "src/agent_runtime_client/wait.py", "tests/test_member.py", "tests/test_wait.py"]
+opened_commit = "6abfb85e24e66b53f4828fdfaa7efd962ab97088"
+whole_reason = "One new contract module, the moved records it takes over, and the checks and documents that name it."
