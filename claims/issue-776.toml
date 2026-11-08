@@ -1,0 +1,7 @@
+claim_id = "34829be9ccfd4b16ab75d4d3c9a14af3"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "5808c0997420ea706efebc3bfd2d27ad20d7b996"
+branch = "claude/issue-776-a-hand-tool-s-handler-can-end-the-turn-w"
+scope = ["docs/connector.md", "src/agent_runtime_client/backend/gateway.py", "tests/test_backend_gateway_tools.py"]
+opened_commit = "3bc5b54c4f73a6e9ee45bb02aecb80b104b8041a"
