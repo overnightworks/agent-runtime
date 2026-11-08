@@ -196,7 +196,11 @@ A `ToolOutcome(is_error=True)` goes to the model, which reads it as `Error: ` fo
 content, and the turn goes on (`test_an_error_outcome_reaches_the_model_and_the_turn_goes_on`,
 `test_the_model_reads_an_error_outcome_differently_from_a_success_of_the_same_text`). A handler
 that raises is a host defect: the client logs its class name only and tells the model the call
-failed (`test_a_raising_handler_logs_its_class_only_and_the_model_gets_an_error`). Task
+failed (`test_a_raising_handler_logs_its_class_only_and_the_model_gets_an_error`). The one
+exception is `TurnStopped`: it ends the turn unchanged, with no result event and no further round,
+and `after_side_effect` is true once a side-effecting call started or the handler set it
+(`test_a_handler_that_stops_the_turn_ends_it_with_that_exception_and_no_further_round`,
+`test_a_handler_that_stops_the_turn_leaves_after_side_effect_as_the_connector_promises`). Task
 cancellation reaches the caller unchanged and no later round runs
 (`test_cancelling_between_a_call_and_its_result_reaches_the_caller_unchanged`). Per started call
 one INFO record carries the tool name, call id and `is_error`, never the arguments or the

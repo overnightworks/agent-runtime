@@ -383,10 +383,16 @@ def _limit_exceeded() -> TurnStopped:
 
 
 async def _serve(handler: HandToolHandler, person: TurnPerson, call: _Call) -> ToolResultEvent:
-    """Run one handler; an outcome that is no valid result event is a host defect like a raise."""
-    is_error: bool | None = None  # unset for a call the deadline or a cancellation cut off
+    """Run one handler; an outcome that is no valid result event is a host defect like a raise.
+
+    The one raise that is no defect is ``TurnStopped``: the handler ends the turn, so it passes.
+    """
+    # unset for a call the deadline, a cancellation or a handler's TurnStopped cut off
+    is_error: bool | None = None
     try:
         event = _result_event(call, await handler(person.principal, call.arguments))
+    except TurnStopped:
+        raise
     except Exception as error:  # a handler is the app's code; its failure is a host defect
         _LOGGER.error("tool %s raised %s", call.name, type(error).__qualname__)
         event = _failed_event(call, _HANDLER_FAILED_TEXT)
