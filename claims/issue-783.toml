@@ -1,8 +1,0 @@
-claim_id = "61d6834ec7f04e9f99569745d4f220af"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "ba5ab7bc52383f7094495bed4c3a095d10ccdbd9"
-branch = "claude/issue-783-the-wait-tool-leaves-the-library"
-scope = [".importlinter", "docs/ARCHITECTURE.md", "docs/connector.md", "quality/config.toml", "src/agent_runtime_client/mcp_server/__init__.py", "src/agent_runtime_client/mcp_server/wait.py", "src/agent_runtime_client/member.py", "src/agent_runtime_client/wait.py", "tests/support/mcp_server_support.py", "tests/test_mcp_server_resources.py", "tests/test_mcp_server_wait.py", "tests/test_member.py", "tests/test_wait.py"]
-opened_commit = "b74f7ea7dfe411da613c4d0324566e82f131a68c"
-whole_reason = "One predecessor removed whole: its modules, its suites and every document and contract that names it."
