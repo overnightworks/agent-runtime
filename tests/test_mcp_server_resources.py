@@ -236,12 +236,12 @@ def test_a_cancelled_port_is_not_a_failure_and_propagates(
 
 
 @pytest.mark.parametrize(
-    ("method", "params", "unusable"),
+    ("method", "params", "unusable", "raised"),
     [
-        ("resources/list", {}, ["member://x", 1]),
-        ("resources/list", {}, [1]),
-        ("resources/read", {"uri": STANDING_URI}, {"standings": []}),
-        ("resources/read", {"uri": STANDING_URI}, object()),
+        ("resources/list", {}, ["member://x", 1], "TypeError"),
+        ("resources/list", {}, [1], "ValidationError"),
+        ("resources/read", {"uri": STANDING_URI}, {"standings": []}, "AttributeError"),
+        ("resources/read", {"uri": STANDING_URI}, object(), "AttributeError"),
     ],
     ids=["mixed uris", "a non-text uri", "a mapping record", "an object record"],
 )
@@ -252,6 +252,7 @@ def test_a_port_returning_an_unusable_value_answers_the_fixed_text_and_logs_the_
     method: str,
     params: dict[str, Any],
     unusable: Any,
+    raised: str,
 ) -> None:
     caplog.set_level(logging.INFO, logger=LOGGER)
     app.unusable = unusable
@@ -260,7 +261,7 @@ def test_a_port_returning_an_unusable_value_answers_the_fixed_text_and_logs_the_
 
     logged = " ".join(record.getMessage() for record in caplog.records)
     assert (reply["error"]["code"], reply["error"]["message"]) == (-32603, _FAILED)
-    assert f"{method} raised" in logged
+    assert f"{method} raised {raised}" in logged
 
 
 def test_the_sdk_client_lists_and_reads_what_the_front_answers(app: MemberApp) -> None:

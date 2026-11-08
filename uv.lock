@@ -432,6 +432,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "uvicorn" },
 ]
 mcp-server = [
     { name = "anyio" },
@@ -451,6 +452,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1,<8" },
     { name = "ruamel-yaml", specifier = ">=0.19.1,<0.20" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.17,<1" },
+    { name = "uvicorn", marker = "extra == 'dev'", specifier = ">=0.54,<1" },
 ]
 provides-extras = ["backend", "mcp-server", "dev"]
 

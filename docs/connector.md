@@ -334,6 +334,27 @@ registered and `server/discover` advertises no `resources`; with it, it advertis
 no `subscribe`. `resources/templates/list` is not served. Proved by
 `tests/test_mcp_server_resources.py`.
 
+With `changes=` beside `resources=` the front also serves `subscriptions/listen`, and `changes`
+without the port is a `ValueError`. The host creates one `ResourceChanges` and calls
+`changes.changed(recipient, uri)` after the change is visible to a read, on the front's event loop
+or through `anyio.from_thread.run_sync`. The recipient is a `Principal`, and a call for a principal
+with no open stream does nothing. `server/discover` then advertises `resources.subscribe` true and
+no `listChanged`. A client listens with `resourceSubscriptions`, waits for the acknowledgement,
+which is the first frame and holds the requested URIs in `current(principal)`, retains what arrives
+and only then reads, so a change in a gap between streams is never lost. A notification says only
+that something changed: after a lost, repeated or late one, the next read shows today's truth. A
+subscriber of `member://standing` also receives the URI of a place window `current` holds; a
+subscriber of one place gets that place alone. Every pulse is checked against `current` when it is
+drained from the stream's pending URIs, so a removal ends delivery on an open stream, and `current`
+runs once per pulse, so it must be cheap. The check is not at the socket: after a removal, up to two
+already-checked URI-only frames can still reach a client that stalled, and a host relies on the read
+for revocation, not on the absence of a pulse. The stream ends after `LISTEN_BOUND_SECONDS` with the
+completion result carrying the subscription id, so a runner listens again; a stream cut without one
+is `SubscriptionLost` at the SDK's client. The `listChanged` flags stay unhonored. A port that
+raises at the acknowledgement answers `-32603` with one fixed text, one that raises later ends the
+stream with the completion, and both log only the exception's type. A listen needs an SSE `Accept`,
+else it is `406`. Proved by `tests/test_mcp_server_listen.py`.
+
 A thin ASGI shell stands before the SDK and keeps this order. A request with an `Origin` header is
 403 (its clients are agents, which send none), anything but `POST` is 405 with `Allow: POST`, a
 body over `MAX_EVENT_BYTES` is 413, and a body with a repeated member, `NaN`, `Infinity` or a

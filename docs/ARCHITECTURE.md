@@ -90,6 +90,14 @@ The MCP person front is mounted by the host behind the host's own authentication
 resolves the person through a port, answers `tools/list` and `tools/call`, and replays a
 marked route as an in-process request into the host's whole application.
 
+Every answer of the front is buffered, so a bearer reflected into it can be withheld whole. The
+one streaming path is `subscriptions/listen`, per verified principal: `ResourceChanges` wakes each
+open stream of the signalled principal, and the stream acknowledges, delivers and ends at a bound.
+The shell's writer checks each frame for the bearer and holds the response start until the first
+frame, so a bearer in the first one is still withheld and in a later one cuts the stream. The shell
+caps that call at the bound plus time for the completion, because the SDK's write to a client has
+no timeout and a client that stops reading would otherwise hold the request forever.
+
 ## Deployment
 
 The client is a library: every block runs inside the host app's process, the agent files are
