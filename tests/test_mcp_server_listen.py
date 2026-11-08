@@ -318,20 +318,36 @@ def test_a_clients_disconnect_frees_its_stream_with_no_completion_frame(
     assert not any("result" in frame for frame in connection.frames)
 
 
-def test_a_disconnect_while_the_port_answers_ends_the_call_with_no_frame(
-    front: McpPersonFront, app: MemberApp, alice: Principal
+@pytest.mark.parametrize(
+    ("port_answers", "frames"),
+    [("for the acknowledgement", []), ("during delivery", [_ACKNOWLEDGED])],
+)
+def test_a_disconnect_while_the_port_answers_is_no_failure_and_writes_no_completion(
+    front: McpPersonFront,
+    app: MemberApp,
+    alice: Principal,
+    changes: ResourceChanges,
+    caplog: pytest.LogCaptureFixture,
+    port_answers: str,
+    frames: list[str],
 ) -> None:
-    app.current_seconds = LISTEN_BOUND_SECONDS * 2
+    caplog.set_level(logging.DEBUG, logger=LOGGER)
     connection = listen_connection(front, alice, [STANDING_URI])
 
     async def scenario() -> None:
+        if port_answers == "for the acknowledgement":
+            app.current_seconds = LISTEN_BOUND_SECONDS * 2
         async with front.running(), open_stream(connection):
-            pass
+            if port_answers == "during delivery":
+                app.current_seconds = LISTEN_BOUND_SECONDS * 2
+                changes.changed(alice, STANDING_URI)
+                await settled()
 
     served(scenario())
 
     assert connection.returned_after is not None
-    assert connection.sent == []
+    assert [frame.get("method") for frame in connection.frames] == frames
+    assert not any("raised" in record.getMessage() for record in caplog.records)
 
 
 def test_a_port_that_never_answers_ends_at_the_bound_with_the_completion_alone(
