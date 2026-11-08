@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Collection, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -19,6 +19,7 @@ from starlette.routing import Route
 
 from agent_runtime_client.mcp_server import InMemoryMemberChanges, McpPersonFront, wait_tool
 from agent_runtime_client.mcp_wire import MCP_ENDPOINT_PATH, PROTOCOL_VERSION
+from agent_runtime_client.member import MemberStanding, PlaceWindow
 from agent_runtime_client.tools import Principal, ToolDeclaration, ToolEffect
 from agent_runtime_client.wait import (
     Invitation,
@@ -87,6 +88,37 @@ class Places:
         return current
 
 
+@dataclass
+class MemberApp:
+    """The host's truth behind the resources port: per member, what is readable by URI.
+
+    ``asked`` records every principal and URI the port was asked about; ``unusable`` is what both
+    methods return instead of their answer when set, a port that breaks its contract.
+    """
+
+    readable: dict[Principal, dict[str, MemberStanding | PlaceWindow]] = field(default_factory=dict)
+    failure: Exception | None = None
+    unusable: Any = None
+    asked: list[tuple[Principal, str]] = field(default_factory=list)
+
+    async def current(self, principal: Principal) -> Collection[str]:
+        await asyncio.sleep(0)
+        if self.failure is not None:
+            raise self.failure
+        if self.unusable is not None:
+            return self.unusable
+        return sorted(self.readable.get(principal, {}), reverse=True)
+
+    async def read(self, principal: Principal, uri: str) -> MemberStanding | PlaceWindow | None:
+        await asyncio.sleep(0)
+        self.asked.append((principal, uri))
+        if self.failure is not None:
+            raise self.failure
+        if self.unusable is not None:
+            return self.unusable
+        return self.readable.get(principal, {}).get(uri)
+
+
 @dataclass(frozen=True)
 class ToolResult:
     """One ``tools/call`` result as the wire carried it, and how long the call took."""
@@ -147,6 +179,8 @@ def routing_headers(body: bytes, version: str | None = PROTOCOL_VERSION) -> Head
     fields.append((b"mcp-method", str(document.get("method")).encode()))
     if document.get("method") == "tools/call":
         fields.append((b"mcp-name", str(document["params"]["name"]).encode()))
+    if document.get("method") == "resources/read":
+        fields.append((b"mcp-name", str(document["params"]["uri"]).encode()))
     return fields
 
 

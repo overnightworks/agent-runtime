@@ -10,7 +10,8 @@ A thin ASGI shell stands before the official SDK and serves revision ``2026-07-2
 refuses every request that is not explicitly that revision, because the SDK's stateless mode
 still routes an absent or older version to its legacy path. No answer the front writes, refusals
 included, carries the request's bearer. Rights are the route's, so ``tools/list`` offers every
-tool.
+tool. With a ``MemberResources`` port it also serves ``resources/list`` and ``resources/read``
+per verified principal.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from functools import partial
 from http import HTTPStatus
 from typing import Any, Final
 
@@ -36,8 +38,11 @@ from mcp_types import (
     CallToolResult,
     ErrorData,
     JSONRPCError,
+    ListResourcesResult,
     ListToolsResult,
     PaginatedRequestParams,
+    ReadResourceRequestParams,
+    ReadResourceResult,
     Tool,
     ToolAnnotations,
     UnsupportedProtocolVersionErrorData,
@@ -59,6 +64,7 @@ from agent_runtime_client.mcp_server.asgi import (
     request_label,
     write,
 )
+from agent_runtime_client.mcp_server.resources import MemberResources, list_answer, read_answer
 from agent_runtime_client.mcp_wire import (
     JSON_MEDIA_TYPE,
     PROTOCOL_VERSION,
@@ -218,7 +224,13 @@ def _answer_of(sent: Sequence[Message]) -> HttpAnswer:
 class McpPersonFront:
     """An ASGI 3 app that serves MCP revision 2026-07-28 to one resolved person per request."""
 
-    def __init__(self, tools: Sequence[PersonTool], *, resolve_person: ResolvePerson) -> None:
+    def __init__(
+        self,
+        tools: Sequence[PersonTool],
+        *,
+        resolve_person: ResolvePerson,
+        resources: MemberResources | None = None,
+    ) -> None:
         self._tools = {tool.declaration.name: tool for tool in tools}
         if len(self._tools) != len(tools):
             raise ValueError("a tool name is declared more than once")
@@ -231,6 +243,8 @@ class McpPersonFront:
             version=_SERVER_VERSION,
             on_list_tools=self._list_tools,
             on_call_tool=self._call_tool,
+            on_list_resources=None if resources is None else partial(_list_resources, resources),
+            on_read_resource=None if resources is None else partial(_read_resource, resources),
         )
         self._manager: StreamableHTTPSessionManager | None = None
 
@@ -337,3 +351,19 @@ class McpPersonFront:
             result = _written(outcome)
         _LOG.info("a tool was called: %s is_error=%s", name, outcome.is_error)
         return result
+
+
+async def _list_resources(
+    resources: MemberResources,
+    _context: ServerRequestContext[Any],
+    _params: PaginatedRequestParams | None,
+) -> ListResourcesResult | ErrorData:
+    return await list_answer(resources, _CURRENT_REQUEST.get().principal)
+
+
+async def _read_resource(
+    resources: MemberResources,
+    _context: ServerRequestContext[Any],
+    params: ReadResourceRequestParams,
+) -> ReadResourceResult | ErrorData:
+    return await read_answer(resources, _CURRENT_REQUEST.get().principal, params.uri)
