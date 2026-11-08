@@ -296,11 +296,12 @@ there (`test_the_transport_loggers_that_could_carry_the_key_are_not_enabled_for_
 an app for the agent of one signed-in person. It serves MCP revision 2026-07-28 on the official
 SDK and nothing older: there is no `initialize` handshake and no legacy path. `server/discover`,
 `tools/list` and `tools/call` are POST only and answered in `application/json`. It is an ASGI 3 app
-the host registers as the exact route `MCP_ENDPOINT_PATH`, never a `Mount`, which redirects `/mcp`
-to `/mcp/`, and behind the middleware that admits the caller: the host's gate answers every 401
-and 403 before routing, so the front answers no challenge. The host enters
-`async with front.running():` once in its own lifespan, the one thing the SDK's session manager
-needs; a request outside it raises `RuntimeError`. Proved by `tests/test_mcp_server_person.py`:
+the host registers as the exact route `MCP_ENDPOINT_PATH` (in `agent_runtime_client.mcp_wire`),
+never a `Mount`, which redirects `/mcp` to `/mcp/`, and behind the middleware that admits the
+caller: the host's gate answers every 401 and 403 before routing, so the front answers no challenge.
+The host enters `async with front.running():` once in its own lifespan, the one thing the SDK's
+session manager needs; a request outside it raises `RuntimeError`. Proved by
+`tests/test_mcp_server_person.py`:
 `test_an_exact_starlette_route_serves_discovery_list_and_call_without_a_redirect`,
 `test_a_request_outside_running_fails_loud`.
 
@@ -383,10 +384,11 @@ agent when one changed. This section is what a host wires and what a runner may 
 
 **The host** passes `resources=` and `changes=` to `McpPersonFront` and enters
 `async with front.running():` in its lifespan (see above). `resources` is one port,
-`MemberResources`: `current(principal)` returns every URI that principal may read now, and
-`read(principal, uri)` returns the app's current `MemberStanding` or `PlaceWindow` for it, or
-`None` when it is not that principal's. The principal is always the request's verified one and no
-argument names a recipient. `changes` is one `ResourceChanges`, without the port a `ValueError`:
+`MemberResources` (exported by `agent_runtime_client.mcp_server`): `current(principal)` returns
+every URI that principal may read now, and `read(principal, uri)` returns the app's current
+`MemberStanding` or `PlaceWindow` for it, or `None` when it is not that principal's. The principal
+is always the request's verified one and no argument names a recipient. `changes` is one
+`ResourceChanges` (exported by `agent_runtime_client.mcp_server`), without the port a `ValueError`:
 the host calls `changes.changed(recipient, uri)` for the recipient's `Principal` only after the
 change is visible to a read, on the front's event loop or through `anyio.from_thread.run_sync`; a
 call for a principal with no open stream does nothing. `server/discover` advertises `resources`
