@@ -92,24 +92,30 @@ class Places:
 class MemberApp:
     """The host's truth behind the resources port: per member, what is readable by URI.
 
-    ``asked`` records every principal and URI the port was asked about.
+    ``asked`` records every principal and URI the port was asked about; ``unusable`` is what both
+    methods return instead of their answer when set, a port that breaks its contract.
     """
 
     readable: dict[Principal, dict[str, MemberStanding | PlaceWindow]] = field(default_factory=dict)
     failure: Exception | None = None
+    unusable: Any = None
     asked: list[tuple[Principal, str]] = field(default_factory=list)
 
     async def current(self, principal: Principal) -> Collection[str]:
         await asyncio.sleep(0)
         if self.failure is not None:
             raise self.failure
-        return set(self.readable.get(principal, {}))
+        if self.unusable is not None:
+            return self.unusable
+        return sorted(self.readable.get(principal, {}), reverse=True)
 
     async def read(self, principal: Principal, uri: str) -> MemberStanding | PlaceWindow | None:
         await asyncio.sleep(0)
         self.asked.append((principal, uri))
         if self.failure is not None:
             raise self.failure
+        if self.unusable is not None:
+            return self.unusable
         return self.readable.get(principal, {}).get(uri)
 
 

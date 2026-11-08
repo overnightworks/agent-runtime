@@ -8,6 +8,7 @@ import logging
 from typing import Any
 
 import pytest
+from mcp_types import TextResourceContents
 
 from agent_runtime_client.mcp_server import McpPersonFront
 from agent_runtime_client.mcp_server.asgi import LOGGER_NAME as LOGGER
@@ -184,7 +185,7 @@ def test_discovery_advertises_resources_without_subscribe_only_with_the_port(
         assert not advertised["resources"].get("subscribe")
 
 
-def test_without_the_port_resources_list_is_an_unknown_method(app: MemberApp) -> None:
+def test_without_the_port_resources_list_is_an_unknown_method() -> None:
     front = McpPersonFront([], resolve_person=resolve_member)
 
     reply = answered(front, a_member("alice"), "resources/list")
@@ -220,16 +221,70 @@ def test_a_failing_port_answers_the_fixed_text_and_no_marker_reaches_any_log(
     )
 
 
-def test_a_cancelled_port_is_not_a_failure_and_propagates(app: MemberApp) -> None:
-    front = McpPersonFront([], resolve_person=resolve_member, resources=app)
+@pytest.mark.parametrize(
+    ("method", "params"),
+    [("resources/list", {}), ("resources/read", {"uri": STANDING_URI})],
+)
+def test_a_cancelled_port_is_not_a_failure_and_propagates(
+    front: McpPersonFront, app: MemberApp, method: str, params: dict[str, Any]
+) -> None:
     app.failure = asyncio.CancelledError()
-
-    async def driven() -> None:
-        async with front.running():
-            await post(front, a_member("alice"), rpc_body("resources/list"))
+    driven = exchange(front, a_member("alice"), method, **params)
 
     with pytest.raises(asyncio.CancelledError):
-        asyncio.run(driven())
+        asyncio.run(driven)
+
+
+@pytest.mark.parametrize(
+    ("method", "params", "unusable"),
+    [
+        ("resources/list", {}, ["member://x", 1]),
+        ("resources/list", {}, [1]),
+        ("resources/read", {"uri": STANDING_URI}, {"standings": []}),
+        ("resources/read", {"uri": STANDING_URI}, object()),
+    ],
+    ids=["mixed uris", "a non-text uri", "a mapping record", "an object record"],
+)
+def test_a_port_returning_an_unusable_value_answers_the_fixed_text_and_logs_the_type(
+    front: McpPersonFront,
+    app: MemberApp,
+    caplog: pytest.LogCaptureFixture,
+    method: str,
+    params: dict[str, Any],
+    unusable: Any,
+) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER)
+    app.unusable = unusable
+
+    reply = answered(front, a_member("alice"), method, **params)
+
+    logged = " ".join(record.getMessage() for record in caplog.records)
+    assert (reply["error"]["code"], reply["error"]["message"]) == (-32603, _FAILED)
+    assert f"{method} raised" in logged
+
+
+def test_the_sdk_client_lists_and_reads_what_the_front_answers(app: MemberApp) -> None:
+    alice = a_member("alice")
+    front = McpPersonFront([], resolve_person=lambda _scope: alice, resources=app)
+
+    async def through_the_client() -> tuple[list[str], str, int, str]:
+        async with sdk_client(front) as client:
+            listed = await client.list_resources()
+            read = await client.read_resource(STANDING_URI)
+            [content] = read.contents
+            assert isinstance(content, TextResourceContents)
+            return (
+                [r.uri for r in listed.resources],
+                content.text,
+                listed.ttl_ms,
+                listed.cache_scope,
+            )
+
+    uris, text, ttl_ms, cache_scope = asyncio.run(through_the_client())
+
+    assert uris == sorted(app.readable[alice])
+    assert MemberStanding.model_validate_json(text) == app.readable[alice][STANDING_URI]
+    assert (ttl_ms, cache_scope) == (0, "private")
 
 
 def test_the_shell_refuses_an_origin_before_resources_dispatch(

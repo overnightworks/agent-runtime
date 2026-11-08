@@ -31,7 +31,6 @@ from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp_types import (
-    INTERNAL_ERROR,
     INVALID_PARAMS,
     PARSE_ERROR,
     UNSUPPORTED_PROTOCOL_VERSION,
@@ -44,8 +43,6 @@ from mcp_types import (
     PaginatedRequestParams,
     ReadResourceRequestParams,
     ReadResourceResult,
-    Resource,
-    TextResourceContents,
     Tool,
     ToolAnnotations,
     UnsupportedProtocolVersionErrorData,
@@ -67,7 +64,7 @@ from agent_runtime_client.mcp_server.asgi import (
     request_label,
     write,
 )
-from agent_runtime_client.mcp_server.resources import MemberResources
+from agent_runtime_client.mcp_server.resources import MemberResources, list_answer, read_answer
 from agent_runtime_client.mcp_wire import (
     JSON_MEDIA_TYPE,
     PROTOCOL_VERSION,
@@ -81,9 +78,6 @@ type ResolvePerson = Callable[[Scope], Principal]
 
 _LOG: Final = logging.getLogger(LOGGER_NAME)
 _HANDLER_FAILED_TEXT: Final = "the tool failed"
-_RESOURCE_FAILED_TEXT: Final = "the resource failed"
-_UNKNOWN_RESOURCE_TEXT: Final = "Unknown resource"
-_RESOURCE_MIME_TYPE: Final = "application/json"
 _UNKNOWN_TOOL_TEXT: Final = "Unknown tool"
 _INVALID_ARGUMENTS_TEXT: Final = "Invalid tool arguments"
 _BEARER_SCHEME: Final = "bearer"
@@ -364,18 +358,7 @@ async def _list_resources(
     _context: ServerRequestContext[Any],
     _params: PaginatedRequestParams | None,
 ) -> ListResourcesResult | ErrorData:
-    """Exactly the URIs the port lists for the request's principal, sorted."""
-    try:
-        uris = await resources.current(_CURRENT_REQUEST.get().principal)
-    except Exception as failure:
-        return _resource_failure("resources/list", failure)
-    return ListResourcesResult(
-        resources=[
-            Resource(uri=uri, name=uri, mime_type=_RESOURCE_MIME_TYPE) for uri in sorted(uris)
-        ],
-        ttl_ms=0,
-        cache_scope="private",
-    )
+    return await list_answer(resources, _CURRENT_REQUEST.get().principal)
 
 
 async def _read_resource(
@@ -383,20 +366,4 @@ async def _read_resource(
     _context: ServerRequestContext[Any],
     params: ReadResourceRequestParams,
 ) -> ReadResourceResult | ErrorData:
-    """The port's truth for the URI, or one fixed text that echoes nothing of it."""
-    try:
-        record = await resources.read(_CURRENT_REQUEST.get().principal, params.uri)
-    except Exception as failure:
-        return _resource_failure("resources/read", failure)
-    if record is None:
-        return ErrorData(code=INVALID_PARAMS, message=_UNKNOWN_RESOURCE_TEXT)
-    contents = TextResourceContents(
-        uri=params.uri, mime_type=_RESOURCE_MIME_TYPE, text=record.model_dump_json()
-    )
-    return ReadResourceResult(contents=[contents], ttl_ms=0, cache_scope="private")
-
-
-def _resource_failure(method: str, failure: Exception) -> ErrorData:
-    """The fixed answer of a failed port; only the exception's type is logged."""
-    _LOG.error("a resource method failed: %s raised %s", method, type(failure).__name__)
-    return ErrorData(code=INTERNAL_ERROR, message=_RESOURCE_FAILED_TEXT)
+    return await read_answer(resources, _CURRENT_REQUEST.get().principal, params.uri)
