@@ -46,6 +46,6 @@ The head gives the operator that line with the version filled in; only the opera
 only he tagged. `release.yml` calls quality's `release-gate`, which judges main's head at the
 dispatch; it then builds the one client wheel at that commit and calls quality's `release-tag`,
 which creates the tag there and attaches exactly that wheel to the GitHub release. Hosts pin
-that wheel URL or the git tag (`@v<version>`) and never install by name from PyPI. A tag is never
-moved: a broken release gets the next patch tag, so the pull request that precedes the tag
-raises the one version literal, `version` in `pyproject.toml`.
+the git tag (`@v<version>`) and never install by name from PyPI. A tag is never moved: a broken
+release gets the next patch tag, so the pull request that precedes the tag raises the one version
+literal, `version` in `pyproject.toml`.

@@ -70,21 +70,15 @@ jobs:
             exit 1
           fi
 
-      - name: List the wheel with its hash
+      - name: Write the release note naming the git tag
         id: install
         run: |
           {
             echo 'install<<INSTALL_LINES'
-            echo '**Install.** Pin the wheel by URL and hash.'
+            echo '**Install.** Pin the git tag.'
             echo
             echo '```'
-            for wheel in dist/*.whl; do
-              file="$(basename "$wheel")"
-              name="${file%%-*}"
-              listing="$(sha256sum "$wheel")"
-              hash="${listing%% *}"
-              echo "${name//_/-} @ https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/${file}#sha256=${hash}"
-            done
+            echo "overnightworks-agent-runtime-client @ git+https://github.com/${GITHUB_REPOSITORY}@v${VERSION}"
             echo '```'
             echo 'INSTALL_LINES'
           } >> "$GITHUB_OUTPUT"

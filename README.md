@@ -12,12 +12,9 @@ and its gateway.
 
 ## Install
 
-The distribution is not on PyPI. A host pins one of two sources:
+The distribution is not on PyPI. A host pins the git tag:
 
-- the git tag:
-  `overnightworks-agent-runtime-client @ git+https://github.com/overnightworks/agent-runtime@v<version>`;
-- the release wheel: the [latest release](https://github.com/overnightworks/agent-runtime/releases/latest)
-  lists it as a `name @ URL#sha256=…` requirement for `pip install` or `uv add`.
+`overnightworks-agent-runtime-client @ git+https://github.com/overnightworks/agent-runtime@v<version>`
 
 The base depends on `pydantic` and `ruamel.yaml` only. Two extras are optional:
 
