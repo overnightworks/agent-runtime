@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
@@ -23,6 +23,7 @@ class _Release:
     wheel_contents: tuple[tuple[str, bytes], ...] = (
         ("overnightworks_agent_runtime_client-{}-py3-none-any.whl", b"client"),
     )
+    commit: str = ""
 
 
 @pytest.fixture
@@ -53,11 +54,34 @@ def _run_step(
             "GITHUB_OUTPUT": str(output),
             "GITHUB_REPOSITORY": release.repository,
             "VERSION": release.version,
+            "COMMIT": release.commit,
         },
         capture_output=True,
         text=True,
         check=False,
     )
+
+
+def _checkout_at_head(tmp_path: Path, release: _Release) -> _Release:
+    """Make `tmp_path` a git checkout and return the scenario that gated its head commit."""
+    git_env = {
+        "PATH": "/usr/bin:/bin",
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.invalid",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@example.invalid",
+    }
+    for command in (["init", "-q"], ["commit", "-q", "--allow-empty", "-m", "head"]):
+        subprocess.run(["git", *command], cwd=tmp_path, env=git_env, check=True)
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=tmp_path,
+        env=git_env,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    return replace(release, commit=head)
 
 
 def _wheels_in(tmp_path: Path, release: _Release, version: str | None = None) -> dict[str, bytes]:
@@ -88,6 +112,20 @@ def test_the_build_must_hold_exactly_the_client_wheel_at_the_version(
 
     assert (result.returncode == 0) is passes
     assert passes or result.stderr.startswith("Refused:")
+
+
+@pytest.mark.parametrize("gated_is_head", [True, False], ids=["the gated commit", "another commit"])
+def test_the_build_must_check_out_the_commit_the_gate_judged(tmp_path, release, gated_is_head):
+    checked_out = _checkout_at_head(tmp_path, release)
+    gated = checked_out if gated_is_head else replace(checked_out, commit="0" * 40)
+
+    result = _run_step("Refuse unless the checkout is the commit the gate judged", tmp_path, gated)
+
+    assert (result.returncode == 0) is gated_is_head
+    assert gated_is_head or (
+        result.stderr
+        == f"Refused: the checkout is {checked_out.commit}, not the gated commit {gated.commit}.\n"
+    )
 
 
 def test_a_missing_or_extra_wheel_is_refused(tmp_path, release):
