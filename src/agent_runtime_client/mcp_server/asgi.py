@@ -69,13 +69,14 @@ async def write(send: Send, answer: HttpAnswer) -> None:
 
 
 WITHHELD: Final = HttpAnswer(HTTPStatus.INTERNAL_SERVER_ERROR, None, b"")
+DISCOVER_METHOD: Final = "server/discover"
 LISTEN_METHOD: Final = "subscriptions/listen"
 _UNKNOWN_METHOD: Final = "unknown_method"
 _UNKNOWN_TOOL: Final = "unknown_tool"
 _TOOLS_CALL: Final = "tools/call"
 _SERVED_METHODS: Final = frozenset(
     {
-        "server/discover",
+        DISCOVER_METHOD,
         "tools/list",
         _TOOLS_CALL,
         "resources/list",

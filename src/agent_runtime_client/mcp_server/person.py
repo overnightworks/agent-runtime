@@ -57,6 +57,7 @@ from mcp_types import (
 from pydantic import StrictInt, TypeAdapter, ValidationError
 
 from agent_runtime_client.mcp_server.asgi import (
+    DISCOVER_METHOD,
     HEADER_ENCODING,
     LISTEN_METHOD,
     LOGGER_NAME,
@@ -95,7 +96,6 @@ _BEARER_SCHEME: Final = "bearer"
 _SERVER_NAME: Final = "overnightworks-agent-runtime-client"
 _SERVER_VERSION: Final = "1"
 _INITIALIZE: Final = "initialize"
-_DISCOVER: Final = "server/discover"
 _FINAL_FRAME_SECONDS: Final = 5
 _UNSUPPORTED_VERSION_TEXT: Final = "Unsupported protocol version"
 _PARSE_ERROR_TEXT: Final = "Parse error"
@@ -266,7 +266,7 @@ class McpPersonFront:
             ),
         )
         if changes is not None:
-            self._server.add_request_handler(_DISCOVER, RequestParams, _discover_with_listen)
+            self._server.add_request_handler(DISCOVER_METHOD, RequestParams, _discover_with_listen)
         self._manager: StreamableHTTPSessionManager | None = None
 
     @asynccontextmanager

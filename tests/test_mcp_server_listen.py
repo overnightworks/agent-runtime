@@ -17,7 +17,12 @@ import anyio.to_thread
 import pytest
 from mcp.client.subscriptions import SubscriptionLost
 
-from agent_runtime_client.mcp_server import McpPersonFront, ResourceChanges
+from agent_runtime_client.mcp_server import (
+    McpPersonFront,
+    PersonRequest,
+    PersonTool,
+    ResourceChanges,
+)
 from agent_runtime_client.mcp_server.asgi import LOGGER_NAME as LOGGER
 from agent_runtime_client.member import (
     LISTEN_BOUND_SECONDS,
@@ -26,12 +31,15 @@ from agent_runtime_client.member import (
     PlaceRef,
     place_window_uri,
 )
-from agent_runtime_client.tools import Principal
+from agent_runtime_client.tools import Principal, ToolOutcome
+from agent_runtime_client.turn import JsonObject
 from tests.support.mcp_server_support import (
     ListenConnection,
     MemberApp,
     a_member,
+    call_params,
     clock_held,
+    declaration,
     http_scope,
     listen_connection,
     loopback_client,
@@ -577,25 +585,42 @@ def test_no_marker_from_a_uri_a_principal_or_a_failure_reaches_any_log(
     )
 
 
+def a_person_tool() -> PersonTool:
+    async def answer_note(_request: PersonRequest, _arguments: JsonObject) -> ToolOutcome:
+        await asyncio.sleep(0)
+        return ToolOutcome("a note")
+
+    return PersonTool(declaration("read_note"), answer_note)
+
+
 @pytest.mark.parametrize(
     ("method", "params"),
     [
         ("tools/list", {}),
+        ("tools/call", call_params("read_note")),
         ("resources/list", {}),
         ("resources/read", {"uri": STANDING_URI}),
     ],
 )
 def test_every_other_method_answers_the_same_bytes_as_a_front_without_listen(
-    front: McpPersonFront, app: MemberApp, alice: Principal, method: str, params: dict[str, Any]
+    app: MemberApp,
+    changes: ResourceChanges,
+    alice: Principal,
+    method: str,
+    params: dict[str, Any],
 ) -> None:
-    without_listen = McpPersonFront([], resolve_person=resolve_member, resources=app)
+    tool = a_person_tool()
+    with_listen = McpPersonFront(
+        [tool], resolve_person=resolve_member, resources=app, changes=changes
+    )
+    without_listen = McpPersonFront([tool], resolve_person=resolve_member, resources=app)
     body = rpc_body(method, params)
 
     async def answers(candidate: McpPersonFront) -> list[dict[str, Any]]:
         async with candidate.running():
             return await post(candidate, alice, body)
 
-    assert asyncio.run(answers(front)) == asyncio.run(answers(without_listen))
+    assert asyncio.run(answers(with_listen)) == asyncio.run(answers(without_listen))
 
 
 def _listen_request() -> bytes:
