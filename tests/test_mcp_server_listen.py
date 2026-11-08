@@ -12,6 +12,8 @@ import logging
 from collections.abc import Coroutine
 from typing import Any
 
+import anyio.from_thread
+import anyio.to_thread
 import pytest
 from mcp.client.subscriptions import SubscriptionLost
 
@@ -766,6 +768,23 @@ def test_the_sdk_client_is_acknowledged_receives_changes_and_ends_at_the_gracefu
         [new_place, STANDING_URI],
         [STANDING_URI],
     )
+
+
+def test_a_change_signalled_from_a_worker_thread_reaches_the_open_stream(
+    front: McpPersonFront, alice: Principal, changes: ResourceChanges
+) -> None:
+    def signal_from_the_worker() -> None:
+        anyio.from_thread.run_sync(changes.changed, alice, STANDING_URI)
+
+    async def through_a_socket() -> str | None:
+        async with loopback_client(front, alice) as client:
+            async with client.listen(resource_subscriptions=[STANDING_URI]) as stream:
+                await anyio.to_thread.run_sync(signal_from_the_worker)
+                async for event in stream:
+                    return event.uri
+        return None
+
+    assert asyncio.run(through_a_socket()) == STANDING_URI
 
 
 def test_an_abrupt_cut_raises_subscription_lost_at_the_sdk_client_and_a_relisten_is_acknowledged(
