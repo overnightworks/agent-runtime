@@ -1,0 +1,7 @@
+claim_id = "57a8f22e6b5945bcb94971ad253d0817"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "d6a76d01b80dc9434607bf0c91cdd6a6e999430e"
+branch = "fix/release-page-names-git-tag"
+scope = [".github/workflows/release.yml", "AGENTS.md", "README.md"]
+opened_commit = "1771da69d3914d5384e571f05d903e1a0ef04c1e"
