@@ -249,27 +249,24 @@ def test_anything_but_a_request_at_the_served_revision_is_refused_naming_it(
     assert person.calls == []
 
 
-def _repeated(body: bytes, *, once: bytes, doubled: bytes) -> bytes:
+def _note_call_with(*, once: bytes, doubled: bytes) -> bytes:
+    body = rpc_body("tools/call", call_params("read_note", note="n1"))
     assert once in body
     return body.replace(once, doubled, 1)
-
-
-_CALL = rpc_body("tools/call", call_params("read_note", note="n1"))
 
 
 @pytest.mark.parametrize(
     "body",
     [
-        _repeated(_CALL, once=b'"id": 1', doubled=b'"id": 1, "id": 2'),
-        _repeated(
-            _CALL,
+        _note_call_with(once=b'"id": 1', doubled=b'"id": 1, "id": 2'),
+        _note_call_with(
             once=b'"name": "read_note"',
             doubled=b'"name": "read_note", "name": "read_note"',
         ),
-        _repeated(_CALL, once=b'"_meta": {', doubled=b'"_meta": {"x": 1, "x": 2, '),
-        _repeated(_CALL, once=b'"n1"', doubled=b"NaN"),
-        _repeated(_CALL, once=b'"n1"', doubled=b"Infinity"),
-        _repeated(_CALL, once=b'"n1"', doubled=b"1e999"),
+        _note_call_with(once=b'"_meta": {', doubled=b'"_meta": {"x": 1, "x": 2, '),
+        _note_call_with(once=b'"n1"', doubled=b"NaN"),
+        _note_call_with(once=b'"n1"', doubled=b"Infinity"),
+        _note_call_with(once=b'"n1"', doubled=b"1e999"),
         b"{truncated",
     ],
     ids=[
@@ -640,43 +637,70 @@ def test_running_holds_only_an_sdk_logger_the_host_left_unset(
     assert asyncio.run(enabled_inside_running()) is critical_reaches_a_handler
 
 
-_MARKED_SCOPES: dict[str, Any] = {
-    "raising handler": (
-        rpc_body("tools/call", call_params("read_note")),
-        {"failure": RuntimeError(_MARKER)},
-    ),
-    "unwritable outcome": (
-        rpc_body("tools/call", call_params("read_note")),
-        {"outcome": ToolOutcome(f"{_MARKER} \ud800", is_error=False)},
-    ),
-    "malformed outcome": (
-        rpc_body("tools/call", call_params("read_note")),
-        {"outcome": {"marker": _MARKER}},
-    ),
-    "request method": (rpc_body(f"tools/{_MARKER}"), {}),
-    "notification method": (rpc_body(f"notifications/{_MARKER}", notification=True), {}),
-    "tool arguments": (rpc_body("tools/call", call_params("read_note", note=_MARKER)), {}),
-    "unknown tool name": (rpc_body("tools/call", call_params(_MARKER)), {}),
-    "version header": (rpc_body("tools/list"), {"version": _MARKER}),
-}
+@dataclass(frozen=True)
+class MarkedRequest:
+    """One way a credential marker reaches the front, and what the host's tool does with it."""
+
+    body: bytes
+    failure: Exception | None = None
+    outcome: Any = None
+    version: str = PROTOCOL_VERSION
+
+
+def _read_note() -> bytes:
+    return rpc_body("tools/call", call_params("read_note"))
 
 
 @pytest.mark.parametrize("level", [logging.DEBUG, logging.INFO], ids=["debug", "normal"])
-@pytest.mark.parametrize("case", _MARKED_SCOPES, ids=list(_MARKED_SCOPES))
+@pytest.mark.parametrize(
+    "marked",
+    [
+        pytest.param(
+            lambda: MarkedRequest(_read_note(), failure=RuntimeError(_MARKER)),
+            id="raising handler",
+        ),
+        pytest.param(
+            lambda: MarkedRequest(
+                _read_note(), outcome=ToolOutcome(f"{_MARKER} \ud800", is_error=False)
+            ),
+            id="unwritable outcome",
+        ),
+        pytest.param(
+            lambda: MarkedRequest(_read_note(), outcome={"marker": _MARKER}),
+            id="malformed outcome",
+        ),
+        pytest.param(lambda: MarkedRequest(rpc_body(f"tools/{_MARKER}")), id="request method"),
+        pytest.param(
+            lambda: MarkedRequest(rpc_body(f"notifications/{_MARKER}", notification=True)),
+            id="notification method",
+        ),
+        pytest.param(
+            lambda: MarkedRequest(rpc_body("tools/call", call_params("read_note", note=_MARKER))),
+            id="tool arguments",
+        ),
+        pytest.param(
+            lambda: MarkedRequest(rpc_body("tools/call", call_params(_MARKER))),
+            id="unknown tool name",
+        ),
+        pytest.param(
+            lambda: MarkedRequest(rpc_body("tools/list"), version=_MARKER), id="version header"
+        ),
+    ],
+)
 @pytest.mark.usefixtures("unset_sdk_loggers")
 def test_no_credential_marker_reaches_any_log_under_debug_or_normal_logging(
     person: Person,
     front: McpPersonFront,
     caplog: pytest.LogCaptureFixture,
-    case: str,
+    marked: Callable[[], MarkedRequest],
     level: int,
 ) -> None:
-    body, setup = _MARKED_SCOPES[case]
-    person.failure = setup.get("failure")
-    person.outcome = setup.get("outcome", person.outcome)
+    request = marked()
+    person.failure = request.failure
+    person.outcome = request.outcome or person.outcome
     caplog.set_level(level)
 
-    post(front, body, version=setup.get("version", PROTOCOL_VERSION))
+    post(front, request.body, version=request.version)
 
     logged = [
         (record.name, record.getMessage(), str(record.exc_info), str(record.stack_info))

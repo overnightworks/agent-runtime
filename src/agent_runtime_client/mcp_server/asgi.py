@@ -70,7 +70,7 @@ WITHHELD: Final = HttpAnswer(HTTPStatus.INTERNAL_SERVER_ERROR, None, b"")
 _UNKNOWN_METHOD: Final = "unknown_method"
 _UNKNOWN_TOOL: Final = "unknown_tool"
 _TOOLS_CALL: Final = "tools/call"
-_SERVED_METHODS: Final = frozenset({"server/discover", "tools/list", _TOOLS_CALL, "ping"})
+_SERVED_METHODS: Final = frozenset({"server/discover", "tools/list", _TOOLS_CALL})
 
 
 def request_label(document: object, offered_tools: Container[str]) -> str:
