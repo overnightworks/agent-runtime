@@ -1,8 +1,0 @@
-claim_id = "533e53f4a7fe479f92f8d2c060a82431"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "2dfa341e79c542472f02729514b472f7d7b15f70"
-branch = "claude/issue-787-the-connector-document-names-only-the-st"
-scope = ["docs/connector.md", "pyproject.toml", "tests/test_mcp_server_listen.py", "uv.lock"]
-opened_commit = "a02a18874a02800762ce2bbf14aa8fef5cccc35b"
-whole_reason = "One connector document made one description of the standard path, the version literal with its lock, and the one test follow-up of its predecessor slice."
