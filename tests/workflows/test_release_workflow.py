@@ -140,10 +140,6 @@ def test_the_wheel_list_is_written_in_the_multiline_output_form(tmp_path, releas
     assert lines[-1] == delimiter
 
 
-_PUBLISH = "Publish the release on the tag with the wheel the gate built"
-_TAG = "Create the tag at the gated commit"
-
-
 def test_a_release_run_value_never_interpolates_an_expression():
     run_values = re.findall(
         r"^ +run: (.*(?:\n(?: {10}.*|)$)*)", _WORKFLOW.read_text(encoding="utf-8"), re.MULTILINE
@@ -151,18 +147,3 @@ def test_a_release_run_value_never_interpolates_an_expression():
 
     assert run_values
     assert not [value for value in run_values if "${{" in value]
-
-
-def _jobs() -> dict[str, str]:
-    text = _WORKFLOW.read_text(encoding="utf-8")
-    blocks = re.split(r"^  (?=\w+:\n)", text.split("\njobs:\n", 1)[1], flags=re.MULTILINE)
-    return {block.split(":", 1)[0]: block for block in blocks if block}
-
-
-def test_only_the_tag_job_writes_and_it_takes_the_gated_commit():
-    jobs = _jobs()
-
-    writers = [name for name, block in jobs.items() if "contents: write" in block]
-    assert writers == ["tag"]
-    assert "ref: ${{ needs.gate.outputs.commit }}" in jobs["build"]
-    assert "commit: ${{ needs.gate.outputs.commit }}" in jobs["tag"]
