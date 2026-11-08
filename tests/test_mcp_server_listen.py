@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 from mcp.client.subscriptions import SubscriptionLost
 
-from agent_runtime_client.mcp_server import McpPersonFront, ResourceChanges, listen
+from agent_runtime_client.mcp_server import McpPersonFront, ResourceChanges
 from agent_runtime_client.mcp_server.asgi import LOGGER_NAME as LOGGER
 from agent_runtime_client.member import (
     LISTEN_BOUND_SECONDS,
@@ -674,24 +674,25 @@ def test_a_non_ascii_bearer_is_answered_instead_of_raising_out_of_the_front(
     assert connection.status == 200
 
 
-def test_the_sdk_client_is_acknowledged_receives_changes_and_ends_at_the_bound(
-    front: McpPersonFront,
-    app: MemberApp,
-    alice: Principal,
-    changes: ResourceChanges,
-    monkeypatch: pytest.MonkeyPatch,
+def test_the_sdk_client_is_acknowledged_receives_changes_and_ends_at_the_graceful_completion(
+    front: McpPersonFront, app: MemberApp, alice: Principal, changes: ResourceChanges
 ) -> None:
-    monkeypatch.setattr(listen, "LISTEN_BOUND_SECONDS", 0.5)
     foreign = window_uri("foreign")
 
     async def through_a_socket() -> tuple[list[str] | None, list[str], list[str] | None]:
         async with loopback_client(front, alice) as client:
             async with client.listen(resource_subscriptions=[STANDING_URI, foreign]) as stream:
                 honored = stream.honored.resource_subscriptions
+                changes.changed(alice, foreign)
                 changes.changed(alice, window_uri("first"))
                 changes.changed(alice, STANDING_URI)
-                changes.changed(alice, foreign)
-                delivered = [event.uri async for event in stream]
+                delivered: list[str] = []
+                async for event in stream:
+                    delivered.append(event.uri)
+                    if event.uri == STANDING_URI:
+                        app.failure = RuntimeError("the port ends the stream")
+                        changes.changed(alice, STANDING_URI)
+            app.failure = None
             async with client.listen(resource_subscriptions=[STANDING_URI]) as again:
                 honored_again = again.honored.resource_subscriptions
         return honored, delivered, honored_again
