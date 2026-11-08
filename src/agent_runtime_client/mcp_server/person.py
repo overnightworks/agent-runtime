@@ -10,7 +10,8 @@ A thin ASGI shell stands before the official SDK and serves revision ``2026-07-2
 refuses every request that is not explicitly that revision, because the SDK's stateless mode
 still routes an absent or older version to its legacy path. No answer the front writes, refusals
 included, carries the request's bearer. Rights are the route's, so ``tools/list`` offers every
-tool.
+tool. With a ``MemberResources`` port it also serves ``resources/list`` and ``resources/read``
+per verified principal.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+from functools import partial
 from http import HTTPStatus
 from typing import Any, Final
 
@@ -29,6 +31,7 @@ from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp_types import (
+    INTERNAL_ERROR,
     INVALID_PARAMS,
     PARSE_ERROR,
     UNSUPPORTED_PROTOCOL_VERSION,
@@ -36,8 +39,13 @@ from mcp_types import (
     CallToolResult,
     ErrorData,
     JSONRPCError,
+    ListResourcesResult,
     ListToolsResult,
     PaginatedRequestParams,
+    ReadResourceRequestParams,
+    ReadResourceResult,
+    Resource,
+    TextResourceContents,
     Tool,
     ToolAnnotations,
     UnsupportedProtocolVersionErrorData,
@@ -59,6 +67,7 @@ from agent_runtime_client.mcp_server.asgi import (
     request_label,
     write,
 )
+from agent_runtime_client.mcp_server.resources import MemberResources
 from agent_runtime_client.mcp_wire import (
     JSON_MEDIA_TYPE,
     PROTOCOL_VERSION,
@@ -72,6 +81,9 @@ type ResolvePerson = Callable[[Scope], Principal]
 
 _LOG: Final = logging.getLogger(LOGGER_NAME)
 _HANDLER_FAILED_TEXT: Final = "the tool failed"
+_RESOURCE_FAILED_TEXT: Final = "the resource failed"
+_UNKNOWN_RESOURCE_TEXT: Final = "Unknown resource"
+_RESOURCE_MIME_TYPE: Final = "application/json"
 _UNKNOWN_TOOL_TEXT: Final = "Unknown tool"
 _INVALID_ARGUMENTS_TEXT: Final = "Invalid tool arguments"
 _BEARER_SCHEME: Final = "bearer"
@@ -218,7 +230,13 @@ def _answer_of(sent: Sequence[Message]) -> HttpAnswer:
 class McpPersonFront:
     """An ASGI 3 app that serves MCP revision 2026-07-28 to one resolved person per request."""
 
-    def __init__(self, tools: Sequence[PersonTool], *, resolve_person: ResolvePerson) -> None:
+    def __init__(
+        self,
+        tools: Sequence[PersonTool],
+        *,
+        resolve_person: ResolvePerson,
+        resources: MemberResources | None = None,
+    ) -> None:
         self._tools = {tool.declaration.name: tool for tool in tools}
         if len(self._tools) != len(tools):
             raise ValueError("a tool name is declared more than once")
@@ -231,6 +249,8 @@ class McpPersonFront:
             version=_SERVER_VERSION,
             on_list_tools=self._list_tools,
             on_call_tool=self._call_tool,
+            on_list_resources=None if resources is None else partial(_list_resources, resources),
+            on_read_resource=None if resources is None else partial(_read_resource, resources),
         )
         self._manager: StreamableHTTPSessionManager | None = None
 
@@ -337,3 +357,46 @@ class McpPersonFront:
             result = _written(outcome)
         _LOG.info("a tool was called: %s is_error=%s", name, outcome.is_error)
         return result
+
+
+async def _list_resources(
+    resources: MemberResources,
+    _context: ServerRequestContext[Any],
+    _params: PaginatedRequestParams | None,
+) -> ListResourcesResult | ErrorData:
+    """Exactly the URIs the port lists for the request's principal, sorted."""
+    try:
+        uris = await resources.current(_CURRENT_REQUEST.get().principal)
+    except Exception as failure:
+        return _resource_failure("resources/list", failure)
+    return ListResourcesResult(
+        resources=[
+            Resource(uri=uri, name=uri, mime_type=_RESOURCE_MIME_TYPE) for uri in sorted(uris)
+        ],
+        ttl_ms=0,
+        cache_scope="private",
+    )
+
+
+async def _read_resource(
+    resources: MemberResources,
+    _context: ServerRequestContext[Any],
+    params: ReadResourceRequestParams,
+) -> ReadResourceResult | ErrorData:
+    """The port's truth for the URI, or one fixed text that echoes nothing of it."""
+    try:
+        record = await resources.read(_CURRENT_REQUEST.get().principal, params.uri)
+    except Exception as failure:
+        return _resource_failure("resources/read", failure)
+    if record is None:
+        return ErrorData(code=INVALID_PARAMS, message=_UNKNOWN_RESOURCE_TEXT)
+    contents = TextResourceContents(
+        uri=params.uri, mime_type=_RESOURCE_MIME_TYPE, text=record.model_dump_json()
+    )
+    return ReadResourceResult(contents=[contents], ttl_ms=0, cache_scope="private")
+
+
+def _resource_failure(method: str, failure: Exception) -> ErrorData:
+    """The fixed answer of a failed port; only the exception's type is logged."""
+    _LOG.error("a resource method failed: %s raised %s", method, type(failure).__name__)
+    return ErrorData(code=INTERNAL_ERROR, message=_RESOURCE_FAILED_TEXT)
