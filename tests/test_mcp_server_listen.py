@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 import anyio.from_thread
@@ -17,29 +17,18 @@ import anyio.to_thread
 import pytest
 from mcp.client.subscriptions import SubscriptionLost
 
-from agent_runtime_client.mcp_server import (
-    McpPersonFront,
-    PersonRequest,
-    PersonTool,
-    ResourceChanges,
-)
+from agent_runtime_client.mcp_server import McpPersonFront, ResourceChanges
 from agent_runtime_client.mcp_server.asgi import LOGGER_NAME as LOGGER
-from agent_runtime_client.member import (
-    LISTEN_BOUND_SECONDS,
-    STANDING_URI,
-    MemberStanding,
-    PlaceRef,
-    place_window_uri,
-)
-from agent_runtime_client.tools import Principal, ToolOutcome
-from agent_runtime_client.turn import JsonObject
+from agent_runtime_client.member import LISTEN_BOUND_SECONDS, STANDING_URI
+from agent_runtime_client.tools import Principal
 from tests.support.mcp_server_support import (
     ListenConnection,
     MemberApp,
     a_member,
+    a_person_tool,
+    an_empty_record,
     call_params,
     clock_held,
-    declaration,
     http_scope,
     listen_connection,
     loopback_client,
@@ -48,28 +37,18 @@ from tests.support.mcp_server_support import (
     now,
     open_stream,
     post,
+    readable_uris,
     resolve_member,
     routing_headers,
     rpc_body,
     settled,
+    window_uri,
 )
 from tests.support.virtual_time import in_virtual_time
 
 _SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId"
 _FAILED_TEXT = "the resource failed"
 _ACKNOWLEDGED = "notifications/subscriptions/acknowledged"
-
-
-def window_uri(place_id: str) -> str:
-    return place_window_uri(PlaceRef(kind="call", id=place_id))
-
-
-def an_empty_record() -> MemberStanding:
-    return MemberStanding(standings=())
-
-
-def readable_uris(*uris: str) -> dict[str, MemberStanding]:
-    return dict.fromkeys(uris, an_empty_record())
 
 
 @pytest.fixture
@@ -104,6 +83,18 @@ def front(app: MemberApp, changes: ResourceChanges) -> McpPersonFront:
 
 def served[T](main: Coroutine[Any, Any, T]) -> T:
     return in_virtual_time(main)
+
+
+def open_and_leave(
+    front: McpPersonFront, connection: ListenConnection, *, staying_seconds: float = 0
+) -> None:
+    """The front runs, the stream opens, everything runnable runs, and the client leaves."""
+
+    async def scenario() -> None:
+        async with front.running(), open_stream(connection):
+            await asyncio.sleep(staying_seconds)
+
+    served(scenario())
 
 
 def acknowledged_filter(connection: ListenConnection) -> dict[str, Any]:
@@ -144,11 +135,7 @@ def test_the_first_frame_acknowledges_exactly_the_requested_uris_the_principal_m
 ) -> None:
     connection = listen_connection(front, alice, requested, flags=flags)
 
-    async def scenario() -> None:
-        async with front.running(), open_stream(connection):
-            pass
-
-    served(scenario())
+    open_and_leave(front, connection)
 
     assert acknowledged_filter(connection) == honored
     assert connection.status == 200
@@ -343,11 +330,7 @@ def test_at_the_bound_the_stream_ends_with_the_completion_as_its_last_frame(
 ) -> None:
     connection = listen_connection(front, alice, [STANDING_URI], request_id="a-stream-id")
 
-    async def scenario() -> None:
-        async with front.running(), open_stream(connection):
-            await asyncio.sleep(LISTEN_BOUND_SECONDS * 2)
-
-    served(scenario())
+    open_and_leave(front, connection, staying_seconds=LISTEN_BOUND_SECONDS * 2)
 
     completion = connection.frames[-1]
     assert completion["id"] == "a-stream-id"
@@ -413,11 +396,7 @@ def test_a_port_that_never_answers_ends_at_the_bound_with_the_completion_alone(
     app.current_seconds = LISTEN_BOUND_SECONDS * 2
     connection = listen_connection(front, alice, [STANDING_URI])
 
-    async def scenario() -> None:
-        async with front.running(), open_stream(connection):
-            await asyncio.sleep(LISTEN_BOUND_SECONDS * 2)
-
-    served(scenario())
+    open_and_leave(front, connection, staying_seconds=LISTEN_BOUND_SECONDS * 2)
 
     assert ["result" in frame for frame in connection.frames] == [True]
 
@@ -474,11 +453,7 @@ def test_a_bearer_signature_in_the_request_id_answers_an_empty_500_with_no_frame
         front, alice, [STANDING_URI], request_id=signature, bearer=bearer
     )
 
-    async def scenario() -> None:
-        async with front.running(), open_stream(connection):
-            pass
-
-    served(scenario())
+    open_and_leave(front, connection)
 
     logged = " ".join(record.getMessage() for record in caplog.records)
     assert (connection.status, connection.body_bytes) == (500, b"")
@@ -521,11 +496,7 @@ def test_a_port_raising_at_the_acknowledgement_answers_the_fixed_text(
     app.failure = RuntimeError("marker")
     connection = listen_connection(front, alice, [STANDING_URI])
 
-    async def scenario() -> None:
-        async with front.running(), open_stream(connection):
-            pass
-
-    served(scenario())
+    open_and_leave(front, connection)
 
     reply = json.loads(connection.body_bytes)
     assert (reply["error"]["code"], reply["error"]["message"]) == (-32603, _FAILED_TEXT)
@@ -585,14 +556,6 @@ def test_no_marker_from_a_uri_a_principal_or_a_failure_reaches_any_log(
     )
 
 
-def a_person_tool() -> PersonTool:
-    async def answer_note(_request: PersonRequest, _arguments: JsonObject) -> ToolOutcome:
-        await asyncio.sleep(0)
-        return ToolOutcome("a note")
-
-    return PersonTool(declaration("read_note"), answer_note)
-
-
 @pytest.mark.parametrize(
     ("method", "params"),
     [
@@ -627,16 +590,29 @@ def _listen_request() -> bytes:
     return rpc_body("subscriptions/listen", {"notifications": {"resourceSubscriptions": []}})
 
 
+def _without_a_streaming_accept(scope: dict[str, Any]) -> None:
+    scope["headers"] = [
+        (name, b"application/json" if name == b"accept" else value)
+        for name, value in scope["headers"]
+    ]
+
+
 @pytest.mark.parametrize(
-    ("body", "headers", "status"),
+    ("body", "adjust", "status"),
     [
-        pytest.param(_listen_request(), [(b"origin", b"https://x.test")], 403, id="an origin"),
+        pytest.param(
+            _listen_request(),
+            lambda scope: scope["headers"].append((b"origin", b"https://x.test")),
+            403,
+            id="an origin",
+        ),
         pytest.param(
             _listen_request().replace(b'"jsonrpc"', b'"id": 2, "jsonrpc"'),
-            [],
+            lambda _scope: None,
             400,
             id="a repeated member",
         ),
+        pytest.param(_listen_request(), _without_a_streaming_accept, 406, id="no streaming accept"),
     ],
 )
 def test_the_shell_refuses_before_a_listen_opens(
@@ -644,18 +620,14 @@ def test_the_shell_refuses_before_a_listen_opens(
     app: MemberApp,
     alice: Principal,
     body: bytes,
-    headers: list[tuple[bytes, bytes]],
+    adjust: Callable[[dict[str, Any]], None],
     status: int,
 ) -> None:
     scope = member_scope(alice, body)
-    scope["headers"].extend(headers)
+    adjust(scope)
     connection = ListenConnection(front, scope, body)
 
-    async def scenario() -> None:
-        async with front.running():
-            await connection.run()
-
-    served(scenario())
+    open_and_leave(front, connection)
 
     assert connection.status == status
     assert app.current_asked == []
@@ -669,35 +641,10 @@ def test_a_listen_at_another_revision_is_refused_before_it_opens(
     scope = http_scope([*identity, *routing_headers(body, "2025-11-25")])
     connection = ListenConnection(front, scope, body)
 
-    async def scenario() -> None:
-        async with front.running():
-            await connection.run()
-
-    served(scenario())
+    open_and_leave(front, connection)
 
     assert connection.status == 400
     assert json.loads(connection.body_bytes)["error"]["data"]["requested"] == "2025-11-25"
-    assert app.current_asked == []
-
-
-def test_a_listen_without_a_streaming_accept_is_not_acceptable(
-    front: McpPersonFront, app: MemberApp, alice: Principal
-) -> None:
-    body = _listen_request()
-    scope = member_scope(alice, body)
-    scope["headers"] = [
-        (name, b"application/json" if name == b"accept" else value)
-        for name, value in scope["headers"]
-    ]
-    connection = ListenConnection(front, scope, body)
-
-    async def scenario() -> None:
-        async with front.running():
-            await connection.run()
-
-    served(scenario())
-
-    assert connection.status == 406
     assert app.current_asked == []
 
 
@@ -727,11 +674,7 @@ def test_a_front_without_changes_does_not_serve_listen(
     body = rpc_body("subscriptions/listen", {"notifications": notifications})
     connection = ListenConnection(front, member_scope(alice, body), body)
 
-    async def scenario() -> None:
-        async with front.running():
-            await connection.run()
-
-    served(scenario())
+    open_and_leave(front, connection)
 
     assert json.loads(connection.body_bytes)["error"]["code"] == code
 
@@ -757,11 +700,7 @@ def test_a_non_ascii_bearer_is_answered_instead_of_raising_out_of_the_front(
     scope["headers"].append((b"authorization", b"Bearer caf\xe9"))
     connection = ListenConnection(front, scope, body)
 
-    async def scenario() -> None:
-        async with front.running(), open_stream(connection):
-            pass
-
-    served(scenario())
+    open_and_leave(front, connection)
 
     assert connection.status == 200
 

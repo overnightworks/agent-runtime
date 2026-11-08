@@ -20,10 +20,17 @@ from mcp_types import CLIENT_CAPABILITIES_META_KEY, PROTOCOL_VERSION_META_KEY
 from starlette.applications import Starlette
 from starlette.routing import Route
 
-from agent_runtime_client.mcp_server import InMemoryMemberChanges, McpPersonFront, wait_tool
+from agent_runtime_client.mcp_server import (
+    InMemoryMemberChanges,
+    McpPersonFront,
+    PersonRequest,
+    PersonTool,
+    wait_tool,
+)
 from agent_runtime_client.mcp_wire import MCP_ENDPOINT_PATH, PROTOCOL_VERSION
-from agent_runtime_client.member import MemberStanding, PlaceWindow
-from agent_runtime_client.tools import Principal, ToolDeclaration, ToolEffect
+from agent_runtime_client.member import MemberStanding, PlaceWindow, place_window_uri
+from agent_runtime_client.tools import Principal, ToolDeclaration, ToolEffect, ToolOutcome
+from agent_runtime_client.turn import JsonObject
 from agent_runtime_client.wait import (
     Invitation,
     PlaceRef,
@@ -34,6 +41,18 @@ from agent_runtime_client.wait import (
 
 ISSUER = "https://issuer.test"
 type Headers = list[tuple[bytes, bytes]]
+
+
+def window_uri(place_id: str) -> str:
+    return place_window_uri(PlaceRef(kind="call", id=place_id))
+
+
+def an_empty_record() -> MemberStanding:
+    return MemberStanding(standings=())
+
+
+def readable_uris(*uris: str) -> dict[str, MemberStanding]:
+    return dict.fromkeys(uris, an_empty_record())
 
 
 def declaration(name: str, effect: ToolEffect = ToolEffect.READ_ONLY) -> ToolDeclaration:
@@ -65,6 +84,14 @@ def a_standing(place_id: str, state: StandingState) -> Standing:
         expires_at = datetime(2026, 11, 8, 12, tzinfo=UTC)
         invitation = Invitation(id=f"invitation-{place_id}", epoch=0, expires_at=expires_at)
     return Standing(place=PlaceRef(kind="call", id=place_id), state=state, invitation=invitation)
+
+
+def a_person_tool() -> PersonTool:
+    async def answer_note(_request: PersonRequest, _arguments: JsonObject) -> ToolOutcome:
+        await asyncio.sleep(0)
+        return ToolOutcome("a note")
+
+    return PersonTool(declaration("read_note"), answer_note)
 
 
 @dataclass
