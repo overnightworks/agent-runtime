@@ -332,11 +332,27 @@ message reaches the wire or the log
 that carries the signature of the request's own bearer is replaced by an empty 500
 (`test_a_result_carrying_the_request_bearer_is_withheld_and_the_log_names_no_caller_text`).
 
+## The member module
+
+`agent_runtime_client.member` owns what an app and an agent say to each other about a member:
+`PlaceRef`, `StandingState`, `Invitation` and `Standing` (described below under The wait tool), `MemberStanding(standings)` (what `STANDING_URI`, `member://standing`,
+answers with: a `WaitAnswer` without its cursor), `PlaceWindow(generation, starts_at, entries)`
+of `PlaceEntry(seq, kind, name, text, own)`, `LISTEN_BOUND_SECONDS` (50) and
+`AcceptInvitationArguments(place, invitation, epoch)` for the tool `ACCEPT_INVITATION_TOOL`.
+A window's `seq` ascends strictly and may skip; a non-empty window starts at its first `seq`;
+an empty window is valid and its `starts_at` is the `seq` the next line gets. A place's window
+is the resource `place_window_uri(place)`, `member://standing/places/{kind}/{id}` with each
+segment percent-encoded, so `/` in an opaque `kind` or `id` stays inside its segment;
+`place_ref_from_window_uri(uri)` returns the `PlaceRef` for that canonical spelling only and
+`None` for anything else. A URI is no credential. Proved by `tests/test_member.py`.
+
 ## The wait tool
 
 Every app tells a member what concerns it the same way: through one bounded tool, `wait`, served
 on its person front beside its other tools and read by the member's runner in a loop. The
-records and the protocol constants are in the base module `agent_runtime_client.wait`, so a
+answer and the protocol constants are in the base module `agent_runtime_client.wait`, and the
+records it holds (`PlaceRef`, `StandingState`, `Invitation`, `Standing`, `LEASE_SECONDS`) are
+owned by the base module `agent_runtime_client.member`, which `wait` re-exports; so a
 runner parses an answer without the `mcp-server` extra; the tool and its ports are in
 `agent_runtime_client.mcp_server`.
 
@@ -347,7 +363,7 @@ a `StandingState` (`invited`, `active` or `paused`) and, exactly when invited, a
 is the place's removal epoch, so the app refuses an accept after a removal. A paused place is
 listed and a place the member left is absent, so a pause is told from a removal. Because each
 answer is the whole standing, a late, repeated or lost answer leaves no stale state: the next
-one is the truth again. Proved by `tests/test_wait.py`:
+one is the truth again. Proved by `tests/test_member.py` and `tests/test_wait.py`:
 `test_a_standing_carrying_an_invitation_other_than_exactly_when_invited_is_refused`,
 `test_only_an_invited_standing_carries_its_invitations_id_epoch_and_expiry_on_the_wire`, and by
 `tests/test_mcp_server_wait.py`: `test_a_paused_place_is_listed_and_a_place_left_is_absent`.

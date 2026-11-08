@@ -21,6 +21,8 @@ flowchart TB
     turn["turn, turn_events<br/>the turn vocabulary"]
     mcp["mcp_server, mcp_wire<br/>the MCP person front"]
     wait["wait<br/>the wait answer"]
+    member["member<br/>member records, place window, URIs"]
+    wait --> member
     gateway["LiteLLM gateway<br/>(external)"]
     person["a signed-in person's agent<br/>(external)"]
 
@@ -45,8 +47,9 @@ flowchart TB
 
 - The **base** depends on `pydantic` and `ruamel.yaml` only: `agents` (the agent-file reader),
   `tools` (the tool contract), `turn` (the turn's vocabulary, the one owner of `JsonObject`,
-  the size bounds and the failure codes), `turn_events`, `config`, the `backend` port and
-  `wait` (the answer records and protocol constants of the wait tool, base so that an agent's
+  the size bounds and the failure codes), `turn_events`, `config`, the `backend` port,
+  `member` (the records an app and an agent say to each other about a member, the place window
+  and its URIs) and `wait` (the answer records and protocol constants of the wait tool, base so that an agent's
   runner parses an answer without an extra).
 - The **`backend` extra** adds `httpx2` for `backend.gateway.GatewayBackend`, the one
   implementation of the port, and `backend.fake_gateway`, its scripted transport for tests.
