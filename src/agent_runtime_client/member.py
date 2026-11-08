@@ -13,7 +13,7 @@ from enum import StrEnum
 from typing import Annotated, Final, Self
 from urllib.parse import quote, unquote
 
-from pydantic import AwareDatetime, Field, model_validator
+from pydantic import AwareDatetime, Field, ValidationError, model_validator
 
 from agent_runtime_client.turn import NonEmptyUnicodeText, StrictModel
 
@@ -37,7 +37,7 @@ __all__ = [
 LEASE_SECONDS: Final = 120
 """How long a member's lease lasts after its last call; a loop of waits renews itself."""
 LISTEN_BOUND_SECONDS: Final = 50
-"""The longest a listen lasts before it answers the unchanged state."""
+"""The longest a listen lasts before it ends with the completion result."""
 ACCEPT_INVITATION_TOOL: Final = "accept_invitation"
 """The name of the tool that accepts an open invitation."""
 STANDING_URI: Final = "member://standing"
@@ -133,14 +133,14 @@ def place_window_uri(place: PlaceRef) -> str:
 
 def place_ref_from_window_uri(uri: str) -> PlaceRef | None:
     """The place a window URI names, or ``None`` for anything but its canonical spelling."""
-    if not uri.startswith(_PLACE_WINDOW_URI_PREFIX):
+    if not isinstance(uri, str) or not uri.startswith(_PLACE_WINDOW_URI_PREFIX):
         return None
     segments = uri.removeprefix(_PLACE_WINDOW_URI_PREFIX).split("/")
     if len(segments) != 2 or not all(segments):
         return None
     try:
         kind, place_id = (unquote(segment, errors="strict") for segment in segments)
-    except UnicodeDecodeError:
+        place = PlaceRef(kind=kind, id=place_id)
+    except UnicodeDecodeError, ValidationError:
         return None
-    place = PlaceRef(kind=kind, id=place_id)
     return place if place_window_uri(place) == uri else None

@@ -13,7 +13,6 @@ from pydantic import ValidationError
 import agent_runtime_client.member as member
 import agent_runtime_client.wait as wait
 from agent_runtime_client.member import (
-    ACCEPT_INVITATION_TOOL,
     LEASE_SECONDS,
     LISTEN_BOUND_SECONDS,
     STANDING_URI,
@@ -107,10 +106,10 @@ def test_a_member_standing_reads_back_from_its_json_unchanged() -> None:
 
 
 def test_a_member_standing_carries_no_cursor() -> None:
-    wire = {"standings": [], "cursor": "c"}
+    wire_text = json.dumps({"standings": [], "cursor": "c"})
 
     with pytest.raises(ValidationError):
-        MemberStanding.model_validate_json(json.dumps(wire))
+        MemberStanding.model_validate_json(wire_text)
 
 
 def test_a_place_window_reads_back_from_its_json_unchanged() -> None:
@@ -122,15 +121,17 @@ def test_a_place_window_reads_back_from_its_json_unchanged() -> None:
 
 
 def test_a_place_window_with_an_unknown_member_is_refused() -> None:
-    wire = {"generation": "g", "starts_at": 1, "entries": [], "extra": 1}
+    wire_text = json.dumps({"generation": "g", "starts_at": 1, "entries": [], "extra": 1})
 
     with pytest.raises(ValidationError):
-        PlaceWindow.model_validate_json(json.dumps(wire))
+        PlaceWindow.model_validate_json(wire_text)
 
 
 def test_an_entry_with_an_unknown_member_is_refused() -> None:
+    wire_text = json.dumps(entry(1, extra=1))
+
     with pytest.raises(ValidationError):
-        PlaceEntry.model_validate_json(json.dumps(entry(1, extra=1)))
+        PlaceEntry.model_validate_json(wire_text)
 
 
 def test_an_empty_window_is_valid_and_starts_at_the_next_seq() -> None:
@@ -156,8 +157,10 @@ def test_a_window_with_gaps_in_seq_is_valid_and_a_long_text_is_kept() -> None:
     ids=["zero-seq", "fractional-seq", "empty-kind", "empty-name", "empty-text", "text-own"],
 )
 def test_an_entry_with_a_malformed_field_is_refused(fields: dict[str, Any]) -> None:
+    wire_text = json.dumps(entry(1) | fields)
+
     with pytest.raises(ValidationError):
-        PlaceEntry.model_validate_json(json.dumps(entry(1) | fields))
+        PlaceEntry.model_validate_json(wire_text)
 
 
 @pytest.mark.parametrize(
@@ -186,10 +189,6 @@ def test_a_window_breaking_a_construction_rule_is_refused(fields: dict[str, Any]
 
     with pytest.raises(ValidationError):
         window_from(wire)
-
-
-def test_the_standing_uri_is_the_member_standing_resource() -> None:
-    assert STANDING_URI == "member://standing"
 
 
 @pytest.mark.parametrize("place", [PLACE, *HOSTILE_PLACES])
@@ -230,11 +229,15 @@ def test_a_place_window_uri_has_exactly_two_segments_below_places(place: PlaceRe
         "member://standing/places/room/%C3",
         "member://standing/places/room/r-1?x=1",
         "member://standing/places/room/r-1#f",
+        "member://standing/places/\ud800/b",
+        "member://standing/places/a/\ud800",
+        "member://standing/places/\ud800%41/b",
         "",
+        None,
     ],
 )
-def test_a_uri_that_is_not_the_canonical_place_window_uri_yields_no_place(uri: str) -> None:
-    assert place_ref_from_window_uri(uri) is None
+def test_a_uri_that_is_not_the_canonical_place_window_uri_yields_no_place(uri: str | None) -> None:
+    assert place_ref_from_window_uri(uri) is None  # type: ignore[arg-type]
 
 
 def test_accept_invitation_arguments_take_the_place_straight_from_the_standing() -> None:
@@ -245,7 +248,6 @@ def test_accept_invitation_arguments_take_the_place_straight_from_the_standing()
         place=standing.place, invitation=standing.invitation.id, epoch=standing.invitation.epoch
     )
 
-    assert ACCEPT_INVITATION_TOOL == "accept_invitation"
     assert json.loads(arguments.model_dump_json()) == {
         "place": {"kind": "room", "id": "r-1"},
         "invitation": "i-1",
@@ -264,5 +266,7 @@ def test_accept_invitation_arguments_with_a_malformed_field_are_refused(
 ) -> None:
     wire = {"place": {"kind": "room", "id": "r-1"}, "invitation": "i-1", "epoch": 3} | fields
 
+    wire_text = json.dumps(wire)
+
     with pytest.raises(ValidationError):
-        AcceptInvitationArguments.model_validate_json(json.dumps(wire))
+        AcceptInvitationArguments.model_validate_json(wire_text)

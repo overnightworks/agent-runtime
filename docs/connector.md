@@ -335,7 +335,7 @@ that carries the signature of the request's own bearer is replaced by an empty 5
 ## The member module
 
 `agent_runtime_client.member` owns what an app and an agent say to each other about a member:
-the records above, `MemberStanding(standings)` (what `STANDING_URI`, `member://standing`,
+`PlaceRef`, `StandingState`, `Invitation` and `Standing` (described below under The wait tool), `MemberStanding(standings)` (what `STANDING_URI`, `member://standing`,
 answers with: a `WaitAnswer` without its cursor), `PlaceWindow(generation, starts_at, entries)`
 of `PlaceEntry(seq, kind, name, text, own)`, `LISTEN_BOUND_SECONDS` (50) and
 `AcceptInvitationArguments(place, invitation, epoch)` for the tool `ACCEPT_INVITATION_TOOL`.
