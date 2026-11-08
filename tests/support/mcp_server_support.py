@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Collection, Mapping
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx2
@@ -17,7 +19,17 @@ from starlette.routing import Route
 
 from agent_runtime_client.mcp_server import McpPersonFront
 from agent_runtime_client.mcp_wire import MCP_ENDPOINT_PATH, PROTOCOL_VERSION
-from agent_runtime_client.tools import ToolDeclaration, ToolEffect
+from agent_runtime_client.member import (
+    Invitation,
+    MemberStanding,
+    PlaceRef,
+    PlaceWindow,
+    Standing,
+    StandingState,
+)
+from agent_runtime_client.tools import Principal, ToolDeclaration, ToolEffect
+
+ISSUER = "https://issuer.test"
 
 type Headers = list[tuple[bytes, bytes]]
 
@@ -29,6 +41,55 @@ def declaration(name: str, effect: ToolEffect = ToolEffect.READ_ONLY) -> ToolDec
         parameters={"type": "object", "properties": {"note": {"type": "string"}}},
         effect=effect,
     )
+
+
+def a_member(sub: str = "alice", iss: str = ISSUER) -> Principal:
+    return Principal(iss=iss, sub=sub)
+
+
+def resolve_member(scope: dict[str, Any]) -> Principal:
+    """The host's gate stand-in: the member travels in two test headers."""
+    headers = dict(scope["headers"])
+    return a_member(headers[b"x-sub"].decode(), headers[b"x-iss"].decode())
+
+
+def a_standing(place_id: str, state: StandingState) -> Standing:
+    invitation = None
+    if state is StandingState.INVITED:
+        expires_at = datetime(2026, 11, 8, 12, tzinfo=UTC)
+        invitation = Invitation(id=f"invitation-{place_id}", epoch=0, expires_at=expires_at)
+    return Standing(place=PlaceRef(kind="call", id=place_id), state=state, invitation=invitation)
+
+
+@dataclass
+class MemberApp:
+    """The host's truth behind the resources port: per member, what is readable by URI.
+
+    ``asked`` records every principal and URI the port was asked about; ``unusable`` is what both
+    methods return instead of their answer when set, a port that breaks its contract.
+    """
+
+    readable: dict[Principal, dict[str, MemberStanding | PlaceWindow]] = field(default_factory=dict)
+    failure: Exception | None = None
+    unusable: Any = None
+    asked: list[tuple[Principal, str]] = field(default_factory=list)
+
+    async def current(self, principal: Principal) -> Collection[str]:
+        await asyncio.sleep(0)
+        if self.failure is not None:
+            raise self.failure
+        if self.unusable is not None:
+            return self.unusable
+        return sorted(self.readable.get(principal, {}), reverse=True)
+
+    async def read(self, principal: Principal, uri: str) -> MemberStanding | PlaceWindow | None:
+        await asyncio.sleep(0)
+        self.asked.append((principal, uri))
+        if self.failure is not None:
+            raise self.failure
+        if self.unusable is not None:
+            return self.unusable
+        return self.readable.get(principal, {}).get(uri)
 
 
 def with_envelope(params: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -75,6 +136,8 @@ def routing_headers(body: bytes, version: str | None = PROTOCOL_VERSION) -> Head
     fields.append((b"mcp-method", str(document.get("method")).encode()))
     if document.get("method") == "tools/call":
         fields.append((b"mcp-name", str(document["params"]["name"]).encode()))
+    if document.get("method") == "resources/read":
+        fields.append((b"mcp-name", str(document["params"]["uri"]).encode()))
     return fields
 
 
@@ -86,6 +149,12 @@ def http_scope(headers: Headers, *, method: str = "POST") -> dict[str, Any]:
         "query_string": b"",
         "headers": headers,
     }
+
+
+def member_scope(member: Principal, body: bytes) -> dict[str, Any]:
+    return http_scope(
+        [(b"x-iss", member.iss.encode()), (b"x-sub", member.sub.encode()), *routing_headers(body)]
+    )
 
 
 async def drive(
@@ -110,6 +179,15 @@ async def drive(
 
     await front(scope, receive, send)
     return sent
+
+
+async def post(
+    front: McpPersonFront,
+    member: Principal,
+    body: bytes,
+    sent: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    return await drive(front, member_scope(member, body), body, sent)
 
 
 def served_app(front: McpPersonFront) -> Starlette:

@@ -11,10 +11,12 @@ from agent_runtime_client.mcp_server.person import (
     PersonToolHandler,
     ResolvePerson,
 )
+from agent_runtime_client.mcp_server.resources import MemberResources
 from agent_runtime_client.mcp_server.routes import RouteProfileError, RouteTools, route_tools
 
 __all__ = [
     "McpPersonFront",
+    "MemberResources",
     "PersonRequest",
     "PersonTool",
     "PersonToolHandler",

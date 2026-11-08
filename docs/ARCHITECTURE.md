@@ -51,9 +51,10 @@ flowchart TB
   implementation of the port, and `backend.fake_gateway`, its scripted transport for tests.
 - The **`mcp-server` extra** adds `anyio` and the official MCP SDK for
   `agent_runtime_client.mcp_server`, a thin ASGI shell before the SDK that serves an app's tools
-  to one signed-in person's agent on MCP revision 2026-07-28; `mcp_wire` holds what the SDK does
-  not own (the endpoint path, the strict JSON reader, the bearer-reflection check) and imports no
-  extra.
+  to one signed-in person's agent on MCP revision 2026-07-28, and the `MemberResources` port
+  through which a member reads an app's truth per verified principal; `mcp_wire` holds what the
+  SDK does not own (the endpoint path, the strict JSON reader, the bearer-reflection check) and
+  imports no extra.
 
 ## Runtime
 

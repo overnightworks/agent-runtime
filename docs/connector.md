@@ -318,6 +318,22 @@ which holds the bearer, `Host` and client address a handler replays. A name give
 `test_concurrent_calls_each_get_the_person_and_the_scope_of_their_own_request` and
 `test_two_tools_of_one_name_are_refused_at_construction`.
 
+With `resources=` the front also serves `resources/list` and `resources/read` from one port,
+`MemberResources` in `agent_runtime_client.mcp_server.resources`: `current(principal)` returns every
+URI that principal may read now, and `read(principal, uri)` returns the app's current
+`MemberStanding` or `PlaceWindow` for it, or `None` when it is not that principal's. The principal
+is always the request's verified one and no argument names a recipient; the app keeps its own
+participation and permission decisions, and a URI is no credential. `resources/list` answers
+exactly `current`, sorted, each entry with the URI as its `name` and `application/json`.
+`resources/read` answers one text content with the requested URI, `application/json` and the
+record's JSON. A `None` answers `-32602` with one fixed text that does not echo the URI, so an
+unknown, a foreign and a non-canonical URI look alike. A port that raises answers `-32603` with one
+fixed text and logs only the exception's type. Both answers carry `ttlMs: 0` and
+`cacheScope: "private"`, because their content is per principal. Without the port neither method is
+registered and `server/discover` advertises no `resources`; with it, it advertises `resources` and
+no `subscribe`. `resources/templates/list` is not served. Proved by
+`tests/test_mcp_server_resources.py`.
+
 A thin ASGI shell stands before the SDK and keeps this order. A request with an `Origin` header is
 403 (its clients are agents, which send none), anything but `POST` is 405 with `Allow: POST`, a
 body over `MAX_EVENT_BYTES` is 413, and a body with a repeated member, `NaN`, `Infinity` or a
