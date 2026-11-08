@@ -1,8 +1,0 @@
-claim_id = "90ae00545c234273913e176852672fa8"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "ad3f4aa557ea9a8f477491f39d096339b5feee23"
-branch = "claude/issue-784-the-person-front-streams-subscriptions-l"
-scope = ["docs/ARCHITECTURE.md", "docs/connector.md", "pyproject.toml", "src/agent_runtime_client/mcp_server/__init__.py", "src/agent_runtime_client/mcp_server/asgi.py", "src/agent_runtime_client/mcp_server/listen.py", "src/agent_runtime_client/mcp_server/person.py", "src/agent_runtime_client/mcp_wire.py", "tests/support/mcp_server_support.py", "tests/test_mcp_server_listen.py", "tests/test_mcp_server_resources.py", "tests/test_mcp_wire.py", "uv.lock"]
-opened_commit = "38d701e1b4c66a46e6e6b9dd033da396bdd71b3c"
-whole_reason = "One stream path and the handler it exists for, which cannot land apart, with their proof and documents."
