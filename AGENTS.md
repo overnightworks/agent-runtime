@@ -41,10 +41,11 @@ words and fails on any hit. The required check is
 
 `main` is protected.
 
-A release is dispatched, not pushed: `gh workflow run release.yml -f version=X.Y.Z -f commit=<main's head>`.
-The head gives the operator that line with the version and commit filled in; only the operator
-runs it, as only he tagged. `.github/workflows/release.yml` gates first, then creates the tag at
-that commit through the API and attaches exactly the one client wheel, built by the gate, to the
-GitHub release. Hosts pin that wheel URL or the git tag (`@v<version>`) and never install by name
-from PyPI. A tag is never moved: a broken release gets the next patch tag, so the pull request
-that precedes the tag raises the one version literal, `version` in `pyproject.toml`.
+A release is dispatched, not pushed: `gh workflow run release.yml -f version=X.Y.Z`.
+The head gives the operator that line with the version filled in; only the operator runs it, as
+only he tagged. `release.yml` calls quality's `release-gate`, which judges main's head at the
+dispatch; it then builds the one client wheel at that commit and calls quality's `release-tag`,
+which creates the tag there and attaches exactly that wheel to the GitHub release. Hosts pin
+that wheel URL or the git tag (`@v<version>`) and never install by name from PyPI. A tag is never
+moved: a broken release gets the next patch tag, so the pull request that precedes the tag
+raises the one version literal, `version` in `pyproject.toml`.
