@@ -4,6 +4,7 @@ No base module of ``agent_runtime_client`` imports this package, so the base kee
 dependencies, pydantic and ruamel.yaml.
 """
 
+from agent_runtime_client.mcp_server.listen import ResourceChanges
 from agent_runtime_client.mcp_server.person import (
     McpPersonFront,
     PersonRequest,
@@ -30,6 +31,7 @@ __all__ = [
     "PersonTool",
     "PersonToolHandler",
     "ResolvePerson",
+    "ResourceChanges",
     "RouteProfileError",
     "RouteTools",
     "route_tools",

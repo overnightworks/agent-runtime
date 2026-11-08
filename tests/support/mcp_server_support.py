@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator, Callable, Collection, Mapping
+import socket
+from collections.abc import AsyncIterator, Callable, Collection, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+import anyio
 import httpx2
+import uvicorn
 from mcp import Client
 from mcp.client.streamable_http import streamable_http_client
 from mcp_types import CLIENT_CAPABILITIES_META_KEY, PROTOCOL_VERSION_META_KEY
@@ -93,16 +96,23 @@ class MemberApp:
     """The host's truth behind the resources port: per member, what is readable by URI.
 
     ``asked`` records every principal and URI the port was asked about; ``unusable`` is what both
-    methods return instead of their answer when set, a port that breaks its contract.
+    methods return instead of their answer when set, a port that breaks its contract. ``current``
+    takes ``current_seconds``, records its principal in ``current_asked`` and runs
+    ``before_current`` before it answers, so a test can change the state at that moment.
     """
 
     readable: dict[Principal, dict[str, MemberStanding | PlaceWindow]] = field(default_factory=dict)
     failure: Exception | None = None
     unusable: Any = None
     asked: list[tuple[Principal, str]] = field(default_factory=list)
+    current_seconds: float = 0
+    current_asked: list[Principal] = field(default_factory=list)
+    before_current: Callable[[], None] = lambda: None
 
     async def current(self, principal: Principal) -> Collection[str]:
-        await asyncio.sleep(0)
+        await asyncio.sleep(self.current_seconds)
+        self.current_asked.append(principal)
+        self.before_current()
         if self.failure is not None:
             raise self.failure
         if self.unusable is not None:
@@ -143,10 +153,11 @@ def rpc_body(
     *,
     notification: bool = False,
     enveloped: bool = True,
+    request_id: int | str = 1,
 ) -> bytes:
     message: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
     if not notification:
-        message["id"] = 1
+        message["id"] = request_id
     message["params"] = with_envelope(params) if enveloped else dict(params or {})
     return json.dumps(message).encode()
 
@@ -261,6 +272,136 @@ async def call_tool(
     result = result_of(await post(front, member, tool_call_body(name, arguments)))
     [content] = result["content"]
     return ToolResult(content["text"], result["isError"], now() - started)
+
+
+async def settled() -> None:
+    """One virtual second: every task that can run has run, and no real time passed."""
+    await asyncio.sleep(1)
+
+
+@dataclass
+class ListenConnection:
+    """One client's stream as hand-driven ASGI messages, so a frame shows the moment it is written.
+
+    The write of the body numbered ``stall_at`` (from 0) waits for ``release``; ``disconnect``
+    ends the connection the way a client leaving does.
+    """
+
+    front: McpPersonFront
+    scope: dict[str, Any]
+    body: bytes
+    stall_at: int | None = None
+    sent: list[dict[str, Any]] = field(default_factory=list)
+    returned_after: float | None = None
+    bodies_written: int = 0
+    released: asyncio.Event = field(default_factory=asyncio.Event)
+    left: asyncio.Event = field(default_factory=asyncio.Event)
+    request_delivered: bool = False
+
+    def release(self) -> None:
+        self.released.set()
+
+    def disconnect(self) -> None:
+        self.left.set()
+
+    async def receive(self) -> dict[str, Any]:
+        if not self.request_delivered:
+            self.request_delivered = True
+            return {"type": "http.request", "body": self.body, "more_body": False}
+        await self.left.wait()
+        return {"type": "http.disconnect"}
+
+    async def send(self, message: dict[str, Any]) -> None:
+        if message["type"] == "http.response.body":
+            if self.bodies_written == self.stall_at:
+                await self.released.wait()
+            self.bodies_written += 1
+        self.sent.append(message)
+
+    async def run(self) -> None:
+        started = now()
+        await self.front(self.scope, self.receive, self.send)
+        self.returned_after = now() - started
+
+    @property
+    def status(self) -> int:
+        return self.sent[0]["status"]
+
+    @property
+    def body_bytes(self) -> bytes:
+        return b"".join(message.get("body", b"") for message in self.sent)
+
+    @property
+    def frames(self) -> list[dict[str, Any]]:
+        """Every JSON-RPC message the stream wrote, in order; a ping is no message."""
+        data_prefix = "data: "
+        lines = self.body_bytes.decode().split("\r\n")
+        return [
+            json.loads(line.removeprefix(data_prefix))
+            for line in lines
+            if line.startswith(data_prefix)
+        ]
+
+    @property
+    def updated_uris(self) -> list[str]:
+        return [
+            frame["params"]["uri"]
+            for frame in self.frames
+            if frame.get("method") == "notifications/resources/updated"
+        ]
+
+
+def listen_connection(
+    front: McpPersonFront,
+    member: Principal,
+    uris: Sequence[str],
+    *,
+    request_id: int | str = 1,
+    stall_at: int | None = None,
+    flags: Mapping[str, bool] | None = None,
+    bearer: str | None = None,
+) -> ListenConnection:
+    filter_ = {"resourceSubscriptions": list(uris), **(flags or {})}
+    body = rpc_body("subscriptions/listen", {"notifications": filter_}, request_id=request_id)
+    scope = member_scope(member, body)
+    if bearer is not None:
+        scope["headers"].append((b"authorization", b"Bearer " + bearer.encode("iso-8859-1")))
+    return ListenConnection(front, scope, body, stall_at=stall_at)
+
+
+@asynccontextmanager
+async def open_stream(connection: ListenConnection) -> AsyncIterator[ListenConnection]:
+    """The connection running until the block ends; leaving the block is the client leaving."""
+    async with anyio.create_task_group() as group:
+        group.start_soon(connection.run)
+        await settled()
+        yield connection
+        connection.disconnect()
+
+
+@asynccontextmanager
+async def loopback_client(
+    front: McpPersonFront, member: Principal, *, bearer: str | None = None
+) -> AsyncIterator[Client]:
+    """The SDK's ``Client`` against a real uvicorn on a pre-bound loopback socket in this loop."""
+    with socket.socket() as bound:
+        bound.bind(("127.0.0.1", 0))
+        bound.listen()
+        port = bound.getsockname()[1]
+        server = uvicorn.Server(uvicorn.Config(served_app(front), log_level="warning"))
+        serving = asyncio.create_task(server.serve(sockets=[bound]))
+        headers = {"x-iss": member.iss, "x-sub": member.sub}
+        if bearer is not None:
+            headers["authorization"] = f"Bearer {bearer}"
+        url = f"http://127.0.0.1:{port}{MCP_ENDPOINT_PATH}"
+        timeout = httpx2.Timeout(30, read=None)
+        async with (
+            httpx2.AsyncClient(headers=headers, timeout=timeout, trust_env=False) as http,
+            Client(streamable_http_client(url, http_client=http)) as client,
+        ):
+            yield client
+        server.should_exit = True
+        await serving
 
 
 @dataclass

@@ -74,8 +74,18 @@ def test_a_document_the_strict_reader_refuses_raises_value_error(body: bytes) ->
         ("head.payload.sig", b"answer payload only", False),
         ("sig", b"answer sig", True),
         ("sig", b"answer other", False),
+        ("head.payload.sig\u00e9", "answer sig\u00e9".encode(), True),
+        ("head.payload.sig\u00e9", b"answer sig", False),
     ],
-    ids=["signature", "whole token", "another token", "bare token", "bare token absent"],
+    ids=[
+        "signature",
+        "whole token",
+        "another token",
+        "bare token",
+        "bare token absent",
+        "non-ascii signature",
+        "non-ascii signature absent",
+    ],
 )
 def test_data_carries_a_token_whole_or_by_its_signature_segment(
     token: str, data: bytes, carried: bool
