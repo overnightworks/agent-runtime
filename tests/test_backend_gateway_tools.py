@@ -354,6 +354,62 @@ def test_a_raising_handler_logs_its_class_only_and_the_model_gets_an_error(shop,
     assert all(record.exc_info is None for record in caplog.records)
 
 
+def test_a_handler_that_stops_the_turn_ends_it_with_that_exception_and_no_further_round(
+    shop, caplog
+):
+    ran = []
+    refusal = TurnStopped(
+        TurnStopKind.REFUSED, RejectionCode.BUSY, retry_after_s=7, detail="credentials"
+    )
+
+    async def refusing() -> ToolOutcome:
+        raise refusal
+
+    async def later() -> ToolOutcome:
+        ran.append("later")
+        return ToolOutcome("noted", is_error=False)
+
+    shop.add_tool("lookup", answer=refusing)
+    shop.add_tool("other", answer=later)
+    caplog.set_level(logging.INFO)
+
+    events, stopped, gateway = shop.run(
+        tool_round(tool_call("c1", "lookup", {}), tool_call("c2", "other", {})),
+        completion("never"),
+    )
+
+    assert stopped is refusal
+    assert (stopped.kind, stopped.code) == (TurnStopKind.REFUSED, RejectionCode.BUSY)
+    assert (stopped.retry_after_s, stopped.detail) == (7, "credentials")
+    assert [type(event) for event in events] == [ToolCallEvent]
+    assert ran == []
+    assert len(gateway.requests) == 1
+    assert logged_flag(caplog) == "None"
+
+
+@pytest.mark.parametrize(
+    ("effect", "handler_flag", "expected"),
+    [
+        (ToolEffect.SIDE_EFFECTING, False, True),
+        (ToolEffect.READ_ONLY, False, False),
+        (ToolEffect.READ_ONLY, True, True),
+    ],
+)
+def test_a_handler_that_stops_the_turn_leaves_after_side_effect_as_the_connector_promises(
+    shop, effect, handler_flag, expected
+):
+    async def refusing() -> ToolOutcome:
+        raise TurnStopped(
+            TurnStopKind.REFUSED, RejectionCode.FORBIDDEN, after_side_effect=handler_flag
+        )
+
+    shop.add_tool("lookup", effect=effect, answer=refusing)
+
+    _, stopped, _ = shop.run(tool_round(tool_call("c1", "lookup", {})), completion("never"))
+
+    assert stopped.after_side_effect is expected
+
+
 def test_each_call_logs_its_name_id_and_error_flag_never_arguments_or_content(shop, caplog):
     async def answer() -> ToolOutcome:
         return ToolOutcome("content-canary", is_error=True)
