@@ -1,7 +1,0 @@
-claim_id = "2adfbb3458ab431d875b7ef383c185c9"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "f43b1adb091f29c301b4e2adbab6f21feb4aaed6"
-branch = "claude/issue-750-release-path"
-scope = [".github/workflows/release.yml", "AGENTS.md", "tests/workflows/test_release_workflow.py"]
-opened_commit = "7786dc67d6ddb5a58e83e98626ce6fb4a2498dd5"
