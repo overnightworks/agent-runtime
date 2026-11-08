@@ -56,11 +56,17 @@ def read_strict_json(body: bytes) -> Any:
 def carries_signature_of(token: str, data: bytes) -> bool:
     """Whether ``data`` carries ``token``, whole or as its signature segment.
 
-    One needle is enough: every whole token contains its signature segment, the part
-    after the last ``.``. Bodies the person front writes are JSON, which writes base64url
-    characters and ``.`` verbatim, and tool results are asked after decoding. A non-ASCII token
-    is asked in its UTF-8 form. A token split across strings, base64-encoded or reversed is not
-    detected: this stops reflection, not an app that encodes its own bearer.
+    One segment is enough: every whole token contains its signature segment, the part after the
+    last ``.``. The person front's bodies are JSON and tool results are asked after decoding, so
+    the segment is asked verbatim and in the two ways a JSON writer spells it: base64url
+    characters and ``.`` stay as they are, anything else may be ``\\u``-escaped or written in
+    UTF-8. A token split across strings, base64-encoded or reversed is not detected: this stops
+    reflection, not an app that encodes its own bearer.
     """
     signature_segment = token.rsplit(".", 1)[-1]
-    return signature_segment.encode("utf-8") in data
+    json_spellings = {
+        json.dumps(signature_segment, ensure_ascii=ascii_only)[1:-1] for ascii_only in (True, False)
+    }
+    return any(
+        spelling.encode("utf-8") in data for spelling in {signature_segment, *json_spellings}
+    )

@@ -76,6 +76,8 @@ def test_a_document_the_strict_reader_refuses_raises_value_error(body: bytes) ->
         ("sig", b"answer other", False),
         ("head.payload.sig\u00e9", "answer sig\u00e9".encode(), True),
         ("head.payload.sig\u00e9", b"answer sig", False),
+        ("head.payload.sig\u00e9", b"answer sig\\u00e9", True),
+        ('head.payload.si"g', b'answer si\\"g', True),
     ],
     ids=[
         "signature",
@@ -85,6 +87,8 @@ def test_a_document_the_strict_reader_refuses_raises_value_error(body: bytes) ->
         "bare token absent",
         "non-ascii signature",
         "non-ascii signature absent",
+        "non-ascii signature as a json escape",
+        "a signature whose quote json escapes",
     ],
 )
 def test_data_carries_a_token_whole_or_by_its_signature_segment(

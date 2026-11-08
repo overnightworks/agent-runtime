@@ -382,16 +382,21 @@ def test_a_client_that_stalls_past_the_bound_still_gets_the_completion_the_handl
     assert connection.returned_after is not None
 
 
+@pytest.mark.parametrize(
+    ("bearer", "signature"),
+    [("head.payload.sigOfTheStream", "sigOfTheStream"), ("caf\u00e9", "caf\u00e9")],
+    ids=["ascii", "non-ascii, which the frame writes as a json escape"],
+)
 def test_a_bearer_signature_in_the_request_id_answers_an_empty_500_with_no_frame(
-    front: McpPersonFront, alice: Principal, caplog: pytest.LogCaptureFixture
+    front: McpPersonFront,
+    alice: Principal,
+    caplog: pytest.LogCaptureFixture,
+    bearer: str,
+    signature: str,
 ) -> None:
     caplog.set_level(logging.INFO, logger=LOGGER)
     connection = listen_connection(
-        front,
-        alice,
-        [STANDING_URI],
-        request_id="sigOfTheStream",
-        bearer="head.payload.sigOfTheStream",
+        front, alice, [STANDING_URI], request_id=signature, bearer=bearer
     )
 
     async def scenario() -> None:
@@ -403,7 +408,7 @@ def test_a_bearer_signature_in_the_request_id_answers_an_empty_500_with_no_frame
     logged = " ".join(record.getMessage() for record in caplog.records)
     assert (connection.status, connection.body_bytes) == (500, b"")
     assert "subscriptions/listen" in logged
-    assert "sigOfTheStream" not in logged
+    assert signature not in logged
 
 
 def test_a_bearer_signature_in_a_later_frame_cuts_the_stream_before_that_frame(
