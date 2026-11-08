@@ -73,6 +73,7 @@ type ResolvePerson = Callable[[Scope], Principal]
 _LOG: Final = logging.getLogger(LOGGER_NAME)
 _HANDLER_FAILED_TEXT: Final = "the tool failed"
 _UNKNOWN_TOOL_TEXT: Final = "Unknown tool"
+_INVALID_ARGUMENTS_TEXT: Final = "Invalid tool arguments"
 _BEARER_SCHEME: Final = "bearer"
 _SERVER_NAME: Final = "overnightworks-agent-runtime-client"
 _SERVER_VERSION: Final = "1"
@@ -82,6 +83,7 @@ _PARSE_ERROR_TEXT: Final = "Parse error"
 _SDK_LOGGER_NAMES: Final = ("mcp.server", "mcp.shared")
 _ABOVE_ANY_RECORD: Final = logging.CRITICAL + 1
 _ECHOABLE_REQUEST_ID: Final[TypeAdapter[int | str]] = TypeAdapter(StrictInt | UnicodeText)
+_TOOL_ARGUMENTS: Final[TypeAdapter[dict[str, Any]]] = TypeAdapter(JsonObject)
 
 
 @dataclass(frozen=True)
@@ -314,7 +316,11 @@ class McpPersonFront:
         tool = self._tools.get(params.name)
         if tool is None:
             return ErrorData(code=INVALID_PARAMS, message=_UNKNOWN_TOOL_TEXT)
-        return await self._called(tool, params.arguments or {})
+        try:
+            arguments = _TOOL_ARGUMENTS.validate_python(params.arguments or {})
+        except ValidationError:
+            return ErrorData(code=INVALID_PARAMS, message=_INVALID_ARGUMENTS_TEXT)
+        return await self._called(tool, arguments)
 
     @staticmethod
     async def _called(tool: PersonTool, arguments: JsonObject) -> CallToolResult:

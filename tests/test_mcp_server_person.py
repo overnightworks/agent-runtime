@@ -26,7 +26,7 @@ from agent_runtime_client.mcp_server import McpPersonFront, PersonRequest, Perso
 from agent_runtime_client.mcp_server.asgi import LOGGER_NAME as LOGGER
 from agent_runtime_client.mcp_wire import MCP_ENDPOINT_PATH, PROTOCOL_VERSION
 from agent_runtime_client.tools import Principal, ToolEffect, ToolOutcome
-from agent_runtime_client.turn import MAX_EVENT_BYTES, JsonObject
+from agent_runtime_client.turn import MAX_EVENT_BYTES, MAX_TOOL_INPUT_DEPTH, JsonObject
 from tests.support.mcp_server_support import (
     Headers,
     call_params,
@@ -360,16 +360,32 @@ def test_concurrent_calls_each_get_the_person_and_the_scope_of_their_own_request
     ]
 
 
-def test_an_unknown_tool_is_invalid_params_and_runs_nothing(
-    front: McpPersonFront, person: Person
-) -> None:
-    reply = post(front, rpc_body("tools/call", call_params("ghost_tool")))
+def _nested_past_the_tool_input_depth() -> list[Any]:
+    nested: list[Any] = []
+    for _ in range(MAX_TOOL_INPUT_DEPTH + 5):
+        nested = [nested]
+    return nested
 
-    assert (reply.status, reply.json()["error"]["code"], person.calls) == (
-        400,
-        INVALID_PARAMS,
-        [],
-    )
+
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("ghost_tool", {}),
+        ("read_note", {"note": "lone \ud800"}),
+        ("read_note", {"lone \ud800": "note"}),
+        ("read_note", {"note": _nested_past_the_tool_input_depth()}),
+    ],
+    ids=["unknown tool", "lone surrogate value", "lone surrogate key", "nested past the depth"],
+)
+def test_a_call_no_handler_may_receive_is_invalid_params_and_runs_nothing(
+    front: McpPersonFront, person: Person, name: str, arguments: dict[str, Any]
+) -> None:
+    reply = post(front, rpc_body("tools/call", {"name": name, "arguments": arguments}))
+
+    error = reply.json()["error"]
+    assert (reply.status, error["code"], person.calls) == (400, INVALID_PARAMS, [])
+    assert "ud800" not in reply.body.decode()
+    assert "data" not in error
 
 
 def test_two_tools_failing_differently_answer_one_failed_result_without_their_messages(
