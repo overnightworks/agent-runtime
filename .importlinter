@@ -45,6 +45,7 @@ source_modules =
     agent_runtime_client.backend.gateway
     agent_runtime_client.config
     agent_runtime_client.errors
+    agent_runtime_client.member
     agent_runtime_client.mcp_wire
     agent_runtime_client.tools
     agent_runtime_client.turn
@@ -67,6 +68,7 @@ source_modules =
     agent_runtime_client.backend
     agent_runtime_client.config
     agent_runtime_client.errors
+    agent_runtime_client.member
     agent_runtime_client.mcp_wire
     agent_runtime_client.tools
     agent_runtime_client.turn
