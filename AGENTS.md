@@ -7,7 +7,7 @@ already frozen elsewhere. Overview: README; reasons and what was not chosen: doc
 ## Boundaries
 
 `.importlinter` owns the layering and the forbidden imports; the gate's `import-contract` rule
-proves it (`quality hygiene .`). The traps it cannot show:
+proves it (`quality check`). The traps it cannot show:
 
 - The turn's vocabulary has one owner, `agent_runtime_client.turn`; `turn_events` is the
   in-process event, never a wire format.
@@ -29,7 +29,7 @@ proves it (`quality hygiene .`). The traps it cannot show:
 uv sync --locked --extra dev
 uv run pytest -q
 uv run ruff check src tests
-uvx --from git+https://github.com/overnightworks/quality@v0.9.2 quality hygiene .
+uvx --from "git+https://github.com/overnightworks/quality@2d2b68bf3916b34f6f2c72a540c1e3d8a947b750" quality check
 uv build
 ```
 
