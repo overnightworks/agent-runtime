@@ -20,9 +20,7 @@ flowchart TB
     backend["backend<br/>the AgentBackend port<br/>gateway, fake_gateway"]
     turn["turn, turn_events<br/>the turn vocabulary"]
     mcp["mcp_server, mcp_wire<br/>the MCP person front"]
-    wait["wait<br/>the wait answer"]
     member["member<br/>member records, place window, URIs"]
-    wait --> member
     gateway["LiteLLM gateway<br/>(external)"]
     person["a signed-in person's agent<br/>(external)"]
 
@@ -35,7 +33,6 @@ flowchart TB
     backend --> turn
     mcp --> tools
     mcp --> turn
-    mcp --> wait
     backend -->|"one chat completion per round"| gateway
     person -->|"MCP 2026-07-28, JSON-RPC over POST"| mcp
 ```
@@ -47,18 +44,17 @@ flowchart TB
 
 - The **base** depends on `pydantic` and `ruamel.yaml` only: `agents` (the agent-file reader),
   `tools` (the tool contract), `turn` (the turn's vocabulary, the one owner of `JsonObject`,
-  the size bounds and the failure codes), `turn_events`, `config`, the `backend` port,
-  `member` (the records an app and an agent say to each other about a member, the place window
-  and its URIs) and `wait` (the answer records and protocol constants of the wait tool, base so that an agent's
-  runner parses an answer without an extra).
+  the size bounds and the failure codes), `turn_events`, `config`, the `backend` port
+  and `member` (the records an app and an agent say to each other about a member, the place window
+  and its URIs).
 - The **`backend` extra** adds `httpx2` for `backend.gateway.GatewayBackend`, the one
   implementation of the port, and `backend.fake_gateway`, its scripted transport for tests.
 - The **`mcp-server` extra** adds `anyio` and the official MCP SDK for
   `agent_runtime_client.mcp_server`, a thin ASGI shell before the SDK that serves an app's tools
-  to one signed-in person's agent on MCP revision 2026-07-28, the `wait` tool with its two ports
-  among them, and the `MemberResources` port through which a member reads an app's truth per
-  verified principal; `mcp_wire` holds what the SDK does not own (the endpoint path, the strict JSON
-  reader, the bearer-reflection check) and imports no extra.
+  to one signed-in person's agent on MCP revision 2026-07-28, and the `MemberResources` port
+  through which a member reads an app's truth per verified principal; `mcp_wire` holds what the
+  SDK does not own (the endpoint path, the strict JSON reader, the bearer-reflection check) and
+  imports no extra.
 
 ## Runtime
 

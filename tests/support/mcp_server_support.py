@@ -20,26 +20,22 @@ from mcp_types import CLIENT_CAPABILITIES_META_KEY, PROTOCOL_VERSION_META_KEY
 from starlette.applications import Starlette
 from starlette.routing import Route
 
-from agent_runtime_client.mcp_server import (
-    InMemoryMemberChanges,
-    McpPersonFront,
-    PersonRequest,
-    PersonTool,
-    wait_tool,
-)
+from agent_runtime_client.mcp_server import McpPersonFront, PersonRequest, PersonTool
 from agent_runtime_client.mcp_wire import MCP_ENDPOINT_PATH, PROTOCOL_VERSION
-from agent_runtime_client.member import MemberStanding, PlaceWindow, place_window_uri
-from agent_runtime_client.tools import Principal, ToolDeclaration, ToolEffect, ToolOutcome
-from agent_runtime_client.turn import JsonObject
-from agent_runtime_client.wait import (
+from agent_runtime_client.member import (
     Invitation,
+    MemberStanding,
     PlaceRef,
+    PlaceWindow,
     Standing,
     StandingState,
-    WaitAnswer,
+    place_window_uri,
 )
+from agent_runtime_client.tools import Principal, ToolDeclaration, ToolEffect, ToolOutcome
+from agent_runtime_client.turn import JsonObject
 
 ISSUER = "https://issuer.test"
+
 type Headers = list[tuple[bytes, bytes]]
 
 
@@ -95,30 +91,6 @@ def a_person_tool() -> PersonTool:
 
 
 @dataclass
-class Places:
-    """The host's participation state, the one source of truth the wait tool reads.
-
-    ``before_taking`` and ``after_taking`` run inside a read, just before and just after the
-    state is taken, so a test can change the state at either moment.
-    """
-
-    standings: dict[Principal, tuple[Standing, ...]] = field(default_factory=dict)
-    before_taking: Callable[[], None] = lambda: None
-    after_taking: Callable[[], None] = lambda: None
-    failure: Exception | None = None
-    read_seconds: float = 0
-
-    async def read(self, recipient: Principal) -> tuple[Standing, ...]:
-        await asyncio.sleep(self.read_seconds)
-        if self.failure is not None:
-            raise self.failure
-        self.before_taking()
-        current = self.standings.get(recipient, ())
-        self.after_taking()
-        return current
-
-
-@dataclass
 class MemberApp:
     """The host's truth behind the resources port: per member, what is readable by URI.
 
@@ -156,18 +128,6 @@ class MemberApp:
         return self.readable.get(principal, {}).get(uri)
 
 
-@dataclass(frozen=True)
-class ToolResult:
-    """One ``tools/call`` result as the wire carried it, and how long the call took."""
-
-    text: str
-    is_error: bool
-    seconds: float
-
-    def answer(self) -> WaitAnswer:
-        return WaitAnswer.model_validate_json(self.text)
-
-
 def with_envelope(params: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """``params`` with the per-request ``_meta`` every revision 2026-07-28 request carries."""
     meta = {PROTOCOL_VERSION_META_KEY: PROTOCOL_VERSION, CLIENT_CAPABILITIES_META_KEY: {}}
@@ -191,10 +151,6 @@ def rpc_body(
 
 def call_params(name: str, **arguments: Any) -> dict[str, Any]:
     return {"name": name, "arguments": arguments}
-
-
-def tool_call_body(name: str, arguments: dict[str, Any]) -> bytes:
-    return rpc_body("tools/call", call_params(name, **arguments))
 
 
 def routing_headers(body: bytes, version: str | None = PROTOCOL_VERSION) -> Headers:
@@ -286,19 +242,6 @@ async def sdk_client(front: McpPersonFront) -> AsyncIterator[Client]:
         Client(streamable_http_client(url, http_client=http)) as client,
     ):
         yield client
-
-
-def result_of(sent: list[dict[str, Any]]) -> Any:
-    return json.loads(b"".join(message.get("body", b"") for message in sent))["result"]
-
-
-async def call_tool(
-    front: McpPersonFront, member: Principal, name: str, arguments: dict[str, Any]
-) -> ToolResult:
-    started = now()
-    result = result_of(await post(front, member, tool_call_body(name, arguments)))
-    [content] = result["content"]
-    return ToolResult(content["text"], result["isError"], now() - started)
 
 
 async def settled() -> None:
@@ -452,34 +395,3 @@ async def loopback_client(
             yield client
         server.should_exit = True
         await serving
-
-
-@dataclass
-class WaitScenario:
-    """One app serving the wait tool: its places, its change signal and its person front."""
-
-    places: Places = field(default_factory=Places)
-    changes: InMemoryMemberChanges = field(default_factory=InMemoryMemberChanges)
-
-    @property
-    def front(self) -> McpPersonFront:
-        return McpPersonFront(
-            [wait_tool(self.changes, self.places.read)], resolve_person=resolve_member
-        )
-
-    async def wait(self, member: Principal, **arguments: Any) -> ToolResult:
-        front = self.front
-        async with front.running():
-            return await call_tool(front, member, "wait", arguments)
-
-    async def post(
-        self, member: Principal, body: bytes, sent: list[dict[str, Any]] | None = None
-    ) -> list[dict[str, Any]]:
-        front = self.front
-        async with front.running():
-            return await post(front, member, body, sent)
-
-    def change(self, member: Principal, *standings: Standing) -> None:
-        """The app's own update: the state is visible first, then the change is signalled."""
-        self.places.standings[member] = standings
-        self.changes.changed(member)

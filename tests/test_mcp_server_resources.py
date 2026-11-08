@@ -18,10 +18,10 @@ from agent_runtime_client.member import (
     PlaceEntry,
     PlaceRef,
     PlaceWindow,
+    StandingState,
     place_window_uri,
 )
 from agent_runtime_client.tools import Principal
-from agent_runtime_client.wait import StandingState
 from tests.support.mcp_server_support import (
     MemberApp,
     a_member,

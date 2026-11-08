@@ -50,7 +50,6 @@ source_modules =
     agent_runtime_client.tools
     agent_runtime_client.turn
     agent_runtime_client.turn_events
-    agent_runtime_client.wait
 forbidden_modules =
     agent_runtime_client.mcp_server
     agent_runtime_client.mcp_server.**
@@ -75,7 +74,6 @@ source_modules =
     agent_runtime_client.tools
     agent_runtime_client.turn
     agent_runtime_client.turn_events
-    agent_runtime_client.wait
 forbidden_modules =
     httpx2
     httpx
