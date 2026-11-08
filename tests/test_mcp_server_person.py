@@ -1,4 +1,4 @@
-"""The person front: the host's resolver runs first, then the head checks and the profile.
+"""The person front: the host's resolver runs first, then the head checks and revision 2026-07-28.
 
 Every refusal case also asserts that no handler ran.
 """
@@ -13,24 +13,33 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
-from starlette.applications import Starlette
-from starlette.routing import Route
+from mcp_types import (
+    HEADER_MISMATCH,
+    INVALID_PARAMS,
+    METHOD_NOT_FOUND,
+    PARSE_ERROR,
+    UNSUPPORTED_PROTOCOL_VERSION,
+)
 from starlette.testclient import TestClient
 
 from agent_runtime_client.mcp_server import McpPersonFront, PersonRequest, PersonTool
 from agent_runtime_client.mcp_server.asgi import LOGGER_NAME as LOGGER
-from agent_runtime_client.mcp_wire import (
-    LATEST_PROTOCOL_VERSION,
-    MCP_ENDPOINT_PATH,
-    JsonRpcErrorCode,
-    ToolOutcome,
-)
-from agent_runtime_client.tools import Principal, ToolEffect
+from agent_runtime_client.mcp_wire import MCP_ENDPOINT_PATH, PROTOCOL_VERSION
+from agent_runtime_client.tools import Principal, ToolEffect, ToolOutcome
 from agent_runtime_client.turn import MAX_EVENT_BYTES, JsonObject
-from tests.support.mcp_server_support import declaration, drive, http_scope
+from tests.support.mcp_server_support import (
+    Headers,
+    call_params,
+    declaration,
+    drive,
+    http_scope,
+    routing_headers,
+    rpc_body,
+    sdk_client,
+    served_app,
+)
 
-VERSION = str(LATEST_PROTOCOL_VERSION)
-Headers = list[tuple[bytes, bytes]]
+_MARKER = "credential-marker-7f3a"
 
 
 @dataclass(frozen=True)
@@ -46,23 +55,14 @@ class Reply:
         return json.loads(self.body)
 
 
-def rpc(method: str, params: dict[str, Any] | None = None, *, notification: bool = False) -> bytes:
-    message: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
-    if not notification:
-        message["id"] = 1
-    if params is not None:
-        message["params"] = params
-    return json.dumps(message).encode()
-
-
-def call_params(name: str, **arguments: Any) -> dict[str, Any]:
-    return {"name": name, "arguments": arguments}
+def reply_of(sent: list[dict[str, Any]]) -> Reply:
+    [start] = [m for m in sent if m["type"] == "http.response.start"]
+    return Reply(start["status"], start["headers"], b"".join(m.get("body", b"") for m in sent))
 
 
 async def drive_scope(front: McpPersonFront, scope: dict[str, Any], body: bytes) -> Reply:
-    sent = await drive(front, scope, body)
-    [start] = [m for m in sent if m["type"] == "http.response.start"]
-    return Reply(start["status"], start["headers"], b"".join(m.get("body", b"") for m in sent))
+    async with front.running():
+        return reply_of(await drive(front, scope, body))
 
 
 @dataclass
@@ -103,14 +103,15 @@ def front(person: Person) -> McpPersonFront:
     return McpPersonFront(tools, resolve_person=person.resolve)
 
 
-def headers_of(*extra: tuple[bytes, bytes], version: str | None = VERSION) -> Headers:
-    fields = [(b"host", b"notes.internal"), *extra]
-    return fields + [(b"mcp-protocol-version", version.encode())] if version else fields
+def headers_of(
+    body: bytes, *extra: tuple[bytes, bytes], version: str | None = PROTOCOL_VERSION
+) -> Headers:
+    return [(b"host", b"notes.internal"), *extra, *routing_headers(body, version)]
 
 
 def post(front: McpPersonFront, body: bytes, *extra: tuple[bytes, bytes], **options: Any) -> Reply:
-    version = options.pop("version", VERSION)
-    scope = http_scope(headers_of(*extra, version=version), **options)
+    version = options.pop("version", PROTOCOL_VERSION)
+    scope = http_scope(headers_of(body, *extra, version=version), **options)
     return asyncio.run(drive_scope(front, scope, body))
 
 
@@ -122,12 +123,12 @@ def test_a_resolver_failure_reaches_the_host_before_the_origin_check_and_the_bod
 
     async def receive() -> dict[str, Any]:
         received.append("read")
-        return {"type": "http.request", "body": rpc("ping")}
+        return {"type": "http.request", "body": rpc_body("ping")}
 
     async def send(message: dict[str, Any]) -> None:
         sent.append(message)
 
-    scope = http_scope(headers_of((b"x-refused", b"1"), (b"origin", b"https://evil.test")))
+    scope = http_scope(headers_of(b"", (b"x-refused", b"1"), (b"origin", b"https://evil.test")))
     running = front(scope, receive, send)
 
     with pytest.raises(LookupError):
@@ -151,13 +152,13 @@ def test_a_resolver_result_that_is_not_a_principal_reaches_the_host_before_the_b
 
     async def receive() -> dict[str, Any]:
         received.append("read")
-        return {"type": "http.request", "body": rpc("ping")}
+        return {"type": "http.request", "body": rpc_body("ping")}
 
     async def send(message: dict[str, Any]) -> None:
         sent.append(message)
 
     front = McpPersonFront([person.tool("read_note")], resolve_person=resolve)
-    running = front(http_scope(headers_of()), receive, send)
+    running = front(http_scope(headers_of(b"")), receive, send)
 
     with pytest.raises(TypeError):
         asyncio.run(running)
@@ -171,7 +172,7 @@ def test_a_resolver_result_that_is_not_a_principal_reaches_the_host_before_the_b
 def test_a_request_carrying_an_origin_of_any_value_is_forbidden_and_runs_nothing(
     front: McpPersonFront, person: Person, origin: bytes
 ) -> None:
-    reply = post(front, rpc("tools/call", call_params("read_note")), (b"origin", origin))
+    reply = post(front, rpc_body("tools/call", call_params("read_note")), (b"origin", origin))
 
     assert (reply.status, reply.body, person.calls) == (403, b"", [])
 
@@ -193,19 +194,116 @@ def test_a_body_one_byte_over_the_bound_is_too_large_and_runs_nothing(
     assert (reply.status, person.calls) == (413, [])
 
 
-@pytest.mark.parametrize("version", [None, "1999-01-01"])
-def test_a_missing_or_unknown_protocol_version_is_a_bad_request(
-    front: McpPersonFront, person: Person, version: str | None
+@pytest.mark.parametrize(
+    ("body", "version"),
+    [
+        (rpc_body("tools/list"), None),
+        (rpc_body("tools/list"), "2024-11-05"),
+        (rpc_body("tools/list"), "2025-03-26"),
+        (rpc_body("tools/list"), "2025-06-18"),
+        (rpc_body("tools/list"), "2025-11-25"),
+        (rpc_body("tools/list"), "1999-01-01"),
+        (rpc_body("tools/call", call_params("read_note")), None),
+        (rpc_body("initialize", {"capabilities": {}}, enveloped=False), None),
+        (rpc_body("initialize", {"capabilities": {}}, enveloped=False), PROTOCOL_VERSION),
+    ],
+    ids=[
+        "list absent",
+        "2024-11-05",
+        "2025-03-26",
+        "2025-06-18",
+        "2025-11-25",
+        "unknown",
+        "call absent",
+        "initialize absent",
+        "initialize at the revision",
+    ],
+)
+def test_anything_but_a_request_at_the_served_revision_is_refused_naming_it(
+    front: McpPersonFront, person: Person, body: bytes, version: str | None
 ) -> None:
-    reply = post(front, rpc("tools/list"), version=version)
+    reply = post(front, body, version=version)
 
-    assert (reply.status, person.calls) == (400, [])
+    error = reply.json()["error"]
+    assert reply.status == 400
+    assert (error["code"], error["data"]["supported"]) == (
+        UNSUPPORTED_PROTOCOL_VERSION,
+        [PROTOCOL_VERSION],
+    )
+    assert person.calls == []
+
+
+def _repeated(body: bytes, *, once: bytes, doubled: bytes) -> bytes:
+    assert once in body
+    return body.replace(once, doubled, 1)
+
+
+_CALL = rpc_body("tools/call", call_params("read_note", note="n1"))
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        _repeated(_CALL, once=b'"id": 1', doubled=b'"id": 1, "id": 2'),
+        _repeated(
+            _CALL,
+            once=b'"name": "read_note"',
+            doubled=b'"name": "read_note", "name": "read_note"',
+        ),
+        _repeated(_CALL, once=b'"_meta": {', doubled=b'"_meta": {"x": 1, "x": 2, '),
+        _repeated(_CALL, once=b'"n1"', doubled=b"NaN"),
+        _repeated(_CALL, once=b'"n1"', doubled=b"Infinity"),
+        _repeated(_CALL, once=b'"n1"', doubled=b"1e999"),
+        b"{truncated",
+    ],
+    ids=[
+        "repeated id",
+        "repeated in params",
+        "repeated in meta",
+        "NaN",
+        "Infinity",
+        "overflowing number",
+        "not JSON",
+    ],
+)
+def test_a_body_with_a_repeated_member_or_a_non_json_number_is_refused_before_dispatch(
+    front: McpPersonFront, person: Person, body: bytes
+) -> None:
+    reply = post(front, body)
+
+    assert (reply.status, reply.json()["error"]["code"], person.calls) == (400, PARSE_ERROR, [])
+
+
+@pytest.mark.parametrize(
+    ("body", "changed", "status", "code"),
+    [
+        (rpc_body("tools/list"), (b"mcp-method", b"tools/call"), 400, HEADER_MISMATCH),
+        (rpc_body("tools/list", enveloped=False), None, 400, INVALID_PARAMS),
+        (rpc_body("no/such/method"), None, 404, METHOD_NOT_FOUND),
+    ],
+    ids=["header mismatch", "missing meta", "unknown method"],
+)
+def test_the_sdk_ladder_answers_a_malformed_request_with_its_standard_error(
+    front: McpPersonFront,
+    person: Person,
+    body: bytes,
+    changed: tuple[bytes, bytes] | None,
+    status: int,
+    code: int,
+) -> None:
+    headers = headers_of(body)
+    if changed is not None:
+        headers = [(k, v) for k, v in headers if k != changed[0]] + [changed]
+
+    reply = asyncio.run(drive_scope(front, http_scope(headers), body))
+
+    assert (reply.status, reply.json()["error"]["code"], person.calls) == (status, code, [])
 
 
 def test_tools_list_shows_every_tool_with_the_read_only_hint_only_on_a_read_only_one(
     front: McpPersonFront,
 ) -> None:
-    listed = post(front, rpc("tools/list")).json()["result"]["tools"]
+    listed = post(front, rpc_body("tools/list")).json()["result"]["tools"]
 
     assert [(tool["name"], tool.get("annotations")) for tool in listed] == [
         ("read_note", {"readOnlyHint": True}),
@@ -216,7 +314,7 @@ def test_tools_list_shows_every_tool_with_the_read_only_hint_only_on_a_read_only
 def test_a_call_hands_the_handler_the_resolved_person_and_the_request_scope(
     front: McpPersonFront, person: Person
 ) -> None:
-    reply = post(front, rpc("tools/call", call_params("read_note", note="n1")))
+    reply = post(front, rpc_body("tools/call", call_params("read_note", note="n1")))
 
     [(name, request, arguments)] = person.calls
     assert reply.json()["result"]["content"] == [{"type": "text", "text": "done"}]
@@ -228,12 +326,13 @@ def test_concurrent_calls_each_get_the_person_and_the_scope_of_their_own_request
     front: McpPersonFront, person: Person
 ) -> None:
     async def both() -> None:
+        body = rpc_body("tools/call", call_params("read_note"))
         scopes = [
-            http_scope(headers_of((b"x-person", name.encode()))) | {"marker": name}
+            http_scope(headers_of(body, (b"x-person", name.encode()))) | {"marker": name}
             for name in ("alice", "bob")
         ]
-        body = rpc("tools/call", call_params("read_note"))
-        await asyncio.gather(*(drive_scope(front, scope, body) for scope in scopes))
+        async with front.running():
+            await asyncio.gather(*(drive(front, scope, body) for scope in scopes))
 
     asyncio.run(both())
 
@@ -248,11 +347,11 @@ def test_concurrent_calls_each_get_the_person_and_the_scope_of_their_own_request
 def test_an_unknown_tool_is_invalid_params_and_runs_nothing(
     front: McpPersonFront, person: Person
 ) -> None:
-    reply = post(front, rpc("tools/call", call_params("ghost_tool")))
+    reply = post(front, rpc_body("tools/call", call_params("ghost_tool")))
 
     assert (reply.status, reply.json()["error"]["code"], person.calls) == (
-        200,
-        JsonRpcErrorCode.INVALID_PARAMS,
+        400,
+        INVALID_PARAMS,
         [],
     )
 
@@ -268,7 +367,7 @@ def test_two_tools_failing_differently_answer_one_failed_result_without_their_me
     results = []
     for tool_name, failure in failing_calls:
         person.failure = failure
-        results.append(post(front, rpc("tools/call", call_params(tool_name))).json()["result"])
+        results.append(post(front, rpc_body("tools/call", call_params(tool_name))).json()["result"])
 
     assert results[0] == results[1]
     assert results[0]["isError"] is True
@@ -294,7 +393,7 @@ def test_a_result_carrying_the_request_bearer_is_withheld_and_the_log_names_no_c
 
     reply = post(
         front,
-        rpc("tools/call", call_params("read_note", note="caller text")),
+        rpc_body("tools/call", call_params("read_note", note="caller text")),
         (b"authorization", spelling.format(token).encode()),
     )
 
@@ -320,7 +419,7 @@ def test_a_handler_rewriting_the_scope_headers_cannot_keep_the_request_bearer_in
 
     reply = post(
         front,
-        rpc("tools/call", call_params("read_note")),
+        rpc_body("tools/call", call_params("read_note")),
         (b"authorization", f"Bearer {token}".encode()),
     )
 
@@ -334,7 +433,7 @@ def test_a_result_carrying_another_tokens_signature_is_answered_as_usual(
 
     reply = post(
         front,
-        rpc("tools/call", call_params("read_note")),
+        rpc_body("tools/call", call_params("read_note")),
         (b"authorization", b"Bearer head.payload.sigOfTheRequest"),
     )
 
@@ -347,10 +446,10 @@ def test_an_outcome_that_cannot_be_written_answers_the_failed_result_and_leaks_n
 ) -> None:
     person.outcome = ToolOutcome("lone \ud800 surrogate", is_error=False)
     person.failure = None
-    unwritable = post(front, rpc("tools/call", call_params("read_note"))).json()["result"]
+    unwritable = post(front, rpc_body("tools/call", call_params("read_note"))).json()["result"]
     person.outcome = ToolOutcome("done", is_error=False)
     person.failure = RuntimeError("x")
-    raised = post(front, rpc("tools/call", call_params("read_note"))).json()["result"]
+    raised = post(front, rpc_body("tools/call", call_params("read_note"))).json()["result"]
 
     assert unwritable == raised
 
@@ -362,7 +461,7 @@ def test_one_info_record_names_the_tool_and_whether_the_call_failed(
     caplog.set_level(logging.INFO, logger=LOGGER)
     person.outcome = ToolOutcome("text", is_error=is_error)
 
-    post(front, rpc("tools/call", call_params("read_note")))
+    post(front, rpc_body("tools/call", call_params("read_note")))
 
     [record] = [r for r in caplog.records if r.levelno == logging.INFO]
     assert ("read_note" in record.getMessage(), str(is_error) in record.getMessage()) == (
@@ -378,37 +477,140 @@ def test_two_tools_of_one_name_are_refused_at_construction(person: Person) -> No
         McpPersonFront(tools, resolve_person=person.resolve)
 
 
-def test_an_exact_starlette_route_serves_initialize_list_and_call_without_a_redirect(
+def test_an_exact_starlette_route_serves_discovery_list_and_call_without_a_redirect(
     front: McpPersonFront,
 ) -> None:
-    app = Starlette(routes=[Route(MCP_ENDPOINT_PATH, front)])
+    def exchange(client: TestClient, body: bytes) -> Any:
+        headers = {name.decode(): value.decode() for name, value in routing_headers(body)}
+        return client.post(MCP_ENDPOINT_PATH, content=body, headers=headers)
 
-    def headers(version: str | None) -> dict[str, str]:
-        return {"MCP-Protocol-Version": version} if version else {}
+    with TestClient(
+        served_app(front), base_url="http://notes.internal", follow_redirects=False
+    ) as client:
+        discovered = exchange(client, rpc_body("server/discover"))
+        listed = exchange(client, rpc_body("tools/list"))
+        called = exchange(client, rpc_body("tools/call", call_params("read_note")))
 
-    with TestClient(app, base_url="http://notes.internal", follow_redirects=False) as client:
-        initialized = client.post(
-            MCP_ENDPOINT_PATH,
-            content=rpc("initialize", {"protocolVersion": VERSION, "capabilities": {}}),
-            headers=headers(None),
-        )
-        acknowledged = client.post(
-            MCP_ENDPOINT_PATH,
-            content=rpc("notifications/initialized", notification=True),
-            headers=headers(VERSION),
-        )
-        listed = client.post(MCP_ENDPOINT_PATH, content=rpc("tools/list"), headers=headers(VERSION))
-        called = client.post(
-            MCP_ENDPOINT_PATH,
-            content=rpc("tools/call", call_params("read_note")),
-            headers=headers(VERSION),
-        )
-
-    assert [r.status_code for r in (initialized, acknowledged, listed, called)] == [
-        200,
-        202,
-        200,
-        200,
-    ]
-    assert acknowledged.content == b""
+    assert [r.status_code for r in (discovered, listed, called)] == [200, 200, 200]
     assert json.loads(called.content)["result"]["isError"] is False
+
+
+def test_the_sdk_client_discovers_the_served_revision_and_a_capability_of_tools_alone(
+    front: McpPersonFront,
+) -> None:
+    async def discovered() -> tuple[str, dict[str, Any]]:
+        async with sdk_client(front) as client:
+            capabilities = client.server_capabilities.model_dump(exclude_none=True)
+            return client.protocol_version, capabilities
+
+    version, capabilities = asyncio.run(discovered())
+
+    assert version == PROTOCOL_VERSION
+    assert list(capabilities) == ["tools"]
+
+
+def test_the_sdk_client_lists_and_calls_a_tool(front: McpPersonFront, person: Person) -> None:
+    async def listed_and_called() -> Any:
+        async with sdk_client(front) as client:
+            return await client.list_tools(), await client.call_tool("read_note", {"note": "n1"})
+
+    listed, called = asyncio.run(listed_and_called())
+
+    assert [tool.name for tool in listed.tools] == ["read_note", "edit_note"]
+    assert (called.is_error, called.content[0].text) == (False, "done")
+    assert [arguments for _, _, arguments in person.calls] == [{"note": "n1"}]
+
+
+def test_a_failing_tool_gets_the_fixed_text_through_the_sdk_client(
+    front: McpPersonFront, person: Person
+) -> None:
+    async def called() -> Any:
+        async with sdk_client(front) as client:
+            return await client.call_tool("read_note", {})
+
+    person.failure = RuntimeError("secret detail")
+
+    result = asyncio.run(called())
+
+    assert result.is_error is True
+    assert result.content[0].text == "the tool failed"
+
+
+@pytest.mark.parametrize("entered_before", [False, True], ids=["never entered", "already exited"])
+def test_a_request_outside_running_fails_loud(front: McpPersonFront, entered_before: bool) -> None:
+    async def outside() -> None:
+        if entered_before:
+            async with front.running():
+                pass
+        body = rpc_body("tools/list")
+        await drive(front, http_scope(headers_of(body)), body)
+
+    with pytest.raises(RuntimeError, match="running"):
+        asyncio.run(outside())
+
+
+def test_a_front_running_already_refuses_a_second_entry(front: McpPersonFront) -> None:
+    async def overlapping() -> None:
+        async with front.running(), front.running():
+            pass
+
+    with pytest.raises(ExceptionGroup) as raised:
+        asyncio.run(overlapping())
+    assert raised.group_contains(RuntimeError, match="already running")
+
+
+def test_a_front_serves_again_after_its_lifespan_ended(front: McpPersonFront) -> None:
+    async def twice() -> list[Reply]:
+        body = rpc_body("tools/list")
+        replies = []
+        for _ in range(2):
+            async with front.running():
+                replies.append(reply_of(await drive(front, http_scope(headers_of(body)), body)))
+        return replies
+
+    assert [reply.status for reply in asyncio.run(twice())] == [200, 200]
+
+
+_MARKED_SCOPES: dict[str, Any] = {
+    "raising handler": (
+        rpc_body("tools/call", call_params("read_note")),
+        {"failure": RuntimeError(_MARKER)},
+    ),
+    "unwritable outcome": (
+        rpc_body("tools/call", call_params("read_note")),
+        {"outcome": ToolOutcome(f"{_MARKER} \ud800", is_error=False)},
+    ),
+    "malformed outcome": (
+        rpc_body("tools/call", call_params("read_note")),
+        {"outcome": {"marker": _MARKER}},
+    ),
+    "request method": (rpc_body(f"tools/{_MARKER}"), {}),
+    "notification method": (rpc_body(f"notifications/{_MARKER}", notification=True), {}),
+    "tool arguments": (rpc_body("tools/call", call_params("read_note", note=_MARKER)), {}),
+    "unknown tool name": (rpc_body("tools/call", call_params(_MARKER)), {}),
+    "version header": (rpc_body("tools/list"), {"version": _MARKER}),
+}
+
+
+@pytest.mark.parametrize("level", [logging.DEBUG, logging.INFO], ids=["debug", "normal"])
+@pytest.mark.parametrize("case", _MARKED_SCOPES, ids=list(_MARKED_SCOPES))
+def test_no_credential_marker_reaches_any_log_under_debug_or_normal_logging(
+    person: Person,
+    front: McpPersonFront,
+    caplog: pytest.LogCaptureFixture,
+    case: str,
+    level: int,
+) -> None:
+    body, setup = _MARKED_SCOPES[case]
+    person.failure = setup.get("failure")
+    person.outcome = setup.get("outcome", person.outcome)
+    caplog.set_level(level)
+
+    post(front, body, version=setup.get("version", PROTOCOL_VERSION))
+
+    logged = [
+        (record.name, record.getMessage(), str(record.exc_info), str(record.stack_info))
+        for record in caplog.records
+    ]
+    assert not any(_MARKER in " ".join(fields) for fields in logged), logged
+    assert _MARKER not in caplog.text

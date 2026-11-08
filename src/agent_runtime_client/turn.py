@@ -71,7 +71,7 @@ def refuse_non_json_constant(constant: str) -> object:
     """The one decider of NaN and Infinity in text being parsed: JSON has no word for them.
 
     Passed as ``parse_constant`` by the MCP request body reader,
-    ``mcp_wire.parse_message``.
+    ``mcp_wire.read_strict_json``.
     """
     raise ValueError(f"{constant} is not a JSON value")
 

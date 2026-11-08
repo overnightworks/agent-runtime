@@ -10,8 +10,6 @@ import pytest
 from fastapi import Cookie, FastAPI, Header, Query
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field
-from starlette.applications import Starlette
-from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from agent_runtime_client.mcp_server import (
@@ -19,8 +17,9 @@ from agent_runtime_client.mcp_server import (
     RouteProfileError,
     route_tools,
 )
-from agent_runtime_client.mcp_wire import LATEST_PROTOCOL_VERSION, MCP_ENDPOINT_PATH
+from agent_runtime_client.mcp_wire import MCP_ENDPOINT_PATH
 from agent_runtime_client.tools import Principal, ToolEffect, agent_tool
+from tests.support.mcp_server_support import routing_headers, rpc_body, served_app
 
 type Mark = tuple[str, str]
 
@@ -267,17 +266,14 @@ def front_for(app: FastAPI) -> TestClient:
     front = McpPersonFront(
         generated(app).tools, resolve_person=lambda scope: Principal(iss="issuer", sub="person")
     )
-    return TestClient(Starlette(routes=[Route(MCP_ENDPOINT_PATH, front, methods=["POST"])]))
+    return TestClient(served_app(front))
 
 
 def rpc(client: TestClient, method: str, params: dict[str, Any] | None = None) -> Any:
-    message = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}
-    headers = {
-        "MCP-Protocol-Version": str(LATEST_PROTOCOL_VERSION),
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-    }
-    return client.post(MCP_ENDPOINT_PATH, content=json.dumps(message), headers=headers).json()
+    body = rpc_body(method, params)
+    headers = {name.decode(): value.decode() for name, value in routing_headers(body)}
+    with client:
+        return client.post(MCP_ENDPOINT_PATH, content=body, headers=headers).json()
 
 
 def test_a_read_only_mark_is_listed_with_the_read_only_hint_and_a_side_effecting_one_without() -> (

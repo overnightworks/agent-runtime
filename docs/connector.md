@@ -291,14 +291,16 @@ there (`test_the_transport_loggers_that_could_carry_the_key_are_not_enabled_for_
 ## The person front
 
 `agent_runtime_client.mcp_server.McpPersonFront(tools, *, resolve_person)` is the MCP endpoint of
-an app for the agent of one signed-in person. It speaks the JSON-only profile of
-`agent_runtime_client.mcp_wire` (POST only, answered in `application/json`, `MCP-Protocol-Version`
-on every request after `initialize`, a notification answered with 202 and an empty body). It is
-an ASGI 3 app the host registers as the exact route `MCP_ENDPOINT_PATH`, never a `Mount`, which
-redirects `/mcp` to `/mcp/`, and behind the middleware that admits the caller: the host's gate
-answers every 401 and 403 before routing, so the front answers no challenge. Proved by
-`tests/test_mcp_server_person.py`:
-`test_an_exact_starlette_route_serves_initialize_list_and_call_without_a_redirect`.
+an app for the agent of one signed-in person. It serves MCP revision 2026-07-28 on the official
+SDK and nothing older: there is no `initialize` handshake and no legacy path. `server/discover`,
+`tools/list` and `tools/call` are POST only and answered in `application/json`. It is an ASGI 3 app
+the host registers as the exact route `MCP_ENDPOINT_PATH`, never a `Mount`, which redirects `/mcp`
+to `/mcp/`, and behind the middleware that admits the caller: the host's gate answers every 401
+and 403 before routing, so the front answers no challenge. The host enters
+`async with front.running():` once in its own lifespan, the one thing the SDK's session manager
+needs; a request outside it raises `RuntimeError`. Proved by `tests/test_mcp_server_person.py`:
+`test_an_exact_starlette_route_serves_discovery_list_and_call_without_a_redirect`,
+`test_a_request_outside_running_fails_loud`.
 
 `resolve_person` is a port, `Callable[[Scope], Principal]`, and the front's one seam to the
 host's authentication: the client imports no authentication library. The front calls it first on
@@ -316,13 +318,21 @@ which holds the bearer, `Host` and client address a handler replays. A name give
 `test_concurrent_calls_each_get_the_person_and_the_scope_of_their_own_request` and
 `test_two_tools_of_one_name_are_refused_at_construction`.
 
-A request with an `Origin` header is 403 (its clients are agents, which send none), anything but
-`POST` is 405 with `Allow: POST`, and a body over `MAX_EVENT_BYTES` is 413. Proved by
+A thin ASGI shell stands before the SDK and keeps this order. A request with an `Origin` header is
+403 (its clients are agents, which send none), anything but `POST` is 405 with `Allow: POST`, a
+body over `MAX_EVENT_BYTES` is 413, and a body with a repeated member, `NaN`, `Infinity` or a
+number that overflows is refused before dispatch with the JSON-RPC parse error. Every request that
+is not explicitly revision 2026-07-28, an absent or older `MCP-Protocol-Version` and `initialize`
+included, gets `-32022` naming the served version. Proved by
 `test_a_request_carrying_an_origin_of_any_value_is_forbidden_and_runs_nothing`,
-`test_anything_but_post_is_method_not_allowed_with_the_allowed_method_named` and
-`test_a_body_one_byte_over_the_bound_is_too_large_and_runs_nothing`. `tools/list` offers every
+`test_anything_but_post_is_method_not_allowed_with_the_allowed_method_named`,
+`test_a_body_one_byte_over_the_bound_is_too_large_and_runs_nothing`,
+`test_a_body_with_a_repeated_member_or_a_non_json_number_is_refused_before_dispatch` and
+`test_anything_but_a_request_at_the_served_revision_is_refused_naming_it`. `tools/list` offers every
 tool, because rights are the route's, with `annotations.readOnlyHint` true for a `READ_ONLY` tool
 and absent otherwise (`test_tools_list_shows_every_tool_with_the_read_only_hint_only_on_a_read_only_one`).
+The SDK answers the rest of the protocol (`Mcp-Method` mismatch `-32020`, missing `_meta` `-32602`,
+unknown method 404): `test_the_sdk_ladder_answers_a_malformed_request_with_its_standard_error`.
 
 A handler that raises, or returns an outcome that cannot be written, answers a failed tool
 result with one fixed text; the log names the tool and the exception's class, and nothing of its
@@ -331,6 +341,12 @@ message reaches the wire or the log
 `test_an_outcome_that_cannot_be_written_answers_the_failed_result_and_leaks_nothing`). An answer
 that carries the signature of the request's own bearer is replaced by an empty 500
 (`test_a_result_carrying_the_request_bearer_is_withheld_and_the_log_names_no_caller_text`).
+
+The SDK's server loggers (`mcp.server`, `mcp.shared`) are held above every level while the front
+runs, so a credential the SDK would log (a request's method, a handler failure) reaches no log
+even when the host sets its root logger to DEBUG; setting one of those loggers itself is the
+host's explicit choice. The front's own logger names only the tool and the exception's class
+(`test_no_credential_marker_reaches_any_log_under_debug_or_normal_logging`).
 
 ## The wait tool
 
