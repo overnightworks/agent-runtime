@@ -1,8 +1,0 @@
-claim_id = "c0c90cec1af14a4dad9a16388f5c7053"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "06f2d0661795a3990db2797d63897feefb274b07"
-branch = "claude/issue-769-quality-v0-10-0"
-scope = [".github/workflows/ci.yml", ".github/workflows/code-scanning.yml", ".importlinter", "AGENTS.md", "quality/baseline.toml"]
-opened_commit = "ad4c0bdbbce656e24cfb2f67c785a26cb33512c7"
-whole_reason = "One pin bump: the gate pin, the words that name its commands and the ceiling it judges move together, or CI or a local run breaks."
