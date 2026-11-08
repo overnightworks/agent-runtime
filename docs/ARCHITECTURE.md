@@ -134,8 +134,9 @@ size and clone ratchets, and coverage over the whole suite.
 
 - Base modules import no HTTP library and no MCP extra, so an app that only reads agent files
   installs two dependencies.
-- The client imports no web framework: the person front is plain ASGI, so a host keeps its own
-  framework and its own authentication gate.
+- The client's own modules import no web framework, even though the MCP SDK depends on one: the
+  person front is a thin ASGI shell before the SDK, so a host keeps its own framework and its own
+  authentication gate.
 - Tool handlers run in the app's process, so a handler sees the app's own state and the client
   never runs a tool anywhere else. What a tool returns still travels to the gateway and the
   provider as part of the conversation.
@@ -157,9 +158,6 @@ size and clone ratchets, and coverage over the whole suite.
   Reopens if an app needs token-by-token output.
 - Provider CLIs and subscription logins: the gateway is the only route to a model. Reopens if
   the gateway cannot reach a model an app needs.
-- Folding `AnnotatedToolDefinition` into `ToolDefinition`: the person front's listing carries
-  `readOnlyHint`, which a plain definition does not. Reopens if the annotation leaves the
-  listing.
 
 ## Risks and technical debt
 
