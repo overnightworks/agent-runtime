@@ -1,0 +1,8 @@
+claim_id = "9db593dc01ec4cdfb8eff686a0b2347b"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "891d953987f5e9aead1c5eee7ee57fb384d80351"
+branch = "claude/issue-778-the-person-front-serves-mcp-revision-202"
+scope = [".importlinter", "README.md", "docs/ARCHITECTURE.md", "docs/connector.md", "pyproject.toml", "src/agent_runtime_client/__init__.py", "src/agent_runtime_client/mcp_server/__init__.py", "src/agent_runtime_client/mcp_server/asgi.py", "src/agent_runtime_client/mcp_server/person.py", "src/agent_runtime_client/mcp_wire.py", "src/agent_runtime_client/turn.py", "tests/support/mcp_server_support.py", "tests/test_mcp_server_person.py", "tests/test_mcp_server_routes.py", "tests/test_mcp_server_wait.py", "tests/test_mcp_wire.py", "uv.lock"]
+opened_commit = "cd49acca8dd5587c32b3d8c763977c79360b7647"
+whole_reason = "One serving path replaced atomically: the front, its wire rules, their tests and the documents that name them cannot land apart."
