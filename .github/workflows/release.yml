@@ -1,15 +1,11 @@
 name: Release
 
-# The tag is immutable under the ruleset, so every gate runs before it exists.
+# The tag is immutable, so quality's gate reads and refuses before any tag exists.
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "The version to release, X.Y.Z"
-        required: true
-        type: string
-      commit:
-        description: "The approved commit, 40 lowercase hex characters, main's head"
+        description: The version to release, X.Y.Z
         required: true
         type: string
 
@@ -22,82 +18,35 @@ permissions: {}
 jobs:
   gate:
     name: Gate
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      pull-requests: read
+    uses: overnightworks/quality/.github/workflows/release-gate.yml@2d2b68bf3916b34f6f2c72a540c1e3d8a947b750 # v0.10.0
+    with:
+      version: ${{ inputs.version }}
+
+  build:
+    name: Build
+    needs: gate
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     permissions:
       contents: read
-      actions: read # reads CI's run on the commit
     outputs:
       install: ${{ steps.install.outputs.install }}
     env:
-      GH_TOKEN: ${{ github.token }}
       VERSION: ${{ inputs.version }}
-      COMMIT: ${{ inputs.commit }}
     steps:
-      - name: Refuse any ref but main
-        env:
-          DISPATCH_REF: ${{ github.ref }}
-        run: |
-          if [ "$DISPATCH_REF" != "refs/heads/main" ]; then
-            echo "Refused: dispatched from $DISPATCH_REF, a release is dispatched from main." >&2
-            exit 1
-          fi
-
-      - name: Refuse a malformed version or commit
-        run: |
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Refused: the version is not a full X.Y.Z." >&2
-            exit 1
-          fi
-          if ! [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Refused: the commit is not a full 40-character lowercase SHA." >&2
-            exit 1
-          fi
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ needs.gate.outputs.commit }}
           persist-credentials: false
 
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           enable-cache: false
-
-      - name: Refuse unless the commit is the checked-out head of main
-        run: |
-          if [ "$(git rev-parse HEAD)" != "$COMMIT" ]; then
-            echo "Refused: the commit is not the one checked out, main's head." >&2
-            exit 1
-          fi
-          main_head=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
-          if [ "$main_head" != "$COMMIT" ]; then
-            echo "Refused: the commit is not main's head ($main_head)." >&2
-            exit 1
-          fi
-
-      - name: Refuse a tag that exists
-        run: |
-          taken=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v$VERSION" \
-            --jq '[.[] | select(.ref == "refs/tags/v" + env.VERSION)] | length')
-          if [ "$taken" != "0" ]; then
-            echo "Refused: the tag v$VERSION exists." >&2
-            exit 1
-          fi
-
-      - name: Refuse unless CI's push run on the commit is green with the quality verdict
-        run: |
-          gh run list --workflow ci.yml --event push --commit "$COMMIT" \
-            --json databaseId,conclusion > runs.json
-          run_id=$(jq -r 'map(select(.conclusion == "success")) | first | .databaseId // empty' runs.json)
-          if [ -z "$run_id" ]; then
-            echo "Refused: CI has no green push run on $COMMIT." >&2
-            exit 1
-          fi
-          verdicts=$(gh run view "$run_id" --json jobs \
-            --jq '[.jobs[] | select(.name == "quality / verdict" and .conclusion == "success")] | length')
-          if [ "$verdicts" != "1" ]; then
-            echo "Refused: run $run_id has no green quality / verdict." >&2
-            exit 1
-          fi
 
       - name: Build the distribution
         run: uv build
@@ -141,35 +90,12 @@ jobs:
 
   tag:
     name: Tag
-    needs: gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    needs: [gate, build]
     permissions:
-      contents: write # creates the tag and the release
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      VERSION: ${{ inputs.version }}
-      COMMIT: ${{ inputs.commit }}
-      INSTALL: ${{ needs.gate.outputs.install }}
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: wheels
-          path: dist
-
-      - name: Create the tag at the gated commit
-        run: |
-          at=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v$VERSION" \
-            --jq '[.[] | select(.ref == "refs/tags/v" + env.VERSION)] | first | .object.sha // empty')
-          if [ -z "$at" ]; then
-            gh api -X POST "repos/$GITHUB_REPOSITORY/git/refs" \
-              -f "ref=refs/tags/v$VERSION" -f "sha=$COMMIT"
-          elif [ "$at" != "$COMMIT" ]; then
-            echo "Refused: the tag v$VERSION exists at $at, not at the gated commit." >&2
-            exit 1
-          fi
-
-      - name: Publish the release on the tag with the wheel the gate built
-        run: |
-          gh release create "v$VERSION" dist/*.whl --verify-tag --title "v$VERSION" --generate-notes --notes "$INSTALL"
+      contents: write
+    uses: overnightworks/quality/.github/workflows/release-tag.yml@2d2b68bf3916b34f6f2c72a540c1e3d8a947b750 # v0.10.0
+    with:
+      version: ${{ inputs.version }}
+      commit: ${{ needs.gate.outputs.commit }}
+      artifact: wheels
+      notes: ${{ needs.build.outputs.install }}
