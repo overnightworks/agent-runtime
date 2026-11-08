@@ -35,7 +35,7 @@ __all__ = [
 ]
 
 LEASE_SECONDS: Final = 120
-"""How long a member's lease lasts after its last call; a loop of waits renews itself."""
+"""How long a member's lease lasts; each admitted call renews it."""
 LISTEN_BOUND_SECONDS: Final = 50
 """The longest a listen lasts before it ends with the completion result."""
 ACCEPT_INVITATION_TOOL: Final = "accept_invitation"

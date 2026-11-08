@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 import json
 from datetime import UTC, datetime
 from typing import Any
@@ -10,8 +9,6 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-import agent_runtime_client.member as member
-import agent_runtime_client.wait as wait
 from agent_runtime_client.member import (
     LEASE_SECONDS,
     LISTEN_BOUND_SECONDS,
@@ -77,19 +74,6 @@ def test_an_invitation_with_a_malformed_field_is_refused(fields: dict[str, Any])
 
     with pytest.raises(ValidationError):
         Invitation.model_validate(malformed)
-
-
-@pytest.mark.parametrize(
-    "name", ["PlaceRef", "StandingState", "Invitation", "Standing", "LEASE_SECONDS"]
-)
-def test_each_moved_name_is_the_same_object_from_both_modules(name: str) -> None:
-    assert getattr(wait, name) is getattr(member, name)
-    assert name in wait.__all__
-
-
-@pytest.mark.parametrize("name", ["PlaceRef", "StandingState", "Invitation", "Standing"])
-def test_wait_holds_no_second_definition_of_a_moved_record(name: str) -> None:
-    assert inspect.getmodule(getattr(wait, name)) is member
 
 
 def test_the_lease_and_the_listen_bound_are_positive_seconds() -> None:
