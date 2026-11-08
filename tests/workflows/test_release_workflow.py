@@ -1,8 +1,7 @@
-"""agent-runtime's own build step refuses all but the client wheel and lists it with its hash."""
+"""The release build refuses all but the client wheel; its release note names the git tag."""
 
 from __future__ import annotations
 
-import hashlib
 import re
 import subprocess
 from dataclasses import dataclass, replace
@@ -141,38 +140,25 @@ def test_a_missing_or_extra_wheel_is_refused(tmp_path, release):
     assert (missing.returncode, extra.returncode) == (1, 1)
 
 
-def _wheel_list_output(tmp_path: Path, release: _Release) -> tuple[dict[str, bytes], str]:
-    wheels = _wheels_in(tmp_path, release)
-    result = _run_step("List the wheel with its hash", tmp_path, release)
+def _release_note(tmp_path: Path, release: _Release) -> str:
+    result = _run_step("Write the release note naming the git tag", tmp_path, release)
     assert result.returncode == 0
-    return wheels, (tmp_path / "github_output").read_text(encoding="utf-8")
+    return (tmp_path / "github_output").read_text(encoding="utf-8")
 
 
-def test_a_failing_sha256sum_fails_the_wheel_list_step(tmp_path, release):
-    _wheels_in(tmp_path, release)
-    failing = tmp_path / "bin" / "sha256sum"
-    failing.parent.mkdir(exist_ok=True)
-    failing.write_text("#!/bin/bash\nexit 1\n", encoding="utf-8")
-    failing.chmod(0o755)
+def test_the_release_page_names_the_git_tag_requirement_and_no_wheel_url(tmp_path, release):
+    note = _release_note(tmp_path, release)
 
-    result = _run_step("List the wheel with its hash", tmp_path, release)
-
-    assert result.returncode != 0
-
-
-def test_the_release_page_lists_each_wheel_with_its_url_and_sha256(tmp_path, release):
-    wheels, install = _wheel_list_output(tmp_path, release)
-    for name, content in wheels.items():
-        distribution = name.split("-")[0].replace("_", "-")
-        base = f"https://github.com/{release.repository}/releases/download"
-        url = f"{base}/v{release.version}/{name}"
-        digest = hashlib.sha256(content).hexdigest()
-        assert f"{distribution} @ {url}#sha256={digest}\n" in install
+    requirement = (
+        "overnightworks-agent-runtime-client @ "
+        f"git+https://github.com/{release.repository}@v{release.version}\n"
+    )
+    assert requirement in note
+    assert "releases/download" not in note
 
 
-def test_the_wheel_list_is_written_in_the_multiline_output_form(tmp_path, release):
-    _, install = _wheel_list_output(tmp_path, release)
-    lines = install.splitlines()
+def test_the_release_note_is_written_in_the_multiline_output_form(tmp_path, release):
+    lines = _release_note(tmp_path, release).splitlines()
 
     _, delimiter = lines[0].split("<<")
     assert lines[-1] == delimiter
