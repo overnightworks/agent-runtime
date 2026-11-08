@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, Final
 
+import anyio.lowlevel
 from mcp.server.context import ServerRequestContext
 from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
@@ -290,6 +291,7 @@ class McpPersonFront:
 
         async def capture(message: Message) -> None:
             sent.append(message)
+            await anyio.lowlevel.checkpoint()
 
         await manager.handle_request(scope, _replayed(body, receive), capture)
         return _answer_of(sent), document
@@ -297,6 +299,7 @@ class McpPersonFront:
     async def _list_tools(
         self, _context: ServerRequestContext[Any], _params: PaginatedRequestParams | None
     ) -> ListToolsResult:
+        await anyio.lowlevel.checkpoint()
         return self._listing
 
     async def _call_tool(

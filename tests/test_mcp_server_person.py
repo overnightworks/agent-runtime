@@ -545,8 +545,10 @@ def test_a_request_outside_running_fails_loud(front: McpPersonFront, entered_bef
         body = rpc_body("tools/list")
         await drive(front, http_scope(headers_of(body)), body)
 
+    request = outside()
+
     with pytest.raises(RuntimeError, match="running"):
-        asyncio.run(outside())
+        asyncio.run(request)
 
 
 def test_a_front_running_already_refuses_a_second_entry(front: McpPersonFront) -> None:
@@ -554,8 +556,10 @@ def test_a_front_running_already_refuses_a_second_entry(front: McpPersonFront) -
         async with front.running(), front.running():
             pass
 
+    entered = overlapping()
+
     with pytest.raises(ExceptionGroup) as raised:
-        asyncio.run(overlapping())
+        asyncio.run(entered)
     assert raised.group_contains(RuntimeError, match="already running")
 
 
