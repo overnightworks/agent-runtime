@@ -11,7 +11,7 @@ refuses every request that is not explicitly that revision, because the SDK's st
 still routes an absent or older version to its legacy path. No answer the front writes, refusals
 included, carries the request's bearer. Rights are the route's, so ``tools/list`` offers every
 tool. With a ``MemberResources`` port it also serves ``resources/list`` and ``resources/read``
-per verified principal.
+per verified principal, and with ``ResourceChanges`` beside it, ``subscriptions/listen``.
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ from mcp_types import (
     UNSUPPORTED_PROTOCOL_VERSION,
     CallToolRequestParams,
     CallToolResult,
+    DiscoverResult,
     ErrorData,
     JSONRPCError,
     ListResourcesResult,
@@ -43,14 +44,22 @@ from mcp_types import (
     PaginatedRequestParams,
     ReadResourceRequestParams,
     ReadResourceResult,
+    RequestParams,
+    ResourcesCapability,
+    ServerCapabilities,
+    SubscriptionsListenRequestParams,
+    SubscriptionsListenResult,
     Tool,
     ToolAnnotations,
+    ToolsCapability,
     UnsupportedProtocolVersionErrorData,
 )
 from pydantic import StrictInt, TypeAdapter, ValidationError
 
 from agent_runtime_client.mcp_server.asgi import (
+    DISCOVER_METHOD,
     HEADER_ENCODING,
+    LISTEN_METHOD,
     LOGGER_NAME,
     WITHHELD,
     HttpAnswer,
@@ -63,7 +72,9 @@ from agent_runtime_client.mcp_server.asgi import (
     read_body,
     request_label,
     write,
+    write_stream,
 )
+from agent_runtime_client.mcp_server.listen import ResourceChanges, on_subscriptions_listen
 from agent_runtime_client.mcp_server.resources import MemberResources, list_answer, read_answer
 from agent_runtime_client.mcp_wire import (
     JSON_MEDIA_TYPE,
@@ -71,6 +82,7 @@ from agent_runtime_client.mcp_wire import (
     carries_signature_of,
     read_strict_json,
 )
+from agent_runtime_client.member import LISTEN_BOUND_SECONDS
 from agent_runtime_client.tools import ToolDeclaration, ToolEffect, ToolOutcome
 from agent_runtime_client.turn import JsonObject, Principal, StrictModel, UnicodeText
 
@@ -84,6 +96,7 @@ _BEARER_SCHEME: Final = "bearer"
 _SERVER_NAME: Final = "overnightworks-agent-runtime-client"
 _SERVER_VERSION: Final = "1"
 _INITIALIZE: Final = "initialize"
+_FINAL_FRAME_SECONDS: Final = 5
 _UNSUPPORTED_VERSION_TEXT: Final = "Unsupported protocol version"
 _PARSE_ERROR_TEXT: Final = "Parse error"
 _SDK_LOGGER_NAMES: Final = ("mcp.server", "mcp.shared")
@@ -230,7 +243,10 @@ class McpPersonFront:
         *,
         resolve_person: ResolvePerson,
         resources: MemberResources | None = None,
+        changes: ResourceChanges | None = None,
     ) -> None:
+        if changes is not None and resources is None:
+            raise ValueError("changes need the resources port they are read from")
         self._tools = {tool.declaration.name: tool for tool in tools}
         if len(self._tools) != len(tools):
             raise ValueError("a tool name is declared more than once")
@@ -245,7 +261,12 @@ class McpPersonFront:
             on_call_tool=self._call_tool,
             on_list_resources=None if resources is None else partial(_list_resources, resources),
             on_read_resource=None if resources is None else partial(_read_resource, resources),
+            on_subscriptions_listen=(
+                None if changes is None else partial(_listen, resources, changes)
+            ),
         )
+        if changes is not None:
+            self._server.add_request_handler(DISCOVER_METHOD, RequestParams, _discover_with_listen)
         self._manager: StreamableHTTPSessionManager | None = None
 
     @asynccontextmanager
@@ -285,19 +306,28 @@ class McpPersonFront:
         bearers = _bearers_of(scope)
         current = _CURRENT_REQUEST.set(PersonRequest(principal, scope))
         try:
-            answer, document = await self._answer(manager, scope, receive)
+            answer, document = await self._answer(manager, scope, receive, send, bearers)
         finally:
             _CURRENT_REQUEST.reset(current)
+        if answer is None:
+            return
         if any(carries_signature_of(token, answer.body) for token in bearers):
             _LOG.warning("an answer was withheld: %s", request_label(document, self._tools))
             answer = WITHHELD
         await write(send, answer)
 
-    @staticmethod
     async def _answer(
-        manager: StreamableHTTPSessionManager, scope: Scope, receive: Receive
-    ) -> tuple[HttpAnswer, object]:
-        """The answer and the request document it answers; ``None`` when none was read."""
+        self,
+        manager: StreamableHTTPSessionManager,
+        scope: Scope,
+        receive: Receive,
+        send: Send,
+        bearers: Sequence[str],
+    ) -> tuple[HttpAnswer | None, object]:
+        """The answer, ``None`` once a stream wrote its own, and the request document it answers.
+
+        The document is ``None`` when none was read.
+        """
         refusal = _refusal(scope)
         if refusal is not None:
             return refusal, None
@@ -311,6 +341,15 @@ class McpPersonFront:
         refused = _revision_refusal(protocol_version(scope), document)
         if refused is not None:
             return refused, document
+        label = request_label(document, self._tools)
+        if label == LISTEN_METHOD:
+            respond = partial(manager.handle_request, scope, _replayed(body, receive))
+            cut = await write_stream(
+                respond, send, bearers, seconds=LISTEN_BOUND_SECONDS + _FINAL_FRAME_SECONDS
+            )
+            if cut:
+                _LOG.warning("a stream was cut: %s", label)
+            return None, document
         sent: list[Message] = []
 
         async def capture(message: Message) -> None:
@@ -367,3 +406,27 @@ async def _read_resource(
     params: ReadResourceRequestParams,
 ) -> ReadResourceResult | ErrorData:
     return await read_answer(resources, _CURRENT_REQUEST.get().principal, params.uri)
+
+
+async def _listen(
+    resources: MemberResources,
+    changes: ResourceChanges,
+    context: ServerRequestContext[Any],
+    params: SubscriptionsListenRequestParams,
+) -> SubscriptionsListenResult | ErrorData:
+    principal = _CURRENT_REQUEST.get().principal
+    return await on_subscriptions_listen(resources, changes, principal, context, params)
+
+
+async def _discover_with_listen(
+    _context: ServerRequestContext[Any], _params: RequestParams | None
+) -> DiscoverResult:
+    """The SDK says every ``listChanged`` is true once listen is served; this front sends none."""
+    await anyio.lowlevel.checkpoint()
+    return DiscoverResult(
+        supported_versions=[PROTOCOL_VERSION],
+        capabilities=ServerCapabilities(
+            tools=ToolsCapability(list_changed=False),
+            resources=ResourcesCapability(subscribe=True, list_changed=False),
+        ),
+    )

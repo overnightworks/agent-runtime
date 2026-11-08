@@ -26,6 +26,7 @@ dev = [
     "ruff>=0.17,<1",
     "cryptography>=50.0.2",
     "fastapi>=0.133,<1",
+    "uvicorn>=0.54,<1",
 ]
 
 [project.urls]
