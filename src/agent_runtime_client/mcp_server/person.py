@@ -238,9 +238,9 @@ class McpPersonFront:
     async def running(self) -> AsyncIterator[None]:
         """The SDK's manager for the host's lifespan; a request outside it fails loud.
 
-        The SDK logs request methods and handler failures with their content, so a server logger
-        of its that the host left unset is held above any record's level, from here on: a host's
-        DEBUG on the root logger never reaches it, and a level the host sets on it wins.
+        The SDK logs request methods and handler failures with their content, so each of its
+        server loggers the host left unset is held above any record's level from here on: a
+        host's DEBUG on the root logger never reaches it, and a level the host sets on it wins.
         """
         if self._manager is not None:
             raise RuntimeError("the person front is already running")
