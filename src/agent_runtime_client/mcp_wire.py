@@ -1,145 +1,25 @@
-"""The JSON-only MCP wire profile an app's MCP endpoint speaks.
+"""What an app's MCP endpoint keeps out of the SDK: its path, the revision, the strict reader.
 
-The profile is POST only, answered in ``application/json`` only, carries
-``MCP-Protocol-Version`` on every request after ``initialize`` and answers a
-notification with 202 and an empty body. This module holds the pure rules: parse, encode,
-negotiate, decide a header, decide a content type. It opens no socket and reads no clock or
-environment, so the person front builds on it.
-
-Every refusal is one closed ``McpWireError`` that names only the rule, never
-the input: a body, a header or a result may carry a credential.
+The person front speaks revision ``2026-07-28`` of the Model Context Protocol through the
+official SDK, which lives behind the ``mcp-server`` extra. This base module holds only what the
+SDK does not own and imports no extra: the constants a host uses, the JSON reader stricter than
+the SDK's, and the check for a bearer reflected into an answer. It opens no socket and reads no
+clock or environment.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass
-from enum import IntEnum, StrEnum
-from http import HTTPStatus
-from typing import Annotated, Any, Final, Literal, NoReturn, Self, TypeVar
-
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from pydantic.alias_generators import to_camel
+import math
+from typing import Any, Final
 
 from agent_runtime_client.errors import raise_without_chain
-from agent_runtime_client.tools import ToolOutcome
-from agent_runtime_client.turn import (
-    MAX_EVENT_BYTES,
-    JsonObject,
-    UnicodeText,
-    refuse_non_json_constant,
-)
+from agent_runtime_client.turn import refuse_non_json_constant
 
 JSON_MEDIA_TYPE: Final = "application/json"
 MCP_ENDPOINT_PATH: Final = "/mcp"
 PROTOCOL_VERSION_HEADER: Final = "MCP-Protocol-Version"
-_ASSUMED_PROTOCOL_VERSION: Final = "2025-03-26"
-_SERVER_NAME: Final = "overnightworks-agent-runtime-client"
-_SERVER_VERSION: Final = "1"
-_JSON_RPC_VERSION: Final = "2.0"
-
-
-class ProtocolVersion(StrEnum):
-    """The protocol versions this profile implements, newest last."""
-
-    V2025_11_25 = "2025-11-25"
-
-
-SUPPORTED_PROTOCOL_VERSIONS: Final = frozenset(ProtocolVersion)
-LATEST_PROTOCOL_VERSION: Final = ProtocolVersion.V2025_11_25
-
-
-class McpMethod(StrEnum):
-    """The methods the profile serves; any other method parses as an ordinary request."""
-
-    INITIALIZE = "initialize"
-    INITIALIZED = "notifications/initialized"
-    CANCELLED = "notifications/cancelled"
-    PING = "ping"
-    TOOLS_LIST = "tools/list"
-    TOOLS_CALL = "tools/call"
-
-
-class WireRefusal(StrEnum):
-    MALFORMED_JSON = "malformed_json"
-    TOO_LARGE = "too_large"
-    BATCH = "batch"
-    NOT_A_MESSAGE = "not_a_message"
-    INVALID_PAYLOAD = "invalid_payload"
-
-
-class McpWireError(Exception):
-    """A closed refusal: the message is the rule that refused, never the input."""
-
-    def __init__(self, refusal: WireRefusal) -> None:
-        super().__init__(refusal)
-        self.refusal = refusal
-
-
-def _refuse(refusal: WireRefusal) -> NoReturn:
-    raise_without_chain(McpWireError(refusal))
-
-
-class _Model(BaseModel):
-    model_config = ConfigDict(
-        frozen=True,
-        strict=True,
-        extra="forbid",
-        alias_generator=to_camel,
-    )
-
-
-class _Tolerant(_Model):
-    """A payload from the other side: unknown members are read past, never kept."""
-
-    model_config = ConfigDict(extra="ignore")
-
-
-RequestId = int | UnicodeText
-
-
-class JsonRpcRequest(_Model):
-    id: RequestId
-    method: UnicodeText
-    params: JsonObject = Field(default_factory=dict)
-
-
-class JsonRpcNotification(_Model):
-    method: UnicodeText
-    params: JsonObject = Field(default_factory=dict)
-
-
-class JsonRpcResponse(_Model):
-    id: RequestId
-    result: JsonObject
-
-
-class JsonRpcErrorBody(_Model):
-    code: int
-    message: UnicodeText
-
-
-class JsonRpcError(_Model):
-    id: RequestId | None
-    error: JsonRpcErrorBody
-
-
-class JsonRpcErrorCode(IntEnum):
-    METHOD_NOT_FOUND = -32601
-    INVALID_PARAMS = -32602
-
-
-_ERROR_MESSAGES: Final = {
-    JsonRpcErrorCode.METHOD_NOT_FOUND: "Method not found",
-    JsonRpcErrorCode.INVALID_PARAMS: "Invalid params",
-}
-
-
-type JsonRpcMessage = JsonRpcRequest | JsonRpcNotification | JsonRpcResponse | JsonRpcError
-_Item = TypeVar("_Item")
-_JsonArray = Annotated[tuple[_Item, ...], Field(strict=False)]
-type Reply = JsonRpcResponse | JsonRpcError
+PROTOCOL_VERSION: Final = "2026-07-28"
 
 
 def _object_without_duplicate_members(members: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -149,279 +29,38 @@ def _object_without_duplicate_members(members: list[tuple[str, Any]]) -> dict[st
     return document
 
 
-def _read_strict_json(text: str) -> Any:
-    """The one strict JSON reader: no repeated member, no ``NaN`` or infinity.
+def _finite_number(literal: str) -> float:
+    number = float(literal)
+    if not math.isfinite(number):
+        raise ValueError("a number overflows")
+    return number
+
+
+def read_strict_json(body: bytes) -> Any:
+    """The one strict JSON reader: no repeated member, no ``NaN``, no number that overflows.
 
     The only exception that leaves is ``ValueError``; nesting past the recursion limit is
-    converted without chain. The caller owns decoding and any size rule.
+    converted without chain. The caller owns any size rule.
     """
     try:
         return json.loads(
-            text,
+            body.decode("utf-8"),
             parse_constant=refuse_non_json_constant,
+            parse_float=_finite_number,
             object_pairs_hook=_object_without_duplicate_members,
         )
     except RecursionError:
         raise_without_chain(ValueError("the document nests too deeply"))
 
 
-def _model_of(document: dict[str, Any]) -> type[JsonRpcMessage]:
-    if "method" in document:
-        return JsonRpcRequest if "id" in document else JsonRpcNotification
-    if "result" in document:
-        return JsonRpcResponse
-    if "error" in document:
-        return JsonRpcError
-    _refuse(WireRefusal.NOT_A_MESSAGE)
-
-
-def parse_message(body: bytes) -> JsonRpcMessage:
-    if len(body) > MAX_EVENT_BYTES:
-        _refuse(WireRefusal.TOO_LARGE)
-    try:
-        document = _read_strict_json(body.decode("utf-8"))
-    except ValueError:
-        _refuse(WireRefusal.MALFORMED_JSON)
-    if isinstance(document, list):
-        _refuse(WireRefusal.BATCH)
-    if not isinstance(document, dict) or document.pop("jsonrpc", None) != _JSON_RPC_VERSION:
-        _refuse(WireRefusal.NOT_A_MESSAGE)
-    try:
-        return _model_of(document).model_validate(document)
-    except ValidationError:
-        _refuse(WireRefusal.NOT_A_MESSAGE)
-
-
-def encode_message(message: JsonRpcMessage) -> bytes:
-    members = message.model_dump(mode="json", by_alias=True, exclude_unset=True)
-    return json.dumps({"jsonrpc": _JSON_RPC_VERSION, **members}).encode("utf-8")
-
-
-@dataclass(frozen=True)
-class HttpAnswer:
-    status: HTTPStatus
-    content_type: str | None
-    body: bytes
-
-
-ACKNOWLEDGEMENT: Final = HttpAnswer(HTTPStatus.ACCEPTED, None, b"")
-
-
-def answer_for(reply: Reply | None) -> HttpAnswer:
-    """The HTTP answer to one message: ``None`` is a notification, which gets no body."""
-    if reply is None:
-        return ACKNOWLEDGEMENT
-    return HttpAnswer(HTTPStatus.OK, JSON_MEDIA_TYPE, encode_message(reply))
-
-
-def negotiate_protocol_version(requested: str) -> ProtocolVersion:
-    """A requested version inside the set is kept; any other gets the latest one."""
-    if requested in SUPPORTED_PROTOCOL_VERSIONS:
-        return ProtocolVersion(requested)
-    return LATEST_PROTOCOL_VERSION
-
-
-def protocol_header_status(header_value: str | None) -> HTTPStatus:
-    """The decision for a request after ``initialize``; an absent header is not a pass."""
-    effective = _ASSUMED_PROTOCOL_VERSION if header_value is None else header_value
-    if effective in SUPPORTED_PROTOCOL_VERSIONS:
-        return HTTPStatus.OK
-    return HTTPStatus.BAD_REQUEST
-
-
-def read_payload[Payload: _Model](
-    payload_type: type[Payload], payload: Mapping[str, Any] | None
-) -> Payload:
-    try:
-        return payload_type.model_validate({} if payload is None else dict(payload))
-    except ValidationError:
-        _refuse(WireRefusal.INVALID_PAYLOAD)
-
-
-class InitializeParams(_Tolerant):
-    protocol_version: UnicodeText
-
-
-class CancelledParams(_Tolerant):
-    request_id: RequestId
-
-
-class _ServerInfo(_Model):
-    name: str = _SERVER_NAME
-    version: str = _SERVER_VERSION
-
-
-class _ToolsCapability(_Model):
-    list_changed: bool = False
-
-
-class _ServerCapabilities(_Model):
-    tools: _ToolsCapability = _ToolsCapability()
-
-
-class _InitializeResult(_Model):
-    protocol_version: ProtocolVersion
-    capabilities: _ServerCapabilities = _ServerCapabilities()
-    server_info: _ServerInfo = _ServerInfo()
-
-    @classmethod
-    def negotiated(cls, requested: str) -> Self:
-        return cls.model_validate({"protocolVersion": negotiate_protocol_version(requested)})
-
-
-def initialize_response(request_id: RequestId, requested_version: str) -> JsonRpcResponse:
-    result = _InitializeResult.negotiated(requested_version)
-    return JsonRpcResponse(id=request_id, result=result.model_dump(mode="json", by_alias=True))
-
-
-class ToolAnnotations(_Tolerant):
-    read_only_hint: bool | None = None
-
-
-class ToolDefinition(_Tolerant):
-    name: UnicodeText
-    description: UnicodeText | None = None
-    input_schema: JsonObject
-
-
-class AnnotatedToolDefinition(ToolDefinition):
-    """A tool this side lists with its read-only hint."""
-
-    annotations: ToolAnnotations | None = None
-
-
-def error_response(request_id: RequestId, code: JsonRpcErrorCode) -> JsonRpcError:
-    return JsonRpcError(
-        id=request_id, error=JsonRpcErrorBody(code=code, message=_ERROR_MESSAGES[code])
-    )
-
-
-def tools_list_response(request_id: RequestId, tools: Sequence[ToolDefinition]) -> JsonRpcResponse:
-    written = [tool.model_dump(mode="json", by_alias=True, exclude_none=True) for tool in tools]
-    return JsonRpcResponse(id=request_id, result={"tools": written})
-
-
-class CallToolParams(_Tolerant):
-    name: UnicodeText
-    arguments: JsonObject = Field(default_factory=dict)
-
-
-class _TextBlock(_Tolerant):
-    type: Literal["text"]
-    text: UnicodeText
-
-
-class _CallToolResult(_Tolerant):
-    content: _JsonArray[_TextBlock]
-    is_error: bool = False
-
-
-def tool_result_response(request_id: RequestId, outcome: ToolOutcome) -> JsonRpcResponse:
-    written = _CallToolResult.model_validate(
-        {"content": [{"type": "text", "text": outcome.content}], "isError": outcome.is_error}
-    )
-    return JsonRpcResponse(id=request_id, result=written.model_dump(mode="json", by_alias=True))
-
-
-@dataclass(frozen=True)
-class Answered:
-    answer: HttpAnswer
-
-
-@dataclass(frozen=True)
-class Notified:
-    """A notification, which gets no body; ``cancelled`` is the id a well-formed cancel names."""
-
-    cancelled: RequestId | None = None
-
-
-@dataclass(frozen=True)
-class Listing:
-    request_id: RequestId
-
-
-@dataclass(frozen=True)
-class Call:
-    request_id: RequestId
-    params: CallToolParams
-
-
-@dataclass(frozen=True)
-class Unoffered:
-    request_id: RequestId
-
-
-type ServerDecision = Answered | Notified | Listing | Call | Unoffered
-
-_BAD_REQUEST: Final = HttpAnswer(HTTPStatus.BAD_REQUEST, None, b"")
-
-
-def _cancelled_id(notification: JsonRpcNotification) -> RequestId | None:
-    if notification.method != McpMethod.CANCELLED:
-        return None
-    try:
-        return read_payload(CancelledParams, notification.params).request_id
-    except McpWireError:
-        return None
-
-
-def _initialized(request: JsonRpcRequest) -> Reply:
-    try:
-        params = read_payload(InitializeParams, request.params)
-    except McpWireError:
-        return error_response(request.id, JsonRpcErrorCode.INVALID_PARAMS)
-    return initialize_response(request.id, params.protocol_version)
-
-
-def _called(request: JsonRpcRequest, offered_names: Collection[str]) -> ServerDecision:
-    try:
-        params = read_payload(CallToolParams, request.params)
-    except McpWireError:
-        return Answered(answer_for(error_response(request.id, JsonRpcErrorCode.INVALID_PARAMS)))
-    if params.name not in offered_names:
-        return Unoffered(request.id)
-    return Call(request.id, params)
-
-
-def decide_server_message(
-    body: bytes, protocol_version: str | None, offered_names: Collection[str]
-) -> ServerDecision:
-    """What a server half does with one request body, before any state or I/O."""
-    try:
-        message = parse_message(body)
-    except McpWireError:
-        return Answered(_BAD_REQUEST)
-    if isinstance(message, JsonRpcResponse | JsonRpcError):
-        return Answered(_BAD_REQUEST)
-    if message.method != McpMethod.INITIALIZE and (
-        protocol_header_status(protocol_version) is not HTTPStatus.OK
-    ):
-        return Answered(_BAD_REQUEST)
-    if isinstance(message, JsonRpcNotification):
-        return Notified(_cancelled_id(message))
-    match message.method:
-        case McpMethod.INITIALIZE:
-            return Answered(answer_for(_initialized(message)))
-        case McpMethod.PING:
-            return Answered(answer_for(JsonRpcResponse(id=message.id, result={})))
-        case McpMethod.TOOLS_LIST:
-            return Listing(message.id)
-        case McpMethod.TOOLS_CALL:
-            return _called(message, offered_names)
-        case _:
-            return Answered(
-                answer_for(error_response(message.id, JsonRpcErrorCode.METHOD_NOT_FOUND))
-            )
-
-
 def carries_signature_of(token: str, data: bytes) -> bool:
     """Whether ``data`` carries ``token``, whole or as its signature segment.
 
     One needle is enough: every whole token contains its signature segment, the part
-    after the last ``.``. Bodies the person front writes are ``json.dumps`` output, which
-    writes base64url characters and ``.`` verbatim, and tool results are asked after
-    decoding. A token split across strings, base64-encoded or reversed is not
-    detected: this stops reflection, not an app that encodes its own bearer.
+    after the last ``.``. Bodies the person front writes are JSON, which writes base64url
+    characters and ``.`` verbatim, and tool results are asked after decoding. A token split
+    across strings, base64-encoded or reversed is not detected: this stops reflection, not an
+    app that encodes its own bearer.
     """
     signature_segment = token.rsplit(".", 1)[-1]
     return signature_segment.encode("ascii") in data

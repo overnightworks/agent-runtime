@@ -2,8 +2,8 @@
 # everything host-specific reaches it through the ports a host supplies. An app
 # serves its tools through agent_runtime_client.mcp_server, whose library stays
 # an extra, so no client base module (the package __init__ included) imports
-# agent_runtime_client.mcp_server. The client imports no web framework; its MCP
-# server is plain ASGI.
+# agent_runtime_client.mcp_server. The client imports no web framework: its MCP
+# server is a thin ASGI shell before the official SDK, which needs one of its own.
 # The gate's `import-contract` rule (`quality check`) checks them over the
 # real import graph, so an indirect chain is caught as well as a direct import.
 [importlinter]
@@ -55,6 +55,8 @@ forbidden_modules =
     agent_runtime_client.mcp_server
     agent_runtime_client.mcp_server.**
     anyio
+    mcp
+    mcp_types
 
 # The backend extra stays an extra: backend.gateway and backend.fake_gateway import
 # httpx2, so no base module (the package __init__ and the backend port included) does.
@@ -77,6 +79,8 @@ source_modules =
 forbidden_modules =
     httpx2
     httpx
+    mcp
+    mcp_types
 
 [importlinter:contract:hand-tools-stay-below-the-wire]
 name = agent_runtime_client.tools does not import agent_runtime_client.mcp_wire

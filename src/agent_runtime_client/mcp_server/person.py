@@ -1,30 +1,58 @@
 """The person front: an app's own MCP endpoint for the agent of one signed-in person.
 
 The host registers ``McpPersonFront`` as the exact route ``MCP_ENDPOINT_PATH``, behind the
-middleware that has already admitted or refused the caller, so this front answers no
-challenge. ``resolve_person`` is the one seam to that middleware and runs first on every
-request: its failure, or a result that is not a ``Principal``, propagates, because a front
-reached without the gate's admission is a host defect. No answer the front writes, refusals
-included, carries the request's bearer.
-Rights are the route's, so ``tools/list`` offers every tool.
+middleware that has already admitted or refused the caller, and enters ``running()`` once in its
+own lifespan. This front answers no challenge. ``resolve_person`` is the one seam to that
+middleware and runs first on every request: its failure, or a result that is not a ``Principal``,
+propagates, because a front reached without the gate's admission is a host defect.
+
+A thin ASGI shell stands before the official SDK and serves revision ``2026-07-28`` only: it
+refuses every request that is not explicitly that revision, because the SDK's stateless mode
+still routes an absent or older version to its legacy path. No answer the front writes, refusals
+included, carries the request's bearer. Rights are the route's, so ``tools/list`` offers every
+tool.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Final
+from typing import Any, Final
+
+import anyio.lowlevel
+from mcp.server.context import ServerRequestContext
+from mcp.server.lowlevel import Server
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+from mcp.server.transport_security import TransportSecuritySettings
+from mcp_types import (
+    INVALID_PARAMS,
+    PARSE_ERROR,
+    UNSUPPORTED_PROTOCOL_VERSION,
+    CallToolRequestParams,
+    CallToolResult,
+    ErrorData,
+    JSONRPCError,
+    ListToolsResult,
+    PaginatedRequestParams,
+    Tool,
+    ToolAnnotations,
+    UnsupportedProtocolVersionErrorData,
+)
+from pydantic import StrictInt, TypeAdapter, ValidationError
 
 from agent_runtime_client.mcp_server.asgi import (
     HEADER_ENCODING,
     LOGGER_NAME,
     WITHHELD,
+    HttpAnswer,
+    Message,
     Receive,
     Scope,
     Send,
-    definition_of,
     field_values,
     protocol_version,
     read_body,
@@ -32,30 +60,30 @@ from agent_runtime_client.mcp_server.asgi import (
     write,
 )
 from agent_runtime_client.mcp_wire import (
-    ACKNOWLEDGEMENT,
-    Answered,
-    Call,
-    HttpAnswer,
-    JsonRpcErrorCode,
-    Listing,
-    Notified,
-    RequestId,
-    Unoffered,
-    answer_for,
+    JSON_MEDIA_TYPE,
+    PROTOCOL_VERSION,
     carries_signature_of,
-    decide_server_message,
-    error_response,
-    tool_result_response,
-    tools_list_response,
+    read_strict_json,
 )
 from agent_runtime_client.tools import ToolDeclaration, ToolEffect, ToolOutcome
-from agent_runtime_client.turn import JsonObject, Principal
+from agent_runtime_client.turn import JsonObject, Principal, StrictModel, UnicodeText
 
 type ResolvePerson = Callable[[Scope], Principal]
 
 _LOG: Final = logging.getLogger(LOGGER_NAME)
 _HANDLER_FAILED_TEXT: Final = "the tool failed"
+_UNKNOWN_TOOL_TEXT: Final = "Unknown tool"
+_INVALID_ARGUMENTS_TEXT: Final = "Invalid tool arguments"
 _BEARER_SCHEME: Final = "bearer"
+_SERVER_NAME: Final = "overnightworks-agent-runtime-client"
+_SERVER_VERSION: Final = "1"
+_INITIALIZE: Final = "initialize"
+_UNSUPPORTED_VERSION_TEXT: Final = "Unsupported protocol version"
+_PARSE_ERROR_TEXT: Final = "Parse error"
+_SDK_LOGGER_NAMES: Final = ("mcp.server", "mcp.shared")
+_ABOVE_ANY_RECORD: Final = logging.CRITICAL + 1
+_ECHOABLE_REQUEST_ID: Final[TypeAdapter[int | str]] = TypeAdapter(StrictInt | UnicodeText)
+_TOOL_ARGUMENTS: Final[TypeAdapter[dict[str, Any]]] = TypeAdapter(JsonObject)
 
 
 @dataclass(frozen=True)
@@ -73,6 +101,38 @@ type PersonToolHandler = Callable[[PersonRequest, JsonObject], Awaitable[ToolOut
 class PersonTool:
     declaration: ToolDeclaration
     handler: PersonToolHandler
+
+
+_CURRENT_REQUEST: Final[ContextVar[PersonRequest]] = ContextVar(
+    "agent_runtime_client_person_request"
+)
+
+
+def _listed(declaration: ToolDeclaration) -> Tool:
+    """The listed tool; ``readOnlyHint`` is carried only on a read-only one, else absent."""
+    read_only = declaration.effect is ToolEffect.READ_ONLY
+    return Tool(
+        name=declaration.name,
+        description=declaration.description,
+        input_schema=declaration.parameters,
+        annotations=ToolAnnotations(read_only_hint=True) if read_only else None,
+    )
+
+
+class _WritableOutcome(StrictModel):
+    """Stricter than the SDK's result model: valid Unicode text and a real boolean."""
+
+    content: UnicodeText
+    is_error: bool
+
+
+def _written(outcome: ToolOutcome) -> CallToolResult:
+    writable = _WritableOutcome.model_validate(
+        {"content": outcome.content, "is_error": outcome.is_error}
+    )
+    return CallToolResult.model_validate(
+        {"content": [{"type": "text", "text": writable.content}], "isError": writable.is_error}
+    )
 
 
 def _refusal(scope: Scope) -> HttpAnswer | None:
@@ -97,71 +157,183 @@ def _bearers_of(scope: Scope) -> list[str]:
     return credentials
 
 
+def _request_id(document: object) -> int | str | None:
+    """The id a refusal can echo; a boolean or a non-Unicode string answers as no id at all."""
+    identifier = document.get("id") if isinstance(document, dict) else None
+    try:
+        return _ECHOABLE_REQUEST_ID.validate_python(identifier)
+    except ValidationError:
+        return None
+
+
+def _error_answer(request_id: int | str | None, error: ErrorData) -> HttpAnswer:
+    reply = JSONRPCError(jsonrpc="2.0", id=request_id, error=error)
+    return HttpAnswer(
+        HTTPStatus.BAD_REQUEST, JSON_MEDIA_TYPE, reply.model_dump_json(by_alias=True).encode()
+    )
+
+
+def _revision_refusal(requested: str | None, document: object) -> HttpAnswer | None:
+    """The refusal of a request outside the served revision, or ``None``.
+
+    ``initialize`` belongs to the handshake a modern server never holds, so it is refused even
+    at the served version.
+    """
+    method = document.get("method") if isinstance(document, dict) else None
+    if requested == PROTOCOL_VERSION and method != _INITIALIZE:
+        return None
+    data = UnsupportedProtocolVersionErrorData(
+        supported=[PROTOCOL_VERSION], requested=requested or ""
+    )
+    return _error_answer(
+        _request_id(document),
+        ErrorData(
+            code=UNSUPPORTED_PROTOCOL_VERSION,
+            message=_UNSUPPORTED_VERSION_TEXT,
+            data=data.model_dump(mode="json"),
+        ),
+    )
+
+
+def _replayed(body: bytes, receive: Receive) -> Receive:
+    """The body the shell already read, once, then the live channel for anything after it."""
+    pending = [{"type": "http.request", "body": body, "more_body": False}]
+
+    async def replay() -> Message:
+        return pending.pop() if pending else await receive()
+
+    return replay
+
+
+def _answer_of(sent: Sequence[Message]) -> HttpAnswer:
+    [start, *bodies] = sent
+    content_type = next(
+        (value.decode("ascii") for name, value in start["headers"] if name == b"content-type"),
+        None,
+    )
+    body = b"".join(message.get("body", b"") for message in bodies)
+    return HttpAnswer(HTTPStatus(start["status"]), content_type, body)
+
+
 class McpPersonFront:
-    """An ASGI 3 app that serves the JSON-only MCP profile to one resolved person per request."""
+    """An ASGI 3 app that serves MCP revision 2026-07-28 to one resolved person per request."""
 
     def __init__(self, tools: Sequence[PersonTool], *, resolve_person: ResolvePerson) -> None:
         self._tools = {tool.declaration.name: tool for tool in tools}
         if len(self._tools) != len(tools):
             raise ValueError("a tool name is declared more than once")
-        self._definitions = [
-            definition_of(
-                tool.declaration, read_only_hint=tool.declaration.effect is ToolEffect.READ_ONLY
-            )
-            for tool in self._tools.values()
-        ]
+        self._listing = ListToolsResult(
+            tools=[_listed(tool.declaration) for tool in self._tools.values()]
+        )
         self._resolve_person = resolve_person
+        self._server: Server[Any] = Server(
+            _SERVER_NAME,
+            version=_SERVER_VERSION,
+            on_list_tools=self._list_tools,
+            on_call_tool=self._call_tool,
+        )
+        self._manager: StreamableHTTPSessionManager | None = None
+
+    @asynccontextmanager
+    async def running(self) -> AsyncIterator[None]:
+        """The SDK's manager for the host's lifespan; a request outside it fails loud.
+
+        The SDK logs request methods and handler failures with their content, so each of its
+        server loggers the host left unset is held above any record's level from here on: a
+        host's DEBUG on the root logger never reaches it, and a level the host sets on it wins.
+        """
+        if self._manager is not None:
+            raise RuntimeError("the person front is already running")
+        for name in _SDK_LOGGER_NAMES:
+            sdk_logger = logging.getLogger(name)
+            if sdk_logger.level == logging.NOTSET:
+                sdk_logger.setLevel(_ABOVE_ANY_RECORD)
+        manager = StreamableHTTPSessionManager(
+            self._server,
+            json_response=True,
+            stateless=True,
+            security_settings=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+        )
+        async with manager.run():
+            self._manager = manager
+            try:
+                yield
+            finally:
+                self._manager = None
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         principal = self._resolve_person(scope)
         if not isinstance(principal, Principal):
             raise TypeError(f"resolve_person returned {type(principal).__name__}, not a Principal")
+        manager = self._manager
+        if manager is None:
+            raise RuntimeError("the person front is not running: enter running() in the lifespan")
         bearers = _bearers_of(scope)
-        answer, body = await self._answer(PersonRequest(principal, scope), receive)
+        current = _CURRENT_REQUEST.set(PersonRequest(principal, scope))
+        try:
+            answer, document = await self._answer(manager, scope, receive)
+        finally:
+            _CURRENT_REQUEST.reset(current)
         if any(carries_signature_of(token, answer.body) for token in bearers):
-            _LOG.warning("an answer was withheld: %s", request_label(body, self._tools))
+            _LOG.warning("an answer was withheld: %s", request_label(document, self._tools))
             answer = WITHHELD
         await write(send, answer)
 
-    async def _answer(self, request: PersonRequest, receive: Receive) -> tuple[HttpAnswer, bytes]:
-        """The answer and the request body it answers; the body is empty when none was read."""
-        refusal = _refusal(request.scope)
+    @staticmethod
+    async def _answer(
+        manager: StreamableHTTPSessionManager, scope: Scope, receive: Receive
+    ) -> tuple[HttpAnswer, object]:
+        """The answer and the request document it answers; ``None`` when none was read."""
+        refusal = _refusal(scope)
         if refusal is not None:
-            return refusal, b""
+            return refusal, None
         body = await read_body(receive)
         if body is None:
-            return HttpAnswer(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, None, b""), b""
-        return await self._decided(request, body), body
+            return HttpAnswer(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, None, b""), None
+        try:
+            document = read_strict_json(body)
+        except ValueError:
+            return _error_answer(None, ErrorData(code=PARSE_ERROR, message=_PARSE_ERROR_TEXT)), None
+        refused = _revision_refusal(protocol_version(scope), document)
+        if refused is not None:
+            return refused, document
+        sent: list[Message] = []
 
-    async def _decided(self, request: PersonRequest, body: bytes) -> HttpAnswer:
-        decision = decide_server_message(body, protocol_version(request.scope), self._tools)
-        match decision:
-            case Answered(answer):
-                return answer
-            case Notified():
-                return ACKNOWLEDGEMENT
-            case Listing(request_id):
-                return answer_for(tools_list_response(request_id, self._definitions))
-            case Unoffered(request_id):
-                return answer_for(error_response(request_id, JsonRpcErrorCode.INVALID_PARAMS))
-            case Call(request_id, params):
-                return await self._called(
-                    self._tools[params.name], request, request_id, params.arguments
-                )
-            case _:
-                raise AssertionError("a server decision is not handled")
+        async def capture(message: Message) -> None:
+            sent.append(message)
+            await anyio.lowlevel.checkpoint()
+
+        await manager.handle_request(scope, _replayed(body, receive), capture)
+        return _answer_of(sent), document
+
+    async def _list_tools(
+        self, _context: ServerRequestContext[Any], _params: PaginatedRequestParams | None
+    ) -> ListToolsResult:
+        await anyio.lowlevel.checkpoint()
+        return self._listing
+
+    async def _call_tool(
+        self, _context: ServerRequestContext[Any], params: CallToolRequestParams
+    ) -> CallToolResult | ErrorData:
+        tool = self._tools.get(params.name)
+        if tool is None:
+            return ErrorData(code=INVALID_PARAMS, message=_UNKNOWN_TOOL_TEXT)
+        try:
+            arguments = _TOOL_ARGUMENTS.validate_python(params.arguments or {})
+        except ValidationError:
+            return ErrorData(code=INVALID_PARAMS, message=_INVALID_ARGUMENTS_TEXT)
+        return await self._called(tool, arguments)
 
     @staticmethod
-    async def _called(
-        tool: PersonTool, request: PersonRequest, request_id: RequestId, arguments: JsonObject
-    ) -> HttpAnswer:
+    async def _called(tool: PersonTool, arguments: JsonObject) -> CallToolResult:
+        """The tool's result; every failure answers one fixed text and never raises into the SDK."""
         name = tool.declaration.name
         try:
-            outcome = await tool.handler(request, arguments)
-            response = tool_result_response(request_id, outcome)
+            outcome = await tool.handler(_CURRENT_REQUEST.get(), arguments)
+            result = _written(outcome)
         except Exception as failure:
             _LOG.error("a tool failed: %s raised %s", name, type(failure).__name__)
             outcome = ToolOutcome(_HANDLER_FAILED_TEXT, is_error=True)
-            response = tool_result_response(request_id, outcome)
+            result = _written(outcome)
         _LOG.info("a tool was called: %s is_error=%s", name, outcome.is_error)
-        return answer_for(response)
+        return result

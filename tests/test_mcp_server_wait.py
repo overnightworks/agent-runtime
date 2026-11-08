@@ -20,8 +20,8 @@ from tests.support.mcp_server_support import (
     WaitScenario,
     a_member,
     a_standing,
-    post,
     result_of,
+    rpc_body,
     tool_call_body,
 )
 from tests.support.virtual_time import in_virtual_time
@@ -299,7 +299,7 @@ def test_a_cancelled_wait_sends_nothing_and_leaves_every_other_wait_of_the_membe
 
         async def cancelled() -> None:
             body = tool_call_body("wait", {"after": cursor})
-            await post(scenario.front, a_member(), body, sent)
+            await scenario.post(a_member(), body, sent)
 
         async def waiting() -> None:
             results.append(await scenario.wait(a_member(), after=cursor))
@@ -360,9 +360,9 @@ def test_a_paused_place_is_listed_and_a_place_left_is_absent(scenario: WaitScena
 
 
 def test_the_listed_wait_tool_is_read_only_and_names_no_recipient(scenario: WaitScenario) -> None:
-    body = b'{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}'
+    body = rpc_body("tools/list")
 
-    [listed] = result_of(in_virtual_time(post(scenario.front, a_member(), body)))["tools"]
+    [listed] = result_of(in_virtual_time(scenario.post(a_member(), body)))["tools"]
 
     assert (listed["name"], listed["annotations"]) == ("wait", {"readOnlyHint": True})
     assert listed["inputSchema"]["additionalProperties"] is False

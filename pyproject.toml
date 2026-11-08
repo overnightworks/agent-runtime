@@ -17,6 +17,7 @@ backend = [
 ]
 mcp-server = [
     "anyio>=4.12,<5",
+    "mcp>=2.3,<3",
 ]
 dev = [
     "overnightworks-agent-runtime-client[backend,mcp-server]",

@@ -1,21 +1,14 @@
-"""What both MCP fronts share: header fields, request body, written answer, the listed tool,
-the withheld answer and the closed label a withheld answer is logged under."""
+"""What the person front's ASGI shell needs: header fields, request body, written answer, the
+withheld answer and the closed label a withheld answer is logged under."""
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Container, MutableMapping
+from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, Final
 
-from agent_runtime_client.mcp_wire import (
-    PROTOCOL_VERSION_HEADER,
-    AnnotatedToolDefinition,
-    HttpAnswer,
-    McpMethod,
-    McpWireError,
-    parse_message,
-)
-from agent_runtime_client.tools import ToolDeclaration
+from agent_runtime_client.mcp_wire import PROTOCOL_VERSION_HEADER
 from agent_runtime_client.turn import MAX_EVENT_BYTES
 
 type Scope = MutableMapping[str, Any]
@@ -23,6 +16,14 @@ type Message = MutableMapping[str, Any]
 type Receive = Callable[[], Awaitable[Message]]
 type Send = Callable[[Message], Awaitable[None]]
 type AsgiApp = Callable[[Scope, Receive, Send], Awaitable[None]]
+
+
+@dataclass(frozen=True)
+class HttpAnswer:
+    status: HTTPStatus
+    content_type: str | None
+    body: bytes
+
 
 LOGGER_NAME: Final = "agent_runtime_client.mcp_server"
 HEADER_ENCODING: Final = "iso-8859-1"
@@ -42,20 +43,6 @@ def field_values(scope: Scope, name: bytes) -> list[bytes]:
 def protocol_version(scope: Scope) -> str | None:
     values = field_values(scope, PROTOCOL_VERSION_HEADER.lower().encode("ascii"))
     return _VERSION_SEPARATOR.join(v.decode(HEADER_ENCODING) for v in values) if values else None
-
-
-def definition_of(
-    declaration: ToolDeclaration, *, read_only_hint: bool = False
-) -> AnnotatedToolDefinition:
-    """The listed tool; ``readOnlyHint`` is carried only when asked for, else absent."""
-    members: dict[str, Any] = {
-        "name": declaration.name,
-        "description": declaration.description,
-        "inputSchema": declaration.parameters,
-    }
-    if read_only_hint:
-        members["annotations"] = {"readOnlyHint": True}
-    return AnnotatedToolDefinition.model_validate(members)
 
 
 async def read_body(receive: Receive) -> bytes | None:
@@ -82,20 +69,18 @@ async def write(send: Send, answer: HttpAnswer) -> None:
 WITHHELD: Final = HttpAnswer(HTTPStatus.INTERNAL_SERVER_ERROR, None, b"")
 _UNKNOWN_METHOD: Final = "unknown_method"
 _UNKNOWN_TOOL: Final = "unknown_tool"
-_KNOWN_METHODS: Final = frozenset(McpMethod)
+_TOOLS_CALL: Final = "tools/call"
+_SERVED_METHODS: Final = frozenset({"server/discover", "tools/list", _TOOLS_CALL})
 
 
-def request_label(body: bytes, offered_tools: Container[str]) -> str:
-    """Only closed words: a profile method and an offered tool name, else a fixed stand-in."""
-    try:
-        message = parse_message(body)
-    except McpWireError:
+def request_label(document: object, offered_tools: Container[str]) -> str:
+    """Only closed words: a served method and an offered tool name, else a fixed stand-in."""
+    method = document.get("method") if isinstance(document, dict) else None
+    if not isinstance(method, str) or method not in _SERVED_METHODS:
         return _UNKNOWN_METHOD
-    method = getattr(message, "method", None)
-    if method not in _KNOWN_METHODS:
-        return _UNKNOWN_METHOD
-    if method != McpMethod.TOOLS_CALL:
+    if method != _TOOLS_CALL:
         return method
-    name = message.params.get("name")
+    params = document.get("params")
+    name = params.get("name") if isinstance(params, dict) else None
     known = isinstance(name, str) and name in offered_tools
     return f"{method} {name if known else _UNKNOWN_TOOL}"

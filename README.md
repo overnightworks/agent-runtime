@@ -24,7 +24,7 @@ The base depends on `pydantic` and `ruamel.yaml` only. Two extras are optional:
 | Extra | Adds | For |
 |---|---|---|
 | `backend` | `httpx2` | `GatewayBackend`, the one backend, and `FakeGateway`, its scripted transport for tests |
-| `mcp-server` | `anyio` | `agent_runtime_client.mcp_server`, an app's MCP endpoint |
+| `mcp-server` | `anyio`, the official MCP SDK (`mcp`) | `agent_runtime_client.mcp_server`, an app's MCP endpoint on revision 2026-07-28 |
 
 ## Use
 

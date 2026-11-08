@@ -37,7 +37,7 @@ flowchart TB
     mcp --> turn
     mcp --> wait
     backend -->|"one chat completion per round"| gateway
-    person -->|"JSON-RPC over POST"| mcp
+    person -->|"MCP 2026-07-28, JSON-RPC over POST"| mcp
 ```
 
 *Which module an app reaches and what each reaches in turn. Source: `src/agent_runtime_client`,
@@ -53,9 +53,11 @@ flowchart TB
   runner parses an answer without an extra).
 - The **`backend` extra** adds `httpx2` for `backend.gateway.GatewayBackend`, the one
   implementation of the port, and `backend.fake_gateway`, its scripted transport for tests.
-- The **`mcp-server` extra** adds `anyio` for `agent_runtime_client.mcp_server`, plain ASGI
-  that serves an app's tools to one signed-in person's agent, the `wait` tool with its two ports
-  among them; `mcp_wire` holds its pure JSON-RPC rules and imports no extra.
+- The **`mcp-server` extra** adds `anyio` and the official MCP SDK for
+  `agent_runtime_client.mcp_server`, a thin ASGI shell before the SDK that serves an app's tools
+  to one signed-in person's agent on MCP revision 2026-07-28, the `wait` tool with its two ports
+  among them; `mcp_wire` holds what the SDK does not own (the endpoint path, the strict JSON
+  reader, the bearer-reflection check) and imports no extra.
 
 ## Runtime
 
@@ -123,7 +125,8 @@ malformed value fails loud.
 
 **Proof strategy.** Behaviour is proven through the real entry points: `GatewayBackend.run`
 against `FakeGateway`'s scripted transport, `load_agent` against files, and the person front
-as an ASGI app driven with real scopes. Pure rules (`mcp_wire`, the turn vocabulary) are called
+as an ASGI app driven with real scopes and the SDK's own `Client`. Pure rules (`mcp_wire`, the
+turn vocabulary) are called
 directly. The suite needs no live provider. `quality / verdict` holds the import contracts,
 size and clone ratchets, and coverage over the whole suite.
 
@@ -131,8 +134,9 @@ size and clone ratchets, and coverage over the whole suite.
 
 - Base modules import no HTTP library and no MCP extra, so an app that only reads agent files
   installs two dependencies.
-- The client imports no web framework: the person front is plain ASGI, so a host keeps its own
-  framework and its own authentication gate.
+- The client's own modules import no web framework, even though the MCP SDK depends on one: the
+  person front is a thin ASGI shell before the SDK, so a host keeps its own framework and its own
+  authentication gate.
 - Tool handlers run in the app's process, so a handler sees the app's own state and the client
   never runs a tool anywhere else. What a tool returns still travels to the gateway and the
   provider as part of the conversation.
@@ -154,9 +158,6 @@ size and clone ratchets, and coverage over the whole suite.
   Reopens if an app needs token-by-token output.
 - Provider CLIs and subscription logins: the gateway is the only route to a model. Reopens if
   the gateway cannot reach a model an app needs.
-- Folding `AnnotatedToolDefinition` into `ToolDefinition`: the person front's listing carries
-  `readOnlyHint`, which a plain definition does not. Reopens if the annotation leaves the
-  listing.
 
 ## Risks and technical debt
 

@@ -4,13 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable, Mapping
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx2
+from mcp import Client
+from mcp.client.streamable_http import streamable_http_client
+from mcp_types import CLIENT_CAPABILITIES_META_KEY, PROTOCOL_VERSION_META_KEY
+from starlette.applications import Starlette
+from starlette.routing import Route
+
 from agent_runtime_client.mcp_server import InMemoryMemberChanges, McpPersonFront, wait_tool
-from agent_runtime_client.mcp_wire import LATEST_PROTOCOL_VERSION, MCP_ENDPOINT_PATH
+from agent_runtime_client.mcp_wire import MCP_ENDPOINT_PATH, PROTOCOL_VERSION
 from agent_runtime_client.tools import Principal, ToolDeclaration, ToolEffect
 from agent_runtime_client.wait import (
     Invitation,
@@ -21,6 +29,7 @@ from agent_runtime_client.wait import (
 )
 
 ISSUER = "https://issuer.test"
+type Headers = list[tuple[bytes, bytes]]
 
 
 def declaration(name: str, effect: ToolEffect = ToolEffect.READ_ONLY) -> ToolDeclaration:
@@ -90,12 +99,58 @@ class ToolResult:
         return WaitAnswer.model_validate_json(self.text)
 
 
+def with_envelope(params: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """``params`` with the per-request ``_meta`` every revision 2026-07-28 request carries."""
+    meta = {PROTOCOL_VERSION_META_KEY: PROTOCOL_VERSION, CLIENT_CAPABILITIES_META_KEY: {}}
+    return {**(params or {}), "_meta": meta}
+
+
+def rpc_body(
+    method: str,
+    params: Mapping[str, Any] | None = None,
+    *,
+    notification: bool = False,
+    enveloped: bool = True,
+) -> bytes:
+    message: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
+    if not notification:
+        message["id"] = 1
+    message["params"] = with_envelope(params) if enveloped else dict(params or {})
+    return json.dumps(message).encode()
+
+
+def call_params(name: str, **arguments: Any) -> dict[str, Any]:
+    return {"name": name, "arguments": arguments}
+
+
 def tool_call_body(name: str, arguments: dict[str, Any]) -> bytes:
-    message = {"jsonrpc": "2.0", "id": 1, "method": "tools/call"}
-    return json.dumps(message | {"params": {"name": name, "arguments": arguments}}).encode()
+    return rpc_body("tools/call", call_params(name, **arguments))
 
 
-def http_scope(headers: list[tuple[bytes, bytes]], *, method: str = "POST") -> dict[str, Any]:
+def routing_headers(body: bytes, version: str | None = PROTOCOL_VERSION) -> Headers:
+    """The headers a 2026-07-28 client derives from its body, with the version it declares.
+
+    A body that is no JSON-RPC request object gets the version and ``Accept`` alone.
+    """
+    fields: Headers = [
+        (b"accept", b"application/json, text/event-stream"),
+        (b"content-type", b"application/json"),
+    ]
+    if version is not None:
+        fields.append((b"mcp-protocol-version", version.encode()))
+    try:
+        document = json.loads(body)
+    except ValueError:
+        return fields
+    if not isinstance(document, dict):
+        return fields
+    fields.append((b"mcp-method", str(document.get("method")).encode()))
+    if document.get("method") == "tools/call":
+        fields.append((b"mcp-name", str(document["params"]["name"]).encode()))
+    return fields
+
+
+def http_scope(headers: Headers, *, method: str = "POST") -> dict[str, Any]:
     return {
         "type": "http",
         "method": method,
@@ -105,13 +160,9 @@ def http_scope(headers: list[tuple[bytes, bytes]], *, method: str = "POST") -> d
     }
 
 
-def member_scope(member: Principal) -> dict[str, Any]:
+def member_scope(member: Principal, body: bytes) -> dict[str, Any]:
     return http_scope(
-        [
-            (b"x-iss", member.iss.encode()),
-            (b"x-sub", member.sub.encode()),
-            (b"mcp-protocol-version", str(LATEST_PROTOCOL_VERSION).encode()),
-        ]
+        [(b"x-iss", member.iss.encode()), (b"x-sub", member.sub.encode()), *routing_headers(body)]
     )
 
 
@@ -145,7 +196,24 @@ async def post(
     body: bytes,
     sent: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    return await drive(front, member_scope(member), body, sent)
+    return await drive(front, member_scope(member, body), body, sent)
+
+
+def served_app(front: McpPersonFront) -> Starlette:
+    """A host's own application: the front on its exact route, entered in the host's lifespan."""
+    return Starlette(routes=[Route(MCP_ENDPOINT_PATH, front)], lifespan=lambda _: front.running())
+
+
+@asynccontextmanager
+async def sdk_client(front: McpPersonFront) -> AsyncIterator[Client]:
+    """The SDK's own ``Client``, discovering the revision through real scopes of a running front."""
+    url = f"http://notes.internal{MCP_ENDPOINT_PATH}"
+    async with (
+        front.running(),
+        httpx2.AsyncClient(transport=httpx2.ASGITransport(front)) as http,
+        Client(streamable_http_client(url, http_client=http)) as client,
+    ):
+        yield client
 
 
 def result_of(sent: list[dict[str, Any]]) -> Any:
@@ -175,7 +243,16 @@ class WaitScenario:
         )
 
     async def wait(self, member: Principal, **arguments: Any) -> ToolResult:
-        return await call_tool(self.front, member, "wait", arguments)
+        front = self.front
+        async with front.running():
+            return await call_tool(front, member, "wait", arguments)
+
+    async def post(
+        self, member: Principal, body: bytes, sent: list[dict[str, Any]] | None = None
+    ) -> list[dict[str, Any]]:
+        front = self.front
+        async with front.running():
+            return await post(front, member, body, sent)
 
     def change(self, member: Principal, *standings: Standing) -> None:
         """The app's own update: the state is visible first, then the change is signalled."""
