@@ -194,18 +194,26 @@ def test_a_body_one_byte_over_the_bound_is_too_large_and_runs_nothing(
     assert (reply.status, person.calls) == (413, [])
 
 
+def _listing_with_id(raw_id: bytes) -> bytes:
+    return rpc_body("tools/list").replace(b'"id": 1', b'"id": ' + raw_id, 1)
+
+
 @pytest.mark.parametrize(
-    ("body", "version"),
+    ("body", "version", "answered_id"),
     [
-        (rpc_body("tools/list"), None),
-        (rpc_body("tools/list"), "2024-11-05"),
-        (rpc_body("tools/list"), "2025-03-26"),
-        (rpc_body("tools/list"), "2025-06-18"),
-        (rpc_body("tools/list"), "2025-11-25"),
-        (rpc_body("tools/list"), "1999-01-01"),
-        (rpc_body("tools/call", call_params("read_note")), None),
-        (rpc_body("initialize", {"capabilities": {}}, enveloped=False), None),
-        (rpc_body("initialize", {"capabilities": {}}, enveloped=False), PROTOCOL_VERSION),
+        (rpc_body("tools/list"), None, 1),
+        (rpc_body("tools/list"), "2024-11-05", 1),
+        (rpc_body("tools/list"), "2025-03-26", 1),
+        (rpc_body("tools/list"), "2025-06-18", 1),
+        (rpc_body("tools/list"), "2025-11-25", 1),
+        (rpc_body("tools/list"), "1999-01-01", 1),
+        (rpc_body("tools/call", call_params("read_note")), None, 1),
+        (rpc_body("initialize", {"capabilities": {}}, enveloped=False), None, 1),
+        (rpc_body("initialize", {"capabilities": {}}, enveloped=False), PROTOCOL_VERSION, 1),
+        (_listing_with_id(b"true"), None, None),
+        (_listing_with_id(b"true"), "2020-01-01", None),
+        (_listing_with_id(rb'"lone \ud800"'), None, None),
+        (_listing_with_id(rb'"lone \ud800"'), "2020-01-01", None),
     ],
     ids=[
         "list absent",
@@ -217,15 +225,23 @@ def test_a_body_one_byte_over_the_bound_is_too_large_and_runs_nothing(
         "call absent",
         "initialize absent",
         "initialize at the revision",
+        "boolean id absent",
+        "boolean id unsupported",
+        "lone surrogate id absent",
+        "lone surrogate id unsupported",
     ],
 )
 def test_anything_but_a_request_at_the_served_revision_is_refused_naming_it(
-    front: McpPersonFront, person: Person, body: bytes, version: str | None
+    front: McpPersonFront,
+    person: Person,
+    body: bytes,
+    version: str | None,
+    answered_id: int | None,
 ) -> None:
     reply = post(front, body, version=version)
 
     error = reply.json()["error"]
-    assert reply.status == 400
+    assert (reply.status, reply.json()["id"]) == (400, answered_id)
     assert (error["code"], error["data"]["supported"]) == (
         UNSUPPORTED_PROTOCOL_VERSION,
         [PROTOCOL_VERSION],

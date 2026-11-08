@@ -42,6 +42,7 @@ from mcp_types import (
     ToolAnnotations,
     UnsupportedProtocolVersionErrorData,
 )
+from pydantic import StrictInt, TypeAdapter, ValidationError
 
 from agent_runtime_client.mcp_server.asgi import (
     HEADER_ENCODING,
@@ -80,6 +81,7 @@ _UNSUPPORTED_VERSION_TEXT: Final = "Unsupported protocol version"
 _PARSE_ERROR_TEXT: Final = "Parse error"
 _SDK_LOGGER_NAMES: Final = ("mcp.server", "mcp.shared")
 _ABOVE_ANY_RECORD: Final = logging.CRITICAL + 1
+_ECHOABLE_REQUEST_ID: Final[TypeAdapter[int | str]] = TypeAdapter(StrictInt | UnicodeText)
 
 
 @dataclass(frozen=True)
@@ -154,8 +156,12 @@ def _bearers_of(scope: Scope) -> list[str]:
 
 
 def _request_id(document: object) -> int | str | None:
+    """The id a refusal can echo; a boolean or a non-Unicode string answers as no id at all."""
     identifier = document.get("id") if isinstance(document, dict) else None
-    return identifier if isinstance(identifier, int | str) else None
+    try:
+        return _ECHOABLE_REQUEST_ID.validate_python(identifier)
+    except ValidationError:
+        return None
 
 
 def _error_answer(request_id: int | str | None, error: ErrorData) -> HttpAnswer:
