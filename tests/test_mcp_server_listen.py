@@ -1,7 +1,7 @@
 """The person front's ``subscriptions/listen``: one stream per verified principal.
 
-The virtual clock proves what a hand-driven ASGI connection can show; the two real-clock tests
-at the end drive the SDK's own client over a real uvicorn, because only a real socket streams.
+The virtual clock proves what a hand-driven ASGI connection can show; the tests at the end drive
+the SDK's own client over a real uvicorn, because only a real socket streams.
 """
 
 from __future__ import annotations
@@ -31,10 +31,13 @@ from tests.support.mcp_server_support import (
     ListenConnection,
     MemberApp,
     a_member,
+    clock_held,
     http_scope,
     listen_connection,
     loopback_client,
+    loopback_server,
     member_scope,
+    now,
     open_stream,
     post,
     resolve_member,
@@ -91,8 +94,8 @@ def front(app: MemberApp, changes: ResourceChanges) -> McpPersonFront:
     return McpPersonFront([], resolve_person=resolve_member, resources=app, changes=changes)
 
 
-def served(main: Coroutine[Any, Any, None]) -> None:
-    in_virtual_time(main)
+def served[T](main: Coroutine[Any, Any, T]) -> T:
+    return in_virtual_time(main)
 
 
 def acknowledged_filter(connection: ListenConnection) -> dict[str, Any]:
@@ -745,7 +748,7 @@ def test_the_sdk_client_is_acknowledged_receives_changes_and_ends_at_the_gracefu
     new_place = window_uri("opened-after-the-acknowledgement")
 
     async def through_a_socket() -> tuple[list[str] | None, list[str], list[str] | None]:
-        async with loopback_client(front, alice) as client:
+        async with loopback_client(loopback_server(front), alice) as client:
             async with client.listen(resource_subscriptions=[STANDING_URI, foreign]) as stream:
                 honored = stream.honored.resource_subscriptions
                 app.readable[alice][new_place] = an_empty_record()
@@ -777,7 +780,7 @@ def test_a_change_signalled_from_a_worker_thread_reaches_the_open_stream(
         anyio.from_thread.run_sync(changes.changed, alice, STANDING_URI)
 
     async def through_a_socket() -> str | None:
-        async with loopback_client(front, alice) as client:
+        async with loopback_client(loopback_server(front), alice) as client:
             async with client.listen(resource_subscriptions=[STANDING_URI]) as stream:
                 await anyio.to_thread.run_sync(signal_from_the_worker)
                 async for event in stream:
@@ -787,6 +790,27 @@ def test_a_change_signalled_from_a_worker_thread_reaches_the_open_stream(
     assert asyncio.run(through_a_socket()) == STANDING_URI
 
 
+def test_a_server_stopping_under_an_open_stream_completes_it_at_the_bound_and_then_shuts_down(
+    front: McpPersonFront, alice: Principal
+) -> None:
+    server = loopback_server(front)
+
+    async def through_a_socket() -> tuple[list[str], float]:
+        async with clock_held() as release_the_clock, loopback_client(server, alice) as client:
+            async with client.listen(resource_subscriptions=[STANDING_URI]) as stream:
+                stopped_at = now()
+                server.should_exit = True
+                release_the_clock()
+                delivered = [event.uri async for event in stream]
+                ended_after = now() - stopped_at
+        return delivered, ended_after
+
+    delivered, ended_after = served(through_a_socket())
+
+    assert delivered == []
+    assert ended_after >= LISTEN_BOUND_SECONDS
+
+
 def test_an_abrupt_cut_raises_subscription_lost_at_the_sdk_client_and_a_relisten_is_acknowledged(
     front: McpPersonFront, app: MemberApp, alice: Principal, changes: ResourceChanges
 ) -> None:
@@ -794,7 +818,9 @@ def test_an_abrupt_cut_raises_subscription_lost_at_the_sdk_client_and_a_relisten
     app.readable[alice][carrying] = an_empty_record()
 
     async def through_a_socket() -> list[str] | None:
-        async with loopback_client(front, alice, bearer="head.payload.sigOfTheStream") as client:
+        async with loopback_client(
+            loopback_server(front), alice, bearer="head.payload.sigOfTheStream"
+        ) as client:
             async with client.listen(resource_subscriptions=[STANDING_URI]) as stream:
                 changes.changed(alice, carrying)
                 with pytest.raises(SubscriptionLost):

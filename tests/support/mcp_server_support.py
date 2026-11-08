@@ -380,15 +380,38 @@ async def open_stream(connection: ListenConnection) -> AsyncIterator[ListenConne
 
 
 @asynccontextmanager
+async def clock_held() -> AsyncIterator[Callable[[], None]]:
+    """A virtual loop's clock stands still until the yielded function runs.
+
+    A busy loop never reports idle, so real socket bytes still in flight do not look like a
+    skipped sleep; the frames a test acts on arrive at the moment the clock says they were sent.
+    """
+    released = asyncio.Event()
+
+    async def keep_busy() -> None:
+        while not released.is_set():
+            await asyncio.sleep(0)
+
+    holding = asyncio.create_task(keep_busy())
+    yield released.set
+    released.set()
+    await holding
+
+
+def loopback_server(front: McpPersonFront) -> uvicorn.Server:
+    """A real uvicorn for ``loopback_client``, for a test that stops it while a client streams."""
+    return uvicorn.Server(uvicorn.Config(served_app(front), log_config=None))
+
+
+@asynccontextmanager
 async def loopback_client(
-    front: McpPersonFront, member: Principal, *, bearer: str | None = None
+    server: uvicorn.Server, member: Principal, *, bearer: str | None = None
 ) -> AsyncIterator[Client]:
-    """The SDK's ``Client`` against a real uvicorn on a pre-bound loopback socket in this loop."""
+    """The SDK's ``Client`` against the server on a pre-bound loopback socket in this loop."""
     with socket.socket() as bound:
         bound.bind(("127.0.0.1", 0))
         bound.listen()
         port = bound.getsockname()[1]
-        server = uvicorn.Server(uvicorn.Config(served_app(front), log_level="warning"))
         serving = asyncio.create_task(server.serve(sockets=[bound]))
         headers = {"x-iss": member.iss, "x-sub": member.sub}
         if bearer is not None:
