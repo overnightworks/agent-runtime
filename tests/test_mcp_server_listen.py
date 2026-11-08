@@ -244,6 +244,50 @@ def test_a_pulse_queued_before_a_removal_is_not_delivered(
     assert connection.updated_uris == []
 
 
+def test_a_removal_under_backpressure_leaves_at_most_the_two_already_checked_frames(
+    front: McpPersonFront, app: MemberApp, alice: Principal, changes: ResourceChanges
+) -> None:
+    places = [window_uri(f"queued-{number}") for number in range(5)]
+    app.readable[alice].update(readable_uris(*places))
+    connection = listen_connection(front, alice, [STANDING_URI], stall_at=1)
+
+    async def scenario() -> None:
+        async with front.running(), open_stream(connection):
+            for place in places:
+                changes.changed(alice, place)
+            await settled()
+            for place in places:
+                del app.readable[alice][place]
+            connection.release()
+            await settled()
+
+    served(scenario())
+
+    delivered = connection.updated_uris
+    assert delivered == places[: len(delivered)]
+    assert len(delivered) <= 2
+
+
+def test_a_repeated_pending_uri_is_delivered_once_at_its_first_arrival(
+    front: McpPersonFront, alice: Principal, changes: ResourceChanges
+) -> None:
+    connection = listen_connection(front, alice, [STANDING_URI])
+    second, first = window_uri("second"), window_uri("first")
+
+    async def scenario() -> None:
+        async with front.running(), open_stream(connection):
+            changes.changed(alice, second)
+            changes.changed(alice, first)
+            changes.changed(alice, second)
+            changes.changed(alice, STANDING_URI)
+            changes.changed(alice, first)
+            await settled()
+
+    served(scenario())
+
+    assert connection.updated_uris == [second, first, STANDING_URI]
+
+
 def test_one_principals_streams_each_receive_a_change_and_no_other_member_does(
     front: McpPersonFront,
     app: MemberApp,
