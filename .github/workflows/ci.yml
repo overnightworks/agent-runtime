@@ -87,6 +87,9 @@ jobs:
               ) or module.name in (
                   "agent_runtime_client.backend.gateway",
                   "agent_runtime_client.backend.fake_gateway",
+                  "agent_runtime_client.voice.loop",
+                  "agent_runtime_client.voice.reply",
+                  "agent_runtime_client.voice.sentences",
               ):
                   continue
               importlib.import_module(module.name)
@@ -118,6 +121,19 @@ jobs:
           import agent_runtime_client.backend.gateway
 
           print("imported", agent_runtime_client.backend.gateway.__name__)
+          '
+
+      - name: The client wheel with the voice extra imports the voice loop
+        run: |
+          proof="$(mktemp -d "$RUNNER_TEMP/client-voice.XXXXXX")"
+          uv venv "$proof/venv"
+          client_wheel="$(ls "$GITHUB_WORKSPACE"/dist/overnightworks_agent_runtime_client-*-py3-none-any.whl)"
+          uv pip install --python "$proof/venv/bin/python" "$client_wheel[voice]"
+          cd "$proof"
+          "$proof/venv/bin/python" -I -c '
+          import agent_runtime_client.voice.loop
+
+          print("imported", agent_runtime_client.voice.loop.__name__)
           '
 
   checks:
