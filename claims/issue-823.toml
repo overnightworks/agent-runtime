@@ -1,0 +1,8 @@
+claim_id = "b4002fd27445441992c8ce26dc401ba3"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "bb1ee2917a1924e105c0df29ec8971c5e723294b"
+branch = "claude/issue-823-voice-wake-rule"
+scope = [".importlinter", "docs/connector.md", "src/agent_runtime_client/voice/wake.py", "tests/test_voice_wake.py"]
+opened_commit = "a2fdc05490293a7c9f03d189405fa2b657c3d03c"
+whole_reason = "One pure rule with its import contract, its tests and its document line; four paths because the import contract and the connector carry the new module."
