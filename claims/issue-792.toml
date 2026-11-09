@@ -1,0 +1,8 @@
+claim_id = "0258196c8cb94745888bd2a690133e2f"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "3373d6fd70b707020a67e4bbd71f7e79451cd5ca"
+branch = "claude/issue-792-every-route-a-host-serves-is-decided-a-t"
+scope = ["docs/connector.md", "pyproject.toml", "src/agent_runtime_client/mcp_server/routes.py", "src/agent_runtime_client/tools.py", "tests/test_mcp_server_routes.py", "uv.lock"]
+opened_commit = "b9361cd9007a9528c2575f9d65588bdf6c36314d"
+whole_reason = "One rule of the generator, the exclusion it reads, the methods it accepts, their tests and document, and the version that ships them."
