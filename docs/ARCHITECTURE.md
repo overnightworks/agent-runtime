@@ -63,8 +63,9 @@ flowchart TB
 - The **`voice` extra** adds `syntok` for `agent_runtime_client.voice`: the voice loop
   (`voice.loop.run_voice_loop`) on the `AgentBackend` port, its ports `VoiceOut` and `WakeRule`
   and its events. `voice.reply` owns the reply markers, the protocol text composed from them and
-  the sentence release, `voice.sentences` the syntok split, and `voice.conversation` the running
-  conversation and the window each decision sends of it.
+  the sentence release, `voice.sentences` the syntok split, `voice.conversation` the running
+  conversation and the window each decision sends of it, `voice.wake` the standard wake rule, and
+  `voice.echo` the echo rule that keeps the agent's own voice, heard back, out of the conversation.
 
 ## Runtime
 
@@ -175,8 +176,10 @@ over the whole suite.
   model still writes; a turn that then fails ends short, and what showed stays.
 - Sound never enters the library: the voice loop's ports carry text, and an import contract keeps
   the speech client out, so the sound stays with the app and the speech service.
-- Every heard line enters the voice loop's conversation, the agent's own spoken line excepted,
-  so the agent hears everything; only a line the host's wake rule accepts costs a model call.
+- Every heard line that is no echo enters the voice loop's conversation, the agent's own spoken
+  line excepted, so the agent hears everything; only a line the host's wake rule accepts costs a
+  model call. An echo is a spoken line that repeats the agent's latest answer: its own voice heard
+  back through a person's microphone, which would otherwise wake the agent to answer itself.
 - Only what was played is recorded, or `[silent]`, so the conversation never claims the agent
   said what it wrote but did not play.
 - One decision is in flight and one answer plays, so answers keep their order; a line that wakes
@@ -225,6 +228,12 @@ over the whole suite.
   bounds its size but cannot know what it holds.
 - An app that stops pulling without closing holds the response open: the deadline is checked at
   its next pull.
+- The echo rule is a stopgap that judges text alone: it misses an echo mixed with more words of a
+  person, and it drops what a person said when at least half of its words longer than two
+  letters, counted without the punctuation at their edges, are the latest answer's. An app counts
+  its drops through `EchoDropped`. The rule goes, with `EchoDropped` and its lines in
+  `connector.md`, once a measurement of the echo in a room or a hearing that stops while
+  the agent speaks, such as a mode of the speech service's browser package, makes it unneeded.
 - LiteLLM sends a finish reason of its own when a provider's stream ends cleanly without one, so
   such a cut round reads as complete. Measured through LiteLLM, a cut tool round lost its call, and
   its text showed as the answer.

@@ -13,6 +13,7 @@ from agent_runtime_client.backend import AgentBackend, TurnPerson, TurnStopped
 from agent_runtime_client.member import PlaceEntry
 from agent_runtime_client.voice import (
     DecisionFailed,
+    EchoDropped,
     ReplyUnreadable,
     SentenceRefused,
     SentenceStarted,
@@ -24,6 +25,7 @@ from agent_runtime_client.voice import (
     Woke,
 )
 from agent_runtime_client.voice.conversation import Conversation
+from agent_runtime_client.voice.echo import is_echo
 from agent_runtime_client.voice.reply import PROTOCOL_TEXT, SILENT_REPLY, ReplyReader
 
 _SENTENCES_END: Final = None
@@ -42,13 +44,15 @@ async def run_voice_loop[Audio](
 ) -> None:
     """Hear a place's lines and answer by voice until hearing ends.
 
-    Every line enters one running conversation, but the agent's own spoken line. A line that is
-    not the agent's own and that ``wakes`` accepts starts a decision; at most one is in flight
-    and one answer plays, and a line that wakes meanwhile gets exactly one decision after it,
-    over every line since the last one. The system text is the agent's prompt, the protocol
-    text and ``context``. A decision sends at most the agent's voice window of the conversation;
-    only the newest line goes beyond it, alone and behind the window note once anything went. An
-    agent without a voice section raises ``ValueError`` before ``hearing`` is read.
+    Every line enters one running conversation, but the agent's own spoken line and an echo: a
+    spoken line that repeats the agent's latest answer (``voice.echo.is_echo``) is reported as
+    ``EchoDropped`` and never asked of ``wakes``. Any other line that is not the agent's own
+    and that ``wakes`` accepts starts a decision; at most one is in flight and one answer plays,
+    and a line that wakes meanwhile gets exactly one decision after it, over every line since
+    the last one. The system text is the agent's prompt, the protocol text and ``context``. A
+    decision sends at most the agent's voice window of the conversation; only the newest line
+    goes beyond it, alone and behind the window note once anything went. An agent without a
+    voice section raises ``ValueError`` before ``hearing`` is read.
 
     Each decision's turn is read to its end in its own task while its sentences play. A
     ``VoiceRefused`` ends the answer: the turn is closed and the queued sentences dropped. A
@@ -79,8 +83,13 @@ class _Answer:
     """What one decision played and how its reply read."""
 
     played: list[str] = field(default_factory=list)
+    playing: str | None = None
     openings: list[StayedSilent | ReplyUnreadable] = field(default_factory=list)
     ended_short: bool = False
+
+    def started(self) -> list[str]:
+        """Every sentence that started playing and was not refused, the one playing included."""
+        return self.played if self.playing is None else [*self.played, self.playing]
 
     def recorded(self) -> str | None:
         """What the conversation records, or ``None`` when the lines stay undecided."""
@@ -114,14 +123,24 @@ class _VoiceLoop[Audio]:
         self._conversation = conversation
         self._woken = asyncio.Event()
         self._first_after_answer = False
+        self._answer = _Answer()
+        self._last_played: list[str] = []
 
     def hear(self, line: PlaceEntry) -> None:
+        if is_echo(line, self._latest_answer()):
+            self._conversation.skip(line)
+            self._report(EchoDropped(line.text))
+            return
         self._conversation.hear(line)
         if line.own:
             return
         first_after_answer, self._first_after_answer = self._first_after_answer, False
         if self._wakes(line, first_after_answer=first_after_answer):
             self._woken.set()
+
+    def _latest_answer(self) -> list[str]:
+        """What the most recent decision that played at least one sentence has started."""
+        return self._answer.started() or self._last_played
 
     async def answer_when_woken(self) -> None:
         while True:
@@ -136,7 +155,7 @@ class _VoiceLoop[Audio]:
         self._report(Woke())
         messages = self._conversation.open_decision()
         request = self._agent.request(messages, appended_system=self._appended_system)
-        answer = _Answer()
+        answer = self._answer = _Answer()
         sentences: asyncio.Queue[str | None] = asyncio.Queue()
         reading = self._group.create_task(self._read(request, sentences, answer))
         try:
@@ -145,6 +164,8 @@ class _VoiceLoop[Audio]:
             reading.cancel()
             await asyncio.wait({reading})
         self._conversation.close_decision(answer.recorded())
+        if answer.played:
+            self._last_played = answer.played
         return bool(answer.played)
 
     async def _read(
@@ -169,10 +190,13 @@ class _VoiceLoop[Audio]:
         while (sentence := await sentences.get()) is not _SENTENCES_END:
             try:
                 audio = await self._voice.render(sentence)
+                answer.playing = sentence
                 self._report(SentenceStarted(sentence))
                 await self._voice.play(audio)
             except VoiceRefused:
                 answer.ended_short = True
                 self._report(SentenceRefused(sentence))
                 return
+            finally:
+                answer.playing = None
             answer.played.append(sentence)

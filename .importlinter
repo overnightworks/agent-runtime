@@ -161,6 +161,7 @@ allow_indirect_imports = True
 source_modules =
     agent_runtime_client.voice
     agent_runtime_client.voice.conversation
+    agent_runtime_client.voice.echo
     agent_runtime_client.voice.loop
     agent_runtime_client.voice.reply
     agent_runtime_client.voice.wake

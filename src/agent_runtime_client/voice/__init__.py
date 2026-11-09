@@ -18,6 +18,7 @@ from agent_runtime_client.turn import FailureCode, RejectionCode
 
 __all__ = [
     "DecisionFailed",
+    "EchoDropped",
     "ReplyUnreadable",
     "SentenceRefused",
     "SentenceStarted",
@@ -45,7 +46,7 @@ class VoiceOut[Audio](Protocol):
 
 
 class WakeRule(Protocol):
-    """Whether a line that is not the agent's own starts a decision.
+    """Whether a line that is neither the agent's own nor an echo starts a decision.
 
     ``first_after_answer`` is true for the first such line heard after a decision that played
     at least one sentence ended, while no decision is in flight; it is false for every other
@@ -93,7 +94,20 @@ class DecisionFailed:
     detail: str | None
 
 
+@dataclass(frozen=True)
+class EchoDropped:
+    """A spoken line repeated the agent's latest answer: it never enters and wakes nothing."""
+
+    text: str
+
+
 type VoiceEvent = (
-    Woke | StayedSilent | ReplyUnreadable | SentenceStarted | SentenceRefused | DecisionFailed
+    Woke
+    | StayedSilent
+    | ReplyUnreadable
+    | SentenceStarted
+    | SentenceRefused
+    | DecisionFailed
+    | EchoDropped
 )
 """What the loop reports; a host may show, log or measure it. An in-process record."""
