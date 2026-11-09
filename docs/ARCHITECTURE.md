@@ -206,7 +206,7 @@ over the whole suite.
   that knows nothing of the app's agent. Reopens if a realtime session can run the app's agent.
 - Speaking as a tool the model calls: a tool call runs only after its round is judged whole, so
   speech could not start before the whole answer existed, and every sentence would cost a round.
-  The `speak` tool stays for the loop: the app's `VoiceOut` calls it and the model is never offered
+  The `speak` tool stays for the loop: a runner's `VoiceOut` calls it and the model is never offered
   it. Reopens if a tool call can run while its round is still being written.
 - A speech adapter in the library: the app holds the sound and its speech access. Reopens if
   every app ends up writing the same adapter.
