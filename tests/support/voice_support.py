@@ -3,7 +3,7 @@
 Every run drives ``run_voice_loop`` with the real ``GatewayBackend`` over a scripted transport.
 The trace holds, in order, what the loop reported, what it called on the voice, what it asked
 the wake rule and what the paced gateway saw, so a test waits on and asserts outcomes only. The
-lines and answers come from ``voice_lines``, which the loop's tests also take from here.
+lines and answers live in ``voice_lines``, which every test imports directly.
 """
 
 from __future__ import annotations
@@ -29,7 +29,6 @@ from agent_runtime_client.voice import VoiceEvent, WakeRule, Woke
 from agent_runtime_client.voice.loop import run_voice_loop
 from tests.support.gateway_turn_support import a_chunk, a_gateway_config, a_person, an_event_stream
 from tests.support.virtual_time import VirtualTimeLoop
-from tests.support.voice_lines import a_line as a_line
 
 PROMPT: Final = "Du hörst zu und antwortest kurz."
 CONTEXT: Final = "Im Raum sind Ada und Ben."
