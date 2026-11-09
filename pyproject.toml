@@ -30,7 +30,7 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/overnightworks/agent-runtime"
+Repository = "https://github.com/overnightworks/agents"
 
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]

@@ -1,4 +1,4 @@
-# agent-runtime
+# agents
 
 ## Commands
 
