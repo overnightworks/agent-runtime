@@ -3,6 +3,6 @@ agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
 role = "builder"
 base = "ccfe0c096babbaeb7d3b9f92cc1927124b571829"
 branch = "claude/issue-807-a-spent-budget-refuses"
-scope = ["docs/connector.md", "src/agent_runtime_client/backend/gateway.py", "src/agent_runtime_client/backend/streamed_round.py", "src/agent_runtime_client/turn.py", "tests/test_backend_gateway_refusal.py"]
+scope = ["docs/connector.md", "src/agent_runtime_client/backend/gateway.py", "src/agent_runtime_client/backend/streamed_round.py", "src/agent_runtime_client/turn.py", "tests/support/gateway_turn_support.py", "tests/test_backend_gateway.py", "tests/test_backend_gateway_pictures.py", "tests/test_backend_gateway_refusal.py"]
 opened_commit = "3fb8b091c793e8c7177afe46cde90b5d3963aa3c"
 whole_reason = "The new code, its one decider in the gateway, its test and its sentence in the connector document change together as one public contract."
