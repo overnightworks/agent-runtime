@@ -767,6 +767,7 @@ def test_a_stopped_turn_holds_neither_the_key_nor_the_reply_in_any_frame_or_chai
 
     _, stopped = scenario.outcome(backend, request, leaves_after=leaves_after)
 
+    assert stopped is not None
     assert _leaks(stopped, scenario.key) == []
 
 
