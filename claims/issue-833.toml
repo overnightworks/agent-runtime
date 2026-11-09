@@ -1,0 +1,7 @@
+claim_id = "adfc8c0e5ea142a6b73e8aafc7e0ce4d"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "2c9c2407529a2cf434699b5562f16d4dfe091dc3"
+branch = "claude/issue-833-ci-run-groups"
+scope = [".github/workflows/ci.yml"]
+opened_commit = "c5d5dbbd0e21261e1c523c6a5e4f918ea752ac95"
