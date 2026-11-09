@@ -659,6 +659,18 @@ Proved by `tests/test_voice_loop.py`:
 `test_the_first_line_after_an_answer_that_played_is_the_one_marked_first_after_answer` and
 `test_no_line_after_a_decision_that_played_nothing_is_marked_first_after_answer`.
 
+**The standard wake rule.** `agent_runtime_client.voice.wake.addressed_or_asked(names)` returns
+a `WakeRule`, a cheap local check of which lines cost a decision. It wakes on a line that names
+one of `names` as a whole word in any case, on a line that ends with `?` before its trailing
+spaces and closing quotes, and on the first line after an answer that played. Another agent's
+line wakes by the same rule, and a line that does not wake still enters the conversation.
+`names` without a name or with an empty one raises `ValueError`. Proved by
+`tests/test_voice_wake.py`:
+`test_a_line_naming_one_of_the_names_as_a_whole_word_in_any_case_wakes`,
+`test_a_line_ending_in_a_question_mark_wakes_and_one_asking_only_mid_line_does_not`,
+`test_a_rule_without_a_name_or_with_an_empty_one_is_refused` and
+`test_in_the_loop_a_named_asked_or_first_line_after_a_played_answer_wakes_and_all_are_heard`.
+
 **The conversation.** Every line enters one running conversation, but the agent's own spoken
 line: the loop records what it played itself. A decision sends the pairs decided so far and one
 user message with every line since the last decision, one JSON object per line with `name`,
