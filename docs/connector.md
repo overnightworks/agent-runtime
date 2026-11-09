@@ -35,6 +35,18 @@ started in the turn, whatever ended it, `refused: busy` included, so an app does
 that may have written. Proved by `tests/test_backend_gateway_tools.py`:
 `test_a_busy_gateway_at_round_two_reports_whether_a_call_may_have_written`.
 
+`AssistantTextEvent` is a piece of the assistant's text, yielded as the gateway streams it, before
+its round is judged. Pieces come from every round, including a round that ends in tool calls: its
+pieces come before its `ToolCallEvent`s. `FinalEvent.text` is the last round's judged text only, so
+when tools ran, the turn's pieces joined need not be `FinalEvent.text`; the last round's pieces
+joined are. A turn that ends with `TurnStopped` may have yielded pieces first; nothing withdraws
+them. An app that shows only judged text reads `FinalEvent`. Proved by
+`tests/test_backend_gateway_stream.py`:
+`test_each_text_piece_comes_as_its_own_event_in_order_then_the_joined_answer`,
+`test_a_piece_reaches_the_app_while_its_round_is_still_open`,
+`test_a_tool_rounds_pieces_come_before_its_calls_which_run_after_it_and_echo_whole` and
+`test_a_round_that_streams_text_then_fails_leaves_the_text_shown_and_runs_nothing`.
+
 The app's configuration embeds `agent_runtime_client.config.AgentConfig` as the `agent` section:
 `backend` (`litellm`, the one value), `gateway` and `api_group`, none with a default.
 `ChatGateway` is `origin` (scheme, host and optional port; no path, query, fragment or
@@ -128,9 +140,13 @@ opaque whatever its prefix; any other content is `failed: provider_unavailable`.
 
 **The deadline.** `request.max_duration_seconds` is one deadline around the whole turn, every
 round and handler included; past it the turn `failed: limit_exceeded` and a running handler is
-cancelled. Proved by `tests/test_backend_gateway.py`: `test_a_transport_that_never_answers_ends_at_the_limit`
-and, in `tests/test_backend_gateway_tools.py`,
-`test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state`.
+cancelled. A stream that stalls ends at the deadline, and an app that pulls the next event after it
+gets `failed: limit_exceeded` with no further read. Proved by `tests/test_backend_gateway.py`:
+`test_a_transport_that_never_answers_ends_at_the_limit`; in `tests/test_backend_gateway_tools.py`,
+`test_a_deadline_during_a_handler_cancels_it_and_keeps_the_side_effect_state`; and in
+`tests/test_backend_gateway_stream.py`,
+`test_a_gateway_that_stalls_after_a_piece_ends_the_turn_at_the_deadline` and
+`test_an_app_that_pulls_after_the_deadline_gets_limit_exceeded_and_nothing_more_is_read`.
 
 What the client sends for a text turn, and nothing else:
 
@@ -155,9 +171,9 @@ every person's budget, so every caller computes it with
 
 | The gateway answers | The turn ends |
 | --- | --- |
-| 200, an event stream that ends with `[DONE]` after `finish_reason: stop`, non-empty text of at most `MAX_EVENT_BYTES` | one `AssistantTextEvent` of the round's whole text, then `FinalEvent` |
+| 200, an event stream that ends with `[DONE]` after `finish_reason: stop`, non-empty text of at most `MAX_EVENT_BYTES` | one `AssistantTextEvent` per text piece as it arrives, then `FinalEvent` |
 | 200, an event stream that ends with `[DONE]` after `finish_reason: tool_calls`, whole round | the calls run in order (see below), then the next request |
-| 200 otherwise (a stream that ends or breaks before `[DONE]`, a `[DONE]` with no finish reason, an event that is no JSON object or no chunk, a line that is no UTF-8, empty text, another `finish_reason`, a lone surrogate, a longer reply, a round that is not whole) | `failed: provider_error`, detail `malformed_reply` |
+| 200 otherwise (a stream that ends or breaks before `[DONE]`, a `[DONE]` with no finish reason, an event that is no JSON object or no chunk, a line that is no UTF-8, empty text, another `finish_reason`, a lone surrogate, a longer reply, a round that is not whole) | `failed: provider_error`, detail `malformed_reply`; pieces already yielded stand |
 | 200, an event stream with an error event (a JSON object with an `error` key), with or without a following `[DONE]` | `failed: provider_unavailable`, detail `gateway_failed`; the log carries the error's type and code when they are well formed, never its message |
 | 429 | `refused: busy`; `retry_after_s` from the `Retry-After` seconds, at most `MAX_RETRY_AFTER_S`; an HTTP-date or no header gives none |
 | another 4xx, a budget refusal included | `failed: provider_unavailable`, detail `gateway_refused`; the body is read within `MAX_EVENT_BYTES` only for the logged error type and code |
@@ -171,7 +187,7 @@ Proved by `tests/test_backend_gateway.py`: `test_a_text_turn_ends_with_the_answe
 `test_a_server_failure_is_provider_unavailable_and_ignores_retry_after`,
 `test_a_lost_connection_is_provider_unavailable` and
 `test_an_origin_the_http_library_refuses_is_provider_unavailable`; and by `tests/test_backend_gateway_stream.py`:
-`test_a_round_that_is_not_complete_ends_the_turn_and_closes_the_response`,
+`test_a_round_that_streams_text_then_fails_leaves_the_text_shown_and_runs_nothing`,
 `test_an_error_event_ends_the_turn_and_logs_only_its_type_and_code`,
 `test_a_connection_lost_while_the_stream_runs_is_connection_failed` and
 `test_a_stopped_turn_holds_no_text_from_the_wire`. A round is complete only at `[DONE]` after
@@ -184,10 +200,11 @@ gateway's error type and code, never its message
 ### The tool loop
 
 The loop runs in the client, in process, over streamed rounds, each read whole before it is
-judged. A round is judged whole before anything shows or runs: only the request's tool names are offered and accepted, so a call to any
-other name, arguments that are not a JSON object, an empty round or a call id used twice in the
-turn refuses the round (`failed: provider_error`) with no handler run. A round that would take
-the turn past `max_tool_calls` ends `failed: limit_exceeded` the same way. Proved by
+judged. A round is judged whole before anything runs; its text shows as it streams. Only the
+request's tool names are offered and accepted, so a call to any other name, arguments that are
+not a JSON object, an empty round or a call id used twice in the turn refuses the round
+(`failed: provider_error`) with no handler run. A round that would take the turn past
+`max_tool_calls` ends `failed: limit_exceeded` the same way. Proved by
 `tests/test_backend_gateway_tools.py`: `test_a_round_that_is_not_whole_runs_nothing_and_shows_nothing`,
 `test_a_call_to_a_tool_the_agent_did_not_select_is_refused`,
 `test_a_call_id_reused_in_a_later_round_refuses_that_round_and_keeps_the_side_effect_state` and
@@ -226,14 +243,15 @@ tool returns only what that may see.
 | One tool result | `MAX_EVENT_BYTES` | the model gets a fixed `is_error` sentence instead of the content; the side effect stands; the turn continues |
 | One request of a turn, serialised | 4 × `MAX_EVENT_BYTES` | no request is sent; `failed: limit_exceeded` |
 | One line, one event's data | 6 × `MAX_EVENT_BYTES` + 64 KiB | `failed: provider_error` |
-| One round's text | `MAX_EVENT_BYTES` | `failed: provider_error` |
+| One round's text | `MAX_EVENT_BYTES`, judged per piece | `failed: provider_error`; the crossing piece is not shown |
 | One assembled round | the request bound | `failed: provider_error`; no handler runs |
 
 Proved by `test_a_tool_result_over_the_event_bound_is_replaced_and_the_side_effect_stands`,
 `test_repeated_large_results_stop_the_turn_before_a_request_over_the_bound`,
 `test_a_line_that_never_ends_is_cut_at_the_bound_as_provider_error` and
-`test_a_round_past_the_request_bound_runs_no_handler`; the reader's own bounds by
-`tests/test_backend_streamed_round.py`.
+`test_a_round_past_the_request_bound_runs_no_handler`; the crossing piece by
+`test_a_round_that_streams_text_then_fails_leaves_the_text_shown_and_runs_nothing`; the reader's
+own bounds by `tests/test_backend_streamed_round.py`.
 
 ### A picture agent
 

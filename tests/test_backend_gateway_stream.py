@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from dataclasses import dataclass, field
@@ -10,7 +11,7 @@ from dataclasses import dataclass, field
 import httpx2
 import pytest
 
-from agent_runtime_client.backend import TurnStopKind
+from agent_runtime_client.backend import TurnStopKind, TurnStopped
 from agent_runtime_client.backend.fake_gateway import FakeGateway, Reply, completion
 from agent_runtime_client.backend.gateway import GatewayBackend, GatewayDetail
 from agent_runtime_client.tools import HandTool, ToolDeclaration, ToolEffect, ToolOutcome
@@ -32,18 +33,19 @@ from tests.support.gateway_turn_support import (
     an_event_stream,
     ending,
 )
-from tests.support.virtual_time import VirtualTimeLoop
+from tests.support.virtual_time import VirtualTimeLoop, in_virtual_time
 
 scenario = gateway_turn_support.scenario
 
 PROVIDER_ERROR = (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
 LIMIT_EXCEEDED = (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
 STOPPED = a_chunk(finish_reason="stop")
+CALLS_ASKED = a_chunk(finish_reason="tool_calls")
 
 
 @dataclass
 class Lookup:
-    """The app's one tool; ``seen`` holds the arguments of every call it ran."""
+    """The app's one tool, side-effecting; ``seen`` holds the arguments of every call it ran."""
 
     seen: list = field(default_factory=list)
 
@@ -53,7 +55,7 @@ class Lookup:
             return ToolOutcome("noted", is_error=False)
 
         declaration = ToolDeclaration(
-            name="lookup", description="Look up.", parameters={}, effect=ToolEffect.READ_ONLY
+            name="lookup", description="Look up.", parameters={}, effect=ToolEffect.SIDE_EFFECTING
         )
         return HandTool(declaration, handler)
 
@@ -67,24 +69,51 @@ def drive(scenario, transport, lookup: Lookup | None = None):
         return runner.run(_turn(backend, request, scenario.person()[0]))
 
 
-def test_the_pieces_of_a_text_round_come_as_one_event_of_the_joined_text(scenario):
-    body = an_event_stream(a_chunk("Hel"), a_chunk("lo ä"), a_chunk("!"), STOPPED)
-    transport = Streamed((body,))
+def test_each_text_piece_comes_as_its_own_event_in_order_then_the_joined_answer(scenario):
+    gateway = FakeGateway(completion("Hel", "lo ä", "!"))
 
-    events, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=transport))
+    events, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=gateway))
 
     assert stopped is None
-    assert events == [AssistantTextEvent(text="Hello ä!"), FinalEvent(text="Hello ä!")]
+    assert events == [
+        AssistantTextEvent(text="Hel"),
+        AssistantTextEvent(text="lo ä"),
+        AssistantTextEvent(text="!"),
+        FinalEvent(text="Hello ä!"),
+    ]
+
+
+def test_a_piece_reaches_the_app_while_its_round_is_still_open(scenario):
+    held = Streamed((an_event_stream(a_chunk("Hel"), done=False),), hangs=True)
+    backend = GatewayBackend(scenario.config(), transport=held)
+
+    async def take_the_first_event():
+        async with contextlib.aclosing(backend.run(a_request(), scenario.person()[0])) as events:
+            return await anext(events), held.closed.is_set()
+
+    assert in_virtual_time(take_the_first_event()) == (AssistantTextEvent(text="Hel"), False)
+
+
+def _a_call(name: str, arguments: str) -> dict:
+    return a_chunk(tool_calls=[a_fragment(0, call_id="c0", name=name, arguments=arguments)])
 
 
 @pytest.mark.parametrize(
-    "body",
+    ("body", "shown"),
     [
-        an_event_stream(a_chunk("a"), done=False),
-        an_event_stream(a_chunk("a")),
-        an_event_stream(a_chunk("a"), "{not json", STOPPED),
-        an_event_stream(a_chunk("a"), a_chunk(finish_reason="length")),
-        an_event_stream(a_chunk("a"), STOPPED, done=False),
+        (an_event_stream(a_chunk("a"), done=False), "a"),
+        (an_event_stream(a_chunk("a")), "a"),
+        (an_event_stream(a_chunk("a"), "{not json", STOPPED), "a"),
+        (an_event_stream(a_chunk("a"), a_chunk(finish_reason="length")), "a"),
+        (an_event_stream(a_chunk("a"), STOPPED, done=False), "a"),
+        (an_event_stream(a_chunk("  \n"), STOPPED), "  \n"),
+        (an_event_stream(a_chunk("a"), CALLS_ASKED), "a"),
+        (an_event_stream(a_chunk("a"), _a_call("unoffered", "{}"), CALLS_ASKED), "a"),
+        (an_event_stream(a_chunk("a"), _a_call("lookup", "[]"), CALLS_ASKED), "a"),
+        (
+            an_event_stream(a_chunk("a" * (MAX_EVENT_BYTES - 1)), a_chunk("bb"), STOPPED),
+            "a" * (MAX_EVENT_BYTES - 1),
+        ),
     ],
     ids=[
         "cut-after-a-piece",
@@ -92,14 +121,27 @@ def test_the_pieces_of_a_text_round_come_as_one_event_of_the_joined_text(scenari
         "malformed-event-after-a-piece",
         "length",
         "cut-after-the-finish-reason",
+        "blank-content",
+        "tool-calls-without-calls",
+        "a-call-to-a-tool-not-offered",
+        "arguments-not-an-object",
+        "a-piece-crossing-the-text-bound",
     ],
 )
-def test_a_round_that_is_not_complete_ends_the_turn_and_closes_the_response(scenario, body):
+def test_a_round_that_streams_text_then_fails_leaves_the_text_shown_and_runs_nothing(
+    scenario, body, shown
+):
+    lookup = Lookup()
     transport = Streamed((body,))
 
-    events, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=transport))
+    events, stopped = drive(scenario, transport, lookup)
 
-    assert (events, ending(stopped)) == ([], PROVIDER_ERROR)
+    assert (events, ending(stopped), lookup.seen) == (
+        [AssistantTextEvent(text=shown)],
+        PROVIDER_ERROR,
+        [],
+    )
+    assert not stopped.after_side_effect
     assert transport.closed.is_set()
 
 
@@ -108,7 +150,40 @@ def test_a_gateway_that_stalls_after_a_piece_ends_the_turn_at_the_deadline(scena
 
     events, stopped = drive(scenario, transport)
 
-    assert (events, ending(stopped)) == ([], LIMIT_EXCEEDED)
+    assert (events, ending(stopped)) == ([AssistantTextEvent(text="a")], LIMIT_EXCEEDED)
+    assert transport.closed.is_set()
+
+
+@pytest.mark.parametrize(
+    "first_chunk",
+    [
+        an_event_stream(a_chunk("a"), done=False),
+        an_event_stream(a_chunk("a"), a_chunk("b"), done=False),
+    ],
+    ids=["next-piece-unread", "next-piece-already-read"],
+)
+def test_an_app_that_pulls_after_the_deadline_gets_limit_exceeded_and_nothing_more_is_read(
+    scenario, first_chunk
+):
+    transport = Streamed((first_chunk,), hangs=True)
+    request = a_request()
+    backend = GatewayBackend(scenario.config(), transport=transport)
+
+    async def pull_late():
+        events = []
+        try:
+            async with contextlib.aclosing(backend.run(request, scenario.person()[0])) as stream:
+                events.append(await anext(stream))
+                asyncio.get_running_loop().skew_seconds += request.max_duration_seconds
+                events.append(await anext(stream))
+        except TurnStopped as stopped:
+            return events, ending(stopped)
+        return events, None
+
+    outcome = in_virtual_time(pull_late())
+
+    assert outcome == ([AssistantTextEvent(text="a")], LIMIT_EXCEEDED)
+    assert not transport.started.is_set()
     assert transport.closed.is_set()
 
 
@@ -121,7 +196,7 @@ def test_an_error_event_ends_the_turn_and_logs_only_its_type_and_code(scenario, 
     events, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=transport))
 
     assert (events, ending(stopped), stopped.detail) == (
-        [],
+        [AssistantTextEvent(text="a")],
         UNAVAILABLE,
         GatewayDetail.GATEWAY_FAILED,
     )
@@ -140,14 +215,14 @@ def test_a_connection_lost_while_the_stream_runs_is_connection_failed(scenario):
     events, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=transport))
 
     assert (events, ending(stopped), stopped.detail) == (
-        [],
+        [AssistantTextEvent(text="a")],
         UNAVAILABLE,
         GatewayDetail.CONNECTION_FAILED,
     )
     assert transport.closed.is_set()
 
 
-def test_calls_streamed_in_fragments_run_after_the_round_and_are_echoed_whole(scenario):
+def test_a_tool_rounds_pieces_come_before_its_calls_which_run_after_it_and_echo_whole(scenario):
     first = an_event_stream(
         a_chunk("Looking"),
         a_chunk(tool_calls=[a_fragment(0, call_id="c0", name="lookup", arguments="")]),
@@ -162,6 +237,7 @@ def test_calls_streamed_in_fragments_run_after_the_round_and_are_echoed_whole(sc
 
     assert stopped is None
     assert events == [
+        AssistantTextEvent(text="Looking"),
         ToolCallEvent(tool_use_id="c0", name="lookup", input={"q": "x"}),
         ToolResultEvent(tool_use_id="c0", content="noted", is_error=False),
         AssistantTextEvent(text="Done."),
