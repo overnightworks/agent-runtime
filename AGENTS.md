@@ -7,12 +7,12 @@
 - `uv run ruff check src tests`: lint `src` and `tests`.
 - `uvx --from "git+https://github.com/overnightworks/quality@<sha>" quality check`: the gate's local check; `<sha>` is the one `.github/workflows/ci.yml` pins for quality's gate.
 - `uv build`: build the wheel; run it after `uv sync`.
-- `gh workflow run release.yml -f version=X.Y.Z`: dispatch a release; only the operator runs it, and the pull request before it raises `version` in `pyproject.toml`.
+- `gh workflow run release.yml -f version=X.Y.Z`: dispatch a release; the pull request before it raises `version` in `pyproject.toml`.
 
 ## Rules
 
 - The turn's vocabulary has one owner, `agent_runtime_client.turn`; `turn_events` is the in-process event, never a wire format.
-- The libraries of the `backend` and `mcp-server` extras are imported only inside the module that needs them; `.importlinter` lists which.
+- The libraries of the `backend` and `mcp-server` extras are imported only inside the module that needs them; `.importlinter` forbids them in the client's base modules.
 - Deployment facts (the gateway origin and key file) come from the host's `AgentConfig`, never from an environment variable or a module default.
 - Host obligations (the app's `HandTool`s, the MCP person front's handlers) are ports passed in; the library never invents them.
 - Tests build their fakes with the builders in `tests/support`, not a second set.
