@@ -679,12 +679,12 @@ def test_an_unusable_ca_file_is_provider_unavailable(scenario):
 def test_debug_logging_writes_the_key_into_no_record(scenario, caplog):
     for name in ("httpx2", "httpcore2"):
         caplog.set_level(logging.DEBUG, logger=name)
-    caplog.set_level(logging.DEBUG)
 
     events, stopped = _loopback_turn(scenario)
 
     assert stopped is None
     assert events[-1] == FinalEvent(text="hi")
+    assert any(record.name.startswith("httpcore2") for record in caplog.records)
     assert scenario.key not in caplog.text
     assert scenario.key not in "".join(str(record.__dict__) for record in caplog.records)
 
@@ -692,13 +692,27 @@ def test_debug_logging_writes_the_key_into_no_record(scenario, caplog):
 @pytest.mark.parametrize(
     "name", ["httpx2", "httpcore2", "httpcore2.connection", "httpcore2.http11"]
 )
-def test_the_transport_loggers_that_could_carry_the_key_are_not_enabled_for_debug(
+def test_a_transport_logger_the_host_left_unset_is_not_enabled_for_debug_after_a_construction(
     scenario, caplog, name
 ):
     for logger in ("httpx2", "httpcore2"):
-        caplog.set_level(logging.DEBUG, logger=logger)
+        caplog.set_level(logging.NOTSET, logger=logger)
+
     GatewayBackend(scenario.config())
+
     assert not logging.getLogger(name).isEnabledFor(logging.DEBUG)
+
+
+@pytest.mark.parametrize("logger", ["httpx2", "httpcore2"])
+@pytest.mark.parametrize("level", [logging.DEBUG, logging.ERROR])
+def test_a_level_the_host_set_on_a_transport_logger_stands_after_a_construction(
+    scenario, caplog, logger, level
+):
+    caplog.set_level(level, logger=logger)
+
+    GatewayBackend(scenario.config())
+
+    assert logging.getLogger(logger).level == level
 
 
 def test_a_fake_gateway_without_replies_is_refused():

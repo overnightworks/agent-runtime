@@ -244,7 +244,9 @@ async def _get_models(
 
 def _quiet_transport_loggers() -> None:
     for name in _TRANSPORT_LOGGERS:
-        logging.getLogger(name).setLevel(logging.WARNING)
+        transport_logger = logging.getLogger(name)
+        if transport_logger.level == logging.NOTSET:
+            transport_logger.setLevel(logging.WARNING)
 
 
 async def _send[Result](
