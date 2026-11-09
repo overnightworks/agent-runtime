@@ -769,7 +769,7 @@ TURN_STOPS = {
     ),
     "incomplete_round": (lambda: Streamed((A_PIECE,)), 30),
     "malformed_event": (lambda: Streamed((A_PIECE + b"data: {not json\n\n",)), 30),
-    "judge_refusal": (
+    "round_cut_short": (
         lambda: Streamed(
             (A_PIECE + b'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n',)
         ),
