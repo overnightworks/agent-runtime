@@ -233,7 +233,7 @@ Proved by `test_a_tool_result_over_the_event_bound_is_replaced_and_the_side_effe
 `test_repeated_large_results_stop_the_turn_before_a_request_over_the_bound`,
 `test_a_line_that_never_ends_is_cut_at_the_bound_as_provider_error` and
 `test_a_round_past_the_request_bound_runs_no_handler`; the reader's own bounds by
-`tests/test_streamed_round.py`.
+`tests/test_backend_streamed_round.py`.
 
 ### A picture agent
 
