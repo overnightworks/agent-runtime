@@ -432,35 +432,57 @@ member whose lease ran out.
 ## A marked route as a tool
 
 A host turns the routes of its FastAPI app into person-front tools. `tools.agent_tool(name=…,
-effect=…)` is the mark, passed as a route's `openapi_extra`; an unmarked route is never a tool,
-and the client imports no FastAPI. `mcp_server.route_tools(openapi, app, *, mark_route)` reads
-the host's own `app.openapi()` and returns `RouteTools(tools, marks)`: the `PersonTool`s, and a
-`frozenset` of what `mark_route(METHOD, template)` returned for each marked operation, in the
-host's own mark type. `mark_route` runs only on marked operations; its `ValueError` becomes a
-`RouteProfileError` naming the operation, with the host's error as its cause, and any other
+effect=…)` is the mark and `tools.not_an_agent_tool(reason=…)` the exclusion, each passed as a
+route's `openapi_extra` and each stored under the one extension key `x-agent-tool`, so a route
+holds only one. The client imports no FastAPI.
+
+**The rule.** Every operation of the document is decided: marked, or excluded with its reason. A
+route becomes a tool only through its own mark; an exclusion yields no tool and no mark.
+`route_tools` decides first, over the whole document: when any operation carries neither, it
+raises one `RouteProfileError` naming every undecided operation in document order, before a tool
+is built or `mark_route` runs. Only then is each operation judged: an exclusion whose reason is
+not a non-blank string, or an extension value that neither function returns, is refused naming
+its operation. An excluded operation is never judged against the profile below: its method,
+parameters, body, responses and description may be anything, which is how an upload, a stream or
+a browser-only route is left out. It still counts as another operation of its method in the
+overlap check. Proved by
+`test_an_operation_with_neither_mark_nor_exclusion_is_refused_naming_every_undecided_one`,
+`test_an_undecided_operation_is_refused_even_when_a_marked_one_breaches_the_profile`,
+`test_an_exclusion_that_not_an_agent_tool_does_not_return_is_refused` and
+`test_an_excluded_route_outside_the_profile_is_accepted_beside_a_marked_tool`.
+`mcp_server.route_tools(openapi, app, *, mark_route)` reads the host's own `app.openapi()` and
+returns `RouteTools(tools, marks)`: the `PersonTool`s, and a `frozenset` of what
+`mark_route(METHOD, template)` returned for each marked operation, in the host's own mark type.
+`mark_route` runs only on marked operations, never on an excluded one; its `ValueError` becomes
+a `RouteProfileError` naming the operation, with the host's error as its cause, and any other
 exception propagates. Proved by `tests/test_mcp_server_routes.py`:
 `test_a_marked_route_becomes_a_tool_with_its_name_description_and_input_schema`,
-`test_an_unmarked_route_is_never_passed_to_the_host_mark_function`,
+`test_an_excluded_route_is_never_passed_to_the_host_mark_function`,
 `test_the_host_mark_functions_value_error_becomes_a_profile_error_with_it_as_cause` and
 `test_another_exception_from_the_host_mark_function_propagates_unchanged`.
 
 The host wires in this order: register every route, read `app.openapi()` (FastAPI caches it),
 run `route_tools`, then build the gate with the marks.
 
-**The profile.** `GET` and `POST` only. Parameters are string path parameters and scalar query
-parameters (string, integer, number or boolean, with or without `enum`, inline or by `$ref`,
-nullable through `anyOf [x, null]`); the one body is a required `application/json` object whose
-fields are flattened beside the parameters; `$ref` is inlined from `components`, and an
-annotation beside a reference is kept and wins over the component's own; every success response
-is JSON, and an error status may also declare RFC 9457 problem details
-(`application/problem+json`), beside or instead of JSON. The tool's description is the
-operation's `description` (the route's docstring) and is required. Everything else is refused at
-start with `RouteProfileError`: a mark on any other method, a mark that is not the mapping
-`agent_tool` returns, header and cookie parameters, a non-JSON or optional body, a success
-response that is not JSON, an error response that is neither JSON nor problem details, a
-recursive schema, a body object carrying any keyword flattening would lose, a `$ref` beside any
-keyword that is not an annotation, a name shared by two inputs, two marks of one name, an integer
-path parameter and a missing description. Proved by
+**The profile** of a marked operation. `GET`, `POST`, `PUT`, `PATCH` and `DELETE` can be marked,
+`HEAD`, `OPTIONS` and `TRACE` only excluded; a `PUT`, `PATCH` or `DELETE` marked `READ_ONLY` is
+refused, because RFC 9110 §9.2.1 does not count them safe and a client may run a read-only tool
+without asking. Parameters are string path parameters and scalar query parameters (string,
+integer, number or boolean, with or without `enum`, inline or by `$ref`, nullable through `anyOf
+[x, null]`); the one body is a required `application/json` object whose fields are flattened
+beside the parameters; `$ref` is inlined from `components`, and an annotation beside a reference
+is kept and wins over the component's own; every success response is JSON, and an error status may
+also declare RFC 9457 problem details (`application/problem+json`), beside or instead of JSON. A
+success without JSON content, such as a `204`, is refused: such a route is excluded or answers
+JSON. The tool's description is the operation's `description` (the route's docstring) and is
+required. Everything else is refused at start with `RouteProfileError`: a mark on `HEAD`,
+`OPTIONS` or `TRACE`, a mark that is not the mapping `agent_tool` returns, header and cookie
+parameters, a non-JSON or optional body, a success response that is not JSON, an error response
+that is neither JSON nor problem details, a recursive schema, a body object carrying any keyword
+flattening would lose, a `$ref` beside any keyword that is not an annotation, a name shared by two
+inputs, two marks of one name, an integer path parameter and a missing description. Proved by
+`test_a_put_patch_or_delete_marked_read_only_is_refused_naming_the_operation`,
+`test_a_head_options_or_trace_route_may_be_excluded_beside_a_marked_tool`,
 `test_a_marked_route_outside_the_profile_is_refused_naming_the_operation`,
 `test_an_error_status_may_declare_problem_details`,
 `test_a_hand_written_mark_that_agent_tool_does_not_return_is_refused`,
@@ -470,17 +492,25 @@ path parameter and a missing description. Proved by
 **Overlap.** Two templates of one method overlap when they have the same number of segments and
 every pair of segments at a position could match one string: two literals only when equal, and
 any pair holding a parameter always. A marked template that overlaps any other operation of its
-method is refused whatever the order; a partial segment may refuse a pair that never collides,
-never the reverse. Unmarked templates are read, never passed to `mark_route`. The document
-cannot show converters, routes hidden from it, a `Mount`, a catch-all or a second registration of
-one method and path; proving those is the host's duty. Proved by
+method is refused whatever the order, whether the other is marked or excluded; a partial
+segment may refuse a pair that never collides, never the reverse. The document cannot show
+converters, routes hidden from it, a `Mount`, a WebSocket route, a catch-all or a second
+registration of one method and path. A route hidden from the document, a `Mount` or a WebSocket
+route never appears in it, so it can become neither a tool nor a mark. A converter is stripped
+from the template (`/files/{rest:path}` reads as `/files/{rest}`), and FastAPI folds a second
+registration of one method and path into one operation, so the overlap check and the profile
+cannot see either: the host proves that no marked route has a converter, a catch-all or a
+second registration.
+Which route falls into an excluded class (deleting for good, deleting in bulk, sharing,
+publishing, sending out) is judged mark by mark in each host's review, not in code. Proved by
 `test_a_marked_template_that_overlaps_another_operation_of_its_method_is_refused_in_either_order`
 and `test_a_marked_template_that_cannot_collide_with_another_operation_is_accepted`.
 
 **The call.** Each tool call is one in-process ASGI request into `app`, which must be the host's
-whole application, so the request passes every middleware. An argument the schema does not name,
-a path value that is missing, not a string, empty, `.`, `..` or holding `/`, and an object or
-array query value fail the call before any inner request
+whole application, so the request passes every middleware, whatever the method
+(`test_a_marked_put_patch_or_delete_is_called_with_its_path_query_and_body_arguments`). An
+argument the schema does not name, a path value that is missing, not a string, empty, `.`, `..`
+or holding `/`, and an object or array query value fail the call before any inner request
 (`tests/test_mcp_server_route_call.py`:
 `test_a_bad_path_value_or_an_unnamed_argument_is_refused_with_no_inner_request`,
 `test_an_object_or_array_query_value_is_refused_with_no_inner_request`). `path` is the outer

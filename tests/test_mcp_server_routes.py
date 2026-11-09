@@ -18,7 +18,7 @@ from agent_runtime_client.mcp_server import (
     route_tools,
 )
 from agent_runtime_client.mcp_wire import MCP_ENDPOINT_PATH
-from agent_runtime_client.tools import Principal, ToolEffect, agent_tool
+from agent_runtime_client.tools import Principal, ToolEffect, agent_tool, not_an_agent_tool
 from tests.support.mcp_server_support import routing_headers, rpc_body, served_app
 
 type Mark = tuple[str, str]
@@ -62,6 +62,7 @@ class Registration:
     path: str
     endpoint: Callable[..., Any] = nothing
     tool: str | None = None
+    excluded: str | None = None
     effect: ToolEffect = ToolEffect.READ_ONLY
     description: str | None = "Does the thing."
     extra: dict[str, Any] = field(default_factory=dict)
@@ -76,11 +77,14 @@ def application(*registrations: Registration) -> FastAPI:
             if registration.tool
             else None
         )
+        exclusion = (
+            not_an_agent_tool(reason=registration.excluded) if registration.excluded else None
+        )
         app.add_api_route(
             registration.path,
             registration.endpoint,
             methods=[registration.method],
-            openapi_extra={**(mark or {}), **registration.document},
+            openapi_extra={**(mark or {}), **(exclusion or {}), **registration.document},
             description=registration.description,
             **registration.extra,
         )
@@ -250,10 +254,10 @@ def test_a_hand_written_mark_that_agent_tool_does_not_return_is_refused(mark: An
     assert "GET /notes" in str(failure)
 
 
-def test_an_unmarked_route_is_no_tool_and_no_mark() -> None:
+def test_an_excluded_route_is_no_tool_and_no_mark() -> None:
     app = application(
         Registration("GET", "/notes", list_notes, tool="list_notes"),
-        Registration("POST", "/notes/purge", nothing),
+        Registration("POST", "/notes/purge", nothing, excluded="Deletes in bulk."),
     )
 
     result = generated(app)
@@ -292,10 +296,12 @@ def test_a_read_only_mark_is_listed_with_the_read_only_hint_and_a_side_effecting
     assert hints == {"list_notes": {"readOnlyHint": True}, "create_note": None}
 
 
-def test_an_unmarked_route_name_answers_the_unknown_tool_error() -> None:
+def test_an_excluded_route_name_answers_the_unknown_tool_error() -> None:
     app = application(
         Registration("GET", "/notes", list_notes, tool="list_notes"),
-        Registration("POST", "/notes/{note_id}/delete", nothing, description="Deletes."),
+        Registration(
+            "POST", "/notes/{note_id}/delete", nothing, description="Deletes.", excluded="Deletes."
+        ),
     )
 
     answer = rpc(front_for(app), "tools/call", {"name": "delete_note", "arguments": {}})
@@ -358,9 +364,6 @@ def body_of(*media_types: str) -> dict[str, Any]:
 @pytest.mark.parametrize(
     "registration",
     [
-        Registration("PUT", "/notes", create_note, tool="a"),
-        Registration("PATCH", "/notes", create_note, tool="a"),
-        Registration("DELETE", "/notes", nothing, tool="a"),
         Registration("GET", "/notes", header_route, tool="a"),
         Registration("GET", "/notes", cookie_route, tool="a"),
         Registration("POST", "/notes", optional_body_route, tool="a"),
@@ -427,9 +430,6 @@ def body_of(*media_types: str) -> dict[str, Any]:
         Registration("POST", "/notes", aliased_route, tool="a"),
     ],
     ids=[
-        "put",
-        "patch",
-        "delete",
         "header parameter",
         "cookie parameter",
         "optional body",
@@ -504,7 +504,7 @@ def test_a_marked_template_that_overlaps_another_operation_of_its_method_is_refu
     marked: str, other: str, marked_first: bool
 ) -> None:
     marked_route = Registration("GET", marked, named if "{name}" in marked else nothing, tool="a")
-    other_route = Registration("GET", other, nothing)
+    other_route = Registration("GET", other, nothing, excluded="Not a tool.")
     order = (marked_route, other_route) if marked_first else (other_route, marked_route)
 
     failure = refused(application(*order))
@@ -525,16 +525,17 @@ def test_a_marked_template_that_cannot_collide_with_another_operation_is_accepte
     marked: str, other_method: str, other: str
 ) -> None:
     app = application(
-        Registration("GET", marked, named, tool="a"), Registration(other_method, other, nothing)
+        Registration("GET", marked, named, tool="a"),
+        Registration(other_method, other, nothing, excluded="Not a tool."),
     )
 
     assert generated(app).marks == {("GET", marked)}
 
 
-def test_an_unmarked_route_is_never_passed_to_the_host_mark_function() -> None:
+def test_an_excluded_route_is_never_passed_to_the_host_mark_function() -> None:
     app = application(
         Registration("GET", "/notes", nothing, tool="a"),
-        Registration("GET", "/odd/{rest}", nothing),
+        Registration("GET", "/odd/{rest}", nothing, excluded="Odd."),
     )
     seen: list[str] = []
 
@@ -576,3 +577,141 @@ def test_another_exception_from_the_host_mark_function_propagates_unchanged() ->
 
     with pytest.raises(KeyError):
         route_tools(schema, app, mark_route=mark_route)
+
+
+def test_an_operation_with_neither_mark_nor_exclusion_is_refused_naming_every_undecided_one() -> (
+    None
+):
+    app = application(
+        Registration("GET", "/notes", nothing, tool="a"),
+        Registration("POST", "/first", nothing),
+        Registration("GET", "/kept", nothing, excluded="Not a tool."),
+        Registration("DELETE", "/second/{name}", named),
+    )
+    schema = app.openapi()
+    seen: list[str] = []
+
+    def mark_route(method: str, template: str) -> Mark:
+        seen.append(template)
+        return (method, template)
+
+    with pytest.raises(RouteProfileError) as raised:
+        route_tools(schema, app, mark_route=mark_route)
+
+    message = str(raised.value)
+    assert seen == []
+    assert "POST /first" in message
+    assert "DELETE /second/{name}" in message
+    assert message.index("/first") < message.index("/second")
+    assert "/kept" not in message
+    assert "/notes" not in message
+
+
+def test_an_undecided_operation_is_refused_even_when_a_marked_one_breaches_the_profile() -> None:
+    app = application(
+        Registration("GET", "/notes", header_route, tool="a"),
+        Registration("GET", "/undecided", nothing),
+    )
+
+    failure = str(refused(app))
+
+    assert "/undecided" in failure
+    assert "/notes" not in failure
+
+
+@pytest.mark.parametrize(
+    "extension",
+    [
+        {"excluded": ""},
+        {"excluded": "  "},
+        {"excluded": 3},
+        {"excluded": ["Why."]},
+        {"excluded": "Why.", "name": "a", "effect": "read_only"},
+        {"excluded": "Why.", "extra": 1},
+        {},
+    ],
+    ids=["empty", "blank", "not a string", "list", "also a mark", "extra key", "empty mapping"],
+)
+def test_an_exclusion_that_not_an_agent_tool_does_not_return_is_refused(
+    extension: Any,
+) -> None:
+    app = application(Registration("GET", "/notes", nothing, document={"x-agent-tool": extension}))
+
+    assert "GET /notes" in str(refused(app))
+
+
+@pytest.mark.parametrize("method", ["PUT", "PATCH", "DELETE"])
+def test_a_put_patch_or_delete_marked_read_only_is_refused_naming_the_operation(
+    method: str,
+) -> None:
+    app = application(Registration(method, "/notes", nothing, tool="a"))
+
+    failure = str(refused(app))
+
+    assert f"{method} /notes" in failure
+
+
+@pytest.mark.parametrize("method", ["PUT", "PATCH", "DELETE"])
+def test_a_marked_put_patch_or_delete_is_called_with_its_path_query_and_body_arguments(
+    method: str,
+) -> None:
+    async def change(note_id: str, draft: NoteDraft, reason: str = "") -> Any:
+        return {"id": note_id, "title": draft.title, "reason": reason}
+
+    app = application(
+        Registration(
+            method,
+            "/notes/{note_id}",
+            change,
+            tool="change_note",
+            effect=ToolEffect.SIDE_EFFECTING,
+        )
+    )
+    arguments = {"note_id": "n1", "title": "Dawn", "genre": "pop", "reason": "typo"}
+
+    answer = rpc(front_for(app), "tools/call", {"name": "change_note", "arguments": arguments})
+
+    assert answer["result"]["isError"] is False
+    assert json.loads(answer["result"]["content"][0]["text"]) == {
+        "id": "n1",
+        "title": "Dawn",
+        "reason": "typo",
+    }
+
+
+@pytest.mark.parametrize("method", ["HEAD", "OPTIONS", "TRACE"])
+def test_a_head_options_or_trace_route_may_be_excluded_beside_a_marked_tool(method: str) -> None:
+    app = application(
+        Registration("GET", "/notes", nothing, tool="a"),
+        Registration(method, "/probe", nothing, excluded="Not a tool."),
+    )
+
+    assert generated(app).marks == {("GET", "/notes")}
+
+
+@pytest.mark.parametrize(
+    "registration",
+    [
+        Registration("GET", "/stream", header_route, excluded="Needs a header."),
+        Registration(
+            "POST", "/upload", nothing, excluded="Uploads.", document=body_of("text/plain")
+        ),
+        Registration(
+            "GET",
+            "/page",
+            nothing,
+            excluded="Browser only.",
+            extra={"response_class": PlainTextResponse},
+        ),
+        Registration("GET", "/bare", nothing, excluded="Undescribed.", description=None),
+        Registration("DELETE", "/gone", no_content, excluded="Empty.", extra={"status_code": 204}),
+        Registration("POST", "/loop", recursive_route, excluded="Recursive."),
+    ],
+    ids=["header", "non-JSON body", "non-JSON response", "no description", "204", "recursive"],
+)
+def test_an_excluded_route_outside_the_profile_is_accepted_beside_a_marked_tool(
+    registration: Registration,
+) -> None:
+    app = application(Registration("GET", "/notes", nothing, tool="a"), registration)
+
+    assert generated(app).marks == {("GET", "/notes")}

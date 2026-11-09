@@ -26,6 +26,7 @@ __all__ = [
     "ToolEffect",
     "ToolOutcome",
     "agent_tool",
+    "not_an_agent_tool",
 ]
 
 AGENT_TOOL_EXTENSION: Final = "x-agent-tool"
@@ -81,6 +82,16 @@ class HandTool:
 def agent_tool(*, name: str, effect: ToolEffect) -> dict[str, object]:
     """The mark that makes a route a tool: pass it as FastAPI's ``openapi_extra``.
 
-    An unmarked route is never a tool. The client imports no FastAPI.
+    A route becomes a tool only through its own mark; the other decision is
+    ``not_an_agent_tool``. The client imports no FastAPI.
     """
     return {AGENT_TOOL_EXTENSION: {"name": name, "effect": effect.value}}
+
+
+def not_an_agent_tool(*, reason: str) -> dict[str, object]:
+    """The exclusion of a route, with its reason: pass it as FastAPI's ``openapi_extra``.
+
+    An excluded route yields no tool and no mark. The generator reads the same extension key as
+    for ``agent_tool``, so one route cannot hold both decisions, and it validates the reason.
+    """
+    return {AGENT_TOOL_EXTENSION: {"excluded": reason}}
