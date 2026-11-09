@@ -3,6 +3,6 @@ agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
 role = "builder"
 base = "bb1ee2917a1924e105c0df29ec8971c5e723294b"
 branch = "claude/issue-822-voice-window"
-scope = ["docs/ARCHITECTURE.md", "docs/connector.md", "src/agent_runtime_client/agents.py", "src/agent_runtime_client/voice/conversation.py", "src/agent_runtime_client/voice/loop.py", "src/agent_runtime_client/voice/reply.py", "tests/support/voice_lines.py", "tests/support/voice_support.py", "tests/test_agents_file.py", "tests/test_voice_reply.py", "tests/test_voice_window.py"]
+scope = ["docs/ARCHITECTURE.md", "docs/connector.md", "src/agent_runtime_client/agents.py", "src/agent_runtime_client/voice/conversation.py", "src/agent_runtime_client/voice/loop.py", "src/agent_runtime_client/voice/reply.py", "tests/support/voice_lines.py", "tests/support/voice_support.py", "tests/test_agents_file.py", "tests/test_voice_loop.py", "tests/test_voice_reply.py", "tests/test_voice_window.py"]
 opened_commit = "10a30fccecb76102e3ff47db7647746f811a0667"
 whole_reason = "One bound: the file field that declares it, the conversation that holds it, the refusal at start, the note's sentence in the protocol text, and its documents and tests."
