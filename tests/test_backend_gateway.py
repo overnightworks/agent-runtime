@@ -8,7 +8,6 @@ import json
 import logging
 import re
 import ssl
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -34,8 +33,11 @@ from tests.support import gateway_turn_support
 from tests.support.gateway_turn_support import (
     UNAVAILABLE,
     FailingTransport,
+    Streamed,
     _turn,
+    a_chunk,
     a_request,
+    an_event_stream,
     ending,
 )
 
@@ -71,7 +73,7 @@ PINNED_ABSENT_BODY_KEYS = {
     "num_retries",
     "mock_response",
     "api_key",
-    "stream",
+    "stream_options",
     "max_tokens",
     "tools",
 }
@@ -103,7 +105,8 @@ def test_the_request_is_one_post_with_the_system_prompt_and_the_messages(scenari
     assert sent.headers["authorization"] == f"Bearer {scenario.key}"
     assert sent.headers["content-type"] == "application/json"
     body = json.loads(sent.content)
-    assert set(body) == {"model", "messages", "user"}
+    assert set(body) == {"model", "messages", "user", "stream"}
+    assert body["stream"] is True
     assert body["model"] == "text/standin"
     assert body["messages"] == [
         {"role": "system", "content": "Answer briefly."},
@@ -292,7 +295,7 @@ def test_a_refusal_status_is_provider_unavailable_as_gateway_refused(scenario, r
 
 
 def test_a_refusal_response_is_closed_after_its_body_is_read(scenario):
-    refusal = _Streamed((b'{"error":"budget_exceeded"}',), status=422)
+    refusal = Streamed((b'{"error":"budget_exceeded"}',), status=422)
 
     _, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=refusal))
 
@@ -349,28 +352,30 @@ def test_busy_carries_the_standard_header_seconds_capped_or_none(scenario, retry
     assert stopped.retry_after_s == wait
 
 
-def _wrapped(choice: dict) -> bytes:
-    return json.dumps({"choices": [choice]}).encode()
+def _stopped_with(*pieces: str, reason: str = "stop") -> bytes:
+    return an_event_stream(*(a_chunk(piece) for piece in pieces), a_chunk(finish_reason=reason))
 
 
 @pytest.mark.parametrize(
     "body",
     [
-        b"{not json",
-        b"[]",
-        b'{"choices": []}',
-        b'{"choices": "x"}',
-        _wrapped({"finish_reason": "stop", "message": {"content": ""}}),
-        _wrapped({"finish_reason": "stop", "message": {"content": "  \n"}}),
-        _wrapped({"finish_reason": "stop", "message": {"content": None}}),
-        _wrapped({"finish_reason": "length", "message": {"content": "cut"}}),
-        _wrapped({"finish_reason": "tool_calls", "message": {"content": "x"}}),
-        _wrapped({"finish_reason": "stop", "message": {"content": "\ud800"}}),
-        _wrapped({"finish_reason": "stop", "message": {"content": "a" * (MAX_EVENT_BYTES + 1)}}),
-        b"\xff\xfe",
-        b"[" * 200_000,
-        b'{"choices":' + b"[" * 200_000,
-        b"[" * 100_000 + b"]" * 100_000,
+        an_event_stream("{not json"),
+        an_event_stream("[]"),
+        an_event_stream({"choices": []}),
+        an_event_stream({"choices": "x"}),
+        completion("").body,
+        _stopped_with("  \n"),
+        an_event_stream(a_chunk(finish_reason="stop")),
+        _stopped_with("cut", reason="length"),
+        _stopped_with("x", reason="tool_calls"),
+        _stopped_with("\ud800"),
+        _stopped_with("a" * (MAX_EVENT_BYTES + 1)),
+        b"data: \xff\xfe\n\n",
+        an_event_stream("[" * 200_000),
+        an_event_stream('{"choices":' + "[" * 200_000),
+        an_event_stream("[" * 100_000 + "]" * 100_000),
+        b"not json",
+        b"",
     ],
     ids=[
         "malformed-json",
@@ -388,6 +393,8 @@ def _wrapped(choice: dict) -> bytes:
         "nested-open",
         "nested-in-choices",
         "nested-closed",
+        "not-an-event-stream",
+        "empty-body",
     ],
 )
 def test_a_200_that_is_no_complete_text_is_provider_error(scenario, body):
@@ -399,7 +406,7 @@ def test_a_200_that_is_no_complete_text_is_provider_error(scenario, body):
 
 
 def test_a_200_body_that_cannot_be_decoded_is_provider_error(scenario):
-    undecodable = _Streamed((b"this is not gzip",), headers={"Content-Encoding": "gzip"})
+    undecodable = Streamed((b"this is not gzip",), headers={"Content-Encoding": "gzip"})
 
     events, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=undecodable))
 
@@ -409,11 +416,8 @@ def test_a_200_body_that_cannot_be_decoded_is_provider_error(scenario):
 
 @pytest.mark.parametrize("unit", ["a", "\\u0061"], ids=["plain", "json_escapes"])
 def test_a_reply_of_the_event_bound_is_answered(scenario, unit):
-    body = (
-        '{"choices":[{"finish_reason":"stop","message":{"role":"assistant","content":"'
-        + unit * MAX_EVENT_BYTES
-        + '"}}],"usage":{"total_tokens":1}}'
-    ).encode()
+    event = '{"choices":[{"delta":{"content":"' + unit * MAX_EVENT_BYTES + '"}}]}'
+    body = an_event_stream(event, a_chunk(finish_reason="stop"))
 
     events, stopped = scenario.outcome(
         GatewayBackend(scenario.config(), transport=FakeGateway(Reply(200, body=body)))
@@ -423,8 +427,8 @@ def test_a_reply_of_the_event_bound_is_answered(scenario, unit):
     assert events[-1] == FinalEvent(text="a" * MAX_EVENT_BYTES)
 
 
-def test_a_body_that_never_ends_is_cut_at_the_bound_as_provider_error(scenario):
-    endless = _Streamed((b"x" * MAX_EVENT_BYTES,) * 16, hangs=True)
+def test_a_line_that_never_ends_is_cut_at_the_bound_as_provider_error(scenario):
+    endless = Streamed((b"x" * MAX_EVENT_BYTES,) * 16, hangs=True)
     request = a_request(max_duration_seconds=5)
 
     _, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=endless), request)
@@ -498,45 +502,8 @@ def test_a_groups_lookup_that_never_answers_ends_at_the_limit(scenario):
     assert gateway.requests == []
 
 
-class _Streamed(httpx2.AsyncBaseTransport):
-    """Answers with a streamed body, recording whether it was read and whether it was closed."""
-
-    def __init__(
-        self,
-        chunks: tuple[bytes, ...],
-        *,
-        status: int = 200,
-        headers: dict[str, str] | None = None,
-        hangs: bool = False,
-    ) -> None:
-        self._chunks = chunks
-        self._status = status
-        self._headers = headers or {}
-        self._hangs = hangs
-        self.read = False
-        self.closed = asyncio.Event()
-        self.started = asyncio.Event()
-
-    async def handle_async_request(self, request):
-        transport = self
-
-        class Body(httpx2.AsyncByteStream):
-            async def __aiter__(self) -> AsyncIterator[bytes]:
-                transport.read = True
-                for chunk in transport._chunks:
-                    yield chunk
-                transport.started.set()
-                if transport._hangs:
-                    await asyncio.Event().wait()
-
-            async def aclose(self) -> None:
-                transport.closed.set()
-
-        return httpx2.Response(self._status, headers=self._headers, stream=Body())
-
-
 def test_cancelling_a_turn_closes_the_response(scenario):
-    trickle = _Streamed((b"{",), hangs=True)
+    trickle = Streamed((b"data: {",), hangs=True)
 
     async def drive() -> bool:
         backend = GatewayBackend(scenario.config(), transport=trickle)
@@ -552,7 +519,7 @@ def test_cancelling_a_turn_closes_the_response(scenario):
 
 def test_closing_a_suspended_turn_leaves_the_response_closed_and_yields_nothing_more(scenario):
     answer = completion("The answer.").body
-    transport = _Streamed((answer,))
+    transport = Streamed((answer,))
 
     async def scenario_run():
         backend = GatewayBackend(scenario.config(), transport=transport)
@@ -583,9 +550,12 @@ def test_a_redirect_is_not_followed_and_a_cookie_is_not_kept(scenario):
 
 async def _serve_ok(reader, writer):
     await reader.readuntil(b"\r\n\r\n")
-    body = json.dumps({"choices": [{"finish_reason": "stop", "message": {"content": "hi"}}]})
-    head = f"HTTP/1.1 200 OK\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n"
-    writer.write(head.encode() + body.encode())
+    body = an_event_stream(a_chunk("hi"), a_chunk(finish_reason="stop"))
+    head = (
+        f"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n"
+        f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n"
+    )
+    writer.write(head.encode() + body)
     await writer.drain()
     writer.close()
 

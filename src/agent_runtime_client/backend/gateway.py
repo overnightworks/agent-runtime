@@ -1,14 +1,15 @@
-"""The gateway as a backend: one buffered completion per round of a turn, or one picture.
+"""The gateway as a backend: one streamed completion per round of a turn, read whole and judged before anything shows or runs, or one picture.
 
 A turn runs under one deadline. An app can also list the models the gateway offers.
 
 The app's key never leaves this module: it is read per turn or per list, sent as the bearer
 and written to no exception or log record.
-"""
+"""  # noqa: E501 - the first line is the module's one-sentence statement
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
@@ -31,6 +32,13 @@ from agent_runtime_client.backend import (
     TurnPerson,
     TurnStopKind,
     TurnStopped,
+)
+from agent_runtime_client.backend.streamed_round import (
+    MalformedRound,
+    RoundErrorEvent,
+    StreamedRound,
+    error_kind_of,
+    read_round,
 )
 from agent_runtime_client.config import AgentConfig, ChatGateway
 from agent_runtime_client.tools import (
@@ -66,17 +74,11 @@ _PICTURES_PATH: Final = "/v1/images/generations"
 _MODELS_PATH: Final = "/v1/models"
 _MODEL_LIST_DEADLINE_SECONDS: Final = 10
 _PICTURE_FILE_NAME: Final = "picture"
-_ERROR_TYPE: Final = re.compile(r"[a-z0-9_]{1,64}")
-_ERROR_CODE: Final = re.compile(r"\d{3}", re.ASCII)
 # Their records carry the gateway URL and the response headers; an app gets them only by
 # setting these loggers itself.
 _TRANSPORT_LOGGERS: Final = ("httpx2", "httpcore2")
 _MAX_KEY_BYTES: Final = 1024
 _PRINTABLE_ASCII: Final = re.compile(r"[\x21-\x7e]+")
-# JSON writes one byte of text as up to six (a \u00XX escape); the rest is the envelope.
-_JSON_ESCAPE_FACTOR: Final = 6
-_ENVELOPE_ALLOWANCE_BYTES: Final = 65_536
-_MAX_BODY_BYTES: Final = _JSON_ESCAPE_FACTOR * MAX_EVENT_BYTES + _ENVELOPE_ALLOWANCE_BYTES
 _MAX_REQUEST_BYTES: Final = 4 * MAX_EVENT_BYTES
 _MAX_PICTURE_BODY_BYTES: Final = base64_length(MAX_RUN_FILES_BYTES) + MAX_EVENT_BYTES
 _UNREADABLE_REPLY: Final = (
@@ -138,7 +140,7 @@ class GatewayBackend(AgentBackend):
         progress = _Progress(request.max_tool_calls or 0)
         try:
             key = await _before(deadline, self._authorise(person))
-            read = partial(_judged, offered=frozenset(tools))
+            read = partial(_streamed_round, offered=frozenset(tools))
             messages = _opening_messages(request)
             user = person_fingerprint(person.principal)
             while True:
@@ -326,6 +328,7 @@ class _Body(TypedDict):
     model: str
     messages: list[_Message]
     user: str
+    stream: bool
     tools: NotRequired[list[_FunctionTool]]
 
 
@@ -436,7 +439,7 @@ def _result_message(result: ToolResultEvent) -> _Message:
 
 
 def _body(request: TurnRequest, messages: list[_Message], user: str) -> str:
-    body: _Body = {"model": request.model, "messages": messages, "user": user}
+    body: _Body = {"model": request.model, "messages": messages, "user": user, "stream": True}
     if request.tools:
         # ``effect`` is for the client, so the projection names its fields.
         body["tools"] = [
@@ -496,7 +499,9 @@ async def _reply_of[Result](
     if status == httpx2.codes.TOO_MANY_REQUESTS:
         wait = _wait_seconds(response.headers.get("Retry-After"))
         raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.BUSY, retry_after_s=wait)
-    _LOGGER.warning("the gateway answered with status %d%s", status, await _error_kind_of(response))
+    _LOGGER.warning(
+        "the gateway answered with status %d, %s", status, await _error_kind_of(response)
+    )
     is_refusal = httpx2.codes.BAD_REQUEST <= status < httpx2.codes.INTERNAL_SERVER_ERROR
     detail = GatewayDetail.GATEWAY_REFUSED if is_refusal else GatewayDetail.GATEWAY_FAILED
     raise _unavailable(detail)
@@ -506,17 +511,9 @@ async def _error_kind_of(response: httpx2.Response) -> str:
     """The error body's ``type`` and ``code`` when both are well formed; never its other fields."""
     try:
         error = json.loads(await _read_body(response, MAX_EVENT_BYTES))["error"]
-        error_type, code = error["type"], error["code"]
     except (TurnStopped, *_UNREADABLE_REPLY):
-        return ", no error type given"
-    if (
-        isinstance(error_type, str)
-        and _ERROR_TYPE.fullmatch(error_type)
-        and isinstance(code, str)
-        and _ERROR_CODE.fullmatch(code)
-    ):
-        return f", error type {error_type}, code {code}"
-    return ", no error type given"
+        return error_kind_of(None)
+    return error_kind_of(error)
 
 
 async def _read_body(response: httpx2.Response, limit: int) -> bytes:
@@ -531,15 +528,28 @@ async def _read_body(response: httpx2.Response, limit: int) -> bytes:
     return bytes(body)
 
 
-async def _judged(response: httpx2.Response, *, offered: frozenset[str]) -> _Round:
-    body = await _read_body(response, _MAX_BODY_BYTES)
+async def _streamed_round(response: httpx2.Response, *, offered: frozenset[str]) -> _Round:
+    """The round the stream completes, judged whole; a failure is raised after its handler ends."""
+    failure: TurnStopped | None = None
     try:
-        choice = json.loads(body)["choices"][0]
-        finish_reason, message = choice["finish_reason"], choice["message"]
-        if finish_reason == "tool_calls":
-            return _calls_of(message, offered)
-        if finish_reason == "stop":
-            return _answer_of(message["content"])
+        async with contextlib.aclosing(response.aiter_bytes()) as chunks:
+            streamed = await read_round(chunks, round_limit_bytes=_MAX_REQUEST_BYTES)
+    except httpx2.DecodingError, MalformedRound:
+        failure = _malformed_reply()
+    except RoundErrorEvent as event:
+        _LOGGER.warning("the gateway sent an error event, %s", event.kind)
+        failure = _unavailable(GatewayDetail.GATEWAY_FAILED)
+    if failure is not None:
+        raise failure
+    return _judged(streamed, offered)
+
+
+def _judged(streamed: StreamedRound, offered: frozenset[str]) -> _Round:
+    try:
+        if streamed.finish_reason == "tool_calls":
+            return _calls_of(streamed.message, offered)
+        if streamed.finish_reason == "stop":
+            return _answer_of(streamed.message["content"])
     except _UNREADABLE_REPLY:
         pass
     raise _malformed_reply()
