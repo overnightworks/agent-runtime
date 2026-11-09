@@ -20,7 +20,7 @@ from agent_runtime_client.voice.reply import (
     SentenceRelease,
 )
 from agent_runtime_client.voice.sentences import split_sentences
-from tests.support.voice_support import a_line
+from tests.support.voice_support import STREAMED_ANSWERS, a_line, random_pieces
 
 SILENT = (StayedSilent(),)
 UNREADABLE = (ReplyUnreadable(),)
@@ -66,6 +66,8 @@ def released_by(release: SentenceRelease, *texts: str) -> list[str]:
         (a_final("[", " " * 5 + "silent" + " " * 4 + "]"), SILENT, []),
         (a_final("[shout] Hallo."), UNREADABLE, []),
         (a_final("[", " " * 5 + "silent" + " " * 5 + "] Hallo."), UNREADABLE, []),
+        (a_final("[" + " " * 5 + "silent" + " " * 4, "]"), SILENT, []),
+        (a_final("[\tsilent] Hallo."), UNREADABLE, []),
         (a_final("[" + "x" * 16, "] Hallo."), UNREADABLE, []),
         (a_final("[sile"), UNREADABLE, []),
         (a_final("Ja [silent] gut."), (), ["Ja [silent] gut."]),
@@ -101,6 +103,7 @@ def test_a_tool_call_ends_a_round_and_the_next_round_is_read_afresh(events, open
 
 def test_the_protocol_text_names_the_marker_the_reader_takes_as_silence():
     assert SILENT_REPLY in PROTOCOL_TEXT
+    assert read_turn(a_final(SILENT_REPLY)) == (SILENT, [])
 
 
 def test_the_protocol_text_names_every_key_a_written_line_carries():
@@ -112,7 +115,6 @@ def test_the_protocol_text_names_every_key_a_written_line_carries():
 
     keys = {key for line in written for key in json.loads(line)}
     assert {key for key in keys if f'"{key}"' not in PROTOCOL_TEXT} == set()
-    assert read_turn(a_final(SILENT_REPLY)) == (SILENT, [])
 
 
 @pytest.mark.parametrize(
@@ -170,44 +172,6 @@ def test_an_unterminated_stream_hands_the_splitter_linear_text(line):
         release.feed(character)
 
     assert handed_over < 100 * len(text)
-
-
-STREAMED_ANSWERS = [
-    (
-        "Am 3. Mai beginnt die Konferenz in Berlin. Sie dauert drei Tage! "
-        "Wer von euch kommt mit? Dr. Müller hält z. B. den ersten Vortrag.",
-        [
-            "Am 3. Mai beginnt die Konferenz in Berlin.",
-            "Sie dauert drei Tage!",
-            "Wer von euch kommt mit?",
-            "Dr. Müller hält z. B. den ersten Vortrag.",
-        ],
-    ),
-    (
-        # A closing German quote ends no sentence here: it is released with the next one.
-        "Er sagte: „Das geht nie.“ Doch er kam. Dann ging er wieder.",
-        ["Er sagte: „Das geht nie.“ Doch er kam.", "Dann ging er wieder."],
-    ),
-    (
-        "We meet at 10 a.m. in the hall. Bring Dr. Smith along! "
-        "Does everyone have the slides? Good.",
-        [
-            "We meet at 10 a.m. in the hall.",
-            "Bring Dr. Smith along!",
-            "Does everyone have the slides?",
-            "Good.",
-        ],
-    ),
-    (
-        "Erstens die Zahlen.\nZweitens der Plan. Um 9.30 Uhr geht es los.",
-        ["Erstens die Zahlen.", "Zweitens der Plan.", "Um 9.30 Uhr geht es los."],
-    ),
-]
-
-
-def random_pieces(text: str, chooser: random.Random) -> list[str]:
-    cuts = sorted(chooser.sample(range(1, len(text)), chooser.randint(1, len(text) // 3)))
-    return [text[start:end] for start, end in zip([0, *cuts], [*cuts, len(text)], strict=True)]
 
 
 @pytest.mark.parametrize(("text", "sentences"), STREAMED_ANSWERS)

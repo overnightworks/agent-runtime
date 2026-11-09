@@ -23,7 +23,8 @@ agent). `AgentDefinition.request(messages, *, model=None, appended_system=None)`
 `model` overrides the file's model for that run, with a model of the agent's kind, and
 `appended_system` follows the file's prompt in the system text, after a blank line.
 Proved by `tests/test_agents_file.py`: `test_request_carries_the_files_prompt_model_roles_and_tools`,
-`test_request_model_is_the_override_when_given`, `test_request_is_frozen`.
+`test_request_model_is_the_override_when_given`, `test_request_is_frozen`; the appended text by
+`tests/test_voice_loop.py`: `test_a_spoken_line_that_wakes_sends_one_request_with_prompt_protocol_context_and_the_line`.
 
 `person` is a `TurnPerson` (frozen, always a person): `principal` (the verified `(iss, sub)`),
 `role` (the app role) and `groups`, an async callable returning the person's groups. Proved by

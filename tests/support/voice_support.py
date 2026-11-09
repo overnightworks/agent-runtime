@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
+import random
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Sequence
 from dataclasses import dataclass, field
@@ -23,7 +24,7 @@ from agent_runtime_client.agents import AgentDefinition
 from agent_runtime_client.backend.gateway import GatewayBackend
 from agent_runtime_client.member import PlaceEntry
 from agent_runtime_client.tools import HandTool
-from agent_runtime_client.voice import VoiceEvent, WakeRule
+from agent_runtime_client.voice import VoiceEvent, WakeRule, Woke
 from agent_runtime_client.voice.loop import run_voice_loop
 from tests.support.gateway_turn_support import a_chunk, a_gateway_config, a_person, an_event_stream
 from tests.support.virtual_time import VirtualTimeLoop
@@ -54,6 +55,55 @@ def finish(reason: str = "stop") -> bytes:
     return an_event_stream(a_chunk(finish_reason=reason))
 
 
+STREAMED_ANSWERS = [
+    (
+        "Am 3. Mai beginnt die Konferenz in Berlin. Sie dauert drei Tage! "
+        "Wer von euch kommt mit? Dr. Müller hält z. B. den ersten Vortrag.",
+        [
+            "Am 3. Mai beginnt die Konferenz in Berlin.",
+            "Sie dauert drei Tage!",
+            "Wer von euch kommt mit?",
+            "Dr. Müller hält z. B. den ersten Vortrag.",
+        ],
+    ),
+    (
+        # A closing German quote ends no sentence here: it is released with the next one.
+        "Er sagte: „Das geht nie.“ Doch er kam. Dann ging er wieder.",
+        ["Er sagte: „Das geht nie.“ Doch er kam.", "Dann ging er wieder."],
+    ),
+    (
+        "We meet at 10 a.m. in the hall. Bring Dr. Smith along! "
+        "Does everyone have the slides? Good.",
+        [
+            "We meet at 10 a.m. in the hall.",
+            "Bring Dr. Smith along!",
+            "Does everyone have the slides?",
+            "Good.",
+        ],
+    ),
+    (
+        "Erstens die Zahlen.\nZweitens der Plan. Um 9.30 Uhr geht es los.",
+        ["Erstens die Zahlen.", "Zweitens der Plan.", "Um 9.30 Uhr geht es los."],
+    ),
+    (
+        # Longer than the words the release re-judges; the end after its abbreviation needs them.
+        "Zur Sitzung am Montag kommen wie immer die Kollegen aus Hamburg, Bremen und Berlin u. ä. "
+        "Danach gehen wir essen. Gut so.",
+        [
+            "Zur Sitzung am Montag kommen wie immer die Kollegen aus Hamburg, Bremen und Berlin "
+            "u. ä.",
+            "Danach gehen wir essen.",
+            "Gut so.",
+        ],
+    ),
+]
+
+
+def random_pieces(text: str, chooser: random.Random) -> list[str]:
+    cuts = sorted(chooser.sample(range(1, len(text)), chooser.randint(1, len(text) // 3)))
+    return [text[start:end] for start, end in zip([0, *cuts], [*cuts, len(text)], strict=True)]
+
+
 async def hang() -> None:
     await asyncio.Event().wait()
 
@@ -63,7 +113,7 @@ class Trace:
 
     Voice events are recorded as reported; the support's own entries are tuples that start
     with their kind: ``render``, ``play``, ``played``, ``stopped``, ``asked``, ``tool``,
-    ``closed`` and ``cancelled``.
+    ``written``, ``closed`` and ``cancelled``.
     """
 
     def __init__(self) -> None:
@@ -83,6 +133,9 @@ class Trace:
     async def settled(self) -> None:
         """Return once every other task waits; the virtual clock moves only then."""
         await asyncio.sleep(_SETTLE_SECONDS)
+
+    async def written(self, text: str) -> None:
+        self.record(("written", text))
 
     async def host_cancels(self) -> None:
         """The host cancels the loop; the hearing that awaits this is cancelled with it."""
@@ -107,6 +160,22 @@ class Trace:
     @property
     def played(self) -> list[str]:
         return [entry[1] for entry in self.entries if _kind_of(entry) == "played"]
+
+    @property
+    def rendered_at_the_written_end(self) -> list[str]:
+        """Each sentence rendered while nothing was written after it in its decision's reply."""
+        at_the_end: list[str] = []
+        written, position = "", 0
+        for entry in self.entries:
+            if entry == Woke():
+                written, position = "", 0
+            elif _kind_of(entry) == "written":
+                written += entry[1]
+            elif _kind_of(entry) == "render":
+                position = written.index(entry[1], position) + len(entry[1])
+                if not written[position:].strip():
+                    at_the_end.append(entry[1])
+        return at_the_end
 
     def count(self, entry: object) -> int:
         return self.entries.count(entry)
@@ -208,6 +277,14 @@ class _PacedBody(httpx2.AsyncByteStream):
 
     async def aclose(self) -> None:
         self._trace.record(("closed",))
+
+
+def written_piece_by_piece(trace: Trace, texts: Sequence[str]) -> list[StreamPart]:
+    """A reply that traces each piece as written, sends it and lets the loop settle on it."""
+    parts: list[StreamPart] = []
+    for text in texts:
+        parts += [functools.partial(trace.written, text), piece(text), trace.settled]
+    return [*parts, finish()]
 
 
 async def _stream_one_reply(

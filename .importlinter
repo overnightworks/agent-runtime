@@ -33,8 +33,8 @@ forbidden_modules =
 # as_packages = False keeps agent_runtime_client itself (its __init__) a source without
 # making the mcp_server and voice packages inside it ones; the ** wildcards keep every
 # mcp_server and voice module forbidden.
-[importlinter:contract:client-base-stays-free-of-mcp-server]
-name = the client base modules import neither agent_runtime_client.mcp_server nor its extras
+[importlinter:contract:client-base-stays-free-of-mcp-server-and-voice]
+name = the client base modules import neither agent_runtime_client.mcp_server, agent_runtime_client.voice nor their extras
 type = forbidden
 as_packages = False
 source_modules =

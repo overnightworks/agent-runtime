@@ -57,8 +57,9 @@ class SentenceRelease:
 
     The sentence at the end stays held because the model may still be writing it: ``Dr.`` at
     the end is not yet a boundary. Only the last word can still turn into one, so each piece
-    re-judges that word, a few words before it and what follows it; an unterminated stretch
-    costs linear time.
+    re-judges that word, a few words before it and what follows it. Text with whitespace costs
+    linear time; a stretch without whitespace is one word, re-judged whole on every piece, so it
+    costs quadratic time and only the turn's deadline bounds it.
     """
 
     def __init__(self, split: Callable[[str], tuple[str, ...]]) -> None:

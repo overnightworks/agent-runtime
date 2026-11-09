@@ -1,6 +1,7 @@
 """The voice loop through its entry point: lines in, one decision at a time, sentences out."""
 
 import asyncio
+import random
 
 import httpx2
 import pytest
@@ -32,6 +33,7 @@ from tests.support.voice_support import (
     CONTEXT,
     PROMPT,
     RETURNED,
+    STREAMED_ANSWERS,
     PacedGateway,
     RecordingVoice,
     a_line,
@@ -39,7 +41,9 @@ from tests.support.voice_support import (
     hang,
     messages_of,
     piece,
+    random_pieces,
     rows_of,
+    written_piece_by_piece,
 )
 
 place = voice_support.place
@@ -84,10 +88,7 @@ def test_a_spoken_line_that_wakes_sends_one_request_with_prompt_protocol_context
 
     [request] = gateway.requests
     system, *messages = messages_of(request)
-    text = system["content"]
-    assert text.startswith(PROMPT)
-    assert text.endswith(CONTEXT)
-    assert text.index(PROMPT) < text.index(PROTOCOL_TEXT) < text.index(CONTEXT)
+    assert system["content"] == f"{PROMPT}\n\n{PROTOCOL_TEXT}\n\n{CONTEXT}"
     assert [message["role"] for message in messages] == ["user"]
     assert rows_of(messages[0]) == [
         {"name": "Ada", "kind": "person", "own": False, "spoken": True, "text": "Kannst du helfen?"}
@@ -391,34 +392,45 @@ def test_no_line_after_a_decision_that_played_nothing_is_marked_first_after_answ
     assert place.trace.asked == [("Frage?", False), ("Danke.", False)]
 
 
+A_REFUSED_TURN = DecisionFailed(
+    TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE, GatewayDetail.GATEWAY_REFUSED
+)
+A_SILENT_ROUND = tool_round(tool_call("call-1", "look_up", {}), content="[silent]")
+
+
 @pytest.mark.parametrize(
-    ("first_reply", "voice_raises", "events"),
+    ("replies", "voice_raises", "events"),
     [
-        (completion("[shout] Hallo."), {}, [Woke(), ReplyUnreadable()]),
+        ((completion("[shout] Hallo."),), {}, [Woke(), ReplyUnreadable()]),
         (
-            completion("Eins. Zwei."),
+            (completion("Eins. Zwei."),),
             {("play", "Eins."): VoiceRefused()},
             [Woke(), SentenceStarted("Eins."), SentenceRefused("Eins.")],
         ),
+        ((A_BUDGET_REFUSAL,), {}, [Woke(), A_REFUSED_TURN]),
         (
-            A_BUDGET_REFUSAL,
+            (A_SILENT_ROUND, A_BUDGET_REFUSAL),
             {},
-            [
-                Woke(),
-                DecisionFailed(
-                    TurnStopKind.FAILED,
-                    FailureCode.PROVIDER_UNAVAILABLE,
-                    GatewayDetail.GATEWAY_REFUSED,
-                ),
-            ],
+            [Woke(), StayedSilent(), A_REFUSED_TURN],
+        ),
+        (
+            (A_SILENT_ROUND, completion("Eins.")),
+            {("play", "Eins."): VoiceRefused()},
+            [Woke(), StayedSilent(), SentenceStarted("Eins."), SentenceRefused("Eins.")],
+        ),
+        (
+            (A_SILENT_ROUND, completion("[shout] Hallo.")),
+            {},
+            [Woke(), StayedSilent(), ReplyUnreadable()],
         ),
     ],
 )
 def test_a_decision_that_played_nothing_leaves_its_lines_undecided_until_a_line_wakes(
-    place, first_reply, voice_raises, events
+    place, replies, voice_raises, events
 ):
     voice = RecordingVoice(place.trace, raises=voice_raises)
-    gateway = FakeGateway(first_reply, completion("Gern."))
+    gateway = FakeGateway(*replies, completion("Gern."))
+    tools = [a_lookup_tool(place.trace)]
     quiet = [f"Leise {number}." for number in range(1, 6)]
 
     async def hearing(trace):
@@ -427,17 +439,40 @@ def test_a_decision_that_played_nothing_leaves_its_lines_undecided_until_a_line_
         for seq, text in enumerate(quiet, start=2):
             yield a_line(seq, text, name="Ben")
         await trace.settled()
-        assert len(gateway.requests) == 1
+        assert len(gateway.requests) == len(replies)
         yield a_line(7, "Noch eine Frage?")
         await trace.settled()
 
     waking = {"Frage?", "Noch eine Frage?"}
-    assert place.run(hearing, gateway, voice=voice, waking=waking) == RETURNED
+    assert place.run(hearing, gateway, voice=voice, waking=waking, tools=tools) == RETURNED
 
     assert place.trace.events[: len(events)] == events
-    assert len(gateway.requests) == 2
-    assert conversation_of(gateway.requests[1]) == [
+    assert len(gateway.requests) == len(replies) + 1
+    assert conversation_of(gateway.requests[-1]) == [
         ("user", ["Frage?", *quiet, "Noch eine Frage?"])
+    ]
+
+
+def test_a_line_heard_during_a_decision_that_played_nothing_follows_that_decisions_lines(place):
+    trace = place.trace
+    gateway = PacedGateway(
+        trace,
+        [lambda: trace.until(lambda: len(trace.asked) == 2), piece("[shout] Hallo."), finish()],
+        [piece("Gern."), finish()],
+    )
+
+    async def hearing(trace):
+        yield a_line(1, "Frage?")
+        await trace.until(lambda: Woke() in trace.events)
+        yield a_line(2, "Dazwischen.", name="Ben")
+        await trace.settled()
+        yield a_line(3, "Noch eine Frage?")
+        await trace.settled()
+
+    assert place.run(hearing, gateway, waking={"Frage?", "Noch eine Frage?"}) == RETURNED
+
+    assert conversation_of(gateway.requests[1]) == [
+        ("user", ["Frage?", "Dazwischen.", "Noch eine Frage?"])
     ]
 
 
@@ -665,6 +700,39 @@ def test_a_voice_that_never_returns_still_hears_lines_but_starts_no_decision_unt
     assert [text for text, _ in place.trace.asked] == ["Erzähl.", "Hallo?", "Hörst du mich?"]
     assert len(gateway.requests) == 1
     assert place.trace.events_after(("cancelled",)) == []
+
+
+CUT_ANYWHERE = [
+    *((text, sentences, None) for text, sentences in STREAMED_ANSWERS),
+    ("  [ Silent ] Nichts zu sagen.", [], StayedSilent()),
+    ("[shout] Hallo.", [], ReplyUnreadable()),
+    ("[" + "x" * 17 + "] Hallo.", [], ReplyUnreadable()),
+    ("[sile", [], ReplyUnreadable()),
+    ("Ja [silent] gut.", ["Ja [silent] gut."], None),
+]
+
+
+@pytest.mark.parametrize(("text", "sentences", "opening"), CUT_ANYWHERE)
+def test_a_reply_cut_anywhere_plays_each_sentence_once_whole_and_after_content(
+    place, text, sentences, opening
+):
+    trace = place.trace
+    chooser = random.Random(text)  # noqa: S311 - seeded cut points that repeat on every run
+    cuts = [random_pieces(text, chooser) for _ in range(8)]
+    gateway = PacedGateway(trace, *(written_piece_by_piece(trace, texts) for texts in cuts))
+
+    async def hearing(trace):
+        for seq in range(1, len(cuts) + 1):
+            yield a_line(seq, "Erzähl.")
+            await trace.until(lambda: trace.count(("closed",)) == seq)
+            await trace.settled()
+
+    assert place.run(hearing, gateway) == RETURNED
+
+    assert trace.played == sentences * len(cuts)
+    assert trace.rendered_at_the_written_end == sentences[-1:] * len(cuts)
+    markers = [event for event in trace.events if isinstance(event, StayedSilent | ReplyUnreadable)]
+    assert markers == ([opening] * len(cuts) if opening else [])
 
 
 def test_a_reply_streamed_slowly_over_a_real_socket_plays_the_same_sentences(place):
