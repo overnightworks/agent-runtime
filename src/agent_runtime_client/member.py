@@ -24,6 +24,8 @@ __all__ = [
     "SPEAK_TOOL",
     "STANDING_URI",
     "AcceptInvitationArguments",
+    "AcceptInvitationRefusal",
+    "AcceptInvitationRefused",
     "Invitation",
     "MemberStanding",
     "PlaceEntry",
@@ -100,6 +102,24 @@ class AcceptInvitationArguments(StrictModel):
     place: PlaceRef
     invitation: NonEmptyUnicodeText
     epoch: int = Field(ge=0)
+
+
+class AcceptInvitationRefusal(StrEnum):
+    """Why the app does not accept an invitation: ``stale_invitation`` when the invitation is no
+    longer standing or its epoch is past, ``two_seats`` when the member already has a seat in the
+    place, ``sponsor_away`` when the person who brought the member is not there, ``busy`` when the
+    place cannot take the member now."""
+
+    STALE_INVITATION = "stale_invitation"
+    TWO_SEATS = "two_seats"
+    SPONSOR_AWAY = "sponsor_away"
+    BUSY = "busy"
+
+
+class AcceptInvitationRefused(StrictModel):
+    """What ``accept_invitation`` answers on a refusal, as JSON in an ``is_error`` result."""
+
+    refused: Annotated[AcceptInvitationRefusal, Field(strict=False)]
 
 
 class SpeakArguments(StrictModel):
