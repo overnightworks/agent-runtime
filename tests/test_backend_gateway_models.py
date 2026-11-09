@@ -261,17 +261,33 @@ def test_a_key_file_that_is_missing_or_malformed_raises_the_same_and_sends_nothi
     assert "first-line-0001" not in everything_it_shows(failure) + caplog.text
 
 
+async def _serve_model_list(reader, writer):
+    await reader.readuntil(b"\r\n\r\n")
+    body = model_list("text/a").body
+    head = f"HTTP/1.1 200 OK\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n"
+    writer.write(head.encode() + body)
+    await writer.drain()
+    writer.close()
+
+
 def test_a_list_call_writes_the_key_into_no_record_under_debug_on_the_transport_loggers(
     tmp_path, caplog
 ):
     for name in ("httpx2", "httpcore2"):
         caplog.set_level(logging.DEBUG, logger=name)
-    gateway = a_gateway(tmp_path)
 
-    list_models(gateway, FakeGateway(model_list("text/a")))
+    async def list_over_loopback():
+        server = await asyncio.start_server(_serve_model_list, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        config = a_gateway_config(tmp_path)
+        gateway = ChatGateway(origin=f"http://127.0.0.1:{port}", key_file=config.gateway.key_file)
+        async with server:
+            await list_gateway_models(gateway)
+        return gateway.key_file.read_text().strip()
 
-    key = gateway.key_file.read_text().strip()
-    assert any(record.name.startswith("httpx2") for record in caplog.records)
+    key = asyncio.run(list_over_loopback())
+
+    assert any(record.name.startswith("httpcore2") for record in caplog.records)
     assert key not in caplog.text
     assert key not in "".join(str(record.__dict__) for record in caplog.records)
 

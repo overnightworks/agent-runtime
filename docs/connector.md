@@ -287,12 +287,14 @@ and the client does not fall back to the file's model.
 
 `GatewayBackend`'s constructor and every `list_gateway_models` call set the `httpx2` and
 `httpcore2` loggers to WARNING only where the app left their level unset; a level the app set,
-quieter or louder, stands. The key stays out of the log even under DEBUG, because `httpcore2`
-prints a request by its method only
+quieter or louder, stands
 (`test_a_transport_logger_the_host_left_unset_is_not_enabled_for_debug_after_a_construction`,
 `test_a_level_the_host_set_on_a_transport_logger_stands_after_a_construction`,
 `test_a_transport_logger_the_host_left_unset_is_not_enabled_for_debug_after_a_list_call`,
-`test_a_level_the_host_set_on_a_transport_logger_stands_after_a_list_call`).
+`test_a_level_the_host_set_on_a_transport_logger_stands_after_a_list_call`). The key stays out of
+the log even under DEBUG, because `httpcore2` prints a request by its method only
+(`test_debug_logging_writes_the_key_into_no_record`,
+`test_a_list_call_writes_the_key_into_no_record_under_debug_on_the_transport_loggers`).
 
 ## The person front
 

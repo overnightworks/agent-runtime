@@ -68,7 +68,8 @@ _MODEL_LIST_DEADLINE_SECONDS: Final = 10
 _PICTURE_FILE_NAME: Final = "picture"
 _ERROR_TYPE: Final = re.compile(r"[a-z0-9_]{1,64}")
 _ERROR_CODE: Final = re.compile(r"\d{3}", re.ASCII)
-# A DEBUG record of either library may carry request headers, and the key is one.
+# Their records carry the gateway URL and the response headers; an app gets them only by
+# setting these loggers itself.
 _TRANSPORT_LOGGERS: Final = ("httpx2", "httpcore2")
 _MAX_KEY_BYTES: Final = 1024
 _PRINTABLE_ASCII: Final = re.compile(r"[\x21-\x7e]+")
