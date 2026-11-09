@@ -695,8 +695,9 @@ line wakes by the same rule, and a line that does not wake still enters the conv
 **The echo rule.** The agent's own voice, heard back through a person's microphone, arrives as
 that person's spoken line; the loop drops it so the agent does not answer itself. A spoken line
 that is not the agent's own is an echo when it has words longer than two characters, split at
-whitespace, and at least half of them are words of the agent's latest answer, compared in lower
-case without the punctuation at their edges. The latest answer is the most recent decision that
+whitespace, and at least half of them are among every word of the agent's latest answer, short
+ones included, compared in lower case without the punctuation at their edges; a word that is
+only punctuation counts on neither side. The latest answer is the most recent decision that
 played at least one sentence; its words are those of every sentence that started playing, the
 one playing now included, never a queued one or a refused one. An echo does not enter the
 conversation, is not asked of `wakes`, leaves `first_after_answer` to the next line and is
@@ -712,8 +713,10 @@ Proved by `tests/test_voice_echo.py`:
 `test_a_spoken_line_repeating_the_answer_is_dropped_never_asked_and_never_sent`,
 `test_an_echo_heard_while_the_next_decision_is_read_repeats_the_answer_before_it`,
 `test_a_line_repeating_only_an_older_answer_enters_while_the_latest_one_plays`,
+`test_a_line_repeating_only_an_older_answer_enters_while_the_next_decision_is_read`,
 `test_a_written_line_with_the_answers_words_enters_and_is_asked`,
 `test_a_sentence_still_queued_does_not_count_while_the_one_before_it_plays`,
+`test_a_sentence_still_rendering_does_not_count_and_the_one_played_before_it_does`,
 `test_a_refused_sentence_does_not_count_and_the_one_played_before_it_does`,
 `test_after_a_decision_that_played_nothing_the_answer_before_it_is_still_the_latest`,
 `test_an_echo_that_breaks_its_order_ends_the_loop_closed_and_silent` and

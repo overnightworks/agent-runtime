@@ -59,6 +59,9 @@ COUNTED_WORDS = [
     pytest.param("Ja, genau", ["Ja, gerne"], True, id="a short word with its comma is long"),
     pytest.param("geht's", ["gehts"], False, id="punctuation inside a word stays"),
     pytest.param(
+        "---", ["Warte ... gleich."], False, id="a word that is only punctuation counts nowhere"
+    ),
+    pytest.param(
         "Genau, die Folie zeigt den Umsatz",
         ["Die Folie zeigt den Umsatz"],
         True,
@@ -77,6 +80,7 @@ PUNCTUATION_AND_CASE = [
     pytest.param("Umsatz? Kosten!", ["Der Umsatz, die Kosten."], True, id="other punctuation"),
     pytest.param("„Gern geschehen…“", ["Gern geschehen."], True, id="quotes and an ellipsis"),
     pytest.param("DANKE SCHÖN!", ["Danke, schön."], True, id="case and punctuation together"),
+    pytest.param("Ja, ok.", ["Ja ok"], True, id="the answer's short words count"),
 ]
 
 
@@ -122,14 +126,19 @@ FIRST_HEARD_BACK = "die Folie zeigt den Umsatz"
 SECOND_HEARD_BACK = "danach kommen die Kosten"
 
 
-def lines_sent(request) -> list[str]:
-    """The text of every line a request sent, in order."""
+def rows_sent(request) -> list[dict]:
+    """Every line a request sent, in order."""
     return [
-        row["text"]
+        row
         for message in messages_of(request)[1:]
         if message["role"] == "user"
         for row in rows_of(message)
     ]
+
+
+def lines_sent(request) -> list[str]:
+    """The text of every line a request sent, in order."""
+    return [row["text"] for row in rows_sent(request)]
 
 
 async def while_its_first_sentence_plays(trace, voice) -> None:
@@ -221,6 +230,32 @@ def test_a_line_repeating_only_an_older_answer_enters_while_the_latest_one_plays
     assert lines_sent(gateway.requests[-1]) == [QUESTION, "Danke.", FIRST_HEARD_BACK]
 
 
+def test_a_line_repeating_only_an_older_answer_enters_while_the_next_decision_is_read(place):
+    trace = place.trace
+    gateway = PacedGateway(
+        trace,
+        [piece(FIRST), finish()],
+        [piece("Gern geschehen."), finish()],
+        [trace.settled, piece("Ja."), finish()],
+    )
+
+    async def hearing(trace):
+        yield a_line(1, QUESTION)
+        await trace.settled()
+        yield a_line(2, "Danke.")
+        await trace.settled()
+        yield a_line(3, "Und weiter?")
+        await trace.until(lambda: trace.count(Woke()) == 3)
+        yield a_line(4, FIRST_HEARD_BACK)
+        await trace.until(lambda: "Ja." in trace.played)
+        await trace.settled()
+
+    assert place.run(hearing, gateway) == RETURNED
+
+    assert EchoDropped(FIRST_HEARD_BACK) not in trace.events
+    assert (FIRST_HEARD_BACK, False) in trace.asked
+
+
 def test_a_written_line_with_the_answers_words_enters_and_is_asked(place):
     gateway = FakeGateway(completion(FIRST), completion("Gern."))
 
@@ -256,6 +291,25 @@ def test_a_sentence_still_queued_does_not_count_while_the_one_before_it_plays(pl
     assert place.trace.asked == [(QUESTION, False), (SECOND_HEARD_BACK, False)]
     assert EchoDropped(FIRST_HEARD_BACK) in place.trace.events
     assert lines_sent(gateway.requests[-1]) == [QUESTION, SECOND_HEARD_BACK]
+
+
+def test_a_sentence_still_rendering_does_not_count_and_the_one_played_before_it_does(place):
+    voice = RecordingVoice(place.trace, hangs={("render", SECOND)})
+    gateway = FakeGateway(completion(f"{FIRST} {SECOND}"), completion("Gern."))
+
+    async def hearing(trace):
+        yield a_line(1, QUESTION)
+        await trace.until(lambda: ("render", SECOND) in trace.entries)
+        await trace.settled()
+        yield a_line(2, SECOND_HEARD_BACK)
+        yield a_line(3, FIRST_HEARD_BACK)
+        await trace.settled()
+        await trace.host_cancels()
+
+    assert place.run(hearing, gateway, voice=voice).cancelled
+
+    assert place.trace.asked == [(QUESTION, False), (SECOND_HEARD_BACK, False)]
+    assert EchoDropped(FIRST_HEARD_BACK) in place.trace.events
 
 
 @pytest.mark.parametrize("call", ["render", "play"])
@@ -361,11 +415,5 @@ def test_the_line_after_an_echo_counts_only_the_lines_never_heard_as_missed(
 
     assert place.run(hearing, gateway) == RETURNED
 
-    rows = [
-        row
-        for message in messages_of(gateway.requests[-1])[1:]
-        if message["role"] == "user"
-        for row in rows_of(message)
-    ]
-    thanks = next(row for row in rows if row["text"] == "Danke.")
+    thanks = next(row for row in rows_sent(gateway.requests[-1]) if row["text"] == "Danke.")
     assert thanks.get("missed_before") == missed_before
