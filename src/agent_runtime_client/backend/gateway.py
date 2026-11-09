@@ -37,6 +37,7 @@ from agent_runtime_client.backend.streamed_round import (
     MalformedRound,
     RoundErrorEvent,
     StreamedRound,
+    checked_error_of,
     error_kind_of,
     read_round,
 )
@@ -72,6 +73,7 @@ _LOGGER: Final = logging.getLogger(__name__)
 _COMPLETIONS_PATH: Final = "/v1/chat/completions"
 _PICTURES_PATH: Final = "/v1/images/generations"
 _MODELS_PATH: Final = "/v1/models"
+_BUDGET_EXCEEDED: Final = "budget_exceeded"
 _MODEL_LIST_DEADLINE_SECONDS: Final = 10
 _PICTURE_FILE_NAME: Final = "picture"
 # Their records carry the gateway URL and the response headers; an app gets them only by
@@ -555,21 +557,26 @@ async def _raise_unless_ok(response: httpx2.Response) -> None:
     if status == httpx2.codes.TOO_MANY_REQUESTS:
         wait = _wait_seconds(response.headers.get("Retry-After"))
         raise _GatewayStop(TurnStopKind.REFUSED, RejectionCode.BUSY, retry_after_s=wait)
-    _LOGGER.warning(
-        "the gateway answered with status %d, %s", status, await _error_kind_of(response)
-    )
+    error = await _error_of(response)
+    _LOGGER.warning("the gateway answered with status %d, %s", status, error_kind_of(error))
+    if status == httpx2.codes.UNPROCESSABLE_ENTITY and _is_spent_budget(error):
+        raise _GatewayStop(TurnStopKind.REFUSED, RejectionCode.BUDGET_SPENT)
     is_refusal = httpx2.codes.BAD_REQUEST <= status < httpx2.codes.INTERNAL_SERVER_ERROR
     detail = GatewayDetail.GATEWAY_REFUSED if is_refusal else GatewayDetail.GATEWAY_FAILED
     raise _unavailable(detail)
 
 
-async def _error_kind_of(response: httpx2.Response) -> str:
-    """The error body's ``type`` and ``code`` when both are well formed; never its other fields."""
+def _is_spent_budget(error: object) -> bool:
+    checked = checked_error_of(error)
+    return checked is not None and checked[0] == _BUDGET_EXCEEDED
+
+
+async def _error_of(response: httpx2.Response) -> object:
+    """The reply's ``error`` member, or none when the body is unreadable."""
     try:
-        error = json.loads(await _read_body(response, MAX_EVENT_BYTES))["error"]
+        return json.loads(await _read_body(response, MAX_EVENT_BYTES))["error"]
     except (TurnStopped, *_UNREADABLE_REPLY):
-        return error_kind_of(None)
-    return error_kind_of(error)
+        return None
 
 
 async def _read_body(response: httpx2.Response, limit: int) -> bytes:

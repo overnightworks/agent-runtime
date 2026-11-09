@@ -7,11 +7,18 @@ import logging
 
 import pytest
 
+from agent_runtime_client.backend import TurnStopKind
 from agent_runtime_client.backend.fake_gateway import FakeGateway, Reply
 from agent_runtime_client.backend.gateway import GatewayBackend
-from agent_runtime_client.turn import MAX_EVENT_BYTES
+from agent_runtime_client.turn import (
+    MAX_EVENT_BYTES,
+    RejectionCode,
+    Turn,
+    TurnMessage,
+    TurnRole,
+)
 from tests.support import gateway_turn_support
-from tests.support.gateway_turn_support import UNAVAILABLE, ending
+from tests.support.gateway_turn_support import UNAVAILABLE, a_request, ending
 
 scenario = gateway_turn_support.scenario
 
@@ -83,3 +90,57 @@ def test_a_refusal_without_a_valid_error_type_and_code_logs_that_no_type_was_giv
     assert "no error type given" in caplog.text
     assert "authentication_error" not in caplog.text
     assert "ab12" not in caplog.text
+
+
+BUDGET_SPENT = (TurnStopKind.REFUSED, RejectionCode.BUDGET_SPENT)
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "expected"),
+    [
+        (422, _error_body(type="budget_exceeded", code="422"), BUDGET_SPENT),
+        (
+            422,
+            b'{"error":{"type":"budget_exceeded","code":"422","message":"person"}}',
+            BUDGET_SPENT,
+        ),
+        (422, _error_body(type="invalid_request_error", code="422"), UNAVAILABLE),
+        (422, b"<html>budget_exceeded</html>", UNAVAILABLE),
+        (400, _error_body(type="budget_exceeded", code="400"), UNAVAILABLE),
+        (
+            429,
+            _error_body(type="budget_exceeded", code="429"),
+            (TurnStopKind.REFUSED, RejectionCode.BUSY),
+        ),
+        (500, _error_body(type="budget_exceeded", code="500"), UNAVAILABLE),
+    ],
+    ids=[
+        "spent-app-budget",
+        "spent-person-budget",
+        "another-422",
+        "422-without-error-object",
+        "another-4xx-with-the-type",
+        "429-stays-busy",
+        "5xx-stays-unavailable",
+    ],
+)
+@pytest.mark.parametrize("picture", [False, True], ids=["text", "picture"])
+def test_only_a_422_with_the_budget_error_type_is_a_spent_budget(
+    scenario, status, body, expected, picture
+):
+    request = (
+        a_request(
+            turn=Turn(system="Paint it.", messages=[TurnMessage(role=TurnRole.USER, text="a cat")]),
+            picture_size="1024x1024",
+            model="image/standin",
+        )
+        if picture
+        else None
+    )
+
+    _, stopped = scenario.outcome(
+        GatewayBackend(scenario.config(), transport=FakeGateway(Reply(status, body=body))),
+        request,
+    )
+
+    assert ending(stopped) == expected

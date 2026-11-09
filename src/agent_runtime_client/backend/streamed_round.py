@@ -119,7 +119,7 @@ class _Assembly:
         return StreamedRound(self.finish_reason, message)
 
 
-def error_kind_of(error: object) -> str:
+def checked_error_of(error: object) -> tuple[str, str] | None:
     """The error's ``type`` and ``code`` when both are well formed; never its other fields."""
     if isinstance(error, dict):
         error_type, code = error.get("type"), error.get("code")
@@ -129,8 +129,16 @@ def error_kind_of(error: object) -> str:
             and isinstance(code, str)
             and _ERROR_CODE.fullmatch(code)
         ):
-            return f"error type {error_type}, code {code}"
-    return "no error type given"
+            return error_type, code
+    return None
+
+
+def error_kind_of(error: object) -> str:
+    """The text a log gives for the error's checked ``type`` and ``code``."""
+    checked = checked_error_of(error)
+    if checked is None:
+        return "no error type given"
+    return "error type {}, code {}".format(*checked)
 
 
 async def read_round(
