@@ -1,8 +1,8 @@
 """How the loop reads a reply: the marker words, the protocol text that teaches them, the sentences.
 
-This module is the one owner of the marker words; the protocol text is composed from them. A
-reply is read per round: a round opening with ``[`` holds until its marker closes within
-16 characters, and any other round is speech, released sentence by sentence.
+This module is the one owner of the marker words and the window note; the protocol text is
+composed from them. A reply is read per round: a round opening with ``[`` holds until its marker
+closes within 16 characters, and any other round is speech, released sentence by sentence.
 """
 
 from __future__ import annotations
@@ -28,19 +28,24 @@ class Marker(StrEnum):
 SILENT_REPLY: Final = f"[{Marker.SILENT}]"
 """A reply that says nothing; the conversation records a silent decision as this."""
 
+WINDOW_NOTE: Final = "(Earlier parts of this conversation are no longer shown.)"
+"""The line that opens the first user message once the window has dropped earlier parts."""
+
 PROTOCOL_TEXT: Final = (
     "You take part in a conversation by voice. Each user message holds what was heard or "
     'written since your last reply, one JSON object per line: "name" is who it comes from, '
     '"kind" is what kind of line it is in the app\'s words, "own" marks your own line, '
     '"spoken" marks a line said aloud rather than written, "text" is the line itself, and '
     '"missed_before" counts the lines that were not passed to you before it.\n'
+    f"Once the conversation grows long, the first user message opens with {WINDOW_NOTE}; "
+    "nobody said that line.\n"
     "Your reply is spoken aloud sentence by sentence, so write plain spoken sentences without "
     "markup, lists, headings or emoji.\n"
     f"To say nothing, reply with {SILENT_REPLY} and nothing else; reply so too after a tool call "
     "when you have nothing to add.\n"
     f"Your earlier replies hold only what was spoken aloud, or {SILENT_REPLY}."
 )
-"""Appended to the agent's prompt: the line format, plain spoken sentences and the markers."""
+"""Appended to the agent's prompt: the line format and note, spoken sentences, the markers."""
 
 _MARKER_OPEN: Final = "["
 _MARKER_CLOSE: Final = "]"

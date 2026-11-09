@@ -5,8 +5,9 @@ read as YAML 1.2 by ruamel.yaml, then the prompt as Markdown) with one extra key
 and two required ones: ``model``, a ``text/<model>`` name for a text agent, and
 ``maxDurationSeconds``. ``maxToolCalls`` is required exactly when ``tools`` is not empty.
 ``picture: {size: <width>x<height>}`` makes a picture agent: its ``model`` is an
-``image/<model>`` name and it selects no tools. ``offered_to`` is a display filter for the app's
-own UI; the boundary is the gateway's group check.
+``image/<model>`` name and it selects no tools. ``voice: {windowBytes: <positive integer>}``
+bounds what each decision of the voice loop sends; a picture agent carries none. ``offered_to``
+is a display filter for the app's own UI; the boundary is the gateway's group check.
 """
 
 from __future__ import annotations
@@ -82,6 +83,12 @@ class _Picture(BaseModel):
     size: PictureSize
 
 
+class _Voice(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+
+    window_bytes: StrictInt = Field(alias="windowBytes", gt=0)
+
+
 class _FrontMatter(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
 
@@ -93,6 +100,7 @@ class _FrontMatter(BaseModel):
     max_duration_seconds: StrictInt = Field(alias="maxDurationSeconds", gt=0)
     max_tool_calls: StrictInt | None = Field(default=None, alias="maxToolCalls", gt=0)
     picture: _Picture | None = None
+    voice: _Voice | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -152,6 +160,7 @@ class AgentDefinition(BaseModel):
     max_duration_seconds: PositiveInt
     max_tool_calls: PositiveInt | None
     picture_size: PictureSize | None = None
+    voice_window_bytes: PositiveInt | None = None
 
     @model_validator(mode="after")
     def _pair_tools_with_their_call_bound(self) -> Self:
@@ -218,6 +227,8 @@ def load_agent(source: Traversable, declarations: list[ToolDeclaration]) -> Agen
     tools = _selected_tools(file_name, front_matter.tools, declarations)
     if front_matter.picture is not None and tools:
         raise AgentFileError(f"{file_name}: tools: a picture agent selects none")
+    if front_matter.picture is not None and front_matter.voice is not None:
+        raise AgentFileError(f"{file_name}: voice: a picture agent carries none")
     try:
         _refuse_unpaired_call_bound(tools, front_matter.max_tool_calls)
     except ValueError as error:
@@ -232,6 +243,7 @@ def load_agent(source: Traversable, declarations: list[ToolDeclaration]) -> Agen
         max_duration_seconds=front_matter.max_duration_seconds,
         max_tool_calls=front_matter.max_tool_calls,
         picture_size=None if front_matter.picture is None else front_matter.picture.size,
+        voice_window_bytes=None if front_matter.voice is None else front_matter.voice.window_bytes,
     )
 
 

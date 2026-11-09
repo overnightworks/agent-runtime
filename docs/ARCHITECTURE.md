@@ -64,7 +64,7 @@ flowchart TB
   (`voice.loop.run_voice_loop`) on the `AgentBackend` port, its ports `VoiceOut` and `WakeRule`
   and its events. `voice.reply` owns the reply markers, the protocol text composed from them and
   the sentence release, `voice.sentences` the syntok split, and `voice.conversation` the running
-  conversation.
+  conversation and the window each decision sends of it.
 
 ## Runtime
 
@@ -212,6 +212,9 @@ over the whole suite.
   every app ends up writing the same adapter.
 - A cap in the loop: the person's budget at the gateway and the app's off switches bound an
   agent. Reopens when the operator turns a cap on.
+- Dropping one line per call at the window's bound: it would rewrite the whole prompt on every
+  call, so no request would share a prefix with the last. The window drops whole pairs until a
+  quarter of it is free. Reopens if no model in use reuses a request's prefix.
 
 ## Risks and technical debt
 

@@ -432,8 +432,9 @@ def test_control_character_inside_quotes_is_refused_not_normalized(
         {"extra": "description: 'sentinelvalue"},
         {"model": "sentinelvalue"},
         {"description": "[sentinelvalue]"},
+        {"extra": "voice: {windowBytes: sentinelvalue}"},
     ],
-    ids=["duplicate-key", "syntax-error", "model-value", "non-string-description"],
+    ids=["duplicate-key", "syntax-error", "model-value", "non-string-description", "voice-window"],
 )
 def test_formatted_traceback_does_not_show_file_values(
     tmp_path: Path, fields: dict[str, str]
@@ -647,6 +648,7 @@ def test_a_text_agent_has_no_picture_size(tmp_path: Path) -> None:
         ({"extra": ""}, "model"),
         ({"tools": "[read_note]"}, "tools"),
         ({"max_tool_calls": "5"}, "maxToolCalls"),
+        ({"extra": f"{PICTURE}\nvoice: {{windowBytes: 4096}}"}, "voice"),
     ],
 )
 def test_a_picture_file_that_does_not_fit_a_picture_agent_is_refused_and_named(
@@ -693,6 +695,35 @@ def test_a_picture_key_that_is_not_exactly_a_size_is_refused_and_named(
     text = picture_text(extra=picture)
 
     with pytest.raises(AgentFileError, match="picture"):
+        load(tmp_path, text)
+
+
+def test_a_voice_agent_carries_its_window_and_any_other_agent_none(tmp_path: Path) -> None:
+    voiced = load(tmp_path, agent_text(extra="voice: {windowBytes: 4096}"))
+    silent = load(tmp_path, agent_text())
+
+    assert (voiced.voice_window_bytes, silent.voice_window_bytes) == (4096, None)
+
+
+@pytest.mark.parametrize(
+    "voice",
+    [
+        "voice: {}",
+        "voice: {windowBytes: 0}",
+        "voice: {windowBytes: -1}",
+        "voice: {windowBytes: '10'}",
+        "voice: {windowBytes: 1.5}",
+        "voice: {windowBytes: true}",
+        "voice: {windowBytes: 10, unit: tokens}",
+        "voice: 10",
+    ],
+)
+def test_a_voice_section_that_is_not_one_positive_window_is_refused_and_named(
+    tmp_path: Path, voice: str
+) -> None:
+    text = agent_text(extra=voice)
+
+    with pytest.raises(AgentFileError, match=r"notes-assistant\.md: voice"):
         load(tmp_path, text)
 
 
