@@ -716,7 +716,7 @@ Proved by `tests/test_voice_window.py`:
 `test_a_long_talk_drops_once_per_quarter_of_the_window_it_grows_never_once_per_line`,
 `test_lines_beyond_the_window_on_their_own_lose_their_oldest_and_keep_the_newest`,
 `test_a_line_larger_than_the_window_still_goes_whole_and_the_agent_answers` and
-`test_lines_a_decision_dropped_stay_dropped_and_the_note_stays_when_it_played_nothing`; the
+`test_pairs_a_decision_dropped_stay_dropped_and_the_note_stays_when_it_played_nothing`; the
 note's sentence in the protocol text by
 `test_the_protocol_text_names_the_note_that_opens_a_window_with_earlier_parts_dropped` in
 `tests/test_voice_reply.py`.
