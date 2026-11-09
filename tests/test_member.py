@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -346,10 +347,20 @@ def test_spoken_with_a_malformed_field_is_refused(fields: dict[str, Any]) -> Non
         Spoken.model_validate_json(wire_text)
 
 
-def test_a_refused_content_carries_exactly_the_three_speak_refusal_codes() -> None:
+@pytest.mark.parametrize(
+    "parse",
+    [
+        lambda wire: SpeakRefused.model_validate_json(json.dumps(wire)),
+        SpeakRefused.model_validate,
+    ],
+    ids=["from-json-text", "from-decoded-json"],
+)
+def test_a_refused_content_carries_exactly_the_three_speak_refusal_codes(
+    parse: Callable[[dict[str, str]], SpeakRefused],
+) -> None:
     wires = [{"refused": code} for code in ("not_active", "too_long", "unavailable")]
 
-    contents = [SpeakRefused.model_validate_json(json.dumps(wire)) for wire in wires]
+    contents = [parse(wire) for wire in wires]
 
     assert {content.refused for content in contents} == set(SpeakRefusal)
     assert [json.loads(content.model_dump_json()) for content in contents] == wires
