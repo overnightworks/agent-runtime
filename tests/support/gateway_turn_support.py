@@ -7,6 +7,7 @@ import contextlib
 import ipaddress
 import json
 import ssl
+import types
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -264,10 +265,12 @@ def a_handler_raising(stop: TurnStopped):
 
 
 def a_handler_raising_from_a_nameless_namespace(stop: TurnStopped):
-    """A handler whose frame's globals have no ``__name__``, as ``exec`` into a bare dict gives."""
-    namespace = {"stop": stop}
-    exec("async def stopping(_principal, _arguments):\n    raise stop\n", namespace)  # noqa: S102 - the case under test is a handler exec defines from this constant source
-    return namespace["stopping"]
+    """A handler whose frame's globals are an empty dict, so they hold no ``__name__``."""
+
+    async def stopping(_principal, _arguments):
+        raise stop
+
+    return types.FunctionType(stopping.__code__, {}, closure=stopping.__closure__)
 
 
 def self_signed_authority(directory: Path, name: str) -> tuple[Path, Path]:
