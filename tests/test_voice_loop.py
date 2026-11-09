@@ -159,7 +159,7 @@ def test_a_silent_reply_speaks_nothing_runs_its_tools_and_is_recorded_as_silent(
     assert place.run(hearing, gateway, tools=tools) == RETURNED
 
     assert place.trace.count(("tool", "look_up")) == 1
-    assert ("render", "Gern.") == place.trace.calls[0]
+    assert place.trace.calls[0] == ("render", "Gern.")
     assert place.trace.events[:3] == [Woke(), StayedSilent(), StayedSilent()]
     assert conversation_of(gateway.requests[2]) == [
         ("user", ["Ada erzählt vom Urlaub."]),
