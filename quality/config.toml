@@ -84,12 +84,6 @@ date = 2026-11-09
 reason = "the rename moves the same modules to the import agents"
 
 [[gate.loosened]]
-what = 'import contract "the client base modules import no HTTP library" changes source_modules'
-item = "overnightworks/agents#837"
-date = 2026-11-09
-reason = "the rename moves the same modules to the import agents"
-
-[[gate.loosened]]
 what = 'import-linter changes root_packages'
 item = "overnightworks/agents#837"
 date = 2026-11-09
