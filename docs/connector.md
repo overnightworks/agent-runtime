@@ -138,7 +138,7 @@ What the client sends for a text turn, and nothing else:
 | --- | --- |
 | Request | `POST <origin>/v1/chat/completions`, no redirect followed, no cookie kept, no proxy variable read; HTTPS trusts `ca_file` alone |
 | Headers | `Authorization: Bearer <key>`, `Content-Type: application/json`, and the transport's own defaults; no `x-litellm-*` or `anthropic-*` header |
-| Body | exactly `model` (the request's `text/<model>` name), `messages` (the system prompt, then the turn's messages, then the round's calls and results), `user` and, when the agent has tools, `tools` (OpenAI function tools of each declaration's `name`, `description` and `parameters`); no `stream`, `max_tokens`, `metadata`, `tags`, `fallbacks`, `num_retries`, `mock_response` or `api_key` |
+| Body | exactly `model` (the request's `text/<model>` name), `messages` (the system prompt, then the turn's messages, then the round's calls and results), `user`, `stream` (`true`) and, when the agent has tools, `tools` (OpenAI function tools of each declaration's `name`, `description` and `parameters`); no `stream_options`, `max_tokens`, `metadata`, `tags`, `fallbacks`, `num_retries`, `mock_response` or `api_key` |
 | `user` | `"fp-" + sha256(json.dumps([iss, sub], ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()`, 67 characters |
 
 Proved by `tests/test_backend_gateway.py`: `test_the_request_is_one_post_with_the_system_prompt_and_the_messages`,
@@ -155,13 +155,14 @@ every person's budget, so every caller computes it with
 
 | The gateway answers | The turn ends |
 | --- | --- |
-| 200, `finish_reason: stop`, non-empty text of at most `MAX_EVENT_BYTES` | one `AssistantTextEvent`, then `FinalEvent` |
-| 200, `finish_reason: tool_calls`, whole round | the calls run in order (see below), then the next request |
-| 200 otherwise (malformed JSON, no choices, empty text, another `finish_reason`, a lone surrogate, a longer reply, a round that is not whole) | `failed: provider_error` |
+| 200, an event stream that ends with `[DONE]` after `finish_reason: stop`, non-empty text of at most `MAX_EVENT_BYTES` | one `AssistantTextEvent` of the round's whole text, then `FinalEvent` |
+| 200, an event stream that ends with `[DONE]` after `finish_reason: tool_calls`, whole round | the calls run in order (see below), then the next request |
+| 200 otherwise (a stream that ends or breaks before `[DONE]`, a `[DONE]` with no finish reason, an event that is no JSON object or no chunk, a line that is no UTF-8, empty text, another `finish_reason`, a lone surrogate, a longer reply, a round that is not whole) | `failed: provider_error`, detail `malformed_reply` |
+| 200, an event stream with an error event (a JSON object with an `error` key), with or without a following `[DONE]` | `failed: provider_unavailable`, detail `gateway_failed`; the log carries the error's type and code when they are well formed, never its message |
 | 429 | `refused: busy`; `retry_after_s` from the `Retry-After` seconds, at most `MAX_RETRY_AFTER_S`; an HTTP-date or no header gives none |
 | another 4xx, a budget refusal included | `failed: provider_unavailable`, detail `gateway_refused`; the body is read within `MAX_EVENT_BYTES` only for the logged error type and code |
 | 1xx, a 2xx other than 200, 3xx or 5xx (a `Retry-After` is ignored) | `failed: provider_unavailable`, detail `gateway_failed`; the body is read as for a 4xx |
-| connection refused or reset, TLS failure, an origin the HTTP library refuses | `failed: provider_unavailable` |
+| connection refused or reset, or lost while the stream runs, TLS failure, an origin the HTTP library refuses | `failed: provider_unavailable`, detail `connection_failed` |
 
 Proved by `tests/test_backend_gateway.py`: `test_a_text_turn_ends_with_the_answer`,
 `test_a_200_that_is_no_complete_text_is_provider_error`,
@@ -169,15 +170,21 @@ Proved by `tests/test_backend_gateway.py`: `test_a_text_turn_ends_with_the_answe
 `test_a_refusal_status_is_provider_unavailable_as_gateway_refused`,
 `test_a_server_failure_is_provider_unavailable_and_ignores_retry_after`,
 `test_a_lost_connection_is_provider_unavailable` and
-`test_an_origin_the_http_library_refuses_is_provider_unavailable`. A person over budget reads as
+`test_an_origin_the_http_library_refuses_is_provider_unavailable`; and by `tests/test_backend_gateway_stream.py`:
+`test_a_round_that_is_not_complete_ends_the_turn_and_closes_the_response`,
+`test_an_error_event_ends_the_turn_and_logs_only_its_type_and_code`,
+`test_a_connection_lost_while_the_stream_runs_is_connection_failed` and
+`test_a_stopped_turn_holds_no_text_from_the_wire`. A round is complete only at `[DONE]` after
+`stop` or `tool_calls`; the client judges what the gateway sends, so a provider stream the
+gateway cuts and closes with a finish reason of its own reads as complete. A person over budget reads as
 "unavailable", the same as any other refusal. `detail` is for logs only. A refusal logs the
 gateway's error type and code, never its message
 (`tests/test_backend_gateway_refusal.py`).
 
 ### The tool loop
 
-The loop runs in the client, in process, over buffered rounds. A round is judged whole before
-anything shows or runs: only the request's tool names are offered and accepted, so a call to any
+The loop runs in the client, in process, over streamed rounds, each read whole before it is
+judged. A round is judged whole before anything shows or runs: only the request's tool names are offered and accepted, so a call to any
 other name, arguments that are not a JSON object, an empty round or a call id used twice in the
 turn refuses the round (`failed: provider_error`) with no handler run. A round that would take
 the turn past `max_tool_calls` ends `failed: limit_exceeded` the same way. Proved by
@@ -218,10 +225,15 @@ tool returns only what that may see.
 | --- | --- | --- |
 | One tool result | `MAX_EVENT_BYTES` | the model gets a fixed `is_error` sentence instead of the content; the side effect stands; the turn continues |
 | One request of a turn, serialised | 4 × `MAX_EVENT_BYTES` | no request is sent; `failed: limit_exceeded` |
-| One response body | as for a text turn | `failed: provider_error` |
+| One line, one event's data | 6 × `MAX_EVENT_BYTES` + 64 KiB | `failed: provider_error` |
+| One round's text | `MAX_EVENT_BYTES` | `failed: provider_error` |
+| One assembled round | the request bound | `failed: provider_error`; no handler runs |
 
-Proved by `test_a_tool_result_over_the_event_bound_is_replaced_and_the_side_effect_stands` and
-`test_repeated_large_results_stop_the_turn_before_a_request_over_the_bound`.
+Proved by `test_a_tool_result_over_the_event_bound_is_replaced_and_the_side_effect_stands`,
+`test_repeated_large_results_stop_the_turn_before_a_request_over_the_bound`,
+`test_a_line_that_never_ends_is_cut_at_the_bound_as_provider_error` and
+`test_a_round_past_the_request_bound_runs_no_handler`; the reader's own bounds by
+`tests/test_streamed_round.py`.
 
 ### A picture agent
 

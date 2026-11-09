@@ -23,10 +23,19 @@ class Reply:
     body: bytes = b""
 
 
+def _event_stream(*chunks: JsonObject, finish_reason: str) -> Reply:
+    chunks += ({"choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}]},)
+    events = [f"data: {json.dumps(chunk)}\n\n" for chunk in chunks] + ["data: [DONE]\n\n"]
+    return Reply(headers={"content-type": "text/event-stream"}, body="".join(events).encode())
+
+
+def _delta(**delta: object) -> JsonObject:
+    return {"choices": [{"index": 0, "delta": delta}]}
+
+
 def completion(text: str, *, finish_reason: str = "stop") -> Reply:
-    """A 200 chat completion with one choice."""
-    choice = {"finish_reason": finish_reason, "message": {"role": "assistant", "content": text}}
-    return Reply(body=json.dumps({"choices": [choice]}).encode())
+    """A 200 event stream: ``text`` as one content chunk, the finish chunk and ``[DONE]``."""
+    return _event_stream(_delta(content=text), finish_reason=finish_reason)
 
 
 def tool_call(call_id: str, name: str, arguments: JsonObject | str) -> JsonObject:
@@ -36,10 +45,14 @@ def tool_call(call_id: str, name: str, arguments: JsonObject | str) -> JsonObjec
 
 
 def tool_round(*calls: JsonObject, content: str | None = None) -> Reply:
-    """A 200 chat completion that asks for these calls and ends with ``tool_calls``."""
-    message = {"role": "assistant", "content": content, "tool_calls": list(calls)}
-    choice = {"finish_reason": "tool_calls", "message": message}
-    return Reply(body=json.dumps({"choices": [choice]}).encode())
+    """A 200 event stream that asks for these calls.
+
+    An optional content chunk, one fragment per call with its whole arguments, the ``tool_calls``
+    finish chunk and ``[DONE]``.
+    """
+    chunks = [] if content is None else [_delta(content=content)]
+    chunks += [_delta(tool_calls=[{"index": index, **call}]) for index, call in enumerate(calls)]
+    return _event_stream(*chunks, finish_reason="tool_calls")
 
 
 def picture(content: bytes) -> Reply:

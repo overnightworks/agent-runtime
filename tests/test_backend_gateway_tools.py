@@ -687,7 +687,7 @@ def test_the_request_carries_only_model_messages_user_and_tools_without_the_effe
     _, _, gateway = shop.run(completion("ok"))
 
     body = sent(gateway, 0)
-    assert set(body) == {"model", "messages", "user", "tools"}
+    assert set(body) == {"model", "messages", "user", "stream", "tools"}
     assert body["tools"] == [
         {
             "type": "function",

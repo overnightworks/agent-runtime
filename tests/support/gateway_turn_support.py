@@ -1,10 +1,11 @@
-"""What the gateway backend's turn tests share: a controlled clock, a person and a config."""
+"""What the gateway backend's turn tests share: a person, a config and a streamed gateway."""
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import json
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -57,6 +58,77 @@ class HangingTransport(httpx2.AsyncBaseTransport):
         except asyncio.CancelledError:
             self.cancelled = True
             raise
+
+
+class Streamed(httpx2.AsyncBaseTransport):
+    """Answers with a streamed body, recording whether it was read and whether it was closed.
+
+    After its chunks it hangs, raises ``breaks_with`` or ends.
+    """
+
+    def __init__(
+        self,
+        chunks: tuple[bytes, ...],
+        *,
+        status: int = 200,
+        headers: dict[str, str] | None = None,
+        hangs: bool = False,
+        breaks_with: Exception | None = None,
+    ) -> None:
+        self._chunks = chunks
+        self._status = status
+        self._headers = headers or {}
+        self._hangs = hangs
+        self._breaks_with = breaks_with
+        self.read = False
+        self.closed = asyncio.Event()
+        self.started = asyncio.Event()
+
+    async def handle_async_request(self, request):
+        transport = self
+
+        class Body(httpx2.AsyncByteStream):
+            async def __aiter__(self) -> AsyncIterator[bytes]:
+                transport.read = True
+                for chunk in transport._chunks:
+                    yield chunk
+                transport.started.set()
+                if transport._breaks_with is not None:
+                    raise transport._breaks_with
+                if transport._hangs:
+                    await asyncio.Event().wait()
+
+            async def aclose(self) -> None:
+                transport.closed.set()
+
+        return httpx2.Response(self._status, headers=self._headers, stream=Body())
+
+
+def a_chunk(
+    content: str | None = None, *, tool_calls: list | None = None, finish_reason: str | None = None
+) -> dict:
+    """One ``chat.completion.chunk`` as the gateway writes it: a null field is absent."""
+    delta = {} if content is None else {"content": content}
+    if tool_calls is not None:
+        delta["tool_calls"] = tool_calls
+    choice = {"index": 0, "delta": delta}
+    if finish_reason is not None:
+        choice["finish_reason"] = finish_reason
+    return {"choices": [choice]}
+
+
+def a_fragment(index: int, *, call_id=None, name=None, arguments=None) -> dict:
+    function = {} if name is None else {"name": name}
+    if arguments is not None:
+        function["arguments"] = arguments
+    return {"index": index, **({} if call_id is None else {"id": call_id}), "function": function}
+
+
+def an_event_stream(*events: dict | str, done: bool = True) -> bytes:
+    """Events as ``data:`` lines (a string is written as it is), then ``[DONE]`` unless cut."""
+    lines = [event if isinstance(event, str) else json.dumps(event) for event in events]
+    lines += ["[DONE]"] if done else []
+    return "".join(f"data: {line}\n\n" for line in lines).encode()
 
 
 def ending(stopped: TurnStopped | None):

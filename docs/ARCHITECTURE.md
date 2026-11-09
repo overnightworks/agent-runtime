@@ -33,7 +33,7 @@ flowchart TB
     backend --> turn
     mcp --> tools
     mcp --> turn
-    backend -->|"one chat completion per round"| gateway
+    backend -->|"one streamed chat completion per round"| gateway
     person -->|"MCP 2026-07-28, JSON-RPC over POST"| mcp
 ```
 
@@ -59,8 +59,9 @@ flowchart TB
 ## Runtime
 
 A turn runs inside the app's process. `GatewayBackend.run` admits the person, reads the key
-file, sends one chat completion per round and, when a round asks for tools, runs the app's
-handlers in order before the next request. One deadline bounds the whole turn. Nothing
+file and streams one chat completion per round; it reads each round whole and judges it before
+anything shows or runs, and when the round asks for tools it runs the app's handlers in order
+before the next request. One deadline bounds the whole turn. Nothing
 persists: the client holds no state between turns, and the gateway holds the budget.
 
 One gateway turn with a tool call:
@@ -74,13 +75,13 @@ sequenceDiagram
     App->>GB: run(request, person)
     GB->>GB: admit the person, read the key file
     GB->>GW: chat completion (messages, declared tools)
-    GW-->>GB: finish_reason tool_calls
+    GW-->>GB: call fragments, finish_reason tool_calls, [DONE]
     GB-->>App: ToolCallEvent
     GB->>H: handler(person, arguments)
     H-->>GB: outcome
     GB-->>App: ToolResultEvent
     GB->>GW: chat completion (with the result)
-    GW-->>GB: finish_reason stop
+    GW-->>GB: text pieces, finish_reason stop, [DONE]
     GB-->>App: AssistantTextEvent, FinalEvent
 ```
 
@@ -159,8 +160,8 @@ size and clone ratchets, and coverage over the whole suite.
 - A capability front that verifies run tokens minted elsewhere: no minter remains, because the
   person front authenticates the person through the host's gate. Reopens if a component other
   than the person's agent must call an app's tools.
-- Streaming gateway responses: rounds are buffered so a round is judged whole before it shows.
-  Reopens if an app needs token-by-token output.
+- A per-turn choice between buffered and streamed rounds: one wire path serves every app.
+  Reopens if a gateway model cannot stream.
 - Provider CLIs and subscription logins: the gateway is the only route to a model. Reopens if
   the gateway cannot reach a model an app needs.
 

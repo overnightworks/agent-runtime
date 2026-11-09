@@ -43,6 +43,7 @@ source_modules =
     agent_runtime_client.backend
     agent_runtime_client.backend.fake_gateway
     agent_runtime_client.backend.gateway
+    agent_runtime_client.backend.streamed_round
     agent_runtime_client.config
     agent_runtime_client.errors
     agent_runtime_client.member
@@ -87,3 +88,15 @@ source_modules =
     agent_runtime_client.tools
 forbidden_modules =
     agent_runtime_client.mcp_wire
+
+# The streamed-round reader is pure: it frames bytes and assembles a round, so it imports no HTTP
+# library, and gateway.py calls it, never the reverse.
+[importlinter:contract:streamed-round-stays-pure]
+name = backend.streamed_round imports no HTTP library and not backend.gateway
+type = forbidden
+source_modules =
+    agent_runtime_client.backend.streamed_round
+forbidden_modules =
+    httpx2
+    httpx
+    agent_runtime_client.backend.gateway
