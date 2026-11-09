@@ -428,7 +428,7 @@ absent, so a pause is told from a removal.
 An `accept_invitation` refusal is an `is_error` result whose content is
 `AcceptInvitationRefused(refused)` as JSON, in `speak`'s shape (`SpeakRefused`), with one
 `AcceptInvitationRefusal` code: `stale_invitation` (the invitation is no longer standing, has
-expired, or its id or epoch no longer matches, or the member's own session is not registered),
+expired, or its id or epoch no longer matches, or the member holds no lease),
 `two_seats` (the person who brought the member does not hold exactly one seat in the place, the
 inviting one), `sponsor_away` (that person's seat lost its connection and waits to resume) or `busy`
 (the place or the app already holds as many members as it takes, or that person already brings
