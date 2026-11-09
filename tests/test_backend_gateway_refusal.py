@@ -13,12 +13,9 @@ from agent_runtime_client.backend.gateway import GatewayBackend
 from agent_runtime_client.turn import (
     MAX_EVENT_BYTES,
     RejectionCode,
-    Turn,
-    TurnMessage,
-    TurnRole,
 )
 from tests.support import gateway_turn_support
-from tests.support.gateway_turn_support import UNAVAILABLE, a_request, ending
+from tests.support.gateway_turn_support import UNAVAILABLE, a_picture_request, ending
 
 scenario = gateway_turn_support.scenario
 
@@ -146,15 +143,7 @@ BUSY = (TurnStopKind.REFUSED, RejectionCode.BUSY)
 def test_only_a_422_with_the_budget_error_type_is_a_spent_budget(
     scenario, status, body, expected, detail, picture
 ):
-    request = (
-        a_request(
-            turn=Turn(system="Paint it.", messages=[TurnMessage(role=TurnRole.USER, text="a cat")]),
-            picture_size="1024x1024",
-            model="image/standin",
-        )
-        if picture
-        else None
-    )
+    request = a_picture_request() if picture else None
 
     _, stopped = scenario.outcome(
         GatewayBackend(scenario.config(), transport=FakeGateway(Reply(status, body=body))),

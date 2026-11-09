@@ -11,7 +11,7 @@ import re
 from collections.abc import AsyncIterable, AsyncIterator
 from contextlib import aclosing
 from dataclasses import dataclass, field
-from typing import Final
+from typing import Final, NamedTuple
 
 from agent_runtime_client.turn import MAX_EVENT_BYTES, JsonObject
 
@@ -119,7 +119,14 @@ class _Assembly:
         return StreamedRound(self.finish_reason, message)
 
 
-def checked_error_of(error: object) -> tuple[str, str] | None:
+class CheckedError(NamedTuple):
+    """An error's ``type`` and ``code``, both well formed."""
+
+    error_type: str
+    code: str
+
+
+def checked_error_of(error: object) -> CheckedError | None:
     """The error's ``type`` and ``code`` when both are well formed; never its other fields."""
     if isinstance(error, dict):
         error_type, code = error.get("type"), error.get("code")
@@ -129,7 +136,7 @@ def checked_error_of(error: object) -> tuple[str, str] | None:
             and isinstance(code, str)
             and _ERROR_CODE.fullmatch(code)
         ):
-            return error_type, code
+            return CheckedError(error_type, code)
     return None
 
 
@@ -138,7 +145,7 @@ def error_kind_of(error: object) -> str:
     checked = checked_error_of(error)
     if checked is None:
         return "no error type given"
-    return "error type {}, code {}".format(*checked)
+    return f"error type {checked.error_type}, code {checked.code}"
 
 
 async def read_round(

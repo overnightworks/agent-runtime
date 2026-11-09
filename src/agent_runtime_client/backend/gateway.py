@@ -258,7 +258,7 @@ async def list_gateway_models(
         async with asyncio.timeout(_MODEL_LIST_DEADLINE_SECONDS):
             return await _get_models(gateway, transport)
     except TurnStopped as stopped:
-        # A 429 carries no detail; for a list it is a refusal like any other 4xx.
+        # A 429 and a spent budget carry no detail; for a list each refuses like any other 4xx.
         detail = GatewayDetail(stopped.detail or GatewayDetail.GATEWAY_REFUSED)
     except TimeoutError:
         detail = GatewayDetail.TIMED_OUT
@@ -559,7 +559,7 @@ async def _raise_unless_ok(response: httpx2.Response) -> None:
         raise _GatewayStop(TurnStopKind.REFUSED, RejectionCode.BUSY, retry_after_s=wait)
     error = await _error_of(response)
     _LOGGER.warning("the gateway answered with status %d, %s", status, error_kind_of(error))
-    if status == httpx2.codes.UNPROCESSABLE_ENTITY and _is_spent_budget(error):
+    if status == httpx2.codes.UNPROCESSABLE_CONTENT and _is_spent_budget(error):
         raise _GatewayStop(TurnStopKind.REFUSED, RejectionCode.BUDGET_SPENT)
     is_refusal = httpx2.codes.BAD_REQUEST <= status < httpx2.codes.INTERNAL_SERVER_ERROR
     detail = GatewayDetail.GATEWAY_REFUSED if is_refusal else GatewayDetail.GATEWAY_FAILED
@@ -568,7 +568,7 @@ async def _raise_unless_ok(response: httpx2.Response) -> None:
 
 def _is_spent_budget(error: object) -> bool:
     checked = checked_error_of(error)
-    return checked is not None and checked[0] == _BUDGET_EXCEEDED
+    return checked is not None and checked.error_type == _BUDGET_EXCEEDED
 
 
 async def _error_of(response: httpx2.Response) -> object:
