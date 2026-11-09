@@ -154,8 +154,8 @@ async def _events(chunks: AsyncIterable[bytes]) -> AsyncIterator[str]:
     async with aclosing(_lines(chunks)) as lines:
         async for line in lines:
             if not line:
-                if joined := "\n".join(data):
-                    yield joined
+                if data:
+                    yield "\n".join(data)
                 data, data_bytes = [], 0
             elif (value := _data_of(line)) is not None:
                 data_bytes += _utf8_size(value) + bool(data)

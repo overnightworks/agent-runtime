@@ -104,6 +104,7 @@ def test_the_last_finish_reason_counts():
 @pytest.mark.parametrize(
     "event",
     [
+        "",
         "null",
         '{"choices": ["x"]}',
         '{"choices": [{"delta": []}]}',
@@ -112,6 +113,7 @@ def test_the_last_finish_reason_counts():
         '{"choices": [{"finish_reason": 5}]}',
     ],
     ids=[
+        "empty-data",
         "null",
         "choice-not-an-object",
         "delta-not-an-object",
@@ -121,7 +123,7 @@ def test_the_last_finish_reason_counts():
     ],
 )
 def test_an_event_that_is_no_chunk_is_malformed(event):
-    stream = an_event_stream(a_chunk("a"), event)
+    stream = an_event_stream(a_chunk("a", finish_reason="stop"), event)
 
     with pytest.raises(MalformedRound):
         read(stream)
