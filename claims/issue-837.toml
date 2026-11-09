@@ -1,0 +1,8 @@
+claim_id = "328894b2aacc459e9dc2f2f4ecc20c83"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "482b6ae1f5ef1f008046cb2e79db69c369599f6d"
+branch = "claude/issue-837-rename-to-agents"
+scope = [".github/workflows/ci.yml", ".github/workflows/release.yml", ".importlinter", "AGENTS.md", "README.md", "docs", "pyproject.toml", "quality/config.toml", "src", "tests", "uv.lock"]
+opened_commit = "36c4af4e6b8e8d3ee93ac00fabbeace87b7a62fc"
+whole_reason = "A pure rename of one package touches every module, every test and every file that names it; split, the tree would not import between the slices."
