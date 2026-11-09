@@ -16,12 +16,13 @@ The distribution is not on PyPI. A host pins the git tag:
 
 `overnightworks-agent-runtime-client @ git+https://github.com/overnightworks/agent-runtime@v<version>`
 
-The base depends on `pydantic` and `ruamel.yaml` only. Two extras are optional:
+The base depends on `pydantic` and `ruamel.yaml` only. Three extras are optional:
 
 | Extra | Adds | For |
 |---|---|---|
 | `backend` | `httpx2` | `GatewayBackend`, the one backend, and `FakeGateway`, its scripted transport for tests |
 | `mcp-server` | `anyio`, the official MCP SDK (`mcp`) | `agent_runtime_client.mcp_server`, an app's MCP endpoint on revision 2026-07-28 |
+| `voice` | `syntok` | `agent_runtime_client.voice`, the voice loop: an agent hears a place's lines and answers sentence by sentence, as text |
 
 ## Use
 
