@@ -3,5 +3,5 @@ agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
 role = "builder"
 base = "540befa116dd0ecbf229f091bffcea50d32e9efe"
 branch = "claude/issue-809-agents-md-shape"
-scope = ["AGENTS.md", "docs/ARCHITECTURE.md"]
+scope = ["AGENTS.md"]
 opened_commit = "8a636a64963ca1661416a88ea715e4ba132ffe7e"
