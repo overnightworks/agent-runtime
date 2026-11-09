@@ -1,5 +1,6 @@
 """A reply is read round by round: its opening marker first, then its sentences as they complete."""
 
+import json
 import random
 
 import pytest
@@ -11,6 +12,7 @@ from agent_runtime_client.turn_events import (
     ToolResultEvent,
 )
 from agent_runtime_client.voice import ReplyUnreadable, StayedSilent
+from agent_runtime_client.voice.conversation import Conversation
 from agent_runtime_client.voice.reply import (
     PROTOCOL_TEXT,
     SILENT_REPLY,
@@ -18,6 +20,7 @@ from agent_runtime_client.voice.reply import (
     SentenceRelease,
 )
 from agent_runtime_client.voice.sentences import split_sentences
+from tests.support.voice_support import a_line
 
 SILENT = (StayedSilent(),)
 UNREADABLE = (ReplyUnreadable(),)
@@ -98,6 +101,17 @@ def test_a_tool_call_ends_a_round_and_the_next_round_is_read_afresh(events, open
 
 def test_the_protocol_text_names_the_marker_the_reader_takes_as_silence():
     assert SILENT_REPLY in PROTOCOL_TEXT
+
+
+def test_the_protocol_text_names_every_key_a_written_line_carries():
+    conversation = Conversation()
+    conversation.hear(a_line(1, "Eins."))
+    conversation.hear(a_line(3, "Drei."))
+
+    written = conversation.open_decision()[-1].text.splitlines()
+
+    keys = {key for line in written for key in json.loads(line)}
+    assert {key for key in keys if f'"{key}"' not in PROTOCOL_TEXT} == set()
     assert read_turn(a_final(SILENT_REPLY)) == (SILENT, [])
 
 

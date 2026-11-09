@@ -73,7 +73,7 @@ file and streams one chat completion per round: the round's text reaches the app
 writes it, and when the round asks for tools the app's handlers run in order once the round is
 complete and judged whole, before the next request. One deadline bounds the whole turn. Nothing
 persists: the client holds no state between turns, except that the voice loop holds one running
-conversation in memory for as long as it runs, and the gateway holds the budget.
+conversation in memory for as long as it runs. The gateway holds the budget.
 
 The voice loop runs in the host's process too. Lines come in from the host's hearing port; the
 host's wake rule decides which line starts a decision. One decision is in flight at a time: its
@@ -174,7 +174,7 @@ over the whole suite.
   text shows as the gateway streams it, so an app can show or speak the first sentence while the
   model still writes; a turn that then fails ends short, and what showed stays.
 - Sound never enters the library: the voice loop's ports carry text, and an import contract keeps
-  every speech library out, so the sound stays with the app and the speech service.
+  the speech client out, so the sound stays with the app and the speech service.
 - Every heard line enters the voice loop's conversation, the agent's own spoken line excepted,
   so the agent hears everything; only a line the host's wake rule accepts costs a model call.
 - Only what was played is recorded, or `[silent]`, so the conversation never claims the agent
@@ -206,6 +206,8 @@ over the whole suite.
   that knows nothing of the app's agent. Reopens if a realtime session can run the app's agent.
 - Speaking as a tool the model calls: a tool call runs only after its round is judged whole, so
   speech could not start before the whole answer existed, and every sentence would cost a round.
+  The `speak` tool stays for the loop: the app's `VoiceOut` calls it and the model is never offered
+  it. Reopens if a tool call can run while its round is still being written.
 - A speech adapter in the library: the app holds the sound and its speech access. Reopens if
   every app ends up writing the same adapter.
 - A cap in the loop: the person's budget at the gateway and the app's off switches bound an
