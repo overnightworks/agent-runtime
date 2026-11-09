@@ -677,6 +677,7 @@ def test_an_unusable_ca_file_is_provider_unavailable(scenario):
 
 
 def test_debug_logging_writes_the_key_into_no_record(scenario, caplog):
+    caplog.set_level(logging.DEBUG)
     for name in ("httpx2", "httpcore2"):
         caplog.set_level(logging.DEBUG, logger=name)
 
@@ -695,6 +696,7 @@ def test_debug_logging_writes_the_key_into_no_record(scenario, caplog):
 def test_a_transport_logger_the_host_left_unset_is_not_enabled_for_debug_after_a_construction(
     scenario, caplog, name
 ):
+    caplog.set_level(logging.DEBUG)
     for logger in ("httpx2", "httpcore2"):
         caplog.set_level(logging.NOTSET, logger=logger)
 

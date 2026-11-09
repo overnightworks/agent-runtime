@@ -270,7 +270,10 @@ def test_a_list_call_writes_the_key_into_no_record_under_debug_on_the_transport_
 
     list_models(gateway, FakeGateway(model_list("text/a")))
 
-    assert gateway.key_file.read_text().strip() not in caplog.text
+    key = gateway.key_file.read_text().strip()
+    assert any(record.name.startswith("httpx2") for record in caplog.records)
+    assert key not in caplog.text
+    assert key not in "".join(str(record.__dict__) for record in caplog.records)
 
 
 @pytest.mark.parametrize(
@@ -279,6 +282,7 @@ def test_a_list_call_writes_the_key_into_no_record_under_debug_on_the_transport_
 def test_a_transport_logger_the_host_left_unset_is_not_enabled_for_debug_after_a_list_call(
     tmp_path, caplog, name
 ):
+    caplog.set_level(logging.DEBUG)
     for logger in ("httpx2", "httpcore2"):
         caplog.set_level(logging.NOTSET, logger=logger)
 
