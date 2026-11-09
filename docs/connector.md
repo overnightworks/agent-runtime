@@ -379,11 +379,14 @@ the tool and the exception's class
 `agent_runtime_client.member` owns what an app and an agent say to each other about a member:
 `PlaceRef`, `StandingState`, `Invitation` and `Standing`, `MemberStanding(standings)` (what
 `STANDING_URI`, `member://standing`, answers with), `PlaceWindow(generation, starts_at, entries)`
-of `PlaceEntry(seq, kind, name, text, own)`, `LEASE_SECONDS` (120), `LISTEN_BOUND_SECONDS` (50)
-and `AcceptInvitationArguments(place, invitation, epoch)` for the tool `ACCEPT_INVITATION_TOOL`.
-A window's `seq` ascends strictly and may skip; a non-empty window starts at its first `seq`;
-an empty window is valid and its `starts_at` is the `seq` the next line gets. A place's window
-is the resource `place_window_uri(place)`, `member://standing/places/{kind}/{id}` with each
+of `PlaceEntry(seq, kind, name, text, own, spoken)`, `LEASE_SECONDS` (120),
+`LISTEN_BOUND_SECONDS` (50), `AcceptInvitationArguments(place, invitation, epoch)` for the tool
+`ACCEPT_INVITATION_TOOL`, and the records of the tool `SPEAK_TOOL`
+([hearing and speaking](#hearing-and-speaking)). `spoken` is true for a line said aloud and
+heard, false for a written one; every dumped entry carries it, and an entry without it reads as
+written. A window's `seq` ascends strictly and may skip; a non-empty window starts at its first
+`seq`; an empty window is valid and its `starts_at` is the `seq` the next line gets. A place's
+window is the resource `place_window_uri(place)`, `member://standing/places/{kind}/{id}` with each
 segment percent-encoded, so `/` in an opaque `kind` or `id` stays inside its segment;
 `place_ref_from_window_uri(uri)` returns the `PlaceRef` for that canonical spelling only and
 `None` for anything else. A URI is no credential.
@@ -448,6 +451,40 @@ keeps its lease.
 **What each app owns:** its places and who stands where, the invitation, its expiry and the epoch
 check at accept, the participation and permission decisions, and enforcing the lease, removing a
 member whose lease ran out.
+
+## Hearing and speaking
+
+A member that hears a conversation and speaks in it does both through the member module's
+records, the same way in every app. The library carries text only: the app turns speech into text
+and a sentence into sound.
+
+**Hearing.** Heard speech is a window entry with `spoken` true: its `text` is one finished
+utterance and its `name` the speaker's shown name.
+
+**Speaking** is the side-effecting tool `SPEAK_TOOL`, `speak`. Its arguments are
+`SpeakArguments(place, text)`: the `PlaceRef`, as for `accept_invitation`, and one sentence. On
+success it answers `Spoken(duration_ms)` as JSON, the sound's length in milliseconds, at least 1.
+A refusal is an `is_error` result whose content is `SpeakRefused(refused)` as JSON, such as
+`{"refused": "too_long"}`, with one `SpeakRefusal` code:
+
+- `not_active`: the member left, was removed or is paused;
+- `too_long`: the sentence is longer than the app speaks at once;
+- `unavailable`: the app cannot speak now.
+
+Proved by `tests/test_member.py`.
+
+**What each app that hears and speaks owns:**
+
+- It appends finished utterances only, one entry per utterance, under the speaker's shown name
+  and its own `kind`, and never provisional text.
+- It enters a person's speech only while that person allows it under the app's own rule.
+- It appends the member's own sentences as `own` and `spoken` when they start playing.
+- It plays one member's sentences in order, each behind that member's previous sentence, and
+  answers each with the sound's length.
+- It bounds a sentence's length, refuses with these codes, and drops the queued sentences of a
+  removed or paused member at once.
+- It bounds its window as it does without speech.
+- Its own privacy section states what it sends and its legal basis.
 
 
 ## A marked route as a tool
