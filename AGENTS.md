@@ -3,7 +3,7 @@
 ## Commands
 
 - `uv sync --locked --extra dev`: install the environment; run it before any other command.
-- `uv run pytest -q`: the suite; needs no live provider.
+- `uv run pytest -q -n auto`: the suite; needs no live provider.
 - `uv run ruff check src tests`: lint `src` and `tests`.
 - `uvx --from "git+https://github.com/overnightworks/quality@<sha>" quality check`: the gate's local check; `<sha>` is the one `.github/workflows/ci.yml` pins for quality's gate.
 - `uv build`: build the wheel; run it after `uv sync`.
