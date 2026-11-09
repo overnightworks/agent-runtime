@@ -128,7 +128,7 @@ class GatewayBackend(AgentBackend):
     async def run(
         self, request: TurnRequest, person: TurnPerson
     ) -> AsyncGenerator[TurnEvent, None]:
-        """The turn's events; a stop leaves this frame, which never held the key or a reply.
+        """The turn's events; a stop leaves this frame holding neither the key nor a reply.
 
         A stop the gateway path raised is replaced by a plain one, with nothing of the frames or
         errors it passed through; a stop the host raised is the same exception, its traceback
@@ -138,6 +138,7 @@ class GatewayBackend(AgentBackend):
             async with contextlib.aclosing(self._turn(request, person)) as events:
                 async for event in events:
                     yield event
+                    # The next pull can stop the turn; this frame then holds no text piece.
                     del event
         except _GatewayStop as stopped:
             closed = _plain(stopped)
@@ -152,7 +153,7 @@ class GatewayBackend(AgentBackend):
     ) -> AsyncGenerator[TurnEvent, None]:
         tools = self._declared_tools(request)
         if person.role not in request.roles:
-            raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.FORBIDDEN)
+            raise _GatewayStop(TurnStopKind.REFUSED, RejectionCode.FORBIDDEN)
         deadline = asyncio.get_running_loop().time() + request.max_duration_seconds
         if request.picture_size is not None:
             yield await _before(
@@ -204,7 +205,7 @@ class GatewayBackend(AgentBackend):
 
     async def _authorise(self, person: TurnPerson) -> str:
         if self._config.api_group not in await person.groups():
-            raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.NOT_ENABLED)
+            raise _GatewayStop(TurnStopKind.REFUSED, RejectionCode.NOT_ENABLED)
         return _read_key(self._config.gateway.key_file)
 
     async def _picture(
