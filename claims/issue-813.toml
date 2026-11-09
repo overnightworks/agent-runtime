@@ -1,0 +1,8 @@
+claim_id = "dd6d1f6f874c48f1a41a9dd97e7df1bd"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "566dd034784040b3f19815cf711159f7cd173795"
+branch = "claude/issue-813-one-voice-loop"
+scope = [".importlinter", "README.md", "docs/ARCHITECTURE.md", "docs/VISION.md", "docs/connector.md", "pyproject.toml", "src/agent_runtime_client/agents.py", "src/agent_runtime_client/voice", "tests/support/voice_support.py", "tests/test_voice_loop.py", "tests/test_voice_reply.py", "tests/test_voice_sentences.py", "uv.lock"]
+opened_commit = "7b4449368022055b389ceb6ec7744ad55e67154a"
+whole_reason = "A loop without its sentences, its markers or its conversation has no honest end-to-end proof, and each of its modules has one job, so splitting would land modules ahead of their caller."
