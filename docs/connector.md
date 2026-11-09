@@ -410,7 +410,10 @@ the next read shows today's truth. A subscriber of `member://standing` also rece
 place window `current` holds; a subscriber of one place gets that place alone. The stream ends
 after `LISTEN_BOUND_SECONDS` with a completion result carrying the subscription id; a stream cut
 without one is `SubscriptionLost` at the SDK's client. After either the runner listens again, and
-reads again once acknowledged. A listen needs an SSE `Accept`, else it is `406`.
+reads again once acknowledged. A listen needs an SSE `Accept`, else it is `406`. The SDK's
+`Client.listen` holds no task group, so whatever the runner's own loop body raises arrives bare at
+its `yield`: a runner that maps the stream's failures maps only the stream's own, which are the
+opening, `SubscriptionLost` during iteration and its deadline.
 
 **Revocation.** Every pulse is checked against `current` when it is drained from the stream's
 pending URIs, so a removal ends delivery on an open stream, and `current` runs once per pulse, so

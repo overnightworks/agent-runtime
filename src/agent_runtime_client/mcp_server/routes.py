@@ -18,7 +18,10 @@ from agent_runtime_client.tools import (
     JsonObject,
     ToolDeclaration,
     ToolEffect,
+    ToolExclusion,
+    ToolMark,
     ToolOutcome,
+    read_decision,
 )
 
 _SUPPORTED_METHODS: Final = frozenset({"get", "post", "put", "patch", "delete"})
@@ -210,18 +213,11 @@ def _handler(app: AsgiApp, target: RouteTarget) -> PersonToolHandler:
     return handler
 
 
-def _mark(operation: _Operation) -> tuple[str, ToolEffect]:
-    mark = operation.node[AGENT_TOOL_EXTENSION]
-    effects = {effect.value: effect for effect in ToolEffect}
-    if not (
-        isinstance(mark, dict)
-        and mark.keys() == {"name", "effect"}
-        and isinstance(mark.get("name"), str)
-        and isinstance(mark.get("effect"), str)
-        and mark["effect"] in effects
-    ):
+def _mark(operation: _Operation) -> ToolMark:
+    mark = read_decision(operation.node[AGENT_TOOL_EXTENSION])
+    if not isinstance(mark, ToolMark):
         raise _Breach("a decision must be the mapping agent_tool or not_an_agent_tool returns")
-    return mark["name"], effects[mark["effect"]]
+    return mark
 
 
 def _tool(operation: _Operation, app: AsgiApp, components: JsonObject) -> PersonTool:
@@ -230,7 +226,8 @@ def _tool(operation: _Operation, app: AsgiApp, components: JsonObject) -> Person
     _check_responses(operation, components)
     description = _check_description(operation)
     target, parameters = _declared_inputs(operation, components)
-    name, effect = _mark(operation)
+    mark = _mark(operation)
+    name, effect = mark.name, mark.effect
     if operation.method in _UNSAFE_METHODS and effect is ToolEffect.READ_ONLY:
         raise _Breach("a PUT, PATCH or DELETE is not safe and cannot be marked read-only")
     declaration = ToolDeclaration(
@@ -257,13 +254,7 @@ def _unshadowed(operation: _Operation, operations: Sequence[_Operation]) -> None
 
 def _is_excluded(operation: _Operation) -> bool:
     """Whether the operation carries an exclusion; one without a non-blank reason is a breach."""
-    extension = operation.node[AGENT_TOOL_EXTENSION]
-    if not (isinstance(extension, dict) and extension.keys() == {"excluded"}):
-        return False
-    reason = extension["excluded"]
-    if not isinstance(reason, str) or not reason.strip():
-        raise _Breach("an exclusion needs a reason that is a non-blank string")
-    return True
+    return isinstance(read_decision(operation.node[AGENT_TOOL_EXTENSION]), ToolExclusion)
 
 
 def _decided(

@@ -79,13 +79,33 @@ class HandTool:
     handler: HandToolHandler
 
 
+_NAME_KEY: Final = "name"
+_EFFECT_KEY: Final = "effect"
+_EXCLUDED_KEY: Final = "excluded"
+
+
+@dataclass(frozen=True)
+class ToolMark:
+    """What ``agent_tool`` wrote: the tool's name and its effect class."""
+
+    name: str
+    effect: ToolEffect
+
+
+@dataclass(frozen=True)
+class ToolExclusion:
+    """What ``not_an_agent_tool`` wrote: the reason a route is no tool."""
+
+    reason: str
+
+
 def agent_tool(*, name: str, effect: ToolEffect) -> dict[str, object]:
     """The mark that makes a route a tool: pass it as FastAPI's ``openapi_extra``.
 
     A route becomes a tool only through its own mark; the other decision is
     ``not_an_agent_tool``. The client imports no FastAPI.
     """
-    return {AGENT_TOOL_EXTENSION: {"name": name, "effect": effect.value}}
+    return {AGENT_TOOL_EXTENSION: {_NAME_KEY: name, _EFFECT_KEY: effect.value}}
 
 
 def not_an_agent_tool(*, reason: str) -> dict[str, object]:
@@ -94,4 +114,23 @@ def not_an_agent_tool(*, reason: str) -> dict[str, object]:
     An excluded route yields no tool and no mark. The generator reads the same extension key as
     for ``agent_tool``, so one route cannot hold both decisions, and it validates the reason.
     """
-    return {AGENT_TOOL_EXTENSION: {"excluded": reason}}
+    return {AGENT_TOOL_EXTENSION: {_EXCLUDED_KEY: reason}}
+
+
+def read_decision(extension: object) -> ToolMark | ToolExclusion | None:
+    """The decision an ``x-agent-tool`` value holds, or ``None`` when it is neither shape.
+
+    Raises ``ValueError`` for an exclusion whose reason is not a non-blank string.
+    """
+    if not isinstance(extension, dict):
+        return None
+    if extension.keys() == {_EXCLUDED_KEY}:
+        reason = extension[_EXCLUDED_KEY]
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("an exclusion needs a reason that is a non-blank string")
+        return ToolExclusion(reason)
+    if extension.keys() == {_NAME_KEY, _EFFECT_KEY}:
+        name, effect = extension[_NAME_KEY], extension[_EFFECT_KEY]
+        if isinstance(name, str) and isinstance(effect, str) and effect in ToolEffect:
+            return ToolMark(name, ToolEffect(effect))
+    return None
