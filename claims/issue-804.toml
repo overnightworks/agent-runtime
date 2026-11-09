@@ -1,0 +1,8 @@
+claim_id = "8a6c5eff8120493682ef216ed7e67e9b"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "808b04dce52a72d66fa0b17b06a87e60554da607"
+branch = "claude/issue-804-streamed-round"
+scope = [".importlinter", "docs/ARCHITECTURE.md", "docs/connector.md", "src/agent_runtime_client/backend/fake_gateway.py", "src/agent_runtime_client/backend/gateway.py", "src/agent_runtime_client/backend/streamed_round.py", "tests/support/gateway_turn_support.py", "tests/test_backend_gateway.py", "tests/test_backend_gateway_stream.py", "tests/test_backend_gateway_tools.py", "tests/test_streamed_round.py"]
+opened_commit = "1bc2384e844ac764e8bdc406220635f6179487ea"
+whole_reason = "The request flag, the reader and the fake every host suite answers through switch together, and the docs and pinned tests change with them."
