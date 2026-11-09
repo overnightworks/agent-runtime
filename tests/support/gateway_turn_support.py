@@ -70,7 +70,7 @@ class HangingTransport(httpx2.AsyncBaseTransport):
 class Streamed(httpx2.AsyncBaseTransport):
     """Answers with a streamed body, recording whether it was read and whether it was closed.
 
-    After its chunks it hangs, raises ``breaks_with`` or ends.
+    After its chunks it hangs, raises ``breaks_with`` or ends; its close raises ``closes_with``.
     """
 
     def __init__(
@@ -81,12 +81,14 @@ class Streamed(httpx2.AsyncBaseTransport):
         headers: dict[str, str] | None = None,
         hangs: bool = False,
         breaks_with: Exception | None = None,
+        closes_with: Exception | None = None,
     ) -> None:
         self._chunks = chunks
         self._status = status
         self._headers = headers or {}
         self._hangs = hangs
         self._breaks_with = breaks_with
+        self._closes_with = closes_with
         self.read = False
         self.closed = asyncio.Event()
         self.started = asyncio.Event()
@@ -107,6 +109,8 @@ class Streamed(httpx2.AsyncBaseTransport):
 
             async def aclose(self) -> None:
                 transport.closed.set()
+                if transport._closes_with is not None:
+                    raise transport._closes_with
 
         return httpx2.Response(self._status, headers=self._headers, stream=Body())
 
@@ -206,8 +210,10 @@ class Scenario:
         self.outcome(GatewayBackend(self.config(), transport=gateway), person=person)
         return json.loads(gateway.requests[0].content)["user"]
 
-    def outcome(self, backend, request=None, person=None):
-        return asyncio.run(_turn(backend, request or a_request(), person or self.person()[0]))
+    def outcome(self, backend, request=None, person=None, *, leaves_after=None):
+        return asyncio.run(
+            _turn(backend, request or a_request(), person or self.person()[0], leaves_after)
+        )
 
 
 @pytest.fixture
@@ -236,12 +242,15 @@ def a_request(**changes) -> TurnRequest:
     return TurnRequest(**{**fields, **changes})
 
 
-async def _turn(backend, request, person):
+async def _turn(backend, request, person, leaves_after=None):
+    """The events and the stop, if any; the host leaves after ``leaves_after`` events if given."""
     events = []
     try:
         async with contextlib.aclosing(backend.run(request, person)) as stream:
             async for event in stream:
                 events.append(event)
+                if len(events) == leaves_after:
+                    break
     except TurnStopped as stopped:
         return events, stopped
     return events, None

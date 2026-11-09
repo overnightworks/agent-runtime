@@ -137,9 +137,12 @@ class GatewayBackend(AgentBackend):
         try:
             async with contextlib.aclosing(self._turn(request, person)) as events:
                 async for event in events:
-                    yield event
-                    # The next pull can stop the turn; this frame then holds no text piece.
-                    del event
+                    try:
+                        yield event
+                    finally:
+                        # The next pull or the host's close can stop the turn; this frame then
+                        # holds no text piece.
+                        del event
         except _GatewayStop as stopped:
             closed = _plain(stopped)
         except TurnStopped as stopped:
