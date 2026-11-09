@@ -10,7 +10,7 @@ from agent_runtime_client.voice.reply import WINDOW_NOTE
 from tests.support.voice_lines import a_line
 from tests.support.voice_support import A_BUDGET_REFUSAL, RETURNED, VoicePlace, messages_of
 
-QUIET = [f"Leise {number:02d}." for number in range(1, 13)]
+QUIET = [f"Leise {number:02d}, schön." for number in range(1, 13)]
 
 
 def bytes_of(messages: list[dict]) -> int:
@@ -49,7 +49,7 @@ def a_talk(place: VoicePlace, decisions: int) -> list:
 
     async def hearing(trace):
         for seq in range(1, decisions + 1):
-            yield a_line(seq, f"Zeile {seq:03d}?")
+            yield a_line(seq, f"Zeile {seq:03d}, schön?")
             await trace.until(lambda: len(trace.played) == seq)
         await trace.settled()
 
@@ -151,7 +151,7 @@ def test_lines_beyond_the_window_on_their_own_lose_their_oldest_and_keep_the_new
 def test_a_line_larger_than_the_window_still_goes_whole_and_the_agent_answers(
     tmp_path, earlier, noted
 ):
-    long_text = "Ein langer Satz ohne Ende " * 40
+    long_text = "Ein langer Satz über Größe " * 40
     texts = [*earlier, long_text]
     gateway = FakeGateway(completion("Gut."))
 
