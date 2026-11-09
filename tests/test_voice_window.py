@@ -8,7 +8,7 @@ import pytest
 from agent_runtime_client.backend.fake_gateway import FakeGateway, completion
 from agent_runtime_client.voice.conversation import WINDOW_NOTE
 from tests.support.voice_lines import a_line
-from tests.support.voice_support import A_BUDGET_REFUSAL, RETURNED, VoicePlace, messages_of
+from tests.support.voice_support import A_GATEWAY_REFUSAL, RETURNED, VoicePlace, messages_of
 
 QUIET = [f"Leise {number:02d}, schön." for number in range(1, 13)]
 
@@ -188,7 +188,7 @@ def test_an_agent_without_a_voice_section_is_refused_before_hearing_is_read(tmp_
 
 
 @pytest.mark.parametrize(
-    "failing_reply", [A_BUDGET_REFUSAL, completion("[shout] Hallo.")], ids=["failed", "unreadable"]
+    "failing_reply", [A_GATEWAY_REFUSAL, completion("[shout] Hallo.")], ids=["failed", "unreadable"]
 )
 def test_pairs_a_decision_dropped_stay_dropped_and_the_note_stays_when_it_played_nothing(
     tmp_path, failing_reply

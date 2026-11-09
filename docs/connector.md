@@ -707,7 +707,7 @@ dropped stays dropped, even when its lines stay undecided.
 | One decision's messages | the agent file's `windowBytes`, in UTF-8 bytes of the messages' texts, because the library cannot count a provider's tokens; the system text does not count and never goes | the oldest whole decided pairs go until a quarter of the window is free; then, while the undecided lines alone exceed the window, the oldest of them go down to it; the newest line always stays, even when it alone exceeds the window. From the first drop on, `voice.conversation.WINDOW_NOTE` opens the first user message |
 
 Every line enters the conversation, and a decided pair leaves the window only after it was sent.
-The oldest undecided lines a drop takes are the one exception: they never reach any request, and
+The oldest undecided lines a drop takes are the one exception: they may never reach any request, and
 only `WINDOW_NOTE` tells the agent that earlier parts are no longer shown.
 
 Proved by `tests/test_voice_window.py`:

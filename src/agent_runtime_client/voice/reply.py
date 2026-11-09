@@ -1,7 +1,7 @@
 """How the loop reads a reply: the marker words, the protocol text that teaches them, the sentences.
 
-This module is the one owner of the marker words and the window note; the protocol text is
-composed from them. A reply is read per round: a round opening with ``[`` holds until its marker
+This module is the one owner of the marker words; the protocol text is composed from them.
+A reply is read per round: a round opening with ``[`` holds until its marker
 closes within 16 characters, and any other round is speech, released sentence by sentence.
 """
 

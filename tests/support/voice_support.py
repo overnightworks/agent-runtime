@@ -36,8 +36,8 @@ _SETTLE_SECONDS: Final = 1.0
 _REAL_TIME_BOUND_SECONDS: Final = 10.0
 _VOICE_EVENTS: Final = VoiceEvent.__value__
 
-A_BUDGET_REFUSAL: Final = Reply(status=400, body=b'{"error": {"type": "budget_exceeded"}}')
-"""The gateway refusing a decision because the person's budget is spent."""
+A_GATEWAY_REFUSAL: Final = Reply(status=400, body=b'{"error": {"type": "budget_exceeded"}}')
+"""A decision the gateway refuses with a 400: the turn ends failed, not as a spent budget."""
 
 type Wait = Callable[[], Awaitable[object]]
 type StreamPart = bytes | Wait | Exception
