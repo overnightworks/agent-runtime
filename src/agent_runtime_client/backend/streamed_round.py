@@ -1,7 +1,7 @@
 """One chat-completion round read from an event stream: framed, bounded and assembled whole.
 
-The reader takes byte chunks and gives the round the stream completed. It imports no HTTP
-library, and its exceptions hold no text from the wire.
+The reader takes byte chunks, hands out each text piece once it is checked and then the round
+the stream completed. It imports no HTTP library, and its exceptions hold no text from the wire.
 """
 
 from __future__ import annotations
@@ -133,14 +133,21 @@ def error_kind_of(error: object) -> str:
     return "no error type given"
 
 
-async def read_round(chunks: AsyncIterable[bytes], *, round_limit_bytes: int) -> StreamedRound:
-    """The round the stream completes at ``[DONE]`` after a finish reason, else a failure."""
+async def read_round(
+    chunks: AsyncIterable[bytes], *, round_limit_bytes: int
+) -> AsyncIterator[str | StreamedRound]:
+    """Each non-empty text piece as its event is added, then the round it completes.
+
+    The round is complete at ``[DONE]`` after a finish reason; anything else is a failure.
+    """
     assembly = _Assembly(round_limit_bytes)
     async with aclosing(_events(chunks)) as events:
         async for data in events:
             if data == _DONE:
-                return assembly.finished()
-            _take(assembly, data)
+                yield assembly.finished()
+                return
+            if piece := _take(assembly, data):
+                yield piece
     raise MalformedRound
 
 
@@ -189,15 +196,15 @@ def _data_of(line: str) -> str | None:
     return value.removeprefix(" ") if name == "data" else None
 
 
-def _take(assembly: _Assembly, data: str) -> None:
+def _take(assembly: _Assembly, data: str) -> str | None:
+    """Add one event's chunk to the round; its text piece, if it carries one."""
     event = _parsed(data)
     if "error" in event:
         raise RoundErrorEvent(error_kind_of(event["error"]))
     choices = event.get("choices")
     if not isinstance(choices, list):
         raise MalformedRound
-    if choices:
-        _add_choice(assembly, choices[0])
+    return _add_choice(assembly, choices[0]) if choices else None
 
 
 def _parsed(data: str) -> JsonObject:
@@ -210,7 +217,7 @@ def _parsed(data: str) -> JsonObject:
     return event
 
 
-def _add_choice(assembly: _Assembly, choice: object) -> None:
+def _add_choice(assembly: _Assembly, choice: object) -> str | None:
     if not isinstance(choice, dict):
         raise MalformedRound
     delta = choice.get("delta", {})
@@ -231,6 +238,7 @@ def _add_choice(assembly: _Assembly, choice: object) -> None:
             assembly.add_fragment(fragment)
     if finish_reason is not None:
         assembly.finish_reason = finish_reason
+    return content
 
 
 def _decoded(line: bytes) -> str:

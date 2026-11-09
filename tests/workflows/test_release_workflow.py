@@ -18,7 +18,7 @@ class _Release:
     """The scenario every test of one release arranges: what is dispatched and what it builds."""
 
     version: str = "0.3.0"
-    repository: str = "overnightworks/agent-runtime"
+    repository: str = "overnightworks/agents"
     wheel_contents: tuple[tuple[str, bytes], ...] = (
         ("overnightworks_agent_runtime_client-{}-py3-none-any.whl", b"client"),
     )

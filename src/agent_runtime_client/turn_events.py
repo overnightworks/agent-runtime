@@ -20,6 +20,14 @@ class StreamEvent(BaseModel):
 
 
 class AssistantTextEvent(StreamEvent):
+    """One piece of the assistant's text, yielded as the gateway streams it.
+
+    A piece shows before its round is judged. Pieces come from every round, including a round
+    that ends in tool calls, whose pieces come before its ``ToolCallEvent``s. The last round's
+    pieces, joined, are ``FinalEvent.text``. A turn that ends with ``TurnStopped`` may have
+    yielded pieces first; nothing withdraws them.
+    """
+
     type: Literal["assistant_text"] = "assistant_text"
     text: str
 
@@ -41,8 +49,9 @@ class ToolResultEvent(StreamEvent):
 class FinalEvent(StreamEvent):
     """A turn's ending: its words and the files it produced.
 
-    A CLI run collects the files it left in its output folder, and a gateway picture turn ends
-    with its one picture; a gateway text turn leaves ``files`` empty.
+    ``text`` is the last round's judged text only, so when tools ran, the turn's pieces joined
+    need not be ``text``. A picture turn ends with its one picture in ``files`` and empty
+    ``text``; a text turn leaves ``files`` empty.
     """
 
     type: Literal["final"] = "final"

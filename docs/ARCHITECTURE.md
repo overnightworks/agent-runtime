@@ -69,10 +69,10 @@ flowchart TB
 ## Runtime
 
 A turn runs inside the app's process. `GatewayBackend.run` admits the person, reads the key
-file and streams one chat completion per round; it reads each round whole and judges it before
-anything shows or runs, and when the round asks for tools it runs the app's handlers in order
-before the next request. One deadline bounds the whole turn. Nothing
-is stored: the client keeps no state between turns, except that the voice loop holds one running
+file and streams one chat completion per round: the round's text reaches the app as the model
+writes it, and when the round asks for tools the app's handlers run in order once the round is
+complete and judged whole, before the next request. One deadline bounds the whole turn. Nothing
+persists: the client holds no state between turns, except that the voice loop holds one running
 conversation in memory for as long as it runs, and the gateway holds the budget.
 
 The voice loop runs in the host's process too. Lines come in from the host's hearing port; the
@@ -98,8 +98,12 @@ sequenceDiagram
     H-->>GB: outcome
     GB-->>App: ToolResultEvent
     GB->>GW: chat completion (with the result)
-    GW-->>GB: text pieces, finish_reason stop, [DONE]
-    GB-->>App: AssistantTextEvent, FinalEvent
+    loop while the text streams
+        GW-->>GB: text piece
+        GB-->>App: AssistantTextEvent per piece
+    end
+    GW-->>GB: finish_reason stop, [DONE]
+    GB-->>App: FinalEvent
 ```
 
 *Source: `backend/gateway.py`, `GatewayBackend.run`.*
@@ -166,8 +170,9 @@ over the whole suite.
 - The key is read per turn, so a rotated key needs no restart.
 - A turn's `person` is always the verified person and the gateway sees a fingerprint, so one
   person has one budget across text and pictures.
-- A round is judged whole before anything shows or runs, so a malformed round never runs a
-  handler.
+- A round is judged whole before anything runs, so a malformed round never runs a handler. Its
+  text shows as the gateway streams it, so an app can show or speak the first sentence while the
+  model still writes; a turn that then fails ends short, and what showed stays.
 - Sound never enters the library: the voice loop's ports carry text, and an import contract keeps
   every speech library out, so the sound stays with the app and the speech service.
 - Every heard line enters the voice loop's conversation, the agent's own spoken line excepted,
@@ -186,8 +191,11 @@ over the whole suite.
 - A capability front that verifies run tokens minted elsewhere: no minter remains, because the
   person front authenticates the person through the host's gate. Reopens if a component other
   than the person's agent must call an app's tools.
-- A per-turn choice between buffered and streamed rounds: one wire path serves every app.
-  Reopens if a gateway model cannot stream.
+- A per-turn choice between buffered and streamed rounds: one wire path serves every app, and an
+  app that shows only judged text reads `FinalEvent`. Reopens if a gateway model cannot stream.
+- A delta event beside a whole-round `AssistantTextEvent`: every app reads assistant text as
+  pieces, and `FinalEvent` holds the judged answer. Reopens if an app must tell a round's judged
+  text from its pieces before the turn ends.
 - Provider CLIs and subscription logins: the gateway is the only route to a model. Reopens if
   the gateway cannot reach a model an app needs.
 - The speech service owning the voice loop: it turns speech into text and text into sound and
@@ -210,3 +218,8 @@ over the whole suite.
   than a person's agent, but the two paths do not share one rule.
 - A tool's result travels to the gateway and the provider as conversation text; the client
   bounds its size but cannot know what it holds.
+- An app that stops pulling without closing holds the response open: the deadline is checked at
+  its next pull.
+- LiteLLM sends a finish reason of its own when a provider's stream ends cleanly without one, so
+  such a cut round reads as complete. Measured through LiteLLM, a cut tool round lost its call, and
+  its text showed as the answer.

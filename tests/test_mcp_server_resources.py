@@ -159,10 +159,12 @@ def test_a_runner_parses_what_it_reads_into_the_record_the_app_gave(
     front: McpPersonFront, app: MemberApp, uri: str, record_type: Any
 ) -> None:
     [content] = answered(front, a_member("alice"), "resources/read", uri=uri)["result"]["contents"]
+    record = app.readable[a_member("alice")][uri]
 
     assert content["uri"] == uri
     assert content["mimeType"] == "application/json"
-    assert record_type.model_validate_json(content["text"]) == app.readable[a_member("alice")][uri]
+    assert content["text"] == record.model_dump_json()
+    assert record_type.model_validate_json(content["text"]) == record
 
 
 @pytest.mark.parametrize("with_port", [True, False], ids=["with the port", "without the port"])

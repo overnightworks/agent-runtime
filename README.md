@@ -1,4 +1,4 @@
-# agent-runtime
+# agents
 
 A small client library for apps that run agent turns on a model gateway. An app ships its
 agents as Markdown files and declares its tools in code. The client sends each turn to the

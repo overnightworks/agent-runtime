@@ -1,10 +1,10 @@
 """What an app and an agent say to each other about a member, written once.
 
 An app writes these records and an agent's runner reads them: where the member stands in every
-place (``Standing``), the window of lines one place shows (``PlaceWindow``) and the arguments
-of accepting an invitation. The URIs name the resources that serve them; a URI is no credential,
-so a guessed one yields nothing. This module is base, so a runner parses all of it without the
-``mcp-server`` extra.
+place (``Standing``), the window of lines one place shows (``PlaceWindow``), the arguments of
+accepting an invitation and of speaking in a place, and what speaking answers. The URIs name the
+resources that serve them; a URI is no credential, so a guessed one yields nothing. This module
+is base, so a runner parses all of it without the ``mcp-server`` extra.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ __all__ = [
     "ACCEPT_INVITATION_TOOL",
     "LEASE_SECONDS",
     "LISTEN_BOUND_SECONDS",
+    "SPEAK_TOOL",
     "STANDING_URI",
     "AcceptInvitationArguments",
     "Invitation",
@@ -28,6 +29,10 @@ __all__ = [
     "PlaceEntry",
     "PlaceRef",
     "PlaceWindow",
+    "SpeakArguments",
+    "SpeakRefusal",
+    "SpeakRefused",
+    "Spoken",
     "Standing",
     "StandingState",
     "place_ref_from_window_uri",
@@ -40,6 +45,8 @@ LISTEN_BOUND_SECONDS: Final = 50
 """The longest a listen lasts before it ends with the completion result."""
 ACCEPT_INVITATION_TOOL: Final = "accept_invitation"
 """The name of the tool that accepts an open invitation."""
+SPEAK_TOOL: Final = "speak"
+"""The name of the tool that says one sentence aloud in a place."""
 STANDING_URI: Final = "member://standing"
 """The resource that answers with the member's ``MemberStanding``."""
 _PLACE_WINDOW_URI_PREFIX: Final = f"{STANDING_URI}/places/"
@@ -95,14 +102,43 @@ class AcceptInvitationArguments(StrictModel):
     epoch: int = Field(ge=0)
 
 
+class SpeakArguments(StrictModel):
+    """The arguments of ``speak``: the place and one sentence, whose length the app bounds."""
+
+    place: PlaceRef
+    text: NonEmptyUnicodeText
+
+
+class Spoken(StrictModel):
+    """What ``speak`` answers on success, as JSON: how long the sentence plays."""
+
+    duration_ms: int = Field(ge=1)
+
+
+class SpeakRefusal(StrEnum):
+    """Why the app does not speak a sentence."""
+
+    NOT_ACTIVE = "not_active"
+    TOO_LONG = "too_long"
+    UNAVAILABLE = "unavailable"
+
+
+class SpeakRefused(StrictModel):
+    """What ``speak`` answers on a refusal, as JSON in an ``is_error`` result."""
+
+    refused: Annotated[SpeakRefusal, Field(strict=False)]
+
+
 class PlaceEntry(StrictModel):
-    """One line of a place; ``kind`` is the app's own text and ``own`` marks the member's line."""
+    """One line of a place; ``kind`` is the app's own text, ``own`` marks the member's line and
+    ``spoken`` a line said aloud and heard, one finished utterance, rather than written."""
 
     seq: int = Field(ge=1)
     kind: NonEmptyUnicodeText
     name: NonEmptyUnicodeText
     text: NonEmptyUnicodeText
     own: bool
+    spoken: bool = False
 
 
 class PlaceWindow(StrictModel):
