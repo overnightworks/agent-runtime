@@ -1,0 +1,8 @@
+claim_id = "7d6586d3bd414a39a3c2b06f9832a144"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "f64abc87e00bfbe59792b6dd33b84d60487a37dd"
+branch = "claude/issue-795-distributor-follow-ups-of-the-reviews-of"
+scope = ["docs/connector.md", "src/agent_runtime_client/mcp_server/routes.py", "src/agent_runtime_client/tools.py", "tests/test_mcp_server_routes.py"]
+opened_commit = "d6042f6e59e3a15a8432a629ce40854d136721a4"
+whole_reason = "Two follow-ups on the generator's one extension and on what a runner relies on: one owner of the extension's keys, its tests, and one sentence of the connector document."
