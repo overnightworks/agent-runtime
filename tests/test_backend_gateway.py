@@ -20,8 +20,15 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
 from agent_runtime_client.backend import MAX_RETRY_AFTER_S, TurnPerson, TurnStopKind, TurnStopped
-from agent_runtime_client.backend.fake_gateway import FakeGateway, Reply, completion
+from agent_runtime_client.backend.fake_gateway import (
+    FakeGateway,
+    Reply,
+    completion,
+    tool_call,
+    tool_round,
+)
 from agent_runtime_client.backend.gateway import GatewayBackend, GatewayDetail
+from agent_runtime_client.tools import HandTool, ToolDeclaration, ToolEffect, ToolOutcome
 from agent_runtime_client.turn import (
     MAX_EVENT_BYTES,
     FailureCode,
@@ -760,6 +767,10 @@ def _held_texts(error: BaseException) -> list[str]:
     return texts
 
 
+def _leaks(error: BaseException, key: str) -> list[str]:
+    return [text for text in _held_texts(error) if key in text or REPLY_CANARY in text]
+
+
 TURN_STOPS = {
     "status": (lambda: FakeGateway(Reply(401, body=b'{"error":{"type":"auth"}}')), 30),
     "lost_connection": (lambda: FailingTransport(httpx2.ConnectError("refused")), 30),
@@ -792,5 +803,27 @@ def test_a_stopped_turn_holds_neither_the_key_nor_the_reply_in_any_frame_or_chai
 
     _, stopped = scenario.outcome(backend, request)
 
-    held = _held_texts(stopped)
-    assert [text for text in held if scenario.key in text or REPLY_CANARY in text] == []
+    assert _leaks(stopped, scenario.key) == []
+
+
+def test_a_handlers_stop_after_a_tool_round_comes_back_the_same_and_holds_neither_key_nor_reply(
+    scenario,
+):
+    refusal = TurnStopped(TurnStopKind.REFUSED, RejectionCode.BUSY)
+
+    async def stopping(_principal, _arguments) -> ToolOutcome:
+        raise refusal
+
+    declaration = ToolDeclaration(
+        name="lookup", description="Use lookup.", parameters={}, effect=ToolEffect.READ_ONLY
+    )
+    gateway = FakeGateway(tool_round(tool_call("c1", "lookup", {}), content=REPLY_CANARY))
+    backend = GatewayBackend(
+        scenario.config(), tools=[HandTool(declaration, stopping)], transport=gateway
+    )
+    request = a_request(tools=(declaration,), max_tool_calls=5)
+
+    _, stopped = scenario.outcome(backend, request)
+
+    assert stopped is refusal
+    assert _leaks(stopped, scenario.key) == []
