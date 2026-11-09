@@ -1,0 +1,8 @@
+claim_id = "0d6d2dae1f3d441f9dc26faa444af6c1"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "9310054a421181c769c8041b0376de4472b9a997"
+branch = "claude/issue-797-transport-logger-level-where-unset"
+scope = ["docs/connector.md", "pyproject.toml", "src/agent_runtime_client/backend/gateway.py", "tests/test_backend_gateway.py", "tests/test_backend_gateway_models.py", "uv.lock"]
+opened_commit = "38265f6ffc1d9d2ae5103a9a91a046959b3d9427"
+whole_reason = "One rule for the transport loggers, its two pinning tests, its one documented sentence and the patch version that ships it."
