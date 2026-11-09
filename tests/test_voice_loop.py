@@ -221,13 +221,15 @@ def test_a_gap_in_seq_marks_the_next_line_with_how_many_were_missed(place):
         yield a_line(1, "Eins.")
         yield a_line(2, "Gesagt.", name="listener", kind="agent", own=True)
         yield a_line(3, "Drei.")
-        yield a_line(6, "Sechs?")
+        yield a_line(6, "Sechs.")
+        yield a_line(9, "Selbst gesagt.", name="listener", kind="agent", own=True)
+        yield a_line(11, "Elf?")
         await trace.settled()
 
-    assert place.run(hearing, gateway, waking={"Sechs?"}) == RETURNED
+    assert place.run(hearing, gateway, waking={"Elf?"}) == RETURNED
 
     [message] = messages_of(gateway.requests[0])[1:]
-    assert [row.get("missed_before") for row in rows_of(message)] == [None, None, 2]
+    assert [row.get("missed_before") for row in rows_of(message)] == [None, None, 2, 3]
 
 
 def test_two_lines_heard_while_deciding_of_which_one_wakes_get_exactly_one_more_decision(place):
