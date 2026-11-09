@@ -297,3 +297,19 @@ def test_a_line_repeating_only_the_sentence_rendered_ahead_is_no_echo_and_enters
         ("assistant", f"{playing} {rendered_ahead}"),
         ("user", [heard_back]),
     ]
+
+
+def test_a_render_ahead_failing_with_another_error_stops_the_sentence_still_playing(place):
+    trace = place.trace
+    voice = RecordingVoice(trace, held={"Eins."}, raises={("render", "Zwei."): RuntimeError()})
+    gateway = FakeGateway(completion("Eins. Zwei."), completion("Gern."))
+
+    async def hearing(trace):
+        yield a_line(1, "Erzähl.")
+        await trace.settled()
+
+    ending = place.run(hearing, gateway, voice=voice)
+
+    assert ("stopped", "Eins.") in trace.calls
+    assert ("played", "Eins.") not in trace.entries
+    assert ending.raised.subgroup(RuntimeError) is not None
