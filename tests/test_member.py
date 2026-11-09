@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from agent_runtime_client.member import (
+from agents.member import (
     LEASE_SECONDS,
     LISTEN_BOUND_SECONDS,
     STANDING_URI,

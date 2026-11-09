@@ -14,18 +14,18 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_runtime_client.agents import TurnRequest
-from agent_runtime_client.backend import TurnStopKind, TurnStopped
-from agent_runtime_client.backend.fake_gateway import (
+from agents.agent_file import TurnRequest
+from agents.backend import TurnStopKind, TurnStopped
+from agents.backend.fake_gateway import (
     FakeGateway,
     Reply,
     completion,
     tool_call,
     tool_round,
 )
-from agent_runtime_client.backend.gateway import GatewayBackend
-from agent_runtime_client.config import AgentConfig
-from agent_runtime_client.tools import (
+from agents.backend.gateway import GatewayBackend
+from agents.config import AgentConfig
+from agents.tools import (
     HandTool,
     JsonObject,
     Principal,
@@ -33,7 +33,7 @@ from agent_runtime_client.tools import (
     ToolEffect,
     ToolOutcome,
 )
-from agent_runtime_client.turn import (
+from agents.turn import (
     MAX_EVENT_BYTES,
     FailureCode,
     RejectionCode,
@@ -41,7 +41,7 @@ from agent_runtime_client.turn import (
     TurnMessage,
     TurnRole,
 )
-from agent_runtime_client.turn_events import (
+from agents.turn_events import (
     AssistantTextEvent,
     FinalEvent,
     ToolCallEvent,

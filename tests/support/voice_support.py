@@ -20,13 +20,13 @@ from typing import Final
 import httpx2
 import pytest
 
-from agent_runtime_client.agents import AgentDefinition
-from agent_runtime_client.backend.fake_gateway import Reply
-from agent_runtime_client.backend.gateway import GatewayBackend
-from agent_runtime_client.member import PlaceEntry
-from agent_runtime_client.tools import HandTool
-from agent_runtime_client.voice import VoiceEvent, WakeRule, Woke
-from agent_runtime_client.voice.loop import run_voice_loop
+from agents.agent_file import AgentDefinition
+from agents.backend.fake_gateway import Reply
+from agents.backend.gateway import GatewayBackend
+from agents.member import PlaceEntry
+from agents.tools import HandTool
+from agents.voice import VoiceEvent, WakeRule, Woke
+from agents.voice.loop import run_voice_loop
 from tests.support.gateway_turn_support import a_chunk, a_gateway_config, a_person, an_event_stream
 from tests.support.virtual_time import VirtualTimeLoop
 

@@ -5,21 +5,21 @@ import random
 
 import pytest
 
-from agent_runtime_client.turn_events import (
+from agents.turn_events import (
     AssistantTextEvent,
     FinalEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
-from agent_runtime_client.voice import ReplyUnreadable, StayedSilent
-from agent_runtime_client.voice.conversation import Conversation
-from agent_runtime_client.voice.reply import (
+from agents.voice import ReplyUnreadable, StayedSilent
+from agents.voice.conversation import Conversation
+from agents.voice.reply import (
     PROTOCOL_TEXT,
     SILENT_REPLY,
     ReplyReader,
     SentenceRelease,
 )
-from agent_runtime_client.voice.sentences import split_sentences
+from agents.voice.sentences import split_sentences
 from tests.support.voice_lines import STREAMED_ANSWERS, a_line, random_pieces
 
 SILENT = (StayedSilent(),)

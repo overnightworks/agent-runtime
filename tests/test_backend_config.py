@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from agent_runtime_client.config import AgentConfig
+from agents.config import AgentConfig
 
 GATEWAY = {"origin": "http://gateway.test:4000", "key_file": "/run/secrets/key"}
 HTTPS_GATEWAY = {

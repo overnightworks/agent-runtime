@@ -31,8 +31,8 @@ from pydantic import (
 )
 from ruamel.yaml import YAML, YAMLError
 
-from agent_runtime_client.tools import ToolDeclaration
-from agent_runtime_client.turn import (
+from agents.tools import ToolDeclaration
+from agents.turn import (
     AgentName,
     AgentRole,
     AgentRoles,

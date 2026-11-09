@@ -16,7 +16,7 @@ from urllib.parse import quote, unquote
 
 from pydantic import AwareDatetime, Field, ValidationError, model_validator
 
-from agent_runtime_client.turn import NonEmptyUnicodeText, StrictModel
+from agents.turn import NonEmptyUnicodeText, StrictModel
 
 __all__ = [
     "ACCEPT_INVITATION_TOOL",

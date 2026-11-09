@@ -1,6 +1,6 @@
 """A conversation by voice, as text: the ports a host passes in and the events the loop reports.
 
-``agent_runtime_client.voice.loop.run_voice_loop`` hears a place's lines, lets the host's
+``agents.voice.loop.run_voice_loop`` hears a place's lines, lets the host's
 ``WakeRule`` decide which line starts a decision, and speaks the agent's answer sentence by
 sentence through the host's ``VoiceOut``. Sound never reaches this package: the hearing port
 yields ``PlaceEntry`` text and ``VoiceOut`` takes sentences. It needs the ``voice`` extra, and
@@ -12,9 +12,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from agent_runtime_client.backend import TurnStopKind
-from agent_runtime_client.member import PlaceEntry
-from agent_runtime_client.turn import FailureCode, RejectionCode, StopOutcome, outcome_of_stop
+from agents.backend import TurnStopKind
+from agents.member import PlaceEntry
+from agents.turn import FailureCode, RejectionCode, StopOutcome, outcome_of_stop
 
 __all__ = [
     "DecisionFailed",

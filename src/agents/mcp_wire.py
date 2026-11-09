@@ -13,8 +13,8 @@ import json
 import math
 from typing import Any, Final
 
-from agent_runtime_client.errors import raise_without_chain
-from agent_runtime_client.turn import refuse_non_json_constant
+from agents.errors import raise_without_chain
+from agents.turn import refuse_non_json_constant
 
 JSON_MEDIA_TYPE: Final = "application/json"
 MCP_ENDPOINT_PATH: Final = "/mcp"

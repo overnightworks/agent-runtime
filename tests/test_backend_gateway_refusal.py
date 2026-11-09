@@ -7,10 +7,10 @@ import logging
 
 import pytest
 
-from agent_runtime_client.backend import TurnStopKind
-from agent_runtime_client.backend.fake_gateway import FakeGateway, Reply
-from agent_runtime_client.backend.gateway import GatewayBackend
-from agent_runtime_client.turn import (
+from agents.backend import TurnStopKind
+from agents.backend.fake_gateway import FakeGateway, Reply
+from agents.backend.gateway import GatewayBackend
+from agents.turn import (
     MAX_EVENT_BYTES,
     RejectionCode,
 )

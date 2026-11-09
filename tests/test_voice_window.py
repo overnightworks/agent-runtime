@@ -5,8 +5,8 @@ from itertools import pairwise
 
 import pytest
 
-from agent_runtime_client.backend.fake_gateway import FakeGateway, completion
-from agent_runtime_client.voice.conversation import WINDOW_NOTE
+from agents.backend.fake_gateway import FakeGateway, completion
+from agents.voice.conversation import WINDOW_NOTE
 from tests.support.voice_lines import a_line
 from tests.support.voice_support import A_GATEWAY_REFUSAL, RETURNED, VoicePlace, messages_of
 

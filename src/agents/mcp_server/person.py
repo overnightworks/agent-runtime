@@ -56,7 +56,7 @@ from mcp_types import (
 )
 from pydantic import StrictInt, TypeAdapter, ValidationError
 
-from agent_runtime_client.mcp_server.asgi import (
+from agents.mcp_server.asgi import (
     DISCOVER_METHOD,
     HEADER_ENCODING,
     LISTEN_METHOD,
@@ -74,17 +74,17 @@ from agent_runtime_client.mcp_server.asgi import (
     write,
     write_stream,
 )
-from agent_runtime_client.mcp_server.listen import ResourceChanges, on_subscriptions_listen
-from agent_runtime_client.mcp_server.resources import MemberResources, list_answer, read_answer
-from agent_runtime_client.mcp_wire import (
+from agents.mcp_server.listen import ResourceChanges, on_subscriptions_listen
+from agents.mcp_server.resources import MemberResources, list_answer, read_answer
+from agents.mcp_wire import (
     JSON_MEDIA_TYPE,
     PROTOCOL_VERSION,
     carries_signature_of,
     read_strict_json,
 )
-from agent_runtime_client.member import LISTEN_BOUND_SECONDS
-from agent_runtime_client.tools import ToolDeclaration, ToolEffect, ToolOutcome
-from agent_runtime_client.turn import JsonObject, Principal, StrictModel, UnicodeText
+from agents.member import LISTEN_BOUND_SECONDS
+from agents.tools import ToolDeclaration, ToolEffect, ToolOutcome
+from agents.turn import JsonObject, Principal, StrictModel, UnicodeText
 
 type ResolvePerson = Callable[[Scope], Principal]
 
@@ -93,7 +93,7 @@ _HANDLER_FAILED_TEXT: Final = "the tool failed"
 _UNKNOWN_TOOL_TEXT: Final = "Unknown tool"
 _INVALID_ARGUMENTS_TEXT: Final = "Invalid tool arguments"
 _BEARER_SCHEME: Final = "bearer"
-_SERVER_NAME: Final = "overnightworks-agent-runtime-client"
+_SERVER_NAME: Final = "overnightworks-agents"
 _SERVER_VERSION: Final = "1"
 _INITIALIZE: Final = "initialize"
 _FINAL_FRAME_SECONDS: Final = 5
@@ -122,9 +122,7 @@ class PersonTool:
     handler: PersonToolHandler
 
 
-_CURRENT_REQUEST: Final[ContextVar[PersonRequest]] = ContextVar(
-    "agent_runtime_client_person_request"
-)
+_CURRENT_REQUEST: Final[ContextVar[PersonRequest]] = ContextVar("agents_person_request")
 
 
 def _listed(declaration: ToolDeclaration) -> Tool:

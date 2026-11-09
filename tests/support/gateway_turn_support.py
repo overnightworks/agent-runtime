@@ -20,12 +20,12 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
-from agent_runtime_client.agents import TurnRequest
-from agent_runtime_client.backend import TurnPerson, TurnStopKind, TurnStopped
-from agent_runtime_client.backend.fake_gateway import FakeGateway, completion
-from agent_runtime_client.backend.gateway import GatewayBackend
-from agent_runtime_client.config import AgentConfig
-from agent_runtime_client.turn import (
+from agents.agent_file import TurnRequest
+from agents.backend import TurnPerson, TurnStopKind, TurnStopped
+from agents.backend.fake_gateway import FakeGateway, completion
+from agents.backend.gateway import GatewayBackend
+from agents.config import AgentConfig
+from agents.turn import (
     FailureCode,
     Principal,
     Turn,

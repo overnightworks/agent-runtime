@@ -4,10 +4,10 @@ import asyncio
 
 import pytest
 
-from agent_runtime_client.backend.fake_gateway import FakeGateway, completion
-from agent_runtime_client.backend.gateway import GatewayBackend
-from agent_runtime_client.voice.loop import run_voice_loop
-from agent_runtime_client.voice.wake import addressed_or_asked
+from agents.backend.fake_gateway import FakeGateway, completion
+from agents.backend.gateway import GatewayBackend
+from agents.voice.loop import run_voice_loop
+from agents.voice.wake import addressed_or_asked
 from tests.support import voice_support
 from tests.support.gateway_turn_support import a_gateway_config, a_person
 from tests.support.virtual_time import VirtualTimeLoop

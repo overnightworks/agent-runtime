@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 
 import httpx2
 
-from agent_runtime_client.tools import JsonObject
+from agents.tools import JsonObject
 
 
 @dataclass(frozen=True)

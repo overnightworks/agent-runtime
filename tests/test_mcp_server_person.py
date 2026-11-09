@@ -22,11 +22,11 @@ from mcp_types import (
 )
 from starlette.testclient import TestClient
 
-from agent_runtime_client.mcp_server import McpPersonFront, PersonRequest, PersonTool
-from agent_runtime_client.mcp_server.asgi import LOGGER_NAME as LOGGER
-from agent_runtime_client.mcp_wire import MCP_ENDPOINT_PATH, PROTOCOL_VERSION
-from agent_runtime_client.tools import Principal, ToolEffect, ToolOutcome
-from agent_runtime_client.turn import MAX_EVENT_BYTES, MAX_TOOL_INPUT_DEPTH, JsonObject
+from agents.mcp_server import McpPersonFront, PersonRequest, PersonTool
+from agents.mcp_server.asgi import LOGGER_NAME as LOGGER
+from agents.mcp_wire import MCP_ENDPOINT_PATH, PROTOCOL_VERSION
+from agents.tools import Principal, ToolEffect, ToolOutcome
+from agents.turn import MAX_EVENT_BYTES, MAX_TOOL_INPUT_DEPTH, JsonObject
 from tests.support.mcp_server_support import (
     Headers,
     call_params,

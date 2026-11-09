@@ -7,11 +7,11 @@ import itertools
 import httpx2
 import pytest
 
-from agent_runtime_client.backend import TurnStopKind
-from agent_runtime_client.backend.fake_gateway import FakeGateway, completion
-from agent_runtime_client.backend.gateway import GatewayDetail
-from agent_runtime_client.turn import FailureCode
-from agent_runtime_client.voice import (
+from agents.backend import TurnStopKind
+from agents.backend.fake_gateway import FakeGateway, completion
+from agents.backend.gateway import GatewayDetail
+from agents.turn import FailureCode
+from agents.voice import (
     DecisionFailed,
     EchoDropped,
     SentenceRefused,

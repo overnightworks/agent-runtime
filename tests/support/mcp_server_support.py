@@ -20,9 +20,9 @@ from mcp_types import CLIENT_CAPABILITIES_META_KEY, PROTOCOL_VERSION_META_KEY
 from starlette.applications import Starlette
 from starlette.routing import Route
 
-from agent_runtime_client.mcp_server import McpPersonFront, PersonRequest, PersonTool
-from agent_runtime_client.mcp_wire import MCP_ENDPOINT_PATH, PROTOCOL_VERSION
-from agent_runtime_client.member import (
+from agents.mcp_server import McpPersonFront, PersonRequest, PersonTool
+from agents.mcp_wire import MCP_ENDPOINT_PATH, PROTOCOL_VERSION
+from agents.member import (
     Invitation,
     MemberStanding,
     PlaceRef,
@@ -31,8 +31,8 @@ from agent_runtime_client.member import (
     StandingState,
     place_window_uri,
 )
-from agent_runtime_client.tools import Principal, ToolDeclaration, ToolEffect, ToolOutcome
-from agent_runtime_client.turn import JsonObject
+from agents.tools import Principal, ToolDeclaration, ToolEffect, ToolOutcome
+from agents.turn import JsonObject
 
 ISSUER = "https://issuer.test"
 

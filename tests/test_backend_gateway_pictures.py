@@ -11,12 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from agent_runtime_client.agents import TurnRequest
-from agent_runtime_client.backend import TurnPerson, TurnStopKind, TurnStopped
-from agent_runtime_client.backend.fake_gateway import FakeGateway, Reply, completion, picture
-from agent_runtime_client.backend.gateway import GatewayBackend
-from agent_runtime_client.config import AgentConfig
-from agent_runtime_client.turn import (
+from agents.agent_file import TurnRequest
+from agents.backend import TurnPerson, TurnStopKind, TurnStopped
+from agents.backend.fake_gateway import FakeGateway, Reply, completion, picture
+from agents.backend.gateway import GatewayBackend
+from agents.config import AgentConfig
+from agents.turn import (
     MAX_EVENT_BYTES,
     MAX_RUN_FILES_BYTES,
     FailureCode,
@@ -27,7 +27,7 @@ from agent_runtime_client.turn import (
     TurnRole,
     base64_length,
 )
-from agent_runtime_client.turn_events import FinalEvent
+from agents.turn_events import FinalEvent
 from tests.support.gateway_turn_support import (
     FailingTransport,
     HangingTransport,

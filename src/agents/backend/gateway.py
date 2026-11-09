@@ -24,8 +24,8 @@ from typing import Final, NotRequired, Required, TypedDict
 import httpx2
 from pydantic import TypeAdapter, ValidationError
 
-from agent_runtime_client.agents import AgentDefinition, TurnRequest
-from agent_runtime_client.backend import (
+from agents.agent_file import AgentDefinition, TurnRequest
+from agents.backend import (
     MAX_RETRY_AFTER_S,
     AgentBackend,
     TurnEvent,
@@ -33,7 +33,7 @@ from agent_runtime_client.backend import (
     TurnStopKind,
     TurnStopped,
 )
-from agent_runtime_client.backend.streamed_round import (
+from agents.backend.streamed_round import (
     MalformedRound,
     RoundErrorEvent,
     StreamedRound,
@@ -41,8 +41,8 @@ from agent_runtime_client.backend.streamed_round import (
     error_kind_of,
     read_round,
 )
-from agent_runtime_client.config import AgentConfig, ChatGateway
-from agent_runtime_client.tools import (
+from agents.config import AgentConfig, ChatGateway
+from agents.tools import (
     HandTool,
     HandToolHandler,
     JsonObject,
@@ -50,7 +50,7 @@ from agent_runtime_client.tools import (
     ToolEffect,
     ToolOutcome,
 )
-from agent_runtime_client.turn import (
+from agents.turn import (
     MAX_EVENT_BYTES,
     MAX_RUN_FILES_BYTES,
     FailureCode,
@@ -62,7 +62,7 @@ from agent_runtime_client.turn import (
     model_kind_of,
     person_fingerprint,
 )
-from agent_runtime_client.turn_events import (
+from agents.turn_events import (
     AssistantTextEvent,
     FinalEvent,
     ToolCallEvent,

@@ -11,24 +11,24 @@ import re
 import httpx2
 import pytest
 
-from agent_runtime_client.backend import MAX_RETRY_AFTER_S, TurnPerson, TurnStopKind, TurnStopped
-from agent_runtime_client.backend.fake_gateway import (
+from agents.backend import MAX_RETRY_AFTER_S, TurnPerson, TurnStopKind, TurnStopped
+from agents.backend.fake_gateway import (
     FakeGateway,
     Reply,
     completion,
     tool_call,
     tool_round,
 )
-from agent_runtime_client.backend.gateway import GatewayBackend, GatewayDetail
-from agent_runtime_client.tools import HandTool, ToolDeclaration, ToolEffect
-from agent_runtime_client.turn import (
+from agents.backend.gateway import GatewayBackend, GatewayDetail
+from agents.tools import HandTool, ToolDeclaration, ToolEffect
+from agents.turn import (
     MAX_EVENT_BYTES,
     FailureCode,
     Principal,
     RejectionCode,
     person_fingerprint,
 )
-from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent
+from agents.turn_events import AssistantTextEvent, FinalEvent
 from tests.support import gateway_turn_support
 from tests.support.gateway_turn_support import (
     UNAVAILABLE,
@@ -718,7 +718,7 @@ def _held_texts(error: BaseException) -> list[str]:
         trace = current.__traceback__
         while trace is not None:
             frame = trace.tb_frame
-            if frame.f_globals.get("__name__", "").startswith("agent_runtime_client"):
+            if frame.f_globals.get("__name__", "").startswith("agents"):
                 texts += [repr(value) for value in frame.f_locals.values()]
             trace = trace.tb_next
         pending += [current.__context__, current.__cause__]

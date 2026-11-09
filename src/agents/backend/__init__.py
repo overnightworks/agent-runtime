@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final, Protocol
 
-from agent_runtime_client.agents import TurnRequest
-from agent_runtime_client.turn import (
+from agents.agent_file import TurnRequest
+from agents.turn import (
     AgentRole,
     FailureCode,
     Principal,
@@ -21,7 +21,7 @@ from agent_runtime_client.turn import (
     StopOutcome,
     outcome_of_stop,
 )
-from agent_runtime_client.turn_events import (
+from agents.turn_events import (
     AssistantTextEvent,
     FinalEvent,
     ToolCallEvent,

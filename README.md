@@ -6,7 +6,7 @@ app's LiteLLM gateway with the app's own key, runs the tool calls in the app's p
 hands the turn back as typed events. It can also serve the app's tools to a signed-in
 person's agent over MCP.
 
-The distribution is `overnightworks-agent-runtime-client`, imported as `agent_runtime_client`.
+The distribution is `overnightworks-agents`, imported as `agents`.
 It is a client only: no service, no provider CLI and no subscription login sit between an app
 and its gateway.
 
@@ -14,15 +14,15 @@ and its gateway.
 
 The distribution is not on PyPI. A host pins the git tag:
 
-`overnightworks-agent-runtime-client @ git+https://github.com/overnightworks/agent-runtime@v<version>`
+`overnightworks-agents @ git+https://github.com/overnightworks/agents@v<version>`
 
 The base depends on `pydantic` and `ruamel.yaml` only. Three extras are optional:
 
 | Extra | Adds | For |
 |---|---|---|
 | `backend` | `httpx2` | `GatewayBackend`, the one backend, and `FakeGateway`, its scripted transport for tests |
-| `mcp-server` | `anyio`, the official MCP SDK (`mcp`) | `agent_runtime_client.mcp_server`, an app's MCP endpoint on revision 2026-07-28 |
-| `voice` | `syntok` | `agent_runtime_client.voice`, the voice loop: an agent hears a place's lines and answers sentence by sentence, as text |
+| `mcp-server` | `anyio`, the official MCP SDK (`mcp`) | `agents.mcp_server`, an app's MCP endpoint on revision 2026-07-28 |
+| `voice` | `syntok` | `agents.voice`, the voice loop: an agent hears a place's lines and answers sentence by sentence, as text |
 
 ## Use
 
@@ -33,8 +33,8 @@ consumes the turn inside `aclosing`:
 from contextlib import aclosing
 from importlib.resources import files
 
-from agent_runtime_client.agents import load_agent
-from agent_runtime_client.backend.gateway import GatewayBackend
+from agents.agent_file import load_agent
+from agents.backend.gateway import GatewayBackend
 
 agent = load_agent(files("my_app") / "agents" / "assistant.md", declarations)
 backend = GatewayBackend(settings.agent, tools=hand_tools)

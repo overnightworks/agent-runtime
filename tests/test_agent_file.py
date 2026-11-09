@@ -9,9 +9,9 @@ from types import EllipsisType
 import pytest
 from pydantic import ValidationError
 
-from agent_runtime_client.agents import AgentDefinition, AgentFileError, TurnRequest, load_agent
-from agent_runtime_client.tools import ToolDeclaration, ToolEffect
-from agent_runtime_client.turn import Turn, TurnMessage, TurnRole
+from agents.agent_file import AgentDefinition, AgentFileError, TurnRequest, load_agent
+from agents.tools import ToolDeclaration, ToolEffect
+from agents.turn import Turn, TurnMessage, TurnRole
 
 READ_NOTE = ToolDeclaration(
     name="read_note", description="Read a note", parameters={}, effect=ToolEffect.READ_ONLY

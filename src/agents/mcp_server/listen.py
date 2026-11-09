@@ -33,14 +33,14 @@ from mcp_types import (
     SubscriptionsListenResult,
 )
 
-from agent_runtime_client.mcp_server.asgi import LISTEN_METHOD
-from agent_runtime_client.mcp_server.resources import MemberResources, _failure
-from agent_runtime_client.member import (
+from agents.mcp_server.asgi import LISTEN_METHOD
+from agents.mcp_server.resources import MemberResources, _failure
+from agents.member import (
     LISTEN_BOUND_SECONDS,
     STANDING_URI,
     place_ref_from_window_uri,
 )
-from agent_runtime_client.turn import Principal
+from agents.turn import Principal
 
 
 class _PendingUris:

@@ -12,13 +12,13 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.testclient import TestClient
 
-from agent_runtime_client.mcp_server import (
+from agents.mcp_server import (
     McpPersonFront,
     RouteProfileError,
     route_tools,
 )
-from agent_runtime_client.mcp_wire import MCP_ENDPOINT_PATH
-from agent_runtime_client.tools import Principal, ToolEffect, agent_tool, not_an_agent_tool
+from agents.mcp_wire import MCP_ENDPOINT_PATH
+from agents.tools import Principal, ToolEffect, agent_tool, not_an_agent_tool
 from tests.support.mcp_server_support import routing_headers, rpc_body, served_app
 
 type Mark = tuple[str, str]

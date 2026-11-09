@@ -20,7 +20,7 @@ class _Release:
     version: str = "0.3.0"
     repository: str = "overnightworks/agents"
     wheel_contents: tuple[tuple[str, bytes], ...] = (
-        ("overnightworks_agent_runtime_client-{}-py3-none-any.whl", b"client"),
+        ("overnightworks_agents-{}-py3-none-any.whl", b"client"),
     )
     commit: str = ""
 
@@ -150,8 +150,7 @@ def test_the_release_page_names_the_git_tag_requirement_and_no_wheel_url(tmp_pat
     note = _release_note(tmp_path, release)
 
     requirement = (
-        "overnightworks-agent-runtime-client @ "
-        f"git+https://github.com/{release.repository}@v{release.version}\n"
+        f"overnightworks-agents @ git+https://github.com/{release.repository}@v{release.version}\n"
     )
     assert requirement in note
     assert "releases/download" not in note

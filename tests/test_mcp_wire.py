@@ -7,12 +7,12 @@ from typing import Any
 
 import pytest
 
-from agent_runtime_client.mcp_wire import (
+from agents.mcp_wire import (
     MCP_ENDPOINT_PATH,
     carries_signature_of,
     read_strict_json,
 )
-from agent_runtime_client.turn import MAX_TOOL_INPUT_DEPTH
+from agents.turn import MAX_TOOL_INPUT_DEPTH
 
 
 def nested_in_an_array(depth: int) -> Any:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import unicodedata
 from collections.abc import Sequence
 
-from agent_runtime_client.member import PlaceEntry
+from agents.member import PlaceEntry
 
 
 def is_echo(line: PlaceEntry, answer: Sequence[str]) -> bool:

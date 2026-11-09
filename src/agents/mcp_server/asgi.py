@@ -10,8 +10,8 @@ from typing import Any, Final
 
 import anyio.lowlevel
 
-from agent_runtime_client.mcp_wire import PROTOCOL_VERSION_HEADER, carries_signature_of
-from agent_runtime_client.turn import MAX_EVENT_BYTES
+from agents.mcp_wire import PROTOCOL_VERSION_HEADER, carries_signature_of
+from agents.turn import MAX_EVENT_BYTES
 
 type Scope = MutableMapping[str, Any]
 type Message = MutableMapping[str, Any]
@@ -27,7 +27,7 @@ class HttpAnswer:
     body: bytes
 
 
-LOGGER_NAME: Final = "agent_runtime_client.mcp_server"
+LOGGER_NAME: Final = "agents.mcp_server"
 HEADER_ENCODING: Final = "iso-8859-1"
 _VERSION_SEPARATOR: Final = ", "
 _CONTENT_TYPE_FIELD: Final = b"content-type"
