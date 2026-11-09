@@ -1,0 +1,7 @@
+claim_id = "50d251ef5f4f45949f1713932167a184"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "415563bc8701d227e32065de4ec2e61babe023c4"
+branch = "claude/issue-814-accept-refusal-codes"
+scope = ["docs/connector.md", "src/agent_runtime_client/member.py", "tests/test_member.py"]
+opened_commit = "48e7163260b65b9bf7f4bb35915ab33204408e93"
