@@ -1,8 +1,0 @@
-claim_id = "d8526e86acd6437e9f749b395d4f5d06"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "1462ae4eab596c32ef3832ca37f76b2022e7cacc"
-branch = "claude/issue-833-ci-proof-limits"
-scope = [".github/workflows/ci.yml", "AGENTS.md", "pyproject.toml", "uv.lock"]
-opened_commit = "f46548d5155b1c80990f1238d4ca4fcb2a247aab"
-whole_reason = "One CI workflow's limits, parallel tests and voice-extra proof, with the development dependency they need and the command that names it."
