@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import AsyncIterable, AsyncIterator
+from contextlib import aclosing
 from dataclasses import dataclass, field
 from typing import Final
 
@@ -148,9 +149,24 @@ async def _events(chunks: AsyncIterable[bytes]) -> AsyncIterator[str]:
     Only LF ends a line (a trailing CR is stripped): a lone CR as a line end, the standard's one
     further rule, is left out since the gateway writes none. Data pending at the end is dropped.
     """
-    pending = bytearray()
     data: list[str] = []
     data_bytes = 0
+    async with aclosing(_lines(chunks)) as lines:
+        async for line in lines:
+            if not line:
+                if joined := "\n".join(data):
+                    yield joined
+                data, data_bytes = [], 0
+            elif (value := _data_of(line)) is not None:
+                data_bytes += _utf8_size(value) + bool(data)
+                if data_bytes > _MAX_DATA_BYTES:
+                    raise MalformedRound
+                data.append(value)
+
+
+async def _lines(chunks: AsyncIterable[bytes]) -> AsyncIterator[str]:
+    """Each complete line decoded, its trailing CR and the stream's one leading BOM dropped."""
+    pending = bytearray()
     is_first_line = True
     async for chunk in chunks:
         pending += chunk
@@ -161,38 +177,42 @@ async def _events(chunks: AsyncIterable[bytes]) -> AsyncIterator[str]:
             del pending[: end + 1]
             if is_first_line:
                 line, is_first_line = line.removeprefix("\ufeff"), False
-            if line:
-                name, _, value = line.partition(":")
-                if name == "data":
-                    value = value.removeprefix(" ")
-                    data_bytes += _utf8_size(value) + bool(data)
-                    if data_bytes > _MAX_DATA_BYTES:
-                        raise MalformedRound
-                    data.append(value)
-            else:
-                if joined := "\n".join(data):
-                    yield joined
-                data, data_bytes = [], 0
+            yield line
         if len(pending) > _MAX_DATA_BYTES:
             raise MalformedRound
 
 
+def _data_of(line: str) -> str | None:
+    """The value of a ``data`` field line; ``None`` for a comment or any other field."""
+    name, _, value = line.partition(":")
+    return value.removeprefix(" ") if name == "data" else None
+
+
 def _take(assembly: _Assembly, data: str) -> None:
+    event = _parsed(data)
+    if "error" in event:
+        raise RoundErrorEvent(error_kind_of(event["error"]))
+    choices = event.get("choices")
+    if not isinstance(choices, list):
+        raise MalformedRound
+    if choices:
+        _add_choice(assembly, choices[0])
+
+
+def _parsed(data: str) -> JsonObject:
     try:
         event = json.loads(data)
     except ValueError, RecursionError:
         event = _UNPARSEABLE
     if not isinstance(event, dict):
         raise MalformedRound
-    if "error" in event:
-        raise RoundErrorEvent(error_kind_of(event["error"]))
-    choices = event.get("choices")
-    if not isinstance(choices, list):
+    return event
+
+
+def _add_choice(assembly: _Assembly, choice: object) -> None:
+    if not isinstance(choice, dict):
         raise MalformedRound
-    if not choices:
-        return
-    choice = choices[0]
-    delta = choice.get("delta", {}) if isinstance(choice, dict) else None
+    delta = choice.get("delta", {})
     if not isinstance(delta, dict):
         raise MalformedRound
     content, fragments = delta.get("content"), delta.get("tool_calls")
