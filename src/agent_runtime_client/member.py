@@ -2,9 +2,10 @@
 
 An app writes these records and an agent's runner reads them: where the member stands in every
 place (``Standing``), the window of lines one place shows (``PlaceWindow``), the arguments of
-accepting an invitation and of speaking in a place, and what speaking answers. The URIs name the
-resources that serve them; a URI is no credential, so a guessed one yields nothing. This module
-is base, so a runner parses all of it without the ``mcp-server`` extra.
+accepting an invitation and of speaking in a place, what accepting answers when it refuses, and
+what speaking answers. The URIs name the resources that serve them; a URI is no credential, so a
+guessed one yields nothing. This module is base, so a runner parses all of it without the
+``mcp-server`` extra.
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ __all__ = [
     "SPEAK_TOOL",
     "STANDING_URI",
     "AcceptInvitationArguments",
+    "AcceptInvitationRefusal",
+    "AcceptInvitationRefused",
     "Invitation",
     "MemberStanding",
     "PlaceEntry",
@@ -100,6 +103,26 @@ class AcceptInvitationArguments(StrictModel):
     place: PlaceRef
     invitation: NonEmptyUnicodeText
     epoch: int = Field(ge=0)
+
+
+class AcceptInvitationRefusal(StrEnum):
+    """Why the app does not accept an invitation: ``stale_invitation`` when the invitation is no
+    longer standing, has expired, or its id or epoch no longer matches, or the member holds no
+    lease; ``two_seats`` when the person who brought the member does not hold exactly
+    one seat in the place, the inviting one; ``sponsor_away`` when that person's seat lost its
+    connection and waits to resume; ``busy`` when the place or the app already holds as many members
+    as it takes, or that person already brings another."""
+
+    STALE_INVITATION = "stale_invitation"
+    TWO_SEATS = "two_seats"
+    SPONSOR_AWAY = "sponsor_away"
+    BUSY = "busy"
+
+
+class AcceptInvitationRefused(StrictModel):
+    """What ``accept_invitation`` answers on a refusal, as JSON in an ``is_error`` result."""
+
+    refused: Annotated[AcceptInvitationRefusal, Field(strict=False)]
 
 
 class SpeakArguments(StrictModel):
