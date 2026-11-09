@@ -20,7 +20,7 @@ from agent_runtime_client.backend.fake_gateway import (
     tool_round,
 )
 from agent_runtime_client.backend.gateway import GatewayBackend, GatewayDetail
-from agent_runtime_client.tools import HandTool, ToolDeclaration, ToolEffect, ToolOutcome
+from agent_runtime_client.tools import HandTool, ToolDeclaration, ToolEffect
 from agent_runtime_client.turn import (
     MAX_EVENT_BYTES,
     FailureCode,
@@ -36,6 +36,8 @@ from tests.support.gateway_turn_support import (
     Streamed,
     _turn,
     a_chunk,
+    a_handler_raising,
+    a_handler_raising_from_a_nameless_namespace,
     a_request,
     an_event_stream,
     ending,
@@ -715,7 +717,7 @@ def _held_texts(error: BaseException) -> list[str]:
         trace = current.__traceback__
         while trace is not None:
             frame = trace.tb_frame
-            if frame.f_globals["__name__"].startswith("agent_runtime_client"):
+            if frame.f_globals.get("__name__", "").startswith("agent_runtime_client"):
                 texts += [repr(value) for value in frame.f_locals.values()]
             trace = trace.tb_next
         pending += [current.__context__, current.__cause__]
@@ -761,21 +763,19 @@ def test_a_stopped_turn_holds_neither_the_key_nor_the_reply_in_any_frame_or_chai
     assert _leaks(stopped, scenario.key) == []
 
 
+@pytest.mark.parametrize(
+    "handler_raising", [a_handler_raising, a_handler_raising_from_a_nameless_namespace]
+)
 def test_a_handlers_stop_after_a_tool_round_comes_back_the_same_and_holds_neither_key_nor_reply(
-    scenario,
+    scenario, handler_raising
 ):
     refusal = TurnStopped(TurnStopKind.REFUSED, RejectionCode.BUSY)
-
-    async def stopping(_principal, _arguments) -> ToolOutcome:
-        raise refusal
-
     declaration = ToolDeclaration(
         name="lookup", description="Use lookup.", parameters={}, effect=ToolEffect.READ_ONLY
     )
     gateway = FakeGateway(tool_round(tool_call("c1", "lookup", {}), content=REPLY_CANARY))
-    backend = GatewayBackend(
-        scenario.config(), tools=[HandTool(declaration, stopping)], transport=gateway
-    )
+    handler = HandTool(declaration, handler_raising(refusal))
+    backend = GatewayBackend(scenario.config(), tools=[handler], transport=gateway)
     request = a_request(tools=(declaration,), max_tool_calls=5)
 
     _, stopped = scenario.outcome(backend, request)

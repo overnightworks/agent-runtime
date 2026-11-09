@@ -532,7 +532,7 @@ def _beyond_this_module(trace: TracebackType | None) -> TracebackType | None:
     kept = None
     outside = []
     while trace is not None:
-        if trace.tb_frame.f_globals["__name__"] != __name__:
+        if trace.tb_frame.f_globals is not globals():
             outside.append(trace)
         trace = trace.tb_next
     for entry in reversed(outside):

@@ -247,6 +247,20 @@ async def _turn(backend, request, person):
     return events, None
 
 
+def a_handler_raising(stop: TurnStopped):
+    async def stopping(_principal, _arguments):
+        raise stop
+
+    return stopping
+
+
+def a_handler_raising_from_a_nameless_namespace(stop: TurnStopped):
+    """A handler whose frame's globals have no ``__name__``, as ``exec`` into a bare dict gives."""
+    namespace = {"stop": stop}
+    exec("async def stopping(_principal, _arguments):\n    raise stop\n", namespace)
+    return namespace["stopping"]
+
+
 def self_signed_authority(directory: Path, name: str) -> tuple[Path, Path]:
     """A certificate for 127.0.0.1 that is its own authority: (certificate file, key file)."""
     key = ec.generate_private_key(ec.SECP256R1())
