@@ -174,9 +174,19 @@ def test_a_render_refused_while_the_one_before_it_plays_is_reported_after_that_o
     assert conversation_of(gateway.requests[1])[1] == ("assistant", "Eins.")
 
 
-def test_a_refused_play_never_plays_starts_or_records_the_sentence_rendered_after_it(place):
+@pytest.mark.parametrize(
+    ("hangs", "unrendered"),
+    [
+        pytest.param((), [], id="rendered"),
+        pytest.param({("render", "Drei.")}, [("unrendered", "Drei.")], id="still rendering"),
+    ],
+)
+def test_a_refused_play_never_plays_starts_or_records_the_sentence_rendered_after_it(
+    place, hangs, unrendered
+):
     trace = place.trace
-    voice = RecordingVoice(trace, held={"Zwei."}, raises={("play", "Zwei."): VoiceRefused()})
+    refused = {("play", "Zwei."): VoiceRefused()}
+    voice = RecordingVoice(trace, held={"Zwei."}, raises=refused, hangs=hangs)
     gateway = FakeGateway(completion("Eins. Zwei. Drei."), completion("Gern."))
 
     async def hearing(trace):
@@ -191,6 +201,7 @@ def test_a_refused_play_never_plays_starts_or_records_the_sentence_rendered_afte
     assert place.run(hearing, gateway, voice=voice) == RETURNED
 
     assert ("render", "Drei.") in trace.calls
+    assert [call for call in trace.calls if call[0] == "unrendered"] == unrendered
     assert ("play", "Drei.") not in trace.calls
     assert trace.events[:4] == [
         Woke(),

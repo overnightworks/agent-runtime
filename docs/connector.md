@@ -709,13 +709,13 @@ the punctuation at its edges and still longer than two characters, and is compar
 case; a short reply such as "Ja, ok." therefore always enters, and a word that is only
 punctuation counts on neither side. The latest answer is the most recent decision that
 played at least one sentence; its words are those of every sentence that started playing, the
-one playing now included, never a queued one, one rendered ahead or a refused one. An echo does not enter the
-conversation, is not asked of `wakes`, leaves `first_after_answer` to the next line and is
-reported as `EchoDropped(text)`. It keeps its place in `seq` order like the agent's own spoken
-line: an echo out of order ends the loop like any line, and it never counts in the next line's
-`missed_before`. A written line is never an echo. The rule is a text-level guard, so it misses
-an echo mixed with more words of a person, and it drops what a person said when at least half
-of its counted words are the latest answer's; `EchoDropped` lets an app count the drops.
+one playing now included, never a queued one, one rendered ahead or a refused one. An echo does not
+enter the conversation, is not asked of `wakes`, leaves `first_after_answer` to the next line and is
+reported as `EchoDropped(text)`. It keeps its place in `seq` order like the agent's own spoken line:
+an echo out of order ends the loop like any line, and it never counts in the next line's
+`missed_before`. A written line is never an echo. The rule is a text-level guard, so it misses an
+echo mixed with more words of a person, and it drops what a person said when at least half of its
+counted words are the latest answer's; `EchoDropped` lets an app count the drops.
 Proved by `tests/test_voice_echo.py`:
 `test_a_spoken_line_is_an_echo_when_half_its_long_words_are_words_of_the_answer`,
 `test_a_word_counts_and_compares_without_the_punctuation_at_its_edges`,
