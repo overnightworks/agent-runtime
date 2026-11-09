@@ -29,19 +29,17 @@ from agent_runtime_client.voice import (
 from agent_runtime_client.voice.reply import PROTOCOL_TEXT
 from tests.support import voice_support
 from tests.support.gateway_turn_support import FailingTransport
+from tests.support.voice_lines import STREAMED_ANSWERS, a_line, random_pieces
 from tests.support.voice_support import (
     CONTEXT,
     PROMPT,
     RETURNED,
-    STREAMED_ANSWERS,
     PacedGateway,
     RecordingVoice,
-    a_line,
     finish,
     hang,
     messages_of,
     piece,
-    random_pieces,
     rows_of,
     written_piece_by_piece,
 )

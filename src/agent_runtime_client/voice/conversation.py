@@ -3,8 +3,9 @@
 It lives in memory while the loop runs and is stored nowhere. A decided pair is the user message
 of a decision's lines and what the agent played, or the silent reply; what the model wrote and
 did not play is never recorded. A decision sends at most ``window_bytes`` of it, counted as the
-UTF-8 bytes of the messages' texts, because a provider's tokens cannot be counted here; what a
-decision dropped never returns.
+UTF-8 bytes of the messages' texts, because a provider's tokens cannot be counted here; only a
+lone newest line larger than the window goes whole beyond it. What a decision dropped never
+returns.
 """
 
 from __future__ import annotations

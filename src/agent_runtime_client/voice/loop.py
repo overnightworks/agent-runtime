@@ -46,8 +46,9 @@ async def run_voice_loop[Audio](
     not the agent's own and that ``wakes`` accepts starts a decision; at most one is in flight
     and one answer plays, and a line that wakes meanwhile gets exactly one decision after it,
     over every line since the last one. The system text is the agent's prompt, the protocol
-    text and ``context``. A decision sends at most the agent's voice window of the conversation;
-    an agent without a voice section raises ``ValueError`` before ``hearing`` is read.
+    text and ``context``. A decision sends at most the agent's voice window of the conversation,
+    but a lone newest line larger than the window goes whole; an agent without a voice section
+    raises ``ValueError`` before ``hearing`` is read.
 
     Each decision's turn is read to its end in its own task while its sentences play. A
     ``VoiceRefused`` ends the answer: the turn is closed and the queued sentences dropped. A

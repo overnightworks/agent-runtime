@@ -319,13 +319,6 @@ def test_a_request_with_tools_and_no_bound_is_refused(tmp_path: Path) -> None:
         TurnRequest(**fields)
 
 
-def test_a_definition_with_tools_and_no_bound_is_refused_where_it_is_built(tmp_path: Path) -> None:
-    agent = load(tmp_path, agent_text())
-
-    with pytest.raises(ValidationError):
-        AgentDefinition(**{**dict(agent), "max_tool_calls": None})
-
-
 @pytest.mark.parametrize("description", [None, "''", '"two\\nlines"', "|", "|\n  two\n  lines"])
 def test_missing_empty_or_multiline_description_is_refused(
     tmp_path: Path, description: str | None
@@ -656,7 +649,7 @@ def test_a_picture_file_that_does_not_fit_a_picture_agent_is_refused_and_named(
 ) -> None:
     text = picture_text(**changes)
 
-    with pytest.raises(AgentFileError, match=field):
+    with pytest.raises(AgentFileError, match=rf"notes-assistant\.md: {field}"):
         load(tmp_path, text)
 
 
@@ -696,6 +689,22 @@ def test_a_picture_key_that_is_not_exactly_a_size_is_refused_and_named(
 
     with pytest.raises(AgentFileError, match="picture"):
         load(tmp_path, text)
+
+
+@pytest.mark.parametrize(
+    ("text", "changes"),
+    [
+        (agent_text(), {"max_tool_calls": None}),
+        (picture_text(), {"voice_window_bytes": 4096}),
+    ],
+)
+def test_a_definition_that_breaks_a_file_rule_is_refused_where_it_is_built(
+    tmp_path: Path, text: str, changes: dict[str, object]
+) -> None:
+    agent = load(tmp_path, text)
+
+    with pytest.raises(ValidationError):
+        AgentDefinition(**{**dict(agent), **changes})
 
 
 def test_a_voice_agent_carries_its_window_and_any_other_agent_none(tmp_path: Path) -> None:

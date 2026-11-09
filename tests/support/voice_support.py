@@ -29,9 +29,7 @@ from agent_runtime_client.voice import VoiceEvent, WakeRule, Woke
 from agent_runtime_client.voice.loop import run_voice_loop
 from tests.support.gateway_turn_support import a_chunk, a_gateway_config, a_person, an_event_stream
 from tests.support.virtual_time import VirtualTimeLoop
-from tests.support.voice_lines import STREAMED_ANSWERS as STREAMED_ANSWERS
 from tests.support.voice_lines import a_line as a_line
-from tests.support.voice_lines import random_pieces as random_pieces
 
 PROMPT: Final = "Du hörst zu und antwortest kurz."
 CONTEXT: Final = "Im Raum sind Ada und Ben."

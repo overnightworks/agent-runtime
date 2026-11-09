@@ -93,10 +93,11 @@ body as the prompt.
   `test_a_picture_file_that_does_not_fit_a_picture_agent_is_refused_and_named`.
 - `voice: {windowBytes: <positive integer>}` (nothing else in the mapping) lets the agent run
   the voice loop and bounds what each of its decisions sends (see *The voice loop*);
-  `AgentDefinition.voice_window_bytes` carries it, and a picture agent carries none. Proved by
+  `AgentDefinition.voice_window_bytes` carries it, and a picture agent carries none, neither in
+  its file nor in an `AgentDefinition` built by hand. Proved by
   `test_a_voice_agent_carries_its_window_and_any_other_agent_none`,
-  `test_a_voice_section_that_is_not_one_positive_window_is_refused_and_named` and the picture
-  test above.
+  `test_a_voice_section_that_is_not_one_positive_window_is_refused_and_named`, the picture
+  test above and `test_a_definition_that_breaks_a_file_rule_is_refused_where_it_is_built`.
 - A tool the file names must be declared, once. Proved by `test_undeclared_tool_is_refused_and_named`
   and `test_duplicate_tool_in_the_file_is_refused`.
 - The file is read strictly: an unknown or duplicate key, malformed front matter, an unquoted
@@ -691,15 +692,23 @@ conversation lives in memory while the loop runs and is stored nowhere. Proved b
 `test_a_gap_in_seq_marks_the_next_line_with_how_many_were_missed` and
 `test_a_silent_reply_speaks_nothing_runs_its_tools_and_is_recorded_as_silent`.
 
-**The window.** Each decision sends only a window of the conversation, because the library
-cannot count a provider's tokens. Between drops the messages only grow, so a request's prefix
-changes only at a drop, and a drop frees a quarter of the window, so a talk drops once per
-quarter it grows, never once per line. The bound limits the bytes sent, never whether the agent
-answers, and what a decision dropped stays dropped, even when its lines stay undecided.
+**The window.** Each decision sends only a window of the conversation, so a call does not cost
+more the longer a talk runs. Between drops the messages only grow, so a request's prefix changes
+only at a drop. Dropping decided pairs frees a quarter of the window, so a talk whose decisions
+are recorded drops once per quarter it grows, never once per line. Undecided lines that alone
+exceed the window lose only what they must, down to the window, because freeing more would drop
+more lines the agent never saw; so while decisions give their lines back (a failed turn, an
+unreadable reply, a refusal before anything played), each of them drops again and rewrites the
+prompt. The bound limits the bytes sent, never whether the agent answers, and what a decision
+dropped stays dropped, even when its lines stay undecided.
 
 | Bound | Value | Over it |
 | --- | --- | --- |
-| One decision's messages | the agent file's `windowBytes`, in UTF-8 bytes of the messages' texts; the system text does not count and never goes | the oldest whole decided pairs go until a quarter of the window is free, then the oldest undecided lines while they alone exceed it; the newest line always stays. From the first drop on, `voice.conversation.WINDOW_NOTE` opens the first user message |
+| One decision's messages | the agent file's `windowBytes`, in UTF-8 bytes of the messages' texts, because the library cannot count a provider's tokens; the system text does not count and never goes | the oldest whole decided pairs go until a quarter of the window is free; then, while the undecided lines alone exceed the window, the oldest of them go down to it; the newest line always stays, even when it alone exceeds the window. From the first drop on, `voice.conversation.WINDOW_NOTE` opens the first user message |
+
+Every line enters the conversation, and a decided pair leaves the window only after it was sent.
+The oldest undecided lines a drop takes are the one exception: they never reach any request, and
+only `WINDOW_NOTE` tells the agent that earlier parts are no longer shown.
 
 Proved by `tests/test_voice_window.py`:
 `test_a_talk_within_the_window_drops_nothing_and_each_request_extends_the_last`,

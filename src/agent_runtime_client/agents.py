@@ -167,6 +167,13 @@ class AgentDefinition(BaseModel):
         _refuse_unpaired_call_bound(self.tools, self.max_tool_calls)
         return self
 
+    @model_validator(mode="after")
+    def _keep_a_picture_agent_without_a_voice(self) -> Self:
+        _refuse_voice_on_a_picture_agent(
+            is_picture=self.picture_size is not None, has_voice=self.voice_window_bytes is not None
+        )
+        return self
+
     def offered_to(self, role: AgentRole) -> bool:
         """Whether a person with this app role is shown the agent (not a security boundary)."""
         try:
@@ -227,8 +234,12 @@ def load_agent(source: Traversable, declarations: list[ToolDeclaration]) -> Agen
     tools = _selected_tools(file_name, front_matter.tools, declarations)
     if front_matter.picture is not None and tools:
         raise AgentFileError(f"{file_name}: tools: a picture agent selects none")
-    if front_matter.picture is not None and front_matter.voice is not None:
-        raise AgentFileError(f"{file_name}: voice: a picture agent carries none")
+    try:
+        _refuse_voice_on_a_picture_agent(
+            is_picture=front_matter.picture is not None, has_voice=front_matter.voice is not None
+        )
+    except ValueError as error:
+        raise AgentFileError(f"{file_name}: voice: {error}") from None
     try:
         _refuse_unpaired_call_bound(tools, front_matter.max_tool_calls)
     except ValueError as error:
@@ -261,6 +272,12 @@ def _refuse_unpaired_call_bound(
         raise ValueError("required when tools is not empty")
     if not tools and max_tool_calls is not None:
         raise ValueError("must be absent when tools is empty")
+
+
+def _refuse_voice_on_a_picture_agent(*, is_picture: bool, has_voice: bool) -> None:
+    """The one rule: a picture agent carries no voice section."""
+    if is_picture and has_voice:
+        raise ValueError("a picture agent carries none")
 
 
 def _checked_stem(file_name: str) -> str:
