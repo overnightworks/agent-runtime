@@ -14,7 +14,9 @@ from typing import Final
 
 from agent_runtime_client.member import PlaceEntry
 from agent_runtime_client.turn import TurnMessage, TurnRole
-from agent_runtime_client.voice.reply import WINDOW_NOTE
+
+WINDOW_NOTE: Final = "(Earlier parts of this conversation are no longer shown.)"
+"""The line that opens the first user message once the window has dropped earlier parts."""
 
 _LINE_BREAK: Final = "\n"
 

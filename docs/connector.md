@@ -686,7 +686,7 @@ answers, and what a decision dropped stays dropped, even when its lines stay und
 
 | Bound | Value | Over it |
 | --- | --- | --- |
-| One decision's messages | the agent file's `windowBytes`, in UTF-8 bytes of the messages' texts; the system text does not count and never goes | the oldest whole decided pairs go until a quarter of the window is free, then the oldest undecided lines while they alone exceed it; the newest line always stays. From the first drop on, `voice.reply.WINDOW_NOTE` opens the first user message |
+| One decision's messages | the agent file's `windowBytes`, in UTF-8 bytes of the messages' texts; the system text does not count and never goes | the oldest whole decided pairs go until a quarter of the window is free, then the oldest undecided lines while they alone exceed it; the newest line always stays. From the first drop on, `voice.conversation.WINDOW_NOTE` opens the first user message |
 
 Proved by `tests/test_voice_window.py`:
 `test_a_talk_within_the_window_drops_nothing_and_each_request_extends_the_last`,

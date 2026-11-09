@@ -17,6 +17,7 @@ from typing import Final
 from agent_runtime_client.backend import TurnEvent
 from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent, ToolCallEvent
 from agent_runtime_client.voice import ReplyUnreadable, StayedSilent, sentences
+from agent_runtime_client.voice.conversation import WINDOW_NOTE
 
 
 class Marker(StrEnum):
@@ -27,9 +28,6 @@ class Marker(StrEnum):
 
 SILENT_REPLY: Final = f"[{Marker.SILENT}]"
 """A reply that says nothing; the conversation records a silent decision as this."""
-
-WINDOW_NOTE: Final = "(Earlier parts of this conversation are no longer shown.)"
-"""The line that opens the first user message once the window has dropped earlier parts."""
 
 PROTOCOL_TEXT: Final = (
     "You take part in a conversation by voice. Each user message holds what was heard or "
