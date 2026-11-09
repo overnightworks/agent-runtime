@@ -89,8 +89,10 @@ def test_a_stream_cut_into_chunks_anywhere_gives_the_same_round(size):
 
 
 def test_data_pending_at_the_end_is_discarded():
+    stream = ("".join(_answer_ab()) + "data: [DONE]").encode()
+
     with pytest.raises(MalformedRound):
-        read(("".join(_answer_ab()) + "data: [DONE]").encode())
+        read(stream)
 
 
 def test_the_last_finish_reason_counts():
@@ -119,8 +121,10 @@ def test_the_last_finish_reason_counts():
     ],
 )
 def test_an_event_that_is_no_chunk_is_malformed(event):
+    stream = an_event_stream(a_chunk("a"), event)
+
     with pytest.raises(MalformedRound):
-        read(an_event_stream(a_chunk("a"), event))
+        read(stream)
 
 
 def test_fragments_assemble_by_index_with_their_arguments_in_pieces():
@@ -197,8 +201,10 @@ def test_text_before_the_calls_is_the_rounds_content():
     ],
 )
 def test_fragments_that_do_not_assemble_are_malformed(fragments):
+    stream = _calls_round(*fragments)
+
     with pytest.raises(MalformedRound):
-        read(_calls_round(*fragments))
+        read(stream)
 
 
 @pytest.mark.parametrize(
@@ -250,13 +256,13 @@ def test_one_events_joined_data_stays_within_the_data_bound(extra, fits):
     head = '{"choices": [{"delta": {}, "finish_reason": "stop"}'
     tail = "]}"
     padding = "\t" * (bound - len(head) - len(tail) - 2 + extra)
-    stream = f"data: {head}\ndata: {padding}\ndata: {tail}\n\ndata: [DONE]\n\n"
+    stream = f"data: {head}\ndata: {padding}\ndata: {tail}\n\ndata: [DONE]\n\n".encode()
 
     if fits:
-        assert read(stream.encode()).finish_reason == "stop"
+        assert read(stream).finish_reason == "stop"
     else:
         with pytest.raises(MalformedRound):
-            read(stream.encode())
+            read(stream)
 
 
 @pytest.mark.parametrize(
