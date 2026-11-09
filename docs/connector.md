@@ -662,8 +662,13 @@ await run_voice_loop(
   never a speaker: every decision is charged to that person's budget at the gateway.
 - `hearing` is an `AsyncIterator[PlaceEntry]` in increasing `seq`; a new window generation is a
   new loop.
-- `voice` is the app's `VoiceOut[Audio]`: `render(sentence)` returns the sound and `play(audio)`
-  returns when it has ended. Either raises `VoiceRefused` when the app cannot speak now.
+- `voice` is the app's `VoiceOut[Audio]`: `render(sentence)` returns the sound and neither plays
+  nor queues it, and `play(audio)` returns when it has ended. A sound is heard only through its
+  own `play`, and cancelling or refusing a `play` stops that sound at once. Either raises
+  `VoiceRefused` when the app cannot speak now. The loop plays the sentences in order: `play` for
+  a sentence starts only after it returned for the one before. While one sentence plays, the loop
+  renders the next, never more than one ahead, so `render` may run while `play` does, and a
+  render taking no longer than the sentence playing before it adds no pause between the two.
 - `wakes` is the app's `WakeRule(line, *, first_after_answer)`, asked for every line that is
   neither the agent's own nor an echo. `first_after_answer` is true for the first such line heard
   after a decision that played at least one sentence ended, while no decision is in flight, and
@@ -678,7 +683,11 @@ Proved by `tests/test_voice_loop.py`:
 `test_the_first_line_after_an_answer_that_played_is_the_one_marked_first_after_answer` and
 `test_no_line_after_a_decision_that_played_nothing_is_marked_first_after_answer`; the missing
 `voice` section by `test_an_agent_without_a_voice_section_is_refused_before_hearing_is_read` in
-`tests/test_voice_window.py`.
+`tests/test_voice_window.py`; the render ahead by `tests/test_voice_render_ahead.py`:
+`test_the_next_sentence_renders_once_written_while_the_one_before_it_plays`,
+`test_a_sentence_two_ahead_renders_only_after_the_one_playing_has_played`,
+`test_sentences_play_in_written_order_each_started_after_the_one_before_it_played` and
+`test_a_render_taking_no_longer_than_the_sentence_playing_before_it_adds_no_pause`.
 
 **The standard wake rule.** `agent_runtime_client.voice.wake.addressed_or_asked(names)` returns
 a `WakeRule`, a cheap local check of which lines cost a decision. It wakes on a line that names
@@ -700,13 +709,13 @@ the punctuation at its edges and still longer than two characters, and is compar
 case; a short reply such as "Ja, ok." therefore always enters, and a word that is only
 punctuation counts on neither side. The latest answer is the most recent decision that
 played at least one sentence; its words are those of every sentence that started playing, the
-one playing now included, never a queued one or a refused one. An echo does not enter the
-conversation, is not asked of `wakes`, leaves `first_after_answer` to the next line and is
-reported as `EchoDropped(text)`. It keeps its place in `seq` order like the agent's own spoken
-line: an echo out of order ends the loop like any line, and it never counts in the next line's
-`missed_before`. A written line is never an echo. The rule is a text-level guard, so it misses
-an echo mixed with more words of a person, and it drops what a person said when at least half
-of its counted words are the latest answer's; `EchoDropped` lets an app count the drops.
+one playing now included, never a queued one, one rendered ahead or a refused one. An echo does not
+enter the conversation, is not asked of `wakes`, leaves `first_after_answer` to the next line and is
+reported as `EchoDropped(text)`. It keeps its place in `seq` order like the agent's own spoken line:
+an echo out of order ends the loop like any line, and it never counts in the next line's
+`missed_before`. A written line is never an echo. The rule is a text-level guard, so it misses an
+echo mixed with more words of a person, and it drops what a person said when at least half of its
+counted words are the latest answer's; `EchoDropped` lets an app count the drops.
 Proved by `tests/test_voice_echo.py`:
 `test_a_spoken_line_is_an_echo_when_half_its_long_words_are_words_of_the_answer`,
 `test_a_word_counts_and_compares_without_the_punctuation_at_its_edges`,
@@ -722,7 +731,9 @@ Proved by `tests/test_voice_echo.py`:
 `test_a_refused_sentence_does_not_count_and_the_one_played_before_it_does`,
 `test_after_a_decision_that_played_nothing_the_answer_before_it_is_still_the_latest`,
 `test_an_echo_that_breaks_its_order_ends_the_loop_closed_and_silent` and
-`test_the_line_after_an_echo_counts_only_the_lines_never_heard_as_missed`.
+`test_the_line_after_an_echo_counts_only_the_lines_never_heard_as_missed`, and by
+`test_a_line_repeating_only_the_sentence_rendered_ahead_is_no_echo_and_enters` in
+`tests/test_voice_render_ahead.py`.
 
 **The conversation.** Every line enters one running conversation, but an echo and the agent's
 own spoken line: the loop records what it played itself. Within the window below, a decision
@@ -790,12 +801,16 @@ in `tests/test_voice_sentences.py`.
 
 **Failures.**
 
-- `VoiceRefused` ends the answer: the turn is closed, the queued sentences are dropped and
-  `SentenceRefused` is reported. Proved by
-  `test_a_refused_render_ends_the_answer_closes_the_turn_and_keeps_what_played`.
+- `VoiceRefused` ends the answer: the turn is closed, the queued sentences are dropped, a
+  rendered one included, and `SentenceRefused` is reported; a render refused while the sentence
+  before it plays is reported once that one has played. Proved by
+  `test_a_refused_render_ends_the_answer_closes_the_turn_and_keeps_what_played`,
+  `test_a_render_refused_while_the_one_before_it_plays_is_reported_after_that_one_played` and
+  `test_a_refused_play_never_plays_starts_or_records_the_sentence_rendered_after_it`.
 - `TurnStopped` is reported as `DecisionFailed`; the sentences already queued play out and the
   held rest is dropped. Proved by
-  `test_a_turn_stopped_after_a_sentence_played_plays_out_the_queued_one_and_drops_the_rest`.
+  `test_a_turn_stopped_after_a_sentence_played_plays_out_the_queued_one_and_drops_the_rest` and
+  `test_a_turn_stopped_while_a_sentence_plays_still_plays_the_one_rendered_after_it`.
 - A decision that played nothing and was not silent leaves its lines undecided, and only a new
   waking line starts the next decision, so a spent budget never makes the loop retry on its own.
   Proved by `test_a_decision_that_played_nothing_leaves_its_lines_undecided_until_a_line_wakes`.
@@ -804,13 +819,14 @@ in `tests/test_voice_sentences.py`.
   `test_playing_longer_than_the_turns_limit_plays_every_sentence_without_a_limit_failure`.
 - When hearing ends, the loop closes the turn, stops the sound and returns. Any other error of a
   port or the backend, and a `seq` not above the last, closes the turn, stops the sound and is
-  raised inside an `ExceptionGroup`. On the app's cancel `CancelledError` propagates and nothing
-  more is reported. Proved by
+  raised inside an `ExceptionGroup`. On the app's cancel `CancelledError` propagates, the sound
+  stops, the render ahead is cancelled and nothing more is reported. Proved by
   `test_when_hearing_ends_the_loop_closes_the_turn_stops_the_sound_and_returns`,
   `test_a_backend_error_other_than_a_stopped_turn_is_raised`,
   `test_a_hearing_that_breaks_its_order_or_raises_ends_the_loop_closed_and_silent`,
-  `test_a_voice_that_raises_another_error_closes_the_turn_and_raises_it` and
-  `test_the_hosts_cancel_closes_the_turn_stops_the_sound_and_reports_nothing_more`.
+  `test_a_voice_that_raises_another_error_closes_the_turn_and_raises_it`,
+  `test_the_hosts_cancel_closes_the_turn_stops_the_sound_and_reports_nothing_more` and
+  `test_the_hosts_cancel_stops_the_sentence_playing_and_the_render_after_it`.
 - A port that never returns holds the answer while hearing goes on; the app bounds its own ports.
   Proved by
   `test_a_voice_that_never_returns_still_hears_lines_but_starts_no_decision_until_cancelled`.

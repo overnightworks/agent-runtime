@@ -36,6 +36,7 @@ from tests.support.voice_support import (
     RETURNED,
     PacedGateway,
     RecordingVoice,
+    conversation_of,
     finish,
     hang,
     messages_of,
@@ -45,18 +46,6 @@ from tests.support.voice_support import (
 )
 
 place = voice_support.place
-
-
-def texts_of(message: dict) -> list[str]:
-    return [row["text"] for row in rows_of(message)]
-
-
-def conversation_of(request) -> list[tuple[str, list[str] | str]]:
-    """A request's messages after the system one: a user message as its lines' texts."""
-    return [
-        (message["role"], texts_of(message) if message["role"] == "user" else message["content"])
-        for message in messages_of(request)[1:]
-    ]
 
 
 def a_lookup_tool(trace) -> HandTool:

@@ -61,8 +61,9 @@ class Trace:
     """Everything the loop did that a test may see, in order, and a way to wait for a state.
 
     Voice events are recorded as reported; the support's own entries are tuples that start
-    with their kind: ``render``, ``play``, ``played``, ``stopped``, ``asked``, ``tool``,
-    ``written``, ``closed`` and ``cancelled``.
+    with their kind: ``render``, ``unrendered`` (a render cancelled), ``play``, ``played``,
+    ``stopped`` (a play cancelled), ``asked``, ``tool``, ``written``, ``closed``, ``cancelled``
+    and ``ended`` (the loop's run is over).
     """
 
     def __init__(self) -> None:
@@ -99,7 +100,7 @@ class Trace:
 
     @property
     def calls(self) -> list[tuple[str, str]]:
-        kinds = {"render", "play", "played", "stopped"}
+        kinds = {"render", "unrendered", "play", "played", "stopped"}
         return [entry for entry in self.entries if isinstance(entry, tuple) and entry[0] in kinds]
 
     @property
@@ -142,9 +143,10 @@ def _kind_of(entry: object) -> str | None:
 class RecordingVoice:
     """A ``VoiceOut`` whose sound is the sentence itself; it records each call in the trace.
 
+    Every render takes ``seconds_per_render`` and every play ``seconds_per_sentence`` on the
+    loop's clock, and a sentence in ``held`` plays until ``release`` ends it. After that time,
     ``raises`` maps a call and its sentence to what that call raises, and a call in ``hangs``
-    never returns. A sentence in ``held`` plays until ``release`` ends it, and every play takes
-    ``seconds_per_sentence`` on the loop's clock.
+    never returns.
     """
 
     def __init__(
@@ -154,35 +156,44 @@ class RecordingVoice:
         raises: dict[tuple[str, str], Exception] | None = None,
         hangs: Collection[tuple[str, str]] = (),
         held: Collection[str] = (),
+        seconds_per_render: float = 0.0,
         seconds_per_sentence: float = 0.0,
     ) -> None:
         self._trace = trace
         self._raises = raises or {}
         self._hangs = hangs
         self._held = {sentence: asyncio.Event() for sentence in held}
+        self._render_seconds = seconds_per_render
         self._seconds = seconds_per_sentence
 
     def release(self, sentence: str) -> None:
         self._held[sentence].set()
 
     async def render(self, sentence: str) -> str:
-        await self._called("render", sentence)
+        try:
+            self._trace.record(("render", sentence))
+            if self._render_seconds:
+                await asyncio.sleep(self._render_seconds)
+            await self._as_arranged("render", sentence)
+        except asyncio.CancelledError:
+            self._trace.record(("unrendered", sentence))
+            raise
         return sentence
 
     async def play(self, audio: str) -> None:
         try:
-            await self._called("play", audio)
+            self._trace.record(("play", audio))
             if audio in self._held:
                 await self._held[audio].wait()
             if self._seconds:
                 await asyncio.sleep(self._seconds)
+            await self._as_arranged("play", audio)
         except asyncio.CancelledError:
             self._trace.record(("stopped", audio))
             raise
         self._trace.record(("played", audio))
 
-    async def _called(self, call: str, sentence: str) -> None:
-        self._trace.record((call, sentence))
+    async def _as_arranged(self, call: str, sentence: str) -> None:
         if (call, sentence) in self._raises:
             raise self._raises[call, sentence]
         if (call, sentence) in self._hangs:
@@ -271,6 +282,18 @@ def rows_of(message: dict) -> list[dict]:
     return [json.loads(row) for row in message["content"].splitlines()]
 
 
+def texts_of(message: dict) -> list[str]:
+    return [row["text"] for row in rows_of(message)]
+
+
+def conversation_of(request: httpx2.Request) -> list[tuple[str, list[str] | str]]:
+    """A request's messages after the system one: a user message as its lines' texts."""
+    return [
+        (message["role"], texts_of(message) if message["role"] == "user" else message["content"])
+        for message in messages_of(request)[1:]
+    ]
+
+
 @dataclass(frozen=True)
 class Ending:
     """How the loop ended: returned, raised, or cancelled by the host."""
@@ -321,8 +344,8 @@ class VoicePlace:
     ) -> Ending:
         """Run the loop to its end in virtual time; ``waking`` names the texts that wake.
 
-        With no ``waking``, every line wakes; a ``wakes`` rule given decides instead. Either way
-        the trace records every line the loop asks.
+        A ``wakes`` rule given decides instead, and giving both raises ``ValueError``; with
+        neither, every line wakes. Either way the trace records every line the loop asks.
         """
         config = a_gateway_config(self.directory)
         backend = GatewayBackend(config, tools=tools, transport=transport)
@@ -376,11 +399,15 @@ class VoicePlace:
             await asyncio.wait({loop})
         finally:
             loop.cancel()
+        self.trace.record(("ended",))
         if loop.cancelled():
             return Ending(cancelled=True)
         return Ending(raised=loop.exception())
 
     def _wake_rule(self, waking: Collection[str] | None, rule: WakeRule | None) -> WakeRule:
+        if waking is not None and rule is not None:
+            raise ValueError("a run takes the texts that wake or a wake rule, not both")
+
         def wakes(line: PlaceEntry, *, first_after_answer: bool) -> bool:
             self.trace.record(("asked", line.text, first_after_answer))
             if rule is not None:
