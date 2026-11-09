@@ -31,10 +31,10 @@ forbidden_modules =
     uvicorn
 
 # as_packages = False keeps agent_runtime_client itself (its __init__) a source without
-# making the mcp_server and voice packages inside it ones; the ** wildcards keep every
-# mcp_server and voice module forbidden.
-[importlinter:contract:client-base-stays-free-of-mcp-server-and-voice]
-name = the client base modules import neither agent_runtime_client.mcp_server, agent_runtime_client.voice nor their extras
+# making the mcp_server package inside it one; the ** wildcard keeps every
+# mcp_server module forbidden.
+[importlinter:contract:client-base-stays-free-of-mcp-server]
+name = the client base modules import neither agent_runtime_client.mcp_server nor its extras
 type = forbidden
 as_packages = False
 source_modules =
@@ -54,11 +54,33 @@ source_modules =
 forbidden_modules =
     agent_runtime_client.mcp_server
     agent_runtime_client.mcp_server.**
-    agent_runtime_client.voice
-    agent_runtime_client.voice.**
     anyio
     mcp
     mcp_types
+
+# The voice extra stays an extra the same way: the package __init__ is a source, the voice
+# package inside it is not, and the ** wildcard keeps every voice module forbidden.
+[importlinter:contract:client-base-stays-free-of-voice]
+name = the client base modules import neither agent_runtime_client.voice nor its extra
+type = forbidden
+as_packages = False
+source_modules =
+    agent_runtime_client
+    agent_runtime_client.agents
+    agent_runtime_client.backend
+    agent_runtime_client.backend.fake_gateway
+    agent_runtime_client.backend.gateway
+    agent_runtime_client.backend.streamed_round
+    agent_runtime_client.config
+    agent_runtime_client.errors
+    agent_runtime_client.member
+    agent_runtime_client.mcp_wire
+    agent_runtime_client.tools
+    agent_runtime_client.turn
+    agent_runtime_client.turn_events
+forbidden_modules =
+    agent_runtime_client.voice
+    agent_runtime_client.voice.**
     syntok
 
 # The backend extra stays an extra: backend.gateway and backend.fake_gateway import
