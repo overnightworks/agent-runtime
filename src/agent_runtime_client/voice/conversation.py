@@ -36,18 +36,26 @@ class Conversation:
         """Enter a line in ``seq`` order; the agent's own spoken line is skipped.
 
         The loop records what it played itself. The next line that enters after a gap in ``seq``
-        carries ``missed_before``, the number of lines not heard; a skipped line passes it on.
-        Raises ``ValueError`` when ``seq`` is not above the last one.
+        carries ``missed_before``, the number of lines not heard. Raises ``ValueError`` when
+        ``seq`` is not above the last one.
+        """
+        self.skip(line)
+        if line.own and line.spoken:
+            return
+        self._undecided.append(_written(line, self._missed))
+        self._missed = 0
+
+    def skip(self, line: PlaceEntry) -> None:
+        """Take ``line``'s place in ``seq`` order without entering it.
+
+        A skipped line is never counted as missed, and a gap before it passes on to the next
+        line that enters. Raises ``ValueError`` when ``seq`` is not above the last one.
         """
         if self._last_seq is not None and line.seq <= self._last_seq:
             raise ValueError(f"seq {line.seq} is not above the last seq {self._last_seq}")
         if self._last_seq is not None:
             self._missed += line.seq - self._last_seq - 1
         self._last_seq = line.seq
-        if line.own and line.spoken:
-            return
-        self._undecided.append(_written(line, self._missed))
-        self._missed = 0
 
     def open_decision(self) -> list[TurnMessage]:
         """The messages of a decision over every undecided line, ending with them.

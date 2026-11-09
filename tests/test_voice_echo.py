@@ -19,6 +19,7 @@ from tests.support.voice_support import (
     PacedGateway,
     RecordingVoice,
     finish,
+    hang,
     messages_of,
     piece,
     rows_of,
@@ -311,3 +312,60 @@ def test_after_a_decision_that_played_nothing_the_answer_before_it_is_still_the_
 
     assert EchoDropped(FIRST_HEARD_BACK) in place.trace.events
     assert place.trace.asked == [(QUESTION, False), ("Danke.", True)]
+
+
+@pytest.mark.parametrize(
+    "echo_seq", [pytest.param(2, id="the same seq"), pytest.param(1, id="a seq below")]
+)
+def test_an_echo_that_breaks_its_order_ends_the_loop_closed_and_silent(place, echo_seq):
+    trace = place.trace
+    gateway = PacedGateway(trace, [piece(f"{FIRST} {SECOND}"), hang])
+    voice = RecordingVoice(trace, held={FIRST})
+
+    async def hearing(trace):
+        yield a_line(2, QUESTION)
+        await while_its_first_sentence_plays(trace, voice)
+        yield a_line(echo_seq, FIRST_HEARD_BACK)
+
+    ending = place.run(hearing, gateway, voice=voice)
+
+    assert ending.raised.subgroup(ValueError) is not None
+    assert ("stopped", FIRST) in trace.calls
+    assert ("closed",) in trace.entries
+
+
+@pytest.mark.parametrize(
+    ("after_the_answer", "missed_before"),
+    [
+        pytest.param([a_line(2, FIRST_HEARD_BACK), a_line(3, "Danke.")], None, id="an echo"),
+        pytest.param([a_line(3, "Danke.")], 1, id="a gap"),
+        pytest.param(
+            [a_line(2, FIRST_HEARD_BACK), a_line(4, "Danke.")], 1, id="an echo, then a gap"
+        ),
+        pytest.param(
+            [a_line(3, FIRST_HEARD_BACK), a_line(4, "Danke.")], 1, id="a gap, then an echo"
+        ),
+    ],
+)
+def test_the_line_after_an_echo_counts_only_the_lines_never_heard_as_missed(
+    place, after_the_answer, missed_before
+):
+    gateway = FakeGateway(completion(FIRST), completion("Gern."))
+
+    async def hearing(trace):
+        yield a_line(1, QUESTION)
+        await trace.settled()
+        for line in after_the_answer:
+            yield line
+        await trace.settled()
+
+    assert place.run(hearing, gateway) == RETURNED
+
+    rows = [
+        row
+        for message in messages_of(gateway.requests[-1])[1:]
+        if message["role"] == "user"
+        for row in rows_of(message)
+    ]
+    thanks = next(row for row in rows if row["text"] == "Danke.")
+    assert thanks.get("missed_before") == missed_before

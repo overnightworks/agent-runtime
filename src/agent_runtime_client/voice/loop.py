@@ -128,6 +128,7 @@ class _VoiceLoop[Audio]:
 
     def hear(self, line: PlaceEntry) -> None:
         if is_echo(line, self._latest_answer()):
+            self._conversation.skip(line)
             self._report(EchoDropped(line.text))
             return
         self._conversation.hear(line)

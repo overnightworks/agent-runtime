@@ -700,7 +700,8 @@ case without the punctuation at their edges. The latest answer is the most recen
 played at least one sentence; its words are those of every sentence that started playing, the
 one playing now included, never a queued one or a refused one. An echo does not enter the
 conversation, is not asked of `wakes`, leaves `first_after_answer` to the next line and is
-reported as `EchoDropped(text)`; as a line not passed to the agent, it counts in the next line's
+reported as `EchoDropped(text)`. It keeps its place in `seq` order like the agent's own spoken
+line: an echo out of order ends the loop like any line, and it never counts in the next line's
 `missed_before`. A written line is never an echo. The rule is a text-level guard, so it misses
 an echo mixed with more words of a person, and it drops what a person said when at least half
 of its long words are words of the latest answer; `EchoDropped` lets an app count the drops.
@@ -713,8 +714,10 @@ Proved by `tests/test_voice_echo.py`:
 `test_a_line_repeating_only_an_older_answer_enters_while_the_latest_one_plays`,
 `test_a_written_line_with_the_answers_words_enters_and_is_asked`,
 `test_a_sentence_still_queued_does_not_count_while_the_one_before_it_plays`,
-`test_a_refused_sentence_does_not_count_and_the_one_played_before_it_does` and
-`test_after_a_decision_that_played_nothing_the_answer_before_it_is_still_the_latest`.
+`test_a_refused_sentence_does_not_count_and_the_one_played_before_it_does`,
+`test_after_a_decision_that_played_nothing_the_answer_before_it_is_still_the_latest`,
+`test_an_echo_that_breaks_its_order_ends_the_loop_closed_and_silent` and
+`test_the_line_after_an_echo_counts_only_the_lines_never_heard_as_missed`.
 
 **The conversation.** Every line enters one running conversation, but an echo and the agent's
 own spoken line: the loop records what it played itself. Within the window below, a decision
