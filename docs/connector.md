@@ -5,7 +5,7 @@ app starts, the agent files it ships, the tools it declares, the gateway backend
 person front and the voice loop. The standard path is that the app serves its member's standing as MCP resources and
 announces a change through the standard's subscriptions; [the standard path](#the-standard-path)
 says what a host wires and what a runner relies on. Each rule names the test that proves it. The
-docstrings of `agents`, `tools`, `turn`, `backend` and `mcp_server` are exact where this file is
+docstrings of `agent_file`, `tools`, `turn`, `backend` and `mcp_server` are exact where this file is
 short; the shape of the client is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## The turn

@@ -14,7 +14,7 @@ typed events. Model providers are reached only through the gateway.
 ```mermaid
 flowchart TB
     app["an app (host)"]
-    agents["agents<br/>the agent file"]
+    agent_file["agent_file<br/>the agent file"]
     tools["tools<br/>declarations, hand tools"]
     config["config<br/>AgentConfig"]
     backend["backend<br/>the AgentBackend port<br/>gateway, fake_gateway"]
@@ -25,17 +25,17 @@ flowchart TB
     gateway["LiteLLM gateway<br/>(external)"]
     person["a signed-in person's agent<br/>(external)"]
 
-    app --> agents
+    app --> agent_file
     app --> config
     app --> backend
     app --> mcp
     app --> voice
-    agents --> tools
+    agent_file --> tools
     backend --> tools
     backend --> turn
     mcp --> tools
     mcp --> turn
-    voice --> agents
+    voice --> agent_file
     voice --> backend
     voice --> member
     backend -->|"one streamed chat completion per round"| gateway
@@ -47,7 +47,7 @@ flowchart TB
 
 ## Building blocks
 
-- The **base** depends on `pydantic` and `ruamel.yaml` only: `agents` (the agent-file reader),
+- The **base** depends on `pydantic` and `ruamel.yaml` only: `agent_file` (the agent-file reader),
   `tools` (the tool contract), `turn` (the turn's vocabulary, the one owner of `JsonObject`,
   the size bounds and the failure codes), `turn_events`, `config`, the `backend` port
   and `member` (the records an app and an agent say to each other about a member, the place window
