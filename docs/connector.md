@@ -664,12 +664,13 @@ await run_voice_loop(
   new loop.
 - `voice` is the app's `VoiceOut[Audio]`: `render(sentence)` returns the sound and `play(audio)`
   returns when it has ended. Either raises `VoiceRefused` when the app cannot speak now.
-- `wakes` is the app's `WakeRule(line, *, first_after_answer)`, asked for every line that is not
-  the agent's own. `first_after_answer` is true for the first such line heard after a decision
-  that played at least one sentence ended, while no decision is in flight, and false for every
-  other line, one heard while an answer plays included.
+- `wakes` is the app's `WakeRule(line, *, first_after_answer)`, asked for every line that is
+  neither the agent's own nor an echo. `first_after_answer` is true for the first such line heard
+  after a decision that played at least one sentence ended, while no decision is in flight, and
+  false for every other line, one heard while an answer plays included.
 - `report` receives each `VoiceEvent`: `Woke`, `StayedSilent`, `ReplyUnreadable`,
-  `SentenceStarted(text)`, `SentenceRefused(text)` and `DecisionFailed(kind, code, detail)`.
+  `SentenceStarted(text)`, `SentenceRefused(text)`, `DecisionFailed(kind, code, detail)` and
+  `EchoDropped(text)`.
 
 Proved by `tests/test_voice_loop.py`:
 `test_a_spoken_line_that_wakes_sends_one_request_with_prompt_protocol_context_and_the_line`,
@@ -691,12 +692,36 @@ line wakes by the same rule, and a line that does not wake still enters the conv
 `test_a_rule_without_a_name_or_with_an_empty_one_is_refused` and
 `test_in_the_loop_a_named_asked_or_first_line_after_a_played_answer_wakes_and_all_are_heard`.
 
-**The conversation.** Every line enters one running conversation, but the agent's own spoken
-line: the loop records what it played itself. Within the window below, a decision sends the
-pairs decided so far and one user message with every line since the last decision, one JSON
-object per line with `name`, `kind`, `own`, `spoken` and `text`, and `missed_before`, the number
-of `seq` values skipped, after a gap. The assistant message is what played, or `[silent]`. The
-conversation lives in memory while the loop runs and is stored nowhere. Proved by
+**The echo rule.** The agent's own voice, heard back through a person's microphone, arrives as
+that person's spoken line; the loop drops it so the agent does not answer itself. A spoken line
+that is not the agent's own is an echo when it has words longer than two characters, split at
+whitespace, and at least half of them are words of the agent's latest answer, compared in lower
+case without the punctuation at their edges. The latest answer is the most recent decision that
+played at least one sentence; its words are those of every sentence that started playing, the
+one playing now included, never a queued one or a refused one. An echo does not enter the
+conversation, is not asked of `wakes`, leaves `first_after_answer` to the next line and is
+reported as `EchoDropped(text)`; as a line not passed to the agent, it counts in the next line's
+`missed_before`. A written line is never an echo. The rule is a text-level guard, so it misses
+an echo mixed with more words of a person, and it drops what a person said when at least half
+of its long words are words of the latest answer; `EchoDropped` lets an app count the drops.
+Proved by `tests/test_voice_echo.py`:
+`test_a_spoken_line_is_an_echo_when_half_its_long_words_are_words_of_the_answer`,
+`test_case_and_the_punctuation_at_word_edges_do_not_hide_an_echo`,
+`test_only_a_spoken_line_that_is_not_the_agents_own_can_be_an_echo`,
+`test_a_spoken_line_repeating_the_answer_is_dropped_never_asked_and_never_sent`,
+`test_an_echo_heard_while_the_next_decision_is_read_repeats_the_answer_before_it`,
+`test_a_line_repeating_only_an_older_answer_enters_while_the_latest_one_plays`,
+`test_a_written_line_with_the_answers_words_enters_and_is_asked`,
+`test_a_sentence_still_queued_does_not_count_while_the_one_before_it_plays`,
+`test_a_refused_sentence_does_not_count_and_the_one_played_before_it_does` and
+`test_after_a_decision_that_played_nothing_the_answer_before_it_is_still_the_latest`.
+
+**The conversation.** Every line enters one running conversation, but an echo and the agent's
+own spoken line: the loop records what it played itself. Within the window below, a decision
+sends the pairs decided so far and one user message with every line since the last decision, one
+JSON object per line with `name`, `kind`, `own`, `spoken` and `text`, and `missed_before`, the
+number of `seq` values skipped, after a gap. The assistant message is what played, or
+`[silent]`. The conversation lives in memory while the loop runs and is stored nowhere. Proved by
 `test_a_line_that_does_not_wake_sends_nothing_and_leads_the_next_decisions_message`,
 `test_an_own_spoken_line_never_enters_and_an_own_written_line_enters_but_never_wakes`,
 `test_a_gap_in_seq_marks_the_next_line_with_how_many_were_missed` and
@@ -716,7 +741,8 @@ dropped stays dropped, even when its lines stay undecided.
 | --- | --- | --- |
 | One decision's messages | the agent file's `windowBytes`, in UTF-8 bytes of the messages' texts, because the library cannot count a provider's tokens; the system text does not count and never goes | the oldest whole decided pairs go until a quarter of the window is free; then, while the undecided lines alone exceed the window, the oldest of them go down to it; the newest line always stays, even when it alone exceeds the window. From the first drop on, `voice.conversation.WINDOW_NOTE` opens the first user message |
 
-Every line enters the conversation, and a decided pair leaves the window only after it was sent.
+Every line that is no echo enters the conversation, and a decided pair leaves the window only
+after it was sent.
 The oldest undecided lines a drop takes are the one exception: they may never reach any request, and
 only `WINDOW_NOTE` tells the agent that earlier parts are no longer shown.
 
