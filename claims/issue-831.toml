@@ -1,0 +1,8 @@
+claim_id = "4716c5ea60934e199a028995d92e36b7"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "c6d00f6a56aa4b0f85ebfc72720127d2524ab2b8"
+branch = "claude/issue-831-a-stopped-turn-tells-the-app-one-outcome"
+scope = ["docs/connector.md", "src/agent_runtime_client/backend/__init__.py", "src/agent_runtime_client/turn.py", "src/agent_runtime_client/voice/__init__.py", "tests/test_backend_port.py"]
+opened_commit = "1a3858de8ac4a363b5bc5ee786e99a5b4e9b1459"
+whole_reason = "One record of the turn's vocabulary, the two records that read it, its test and the connector sentence that tells apps to map only it."
