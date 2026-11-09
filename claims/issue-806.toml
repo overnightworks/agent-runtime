@@ -1,8 +1,0 @@
-claim_id = "fce1e8e790e1482b9bb5a41633a196fd"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "31fb481fe5e05d887d19a5dddd45c45939033c50"
-branch = "claude/issue-806-no-key-in-a-stopped-turns-frames"
-scope = ["docs/connector.md", "src/agent_runtime_client/backend/gateway.py", "tests/support/gateway_turn_support.py", "tests/test_backend_gateway.py"]
-opened_commit = "d46f543559da0286c25b8d5e9afb9f7f5cd75cd9"
-whole_reason = "The turn's frame rule, its frame-walking test, the test builders that keep that test file under the size limit, and the sentence in the connector document are one security contract."
