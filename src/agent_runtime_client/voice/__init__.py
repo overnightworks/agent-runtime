@@ -14,7 +14,7 @@ from typing import Protocol
 
 from agent_runtime_client.backend import TurnStopKind
 from agent_runtime_client.member import PlaceEntry
-from agent_runtime_client.turn import FailureCode, RejectionCode
+from agent_runtime_client.turn import FailureCode, RejectionCode, StopOutcome, outcome_of_stop
 
 __all__ = [
     "DecisionFailed",
@@ -97,6 +97,10 @@ class DecisionFailed:
     kind: TurnStopKind
     code: RejectionCode | FailureCode
     detail: str | None
+
+    @property
+    def outcome(self) -> StopOutcome:
+        return outcome_of_stop(self.code)
 
 
 @dataclass(frozen=True)
