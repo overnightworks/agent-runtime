@@ -139,9 +139,10 @@ def test_the_last_finish_reason_counts():
 )
 def test_an_event_that_is_no_chunk_is_malformed_with_no_context(data):
     before = an_event_stream(a_chunk("a", finish_reason="stop"), done=False)
+    chunks = (before, b"data: " + data + b"\n\n", an_event_stream())
 
     with pytest.raises(MalformedRound) as raised:
-        read(before, b"data: " + data + b"\n\n", an_event_stream())
+        read(*chunks)
 
     assert raised.value.__context__ is None
 
