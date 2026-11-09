@@ -343,6 +343,6 @@ def test_a_text_agents_request_is_unchanged(studio):
     assert (stopped, gateway.requests[0].url.path, set(body)) == (
         None,
         "/v1/chat/completions",
-        {"model", "messages", "user"},
+        {"model", "messages", "user", "stream"},
     )
     assert events[-1] == FinalEvent(text="ok")
