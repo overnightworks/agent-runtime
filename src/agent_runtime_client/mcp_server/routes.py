@@ -1,8 +1,9 @@
 """The generator: the routes a host marked with ``agent_tool`` become person-front tools.
 
 The host passes its own ``app.openapi()``, its whole ASGI application and ``mark_route``, which
-maps an upper-case method and the document's template to the host's mark type. Every breach of
-the supported profile is refused at start with one ``RouteProfileError``.
+maps an upper-case method and the document's template to the host's mark type. Every operation
+carries a mark or a ``not_an_agent_tool`` exclusion; every breach of the rule or of the supported
+profile is refused at start with one ``RouteProfileError``.
 """
 
 from collections.abc import Callable, Hashable, Sequence
@@ -20,7 +21,8 @@ from agent_runtime_client.tools import (
     ToolOutcome,
 )
 
-_SUPPORTED_METHODS: Final = frozenset({"get", "post"})
+_SUPPORTED_METHODS: Final = frozenset({"get", "post", "put", "patch", "delete"})
+_UNSAFE_METHODS: Final = frozenset({"put", "patch", "delete"})
 _OPERATION_METHODS: Final = frozenset(
     {"get", "post", "put", "patch", "delete", "head", "options", "trace"}
 )
@@ -33,7 +35,10 @@ _BODY_KEYWORDS: Final = _ANNOTATIONS | {"type", "properties", "required", "addit
 
 
 class RouteProfileError(ValueError):
-    """A marked operation, or its template, is outside what a tool can be made from."""
+    """An operation is undecided, or a marked one, or its template, is outside what a tool can be.
+
+    An operation is undecided when it carries neither ``agent_tool`` nor ``not_an_agent_tool``.
+    """
 
 
 class _Breach(Exception):  # noqa: N818 - internal; carries the reason an operation is refused
@@ -215,17 +220,19 @@ def _mark(operation: _Operation) -> tuple[str, ToolEffect]:
         and isinstance(mark.get("effect"), str)
         and mark["effect"] in effects
     ):
-        raise _Breach("a mark must be the mapping agent_tool returns")
+        raise _Breach("a decision must be the mapping agent_tool or not_an_agent_tool returns")
     return mark["name"], effects[mark["effect"]]
 
 
 def _tool(operation: _Operation, app: AsgiApp, components: JsonObject) -> PersonTool:
     if operation.method not in _SUPPORTED_METHODS:
-        raise _Breach("only GET and POST can be marked")
+        raise _Breach("only GET, POST, PUT, PATCH and DELETE can be marked")
     _check_responses(operation, components)
     description = _check_description(operation)
     target, parameters = _declared_inputs(operation, components)
     name, effect = _mark(operation)
+    if operation.method in _UNSAFE_METHODS and effect is ToolEffect.READ_ONLY:
+        raise _Breach("a PUT, PATCH or DELETE is not safe and cannot be marked read-only")
     declaration = ToolDeclaration(
         name=name, description=description, parameters=parameters, effect=effect
     )
@@ -248,17 +255,39 @@ def _unshadowed(operation: _Operation, operations: Sequence[_Operation]) -> None
                 raise _Breach("the template overlaps another operation of its method")
 
 
-def _marked(
+def _is_excluded(operation: _Operation) -> bool:
+    """Whether the operation carries an exclusion; one without a non-blank reason is a breach."""
+    extension = operation.node[AGENT_TOOL_EXTENSION]
+    if not (isinstance(extension, dict) and extension.keys() == {"excluded"}):
+        return False
+    reason = extension["excluded"]
+    if not isinstance(reason, str) or not reason.strip():
+        raise _Breach("an exclusion needs a reason that is a non-blank string")
+    return True
+
+
+def _decided(
     operation: _Operation,
     operations: Sequence[_Operation],
     app: AsgiApp,
     components: JsonObject,
-) -> PersonTool:
+) -> PersonTool | None:
+    """The tool of a marked operation, or ``None`` for an excluded one, which is not judged."""
     try:
+        if _is_excluded(operation):
+            return None
         _unshadowed(operation, operations)
         return _tool(operation, app, components)
     except (_Breach, KeyError, ValueError) as breach:
         raise RouteProfileError(f"{operation.label}: {breach}") from breach
+
+
+def _require_decided(operations: Sequence[_Operation]) -> None:
+    undecided = [op.label for op in operations if AGENT_TOOL_EXTENSION not in op.node]
+    if undecided:
+        raise RouteProfileError(
+            "operations with neither agent_tool nor not_an_agent_tool: " + "; ".join(undecided)
+        )
 
 
 def route_tools[Mark: Hashable](
@@ -266,17 +295,22 @@ def route_tools[Mark: Hashable](
 ) -> RouteTools[Mark]:
     """The tools and marks of every route marked with ``agent_tool``.
 
-    ``app`` is the host's whole application. ``mark_route`` runs only on marked operations; a
-    ``ValueError`` it raises becomes a ``RouteProfileError`` with the host's error as its cause.
+    Every operation of the document must carry ``agent_tool`` or ``not_an_agent_tool``. Any
+    undecided operation is refused first, all of them named in document order, before a tool is
+    built or ``mark_route`` runs. An excluded operation is never judged against the profile and
+    never reaches ``mark_route``, but still counts for the overlap check. ``app`` is the host's
+    whole application. A ``ValueError`` from ``mark_route`` becomes a ``RouteProfileError`` with
+    the host's error as its cause.
     """
     components = openapi.get("components", {}).get("schemas", {})
     operations = _operations(openapi)
+    _require_decided(operations)
     tools: dict[str, PersonTool] = {}
     marks = set()
     for operation in operations:
-        if AGENT_TOOL_EXTENSION not in operation.node:
+        tool = _decided(operation, operations, app, components)
+        if tool is None:
             continue
-        tool = _marked(operation, operations, app, components)
         name = tool.declaration.name
         if name in tools:
             raise RouteProfileError(f"{operation.label}: the tool name {name} is marked twice")
