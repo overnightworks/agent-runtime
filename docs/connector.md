@@ -449,11 +449,12 @@ overlap check. Proved by
 `test_an_operation_with_neither_mark_nor_exclusion_is_refused_naming_every_undecided_one`,
 `test_an_undecided_operation_is_refused_even_when_a_marked_one_breaches_the_profile`,
 `test_an_exclusion_that_not_an_agent_tool_does_not_return_is_refused` and
-`test_an_excluded_route_outside_the_profile_is_accepted_beside_a_marked_tool`. `mcp_server.route_tools(openapi, app, *, mark_route)` reads
-the host's own `app.openapi()` and returns `RouteTools(tools, marks)`: the `PersonTool`s, and a
-`frozenset` of what `mark_route(METHOD, template)` returned for each marked operation, in the
-host's own mark type. `mark_route` runs only on marked operations, never on an excluded one; its `ValueError` becomes a
-`RouteProfileError` naming the operation, with the host's error as its cause, and any other
+`test_an_excluded_route_outside_the_profile_is_accepted_beside_a_marked_tool`.
+`mcp_server.route_tools(openapi, app, *, mark_route)` reads the host's own `app.openapi()` and
+returns `RouteTools(tools, marks)`: the `PersonTool`s, and a `frozenset` of what
+`mark_route(METHOD, template)` returned for each marked operation, in the host's own mark type.
+`mark_route` runs only on marked operations, never on an excluded one; its `ValueError` becomes
+a `RouteProfileError` naming the operation, with the host's error as its cause, and any other
 exception propagates. Proved by `tests/test_mcp_server_routes.py`:
 `test_a_marked_route_becomes_a_tool_with_its_name_description_and_input_schema`,
 `test_an_excluded_route_is_never_passed_to_the_host_mark_function`,
@@ -491,9 +492,15 @@ inputs, two marks of one name, an integer path parameter and a missing descripti
 **Overlap.** Two templates of one method overlap when they have the same number of segments and
 every pair of segments at a position could match one string: two literals only when equal, and
 any pair holding a parameter always. A marked template that overlaps any other operation of its
-method is refused whatever the order, whether the other is marked or excluded; a partial segment may refuse a pair that never collides,
-never the reverse. The document cannot show converters, routes hidden from it, a `Mount`, a WebSocket route, a catch-all or a second registration of
-one method and path; none can become a tool or a mark, so the host's gate stays closed to them.
+method is refused whatever the order, whether the other is marked or excluded; a partial
+segment may refuse a pair that never collides, never the reverse. The document cannot show
+converters, routes hidden from it, a `Mount`, a WebSocket route, a catch-all or a second
+registration of one method and path. A route hidden from the document, a `Mount` or a WebSocket
+route never appears in it, so it can become neither a tool nor a mark. A converter is stripped
+from the template (`/files/{rest:path}` reads as `/files/{rest}`), and FastAPI folds a second
+registration of one method and path into one operation, so the overlap check and the profile
+cannot see either: the host proves that no marked route has a converter, a catch-all or a
+second registration.
 Which route falls into an excluded class (deleting for good, deleting in bulk, sharing,
 publishing, sending out) is judged mark by mark in each host's review, not in code. Proved by
 `test_a_marked_template_that_overlaps_another_operation_of_its_method_is_refused_in_either_order`
@@ -501,9 +508,9 @@ and `test_a_marked_template_that_cannot_collide_with_another_operation_is_accept
 
 **The call.** Each tool call is one in-process ASGI request into `app`, which must be the host's
 whole application, so the request passes every middleware, whatever the method
-(`test_a_marked_put_patch_or_delete_is_called_with_its_path_query_and_body_arguments`). An argument the schema does not name,
-a path value that is missing, not a string, empty, `.`, `..` or holding `/`, and an object or
-array query value fail the call before any inner request
+(`test_a_marked_put_patch_or_delete_is_called_with_its_path_query_and_body_arguments`). An
+argument the schema does not name, a path value that is missing, not a string, empty, `.`, `..`
+or holding `/`, and an object or array query value fail the call before any inner request
 (`tests/test_mcp_server_route_call.py`:
 `test_a_bad_path_value_or_an_unnamed_argument_is_refused_with_no_inner_request`,
 `test_an_object_or_array_query_value_is_refused_with_no_inner_request`). `path` is the outer
