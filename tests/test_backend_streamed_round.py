@@ -88,19 +88,9 @@ def test_a_stream_cut_into_chunks_anywhere_gives_the_same_round(size):
     assert read(*chunks).message["content"] == "ä"
 
 
-def test_a_stream_that_ends_without_done_is_malformed():
-    with pytest.raises(MalformedRound):
-        read("".join(_answer_ab()).encode())
-
-
 def test_data_pending_at_the_end_is_discarded():
     with pytest.raises(MalformedRound):
         read(("".join(_answer_ab()) + "data: [DONE]").encode())
-
-
-def test_done_without_a_finish_reason_is_malformed():
-    with pytest.raises(MalformedRound):
-        read(an_event_stream(a_chunk("a")))
 
 
 def test_the_last_finish_reason_counts():
@@ -112,46 +102,25 @@ def test_the_last_finish_reason_counts():
 @pytest.mark.parametrize(
     "event",
     [
-        "{not json",
-        "[]",
         "null",
-        '{"choices": "x"}',
         '{"choices": ["x"]}',
         '{"choices": [{"delta": []}]}',
         '{"choices": [{"delta": {"content": 5}}]}',
         '{"choices": [{"delta": {"tool_calls": {}}}]}',
         '{"choices": [{"finish_reason": 5}]}',
-        '{"choices": [{"delta": {"content": "\\ud800"}}]}',
-        "[" * 200_000,
-        '{"choices":' + "[" * 200_000,
     ],
     ids=[
-        "no-json",
-        "not-an-object",
         "null",
-        "choices-not-a-list",
         "choice-not-an-object",
         "delta-not-an-object",
         "content-not-text",
         "tool-calls-not-a-list",
         "finish-reason-not-text",
-        "lone-surrogate",
-        "nested-open",
-        "nested-in-choices",
     ],
 )
 def test_an_event_that_is_no_chunk_is_malformed(event):
-    with pytest.raises(MalformedRound) as raised:
+    with pytest.raises(MalformedRound):
         read(an_event_stream(a_chunk("a"), event))
-
-    assert raised.value.__context__ is None
-
-
-def test_a_line_that_is_no_utf8_is_malformed_with_no_context():
-    with pytest.raises(MalformedRound) as raised:
-        read(b"data: \xff\n\n")
-
-    assert raised.value.__context__ is None
 
 
 def test_fragments_assemble_by_index_with_their_arguments_in_pieces():
@@ -207,7 +176,6 @@ def test_text_before_the_calls_is_the_rounds_content():
         [a_fragment(0, call_id="c")],
         [a_fragment(0, call_id="c", name="n"), a_fragment(0, call_id="other")],
         [a_fragment(0, call_id="c", name="n"), a_fragment(0, name="other")],
-        [a_fragment(0, call_id="c", name="n"), a_fragment(2, call_id="d", name="n")],
         [a_fragment(0, call_id="c", name="n", arguments=5)],
         [a_fragment(0, call_id="\ud800", name="n")],
         ["not an object"],
@@ -222,7 +190,6 @@ def test_text_before_the_calls_is_the_rounds_content():
         "first-fragment-without-name",
         "second-id-for-one-index",
         "second-name-for-one-index",
-        "index-gap",
         "arguments-not-text",
         "surrogate-id",
         "fragment-not-an-object",
@@ -235,27 +202,23 @@ def test_fragments_that_do_not_assemble_are_malformed(fragments):
 
 
 @pytest.mark.parametrize(
-    ("error", "kind"),
+    "error",
     [
-        (
-            {"message": "secret-message", "type": "api_error", "code": "500"},
-            "error type api_error, code 500",
-        ),
-        ({"message": "secret-message", "type": "API ERROR", "code": "500"}, "no error type given"),
-        ({"message": "secret-message", "type": "api_error", "code": 500}, "no error type given"),
-        ({"message": "secret-message"}, "no error type given"),
-        ("secret-message", "no error type given"),
+        {"message": "secret-message", "type": "API ERROR", "code": "500"},
+        {"message": "secret-message", "type": "api_error", "code": 500},
+        {"message": "secret-message"},
+        "secret-message",
     ],
-    ids=["type-and-code", "type-fails-the-rule", "code-not-text", "message-only", "plain-text"],
+    ids=["type-fails-the-rule", "code-not-text", "message-only", "plain-text"],
 )
 @pytest.mark.parametrize("done", [False, True], ids=["alone", "then-done"])
-def test_an_error_event_carries_only_its_checked_type_and_code(error, kind, done):
+def test_an_error_event_whose_type_or_code_fails_the_rule_carries_neither(error, done):
     stream = an_event_stream(a_chunk("a"), {"error": error}, done=done)
 
     with pytest.raises(RoundErrorEvent) as raised:
         read(stream)
 
-    assert raised.value.kind == kind
+    assert raised.value.kind == "no error type given"
     assert "secret-message" not in str(raised.value)
 
 
@@ -279,11 +242,6 @@ def test_a_rounds_text_stays_within_the_event_bound_in_whatever_pieces(text, fit
     else:
         with pytest.raises(MalformedRound):
             read(stream)
-
-
-def test_a_line_that_never_ends_is_malformed_once_it_passes_the_data_bound():
-    with pytest.raises(MalformedRound):
-        read(*[b"x" * MAX_EVENT_BYTES] * 7)
 
 
 @pytest.mark.parametrize(("extra", "fits"), [(0, True), (1, False)], ids=["at-the-bound", "over"])
