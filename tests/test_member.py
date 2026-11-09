@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -19,6 +20,10 @@ from agent_runtime_client.member import (
     PlaceEntry,
     PlaceRef,
     PlaceWindow,
+    SpeakArguments,
+    SpeakRefusal,
+    SpeakRefused,
+    Spoken,
     Standing,
     StandingState,
     place_ref_from_window_uri,
@@ -42,6 +47,10 @@ def window_from(wire: dict[str, Any]) -> PlaceWindow:
 
 def entry(seq: int, **fields: Any) -> dict[str, Any]:
     return {"seq": seq, "kind": "said", "name": "ada", "text": "hello", "own": False} | fields
+
+
+def speak_wire(**fields: Any) -> dict[str, Any]:
+    return {"place": {"kind": "room", "id": "r-1"}, "text": "Shall we start?"} | fields
 
 
 @pytest.mark.parametrize(
@@ -136,9 +145,48 @@ def test_a_window_with_gaps_in_seq_is_valid_and_a_long_text_is_kept() -> None:
 
 
 @pytest.mark.parametrize(
+    ("fields", "spoken"),
+    [({"spoken": True}, True), ({"spoken": False}, False), ({}, False)],
+    ids=["spoken", "written", "absent"],
+)
+def test_an_entry_reads_spoken_as_sent_and_an_absent_one_as_written(
+    fields: dict[str, Any], spoken: bool
+) -> None:
+    wire_text = json.dumps(entry(1) | fields)
+
+    assert PlaceEntry.model_validate_json(wire_text).spoken is spoken
+
+
+def test_a_window_dumped_as_json_carries_spoken_on_every_entry() -> None:
+    window = window_from(
+        {"generation": "g", "starts_at": 1, "entries": [entry(1), entry(2, spoken=True)]}
+    )
+
+    dumped = json.loads(window.model_dump_json())
+
+    assert [line["spoken"] for line in dumped["entries"]] == [False, True]
+
+
+@pytest.mark.parametrize(
     "fields",
-    [{"seq": 0}, {"seq": 1.0}, {"kind": ""}, {"name": ""}, {"text": ""}, {"own": "yes"}],
-    ids=["zero-seq", "fractional-seq", "empty-kind", "empty-name", "empty-text", "text-own"],
+    [
+        {"seq": 0},
+        {"seq": 1.0},
+        {"kind": ""},
+        {"name": ""},
+        {"text": ""},
+        {"own": "yes"},
+        {"spoken": "yes"},
+    ],
+    ids=[
+        "zero-seq",
+        "fractional-seq",
+        "empty-kind",
+        "empty-name",
+        "empty-text",
+        "text-own",
+        "text-spoken",
+    ],
 )
 def test_an_entry_with_a_malformed_field_is_refused(fields: dict[str, Any]) -> None:
     wire_text = json.dumps(entry(1) | fields)
@@ -254,3 +302,82 @@ def test_accept_invitation_arguments_with_a_malformed_field_are_refused(
 
     with pytest.raises(ValidationError):
         AcceptInvitationArguments.model_validate_json(wire_text)
+
+
+def test_speak_arguments_carry_the_place_and_one_sentence_on_the_wire() -> None:
+    arguments = SpeakArguments(place=PLACE, text="Shall we start?")
+
+    assert json.loads(arguments.model_dump_json()) == speak_wire()
+    assert SpeakArguments.model_validate_json(arguments.model_dump_json()) == arguments
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"text": ""},
+        {"extra": 1},
+        {"place": {"kind": "room"}},
+        {"place": {"kind": "room", "id": ""}},
+        {"place": "room/r-1"},
+    ],
+    ids=["empty-text", "unknown-member", "place-without-id", "place-with-empty-id", "text-place"],
+)
+def test_speak_arguments_with_a_malformed_field_are_refused(fields: dict[str, Any]) -> None:
+    wire_text = json.dumps(speak_wire(**fields))
+
+    with pytest.raises(ValidationError):
+        SpeakArguments.model_validate_json(wire_text)
+
+
+def test_spoken_reads_the_sound_length_in_milliseconds_from_its_json() -> None:
+    spoken = Spoken.model_validate_json(json.dumps({"duration_ms": 1}))
+
+    assert spoken.duration_ms == 1
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [{"duration_ms": 0}, {"duration_ms": 1.0}, {"extra": 1}],
+    ids=["zero-duration", "fractional-duration", "unknown-member"],
+)
+def test_spoken_with_a_malformed_field_is_refused(fields: dict[str, Any]) -> None:
+    wire_text = json.dumps({"duration_ms": 1} | fields)
+
+    with pytest.raises(ValidationError):
+        Spoken.model_validate_json(wire_text)
+
+
+@pytest.mark.parametrize(
+    "parse",
+    [
+        lambda wire: SpeakRefused.model_validate_json(json.dumps(wire)),
+        SpeakRefused.model_validate,
+    ],
+    ids=["from-json-text", "from-decoded-json"],
+)
+def test_a_refused_content_carries_exactly_the_three_speak_refusal_codes(
+    parse: Callable[[dict[str, str]], SpeakRefused],
+) -> None:
+    wires = [{"refused": code} for code in ("not_active", "too_long", "unavailable")]
+
+    contents = [parse(wire) for wire in wires]
+
+    assert {content.refused for content in contents} == set(SpeakRefusal)
+    assert [json.loads(content.model_dump_json()) for content in contents] == wires
+
+
+@pytest.mark.parametrize(
+    "wire_text",
+    [
+        json.dumps({"refused": "too_fast"}),
+        json.dumps({"refused": "NOT_ACTIVE"}),
+        json.dumps({"refused": "not_active", "extra": 1}),
+        json.dumps({}),
+        json.dumps("not_active"),
+        "not_active",
+    ],
+    ids=["other-code", "upper-case-code", "unknown-member", "no-code", "bare-code", "bare-text"],
+)
+def test_a_malformed_refused_content_is_refused(wire_text: str) -> None:
+    with pytest.raises(ValidationError):
+        SpeakRefused.model_validate_json(wire_text)
