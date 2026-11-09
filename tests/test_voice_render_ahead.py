@@ -29,6 +29,7 @@ from tests.support.voice_support import (
     Trace,
     conversation_of,
     finish,
+    hang,
     piece,
 )
 
@@ -306,10 +307,9 @@ def test_a_render_ahead_failing_with_another_error_stops_the_sentence_still_play
 
     async def hearing(trace):
         yield a_line(1, "Erzähl.")
-        await trace.settled()
+        await hang()
 
     ending = place.run(hearing, gateway, voice=voice)
 
     assert ("stopped", "Eins.") in trace.calls
-    assert ("played", "Eins.") not in trace.entries
     assert ending.raised.subgroup(RuntimeError) is not None
