@@ -1,8 +1,0 @@
-claim_id = "f84d619e0db649b598842e7bf02fd55b"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "1462ae4eab596c32ef3832ca37f76b2022e7cacc"
-branch = "claude/issue-829-the-voice-loop-renders-the-next-sentence"
-scope = ["docs/ARCHITECTURE.md", "docs/connector.md", "src/agent_runtime_client/voice/__init__.py", "src/agent_runtime_client/voice/loop.py", "tests/support/voice_support.py", "tests/test_voice_loop.py", "tests/test_voice_render_ahead.py"]
-opened_commit = "a9858bbb9fd8ef4525152637ea5a235093573f09"
-whole_reason = "One timing change of one port: the play loop that renders ahead, the port's docstring that allows it, the tests that pin the order, and the two documents that describe it."
