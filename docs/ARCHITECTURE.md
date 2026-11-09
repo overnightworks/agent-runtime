@@ -78,9 +78,10 @@ conversation in memory for as long as it runs. The gateway holds the budget.
 
 The voice loop runs in the host's process too. Lines come in from the host's hearing port; the
 host's wake rule decides which line starts a decision. One decision is in flight at a time: its
-turn is read to its end in one task of the loop's task group while another task renders and
-plays its sentences through the host's `VoiceOut`, so the turn's deadline bounds the writing,
-never the playing.
+turn is read to its end in one task of the loop's task group while another task plays its
+sentences in order through the host's `VoiceOut`, so the turn's deadline bounds the writing,
+never the playing. While one sentence plays, a third task renders the next one, never more than
+one ahead, so no render pauses the answer between two sentences.
 
 One gateway turn with a tool call:
 

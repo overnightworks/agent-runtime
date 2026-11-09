@@ -54,11 +54,13 @@ async def run_voice_loop[Audio](
     goes beyond it, alone and behind the window note once anything went. An agent without a
     voice section raises ``ValueError`` before ``hearing`` is read.
 
-    Each decision's turn is read to its end in its own task while its sentences play. A
-    ``VoiceRefused`` ends the answer: the turn is closed and the queued sentences dropped. A
-    ``TurnStopped`` is reported as ``DecisionFailed``, and the sentences already queued play
-    out. A decision that played nothing and was not silent leaves its lines undecided until a
-    line wakes the agent again.
+    Each decision's turn is read to its end in its own task while its sentences play. They play
+    in written order, and the next one renders while one plays, never more than one ahead. A
+    ``VoiceRefused`` ends the answer: the turn is closed and the queued sentences dropped, a
+    rendered one included; a render refused while the sentence before it plays is reported once
+    that one has played. A ``TurnStopped`` is reported as ``DecisionFailed``, and the sentences
+    already queued play out. A decision that played nothing and was not silent leaves its lines
+    undecided until a line wakes the agent again.
 
     When hearing ends, the loop closes the turn, stops the sound and returns. Any other error
     of a port or the backend, and a ``seq`` not above the last, closes the turn, stops the
@@ -187,16 +189,45 @@ class _VoiceLoop[Audio]:
         sentences.put_nowait(_SENTENCES_END)
 
     async def _play(self, sentences: asyncio.Queue[str | None], answer: _Answer) -> None:
-        while (sentence := await sentences.get()) is not _SENTENCES_END:
-            try:
-                audio = await self._voice.render(sentence)
-                answer.playing = sentence
-                self._report(SentenceStarted(sentence))
-                await self._voice.play(audio)
-            except VoiceRefused:
-                answer.ended_short = True
-                self._report(SentenceRefused(sentence))
-                return
-            finally:
-                answer.playing = None
-            answer.played.append(sentence)
+        """Play the sentences in written order; the next one renders while one plays."""
+        ahead = self._group.create_task(self._render_next(sentences))
+        try:
+            while (rendered := await ahead) is not None:
+                if isinstance(rendered, SentenceRefused):
+                    refused = rendered
+                else:
+                    ahead = self._group.create_task(self._render_next(sentences))
+                    refused = await self._play_one(*rendered, answer)
+                if refused is not None:
+                    answer.ended_short = True
+                    self._report(refused)
+                    return
+        finally:
+            ahead.cancel()
+            await asyncio.wait({ahead})
+
+    async def _render_next(
+        self, sentences: asyncio.Queue[str | None]
+    ) -> tuple[str, Audio] | SentenceRefused | None:
+        """The next sentence and its sound, the refusal of its render, or ``None`` at the end."""
+        if (sentence := await sentences.get()) is _SENTENCES_END:
+            return None
+        try:
+            return sentence, await self._voice.render(sentence)
+        except VoiceRefused:
+            return SentenceRefused(sentence)
+
+    async def _play_one(
+        self, sentence: str, audio: Audio, answer: _Answer
+    ) -> SentenceRefused | None:
+        """Play one rendered sentence; the refusal of its play, or ``None`` once it ended."""
+        answer.playing = sentence
+        self._report(SentenceStarted(sentence))
+        try:
+            await self._voice.play(audio)
+        except VoiceRefused:
+            return SentenceRefused(sentence)
+        finally:
+            answer.playing = None
+        answer.played.append(sentence)
+        return None

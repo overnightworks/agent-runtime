@@ -36,7 +36,12 @@ class VoiceRefused(Exception):
 
 
 class VoiceOut[Audio](Protocol):
-    """How the host speaks one sentence: render it, then play what it rendered."""
+    """How the host speaks one sentence: render it, then play what it rendered.
+
+    The loop plays the sentences in order: ``play`` for a sentence starts only after it returned
+    for the one before. While one sentence plays, the loop renders the next, never more than one
+    ahead, so ``render`` may run while ``play`` does.
+    """
 
     async def render(self, sentence: str) -> Audio:
         """The sentence's sound; it may queue the sound where the app plays in order."""
