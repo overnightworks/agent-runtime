@@ -47,10 +47,12 @@ never stored beside it:
 | `refused: budget_spent` | `budget_spent` |
 | every `failed` code | `unavailable` |
 
-`retry_after_s` stays as the gateway gave it, whatever the outcome. Proved by
-`tests/test_backend_port.py`: `test_every_stop_code_has_exactly_its_outcome`,
-`test_a_turn_stop_and_a_failed_decision_of_one_code_give_the_same_outcome` and
-`test_a_busy_refusal_is_busy_with_or_without_a_wait`.
+`retry_after_s` comes only with `busy`, as the gateway gave it; the outcome never changes it. Proved
+by `tests/test_backend_port.py`: `test_every_stop_code_has_exactly_its_outcome`,
+`test_the_outcome_table_covers_every_stop_code`,
+`test_a_turn_stop_and_a_failed_decision_of_one_code_give_the_same_outcome`,
+`test_a_busy_refusal_is_busy_with_or_without_a_wait` and
+`test_an_outcome_is_never_given_apart_from_its_code`.
 
 `AssistantTextEvent` is a piece of the assistant's text, yielded as the gateway streams it, before
 its round is judged. Pieces come from every round, including a round that ends in tool calls: its
@@ -690,8 +692,8 @@ await run_voice_loop(
   after a decision that played at least one sentence ended, while no decision is in flight, and
   false for every other line, one heard while an answer plays included.
 - `report` receives each `VoiceEvent`: `Woke`, `StayedSilent`, `ReplyUnreadable`,
-  `SentenceStarted(text)`, `SentenceRefused(text)`, `DecisionFailed(kind, code, detail)`, whose `outcome` is the stop's `StopOutcome`, and
-  `EchoDropped(text)`.
+  `SentenceStarted(text)`, `SentenceRefused(text)`, `DecisionFailed(kind, code, detail)`, whose
+  `outcome` is the stop's `StopOutcome`, and `EchoDropped(text)`.
 
 Proved by `tests/test_voice_loop.py`:
 `test_a_spoken_line_that_wakes_sends_one_request_with_prompt_protocol_context_and_the_line`,
