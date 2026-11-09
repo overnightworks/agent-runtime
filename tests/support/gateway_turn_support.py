@@ -266,7 +266,7 @@ def a_handler_raising(stop: TurnStopped):
 def a_handler_raising_from_a_nameless_namespace(stop: TurnStopped):
     """A handler whose frame's globals have no ``__name__``, as ``exec`` into a bare dict gives."""
     namespace = {"stop": stop}
-    exec("async def stopping(_principal, _arguments):\n    raise stop\n", namespace)
+    exec("async def stopping(_principal, _arguments):\n    raise stop\n", namespace)  # noqa: S102 - the case under test is a handler exec defines from this constant source
     return namespace["stopping"]
 
 
