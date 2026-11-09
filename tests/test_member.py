@@ -15,6 +15,8 @@ from agent_runtime_client.member import (
     LISTEN_BOUND_SECONDS,
     STANDING_URI,
     AcceptInvitationArguments,
+    AcceptInvitationRefusal,
+    AcceptInvitationRefused,
     Invitation,
     MemberStanding,
     PlaceEntry,
@@ -347,37 +349,69 @@ def test_spoken_with_a_malformed_field_is_refused(fields: dict[str, Any]) -> Non
         Spoken.model_validate_json(wire_text)
 
 
+REFUSALS = [
+    pytest.param(SpeakRefused, SpeakRefusal, ("not_active", "too_long", "unavailable"), id="speak"),
+    pytest.param(
+        AcceptInvitationRefused,
+        AcceptInvitationRefusal,
+        ("stale_invitation", "two_seats", "sponsor_away", "busy"),
+        id="accept-invitation",
+    ),
+]
+
+
 @pytest.mark.parametrize(
-    "parse",
-    [
-        lambda wire: SpeakRefused.model_validate_json(json.dumps(wire)),
-        SpeakRefused.model_validate,
-    ],
-    ids=["from-json-text", "from-decoded-json"],
+    "from_json_text", [True, False], ids=["from-json-text", "from-decoded-json"]
 )
-def test_a_refused_content_carries_exactly_the_three_speak_refusal_codes(
-    parse: Callable[[dict[str, str]], SpeakRefused],
+@pytest.mark.parametrize(("record", "codes_enum", "codes"), REFUSALS)
+def test_a_refused_content_carries_exactly_its_tools_refusal_codes(
+    record: Any, codes_enum: Any, codes: tuple[str, ...], from_json_text: bool
 ) -> None:
-    wires = [{"refused": code} for code in ("not_active", "too_long", "unavailable")]
+    wires = [{"refused": code} for code in codes]
 
-    contents = [parse(wire) for wire in wires]
+    contents = [
+        record.model_validate_json(json.dumps(wire))
+        if from_json_text
+        else record.model_validate(wire)
+        for wire in wires
+    ]
 
-    assert {content.refused for content in contents} == set(SpeakRefusal)
+    assert {content.refused for content in contents} == set(codes_enum)
     assert [json.loads(content.model_dump_json()) for content in contents] == wires
 
 
+ONE_CODE_EACH = [
+    pytest.param(record, codes[0], id=refusal.id)
+    for refusal in REFUSALS
+    for record, _codes_enum, codes in [refusal.values]
+]
+
+
+@pytest.mark.parametrize(("record", "code"), ONE_CODE_EACH)
 @pytest.mark.parametrize(
-    "wire_text",
+    "malformed",
     [
-        json.dumps({"refused": "too_fast"}),
-        json.dumps({"refused": "NOT_ACTIVE"}),
-        json.dumps({"refused": "not_active", "extra": 1}),
-        json.dumps({}),
-        json.dumps("not_active"),
-        "not_active",
+        lambda _code: json.dumps({"refused": "too_fast"}),
+        lambda _code: json.dumps({"refused": "own_account_only"}),
+        lambda code: json.dumps({"refused": code.upper()}),
+        lambda code: json.dumps({"refused": code, "extra": 1}),
+        lambda _code: json.dumps({}),
+        lambda code: json.dumps(code),
+        lambda code: code,
     ],
-    ids=["other-code", "upper-case-code", "unknown-member", "no-code", "bare-code", "bare-text"],
+    ids=[
+        "other-code",
+        "audience-code",
+        "upper-case-code",
+        "unknown-member",
+        "no-code",
+        "bare-code",
+        "bare-text",
+    ],
 )
-def test_a_malformed_refused_content_is_refused(wire_text: str) -> None:
+def test_a_malformed_refused_content_is_refused(
+    record: Any, code: str, malformed: Callable[[str], str]
+) -> None:
+    wire = malformed(code)
     with pytest.raises(ValidationError):
-        SpeakRefused.model_validate_json(wire_text)
+        record.model_validate_json(wire)
