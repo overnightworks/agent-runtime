@@ -64,6 +64,7 @@ class RejectionCode(StrEnum):
 
     NOT_ENABLED = "not_enabled"
     BUSY = "busy"
+    BUDGET_SPENT = "budget_spent"
     FORBIDDEN = "forbidden"
 
 

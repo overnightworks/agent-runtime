@@ -287,6 +287,7 @@ def test_a_key_with_any_prefix_is_sent_as_it_is(scenario):
 @pytest.mark.parametrize(
     "reply",
     [Reply(401), Reply(403), Reply(422, body=b'{"error":"budget_exceeded"}'), Reply(404)],
+    ids=["401", "403", "422-whose-error-is-no-object", "404"],
 )
 def test_a_refusal_status_is_provider_unavailable_as_gateway_refused(scenario, reply, caplog):
     caplog.set_level(logging.INFO)
@@ -298,7 +299,7 @@ def test_a_refusal_status_is_provider_unavailable_as_gateway_refused(scenario, r
     assert str(reply.status) in caplog.text
 
 
-def test_a_refusal_response_is_closed_after_its_body_is_read(scenario):
+def test_a_refusal_whose_error_is_no_object_is_closed_after_its_body_is_read(scenario):
     refusal = Streamed((b'{"error":"budget_exceeded"}',), status=422)
 
     _, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=refusal))

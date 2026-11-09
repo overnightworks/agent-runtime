@@ -33,6 +33,7 @@ from tests.support.gateway_turn_support import (
     HangingTransport,
     a_gateway_config,
     a_person,
+    a_picture_request,
     ending,
 )
 from tests.support.virtual_time import VirtualTimeLoop
@@ -41,21 +42,7 @@ PROVIDER_ERROR = (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
 UNAVAILABLE = (TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE)
 LIMIT_EXCEEDED = (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
 BUSY = (TurnStopKind.REFUSED, RejectionCode.BUSY)
-TURN_BUDGET_SECONDS = 30
-
-
-def a_picture_request(**changes) -> TurnRequest:
-    fields = {
-        "agent": "painter",
-        "turn": Turn(system="Paint it.", messages=[TurnMessage(role=TurnRole.USER, text="a cat")]),
-        "roles": ["admin", "user"],
-        "tools": (),
-        "model": "image/standin",
-        "max_duration_seconds": TURN_BUDGET_SECONDS,
-        "max_tool_calls": None,
-        "picture_size": "1024x1024",
-    }
-    return TurnRequest(**{**fields, **changes})
+TURN_BUDGET_SECONDS = a_picture_request().max_duration_seconds
 
 
 def a_json_reply(body: object) -> Reply:
