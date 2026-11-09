@@ -18,6 +18,7 @@ from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from types import TracebackType
 from typing import Final, NotRequired, Required, TypedDict
 
 import httpx2
@@ -125,6 +126,28 @@ class GatewayBackend(AgentBackend):
             self._tools[tool.declaration.name] = tool
 
     async def run(
+        self, request: TurnRequest, person: TurnPerson
+    ) -> AsyncGenerator[TurnEvent, None]:
+        """The turn's events; a stop leaves this frame, which never held the key or a reply.
+
+        A stop the gateway path raised is replaced by a plain one, with nothing of the frames or
+        errors it passed through; a stop the host raised is the same exception, its traceback
+        cut of this module's frames, which hold the key and the reply.
+        """
+        try:
+            async with contextlib.aclosing(self._turn(request, person)) as events:
+                async for event in events:
+                    yield event
+                    del event
+        except _GatewayStop as stopped:
+            closed = _plain(stopped)
+        except TurnStopped as stopped:
+            raise stopped.with_traceback(_beyond_this_module(stopped.__traceback__))
+        else:
+            return
+        raise closed
+
+    async def _turn(
         self, request: TurnRequest, person: TurnPerson
     ) -> AsyncGenerator[TurnEvent, None]:
         tools = self._declared_tools(request)
@@ -388,7 +411,7 @@ def _refuse_after(deadline: float) -> None:
 
 
 def _limit_exceeded() -> TurnStopped:
-    return TurnStopped(TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
+    return _GatewayStop(TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
 
 
 async def _serve(handler: HandToolHandler, person: TurnPerson, call: _Call) -> ToolResultEvent:
@@ -489,8 +512,35 @@ def _read_key(key_file: Path) -> str:
     return line
 
 
+class _GatewayStop(TurnStopped):
+    """A stop this module's own code raises, with the context and frames of where it arose."""
+
+
+def _plain(stopped: TurnStopped) -> TurnStopped:
+    return TurnStopped(
+        stopped.kind,
+        stopped.code,
+        retry_after_s=stopped.retry_after_s,
+        after_side_effect=stopped.after_side_effect,
+        detail=stopped.detail,
+    )
+
+
+def _beyond_this_module(trace: TracebackType | None) -> TracebackType | None:
+    """The traceback without this module's frames: they hold the key and the reply."""
+    kept = None
+    outside = []
+    while trace is not None:
+        if trace.tb_frame.f_globals["__name__"] != __name__:
+            outside.append(trace)
+        trace = trace.tb_next
+    for entry in reversed(outside):
+        kept = TracebackType(kept, entry.tb_frame, entry.tb_lasti, entry.tb_lineno)
+    return kept
+
+
 def _unavailable(detail: GatewayDetail) -> TurnStopped:
-    return TurnStopped(TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE, detail=detail)
+    return _GatewayStop(TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE, detail=detail)
 
 
 async def _raise_unless_ok(response: httpx2.Response) -> None:
@@ -500,7 +550,7 @@ async def _raise_unless_ok(response: httpx2.Response) -> None:
         return
     if status == httpx2.codes.TOO_MANY_REQUESTS:
         wait = _wait_seconds(response.headers.get("Retry-After"))
-        raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.BUSY, retry_after_s=wait)
+        raise _GatewayStop(TurnStopKind.REFUSED, RejectionCode.BUSY, retry_after_s=wait)
     _LOGGER.warning(
         "the gateway answered with status %d, %s", status, await _error_kind_of(response)
     )
@@ -657,7 +707,7 @@ def _calls_of(message: JsonObject, offered: frozenset[str]) -> _Round:
 
 
 def _malformed_reply() -> TurnStopped:
-    return TurnStopped(
+    return _GatewayStop(
         TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR, detail=GatewayDetail.MALFORMED_REPLY
     )
 

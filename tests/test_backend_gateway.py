@@ -730,3 +730,67 @@ def test_a_level_the_host_set_on_a_transport_logger_stands_after_a_construction(
 def test_a_fake_gateway_without_replies_is_refused():
     with pytest.raises(ValueError, match="at least one reply"):
         FakeGateway()
+
+
+REPLY_CANARY = "reply-canary-7f3a"
+A_PIECE = an_event_stream(a_chunk(REPLY_CANARY), done=False)
+
+
+def _held_texts(error: BaseException) -> list[str]:
+    """Every string a runtime frame of the traceback holds, and the text of each exception.
+
+    The host's own frames are left out: the host holds the events it was given.
+    """
+    texts: list[str] = []
+    seen: set[int] = set()
+    pending: list[BaseException | None] = [error]
+    while pending:
+        current = pending.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        texts += [str(current), repr(current.args)]
+        trace = current.__traceback__
+        while trace is not None:
+            frame = trace.tb_frame
+            if frame.f_globals["__name__"].startswith("agent_runtime_client"):
+                texts += [repr(value) for value in frame.f_locals.values()]
+            trace = trace.tb_next
+        pending += [current.__context__, current.__cause__]
+    return texts
+
+
+TURN_STOPS = {
+    "status": (lambda: FakeGateway(Reply(401, body=b'{"error":{"type":"auth"}}')), 30),
+    "lost_connection": (lambda: FailingTransport(httpx2.ConnectError("refused")), 30),
+    "broken_chunk_header": (
+        lambda: Streamed((A_PIECE,), breaks_with=httpx2.RemoteProtocolError("bad chunk")),
+        30,
+    ),
+    "incomplete_round": (lambda: Streamed((A_PIECE,)), 30),
+    "malformed_event": (lambda: Streamed((A_PIECE + b"data: {not json\n\n",)), 30),
+    "judge_refusal": (
+        lambda: Streamed(
+            (A_PIECE + b'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n',)
+        ),
+        30,
+    ),
+    "error_event": (
+        lambda: Streamed((A_PIECE + b'data: {"error":{"type":"server_error"}}\n\n',)),
+        30,
+    ),
+    "deadline": (_Silent, 0.05),
+}
+
+
+@pytest.mark.parametrize(("transport", "seconds"), TURN_STOPS.values(), ids=TURN_STOPS)
+def test_a_stopped_turn_holds_neither_the_key_nor_the_reply_in_any_frame_or_chained_error(
+    scenario, transport, seconds
+):
+    request = a_request().model_copy(update={"max_duration_seconds": seconds})
+    backend = GatewayBackend(scenario.config(), transport=transport())
+
+    _, stopped = scenario.outcome(backend, request)
+
+    held = _held_texts(stopped)
+    assert [text for text in held if scenario.key in text or REPLY_CANARY in text] == []
