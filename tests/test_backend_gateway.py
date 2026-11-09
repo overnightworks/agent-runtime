@@ -606,7 +606,7 @@ def test_a_turn_advanced_from_a_new_task_per_event_reads_its_stream_over_a_socke
 
         async with server:
             try:
-                turn = backend.run(a_request(), scenario.person()[0])
+                turn = backend.run(a_request(max_duration_seconds=5), scenario.person()[0])
                 async with contextlib.aclosing(turn) as stream:
                     while (event := await asyncio.create_task(next_event(stream))) is not None:
                         events.append(event)
