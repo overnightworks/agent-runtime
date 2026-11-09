@@ -241,12 +241,11 @@ def test_a_round_past_the_request_bound_runs_no_handler(scenario):
     ],
     ids=["no-json", "nested", "no-utf8", "error-event", "surrogate"],
 )
-def test_a_stopped_turn_holds_no_text_from_the_wire(scenario, body):
+def test_a_stopped_turn_holds_no_text_from_the_wire(scenario, caplog, body):
+    caplog.set_level(logging.DEBUG)
+
     _, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=Streamed((body,))))
 
-    chain, error = [], stopped
-    while error is not None:
-        chain.append(error)
-        error = error.__cause__ or error.__context__
-    assert not any(isinstance(error, ValueError) for error in chain)
-    assert "marker-in-the-wire" not in "".join(f"{error!r}{error}" for error in chain)
+    assert (stopped.__context__, stopped.__cause__) == (None, None)
+    assert "marker-in-the-wire" not in f"{stopped!r}{stopped}"
+    assert "marker-in-the-wire" not in caplog.text
