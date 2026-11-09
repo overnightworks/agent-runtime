@@ -261,15 +261,59 @@ def test_a_key_file_that_is_missing_or_malformed_raises_the_same_and_sends_nothi
     assert "first-line-0001" not in everything_it_shows(failure) + caplog.text
 
 
-def test_a_list_call_keeps_the_transport_loggers_off_debug_so_the_key_stays_out_of_them(
+async def _serve_model_list(reader, writer):
+    await reader.readuntil(b"\r\n\r\n")
+    body = model_list("text/a").body
+    head = f"HTTP/1.1 200 OK\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n"
+    writer.write(head.encode() + body)
+    await writer.drain()
+    writer.close()
+
+
+def test_a_list_call_writes_the_key_into_no_record_under_debug_on_the_transport_loggers(
     tmp_path, caplog
 ):
     for name in ("httpx2", "httpcore2"):
         caplog.set_level(logging.DEBUG, logger=name)
 
+    async def list_over_loopback():
+        server = await asyncio.start_server(_serve_model_list, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        config = a_gateway_config(tmp_path)
+        gateway = ChatGateway(origin=f"http://127.0.0.1:{port}", key_file=config.gateway.key_file)
+        async with server:
+            await list_gateway_models(gateway)
+        return gateway.key_file.read_text().strip()
+
+    key = asyncio.run(list_over_loopback())
+
+    assert any(record.name.startswith("httpcore2") for record in caplog.records)
+    assert key not in caplog.text
+    assert key not in "".join(str(record.__dict__) for record in caplog.records)
+
+
+@pytest.mark.parametrize(
+    "name", ["httpx2", "httpcore2", "httpcore2.connection", "httpcore2.http11"]
+)
+def test_a_transport_logger_the_host_left_unset_is_not_enabled_for_debug_after_a_list_call(
+    tmp_path, caplog, name
+):
+    caplog.set_level(logging.DEBUG)
+    for logger in ("httpx2", "httpcore2"):
+        caplog.set_level(logging.NOTSET, logger=logger)
+
     list_models(a_gateway(tmp_path), FakeGateway(model_list("text/a")))
 
-    assert not any(
-        logging.getLogger(name).isEnabledFor(logging.DEBUG)
-        for name in ("httpx2", "httpcore2", "httpcore2.connection", "httpcore2.http11")
-    )
+    assert not logging.getLogger(name).isEnabledFor(logging.DEBUG)
+
+
+@pytest.mark.parametrize("logger", ["httpx2", "httpcore2"])
+@pytest.mark.parametrize("level", [logging.DEBUG, logging.ERROR])
+def test_a_level_the_host_set_on_a_transport_logger_stands_after_a_list_call(
+    tmp_path, caplog, logger, level
+):
+    caplog.set_level(level, logger=logger)
+
+    list_models(a_gateway(tmp_path), FakeGateway(model_list("text/a")))
+
+    assert logging.getLogger(logger).level == level
