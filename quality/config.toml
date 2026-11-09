@@ -22,3 +22,75 @@ what = 'import contract "the client base modules import no HTTP library" changes
 item = "overnightworks/agent-runtime#783"
 date = 2026-11-08
 reason = "the wait module leaves the library, so it no longer needs listing as a source module"
+
+[[gate.loosened]]
+what = 'import contract "agent_runtime_client imports no speech library" removed'
+item = "overnightworks/agents#837"
+date = 2026-11-09
+reason = "the rename moves the same modules to the import agents"
+
+[[gate.loosened]]
+what = 'import contract "agent_runtime_client imports no web framework" removed'
+item = "overnightworks/agents#837"
+date = 2026-11-09
+reason = "the rename moves the same modules to the import agents"
+
+[[gate.loosened]]
+what = 'import contract "agent_runtime_client reaches back into no host" removed'
+item = "overnightworks/agents#837"
+date = 2026-11-09
+reason = "the rename moves the same modules to the import agents"
+
+[[gate.loosened]]
+what = 'import contract "agent_runtime_client.tools does not import agent_runtime_client.mcp_wire" removed'
+item = "overnightworks/agents#837"
+date = 2026-11-09
+reason = "the rename moves the same modules to the import agents"
+
+[[gate.loosened]]
+what = 'import contract "agent_runtime_client.voice imports no HTTP or MCP library, no backend implementation and no anyio" removed'
+item = "overnightworks/agents#837"
+date = 2026-11-09
+reason = "the rename moves the same modules to the import agents"
+
+[[gate.loosened]]
+what = 'import contract "backend.streamed_round imports no HTTP library and not backend.gateway" changes forbidden_modules'
+item = "overnightworks/agents#837"
+date = 2026-11-09
+reason = "the rename moves the same modules to the import agents"
+
+[[gate.loosened]]
+what = 'import contract "backend.streamed_round imports no HTTP library and not backend.gateway" changes source_modules'
+item = "overnightworks/agents#837"
+date = 2026-11-09
+reason = "the rename moves the same modules to the import agents"
+
+[[gate.loosened]]
+what = 'import contract "only agent_runtime_client.voice.sentences imports syntok" removed'
+item = "overnightworks/agents#837"
+date = 2026-11-09
+reason = "the rename moves the same modules to the import agents"
+
+[[gate.loosened]]
+what = 'import contract "the client base modules import neither agent_runtime_client.mcp_server nor its extras" removed'
+item = "overnightworks/agents#837"
+date = 2026-11-09
+reason = "the rename moves the same modules to the import agents"
+
+[[gate.loosened]]
+what = 'import contract "the client base modules import neither agent_runtime_client.voice nor its extra" removed'
+item = "overnightworks/agents#837"
+date = 2026-11-09
+reason = "the rename moves the same modules to the import agents"
+
+[[gate.loosened]]
+what = 'import contract "the client base modules import no HTTP library" changes source_modules'
+item = "overnightworks/agents#837"
+date = 2026-11-09
+reason = "the rename moves the same modules to the import agents"
+
+[[gate.loosened]]
+what = 'import-linter changes root_packages'
+item = "overnightworks/agents#837"
+date = 2026-11-09
+reason = "the rename moves the same modules to the import agents"
