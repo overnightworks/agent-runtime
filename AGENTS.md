@@ -11,7 +11,7 @@
 
 ## Rules
 
-- The turn's vocabulary has one owner, `agent_runtime_client.turn`; `turn_events` is the in-process event, never a wire format.
+- The turn's vocabulary has one owner, `agents.turn`; `turn_events` is the in-process event, never a wire format.
 - The libraries of the `backend` and `mcp-server` extras are imported only inside the module that needs them; `.importlinter` forbids them in the client's base modules.
 - Deployment facts (the gateway origin and key file) come from the host's `AgentConfig`, never from an environment variable or a module default.
 - Host obligations (the app's `HandTool`s, the MCP person front's handlers) are ports passed in; the library never invents them.

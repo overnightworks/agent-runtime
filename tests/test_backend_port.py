@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from agent_runtime_client.backend import TurnPerson, TurnStopKind, TurnStopped
-from agent_runtime_client.turn import (
+from agents.backend import TurnPerson, TurnStopKind, TurnStopped
+from agents.turn import (
     FailureCode,
     Principal,
     RejectionCode,
     StopOutcome,
     outcome_of_stop,
 )
-from agent_runtime_client.voice import DecisionFailed
+from agents.voice import DecisionFailed
 
 
 async def _no_groups() -> frozenset[str]:

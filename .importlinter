@@ -1,59 +1,59 @@
 # The client is independent of its hosts and of the sibling auth library:
 # everything host-specific reaches it through the ports a host supplies. An app
-# serves its tools through agent_runtime_client.mcp_server, whose library stays
+# serves its tools through agents.mcp_server, whose library stays
 # an extra, so no client base module (the package __init__ included) imports
-# agent_runtime_client.mcp_server. The client imports no web framework: its MCP
+# agents.mcp_server. The client imports no web framework: its MCP
 # server is a thin ASGI shell before the official SDK, which needs one of its own.
 # The gate's `import-contract` rule (`quality check`) checks them over the
 # real import graph, so an indirect chain is caught as well as a direct import.
 [importlinter]
 include_external_packages = True
 root_packages =
-    agent_runtime_client
+    agents
 
 [importlinter:contract:client-reaches-back-into-no-host]
-name = agent_runtime_client reaches back into no host
+name = agents reaches back into no host
 type = forbidden
 source_modules =
-    agent_runtime_client
+    agents
 forbidden_modules =
     songmaker_cli
     webauth
 
 [importlinter:contract:client-imports-no-web-framework]
-name = agent_runtime_client imports no web framework
+name = agents imports no web framework
 type = forbidden
 source_modules =
-    agent_runtime_client
+    agents
 forbidden_modules =
     fastapi
     starlette
     uvicorn
 
-# as_packages = False keeps agent_runtime_client itself (its __init__) a source without
+# as_packages = False keeps agents itself (its __init__) a source without
 # making the mcp_server package inside it one; the ** wildcard keeps every
 # mcp_server module forbidden.
 [importlinter:contract:client-base-stays-free-of-mcp-server]
-name = the client base modules import neither agent_runtime_client.mcp_server nor its extras
+name = the client base modules import neither agents.mcp_server nor its extras
 type = forbidden
 as_packages = False
 source_modules =
-    agent_runtime_client
-    agent_runtime_client.agents
-    agent_runtime_client.backend
-    agent_runtime_client.backend.fake_gateway
-    agent_runtime_client.backend.gateway
-    agent_runtime_client.backend.streamed_round
-    agent_runtime_client.config
-    agent_runtime_client.errors
-    agent_runtime_client.member
-    agent_runtime_client.mcp_wire
-    agent_runtime_client.tools
-    agent_runtime_client.turn
-    agent_runtime_client.turn_events
+    agents
+    agents.agent_file
+    agents.backend
+    agents.backend.fake_gateway
+    agents.backend.gateway
+    agents.backend.streamed_round
+    agents.config
+    agents.errors
+    agents.member
+    agents.mcp_wire
+    agents.tools
+    agents.turn
+    agents.turn_events
 forbidden_modules =
-    agent_runtime_client.mcp_server
-    agent_runtime_client.mcp_server.**
+    agents.mcp_server
+    agents.mcp_server.**
     anyio
     mcp
     mcp_types
@@ -61,26 +61,26 @@ forbidden_modules =
 # The voice extra stays an extra the same way: the package __init__ is a source, the voice
 # package inside it is not, and the ** wildcard keeps every voice module forbidden.
 [importlinter:contract:client-base-stays-free-of-voice]
-name = the client base modules import neither agent_runtime_client.voice nor its extra
+name = the client base modules import neither agents.voice nor its extra
 type = forbidden
 as_packages = False
 source_modules =
-    agent_runtime_client
-    agent_runtime_client.agents
-    agent_runtime_client.backend
-    agent_runtime_client.backend.fake_gateway
-    agent_runtime_client.backend.gateway
-    agent_runtime_client.backend.streamed_round
-    agent_runtime_client.config
-    agent_runtime_client.errors
-    agent_runtime_client.member
-    agent_runtime_client.mcp_wire
-    agent_runtime_client.tools
-    agent_runtime_client.turn
-    agent_runtime_client.turn_events
+    agents
+    agents.agent_file
+    agents.backend
+    agents.backend.fake_gateway
+    agents.backend.gateway
+    agents.backend.streamed_round
+    agents.config
+    agents.errors
+    agents.member
+    agents.mcp_wire
+    agents.tools
+    agents.turn
+    agents.turn_events
 forbidden_modules =
-    agent_runtime_client.voice
-    agent_runtime_client.voice.**
+    agents.voice
+    agents.voice.**
     syntok
 
 # The backend extra stays an extra: backend.gateway and backend.fake_gateway import
@@ -90,16 +90,16 @@ name = the client base modules import no HTTP library
 type = forbidden
 as_packages = False
 source_modules =
-    agent_runtime_client
-    agent_runtime_client.agents
-    agent_runtime_client.backend
-    agent_runtime_client.config
-    agent_runtime_client.errors
-    agent_runtime_client.member
-    agent_runtime_client.mcp_wire
-    agent_runtime_client.tools
-    agent_runtime_client.turn
-    agent_runtime_client.turn_events
+    agents
+    agents.agent_file
+    agents.backend
+    agents.config
+    agents.errors
+    agents.member
+    agents.mcp_wire
+    agents.tools
+    agents.turn
+    agents.turn_events
 forbidden_modules =
     httpx2
     httpx
@@ -107,12 +107,12 @@ forbidden_modules =
     mcp_types
 
 [importlinter:contract:hand-tools-stay-below-the-wire]
-name = agent_runtime_client.tools does not import agent_runtime_client.mcp_wire
+name = agents.tools does not import agents.mcp_wire
 type = forbidden
 source_modules =
-    agent_runtime_client.tools
+    agents.tools
 forbidden_modules =
-    agent_runtime_client.mcp_wire
+    agents.mcp_wire
 
 # The streamed-round reader is pure: it frames bytes and assembles a round, so it imports no HTTP
 # library, and gateway.py calls it, never the reverse.
@@ -120,50 +120,50 @@ forbidden_modules =
 name = backend.streamed_round imports no HTTP library and not backend.gateway
 type = forbidden
 source_modules =
-    agent_runtime_client.backend.streamed_round
+    agents.backend.streamed_round
 forbidden_modules =
     httpx2
     httpx
-    agent_runtime_client.backend.gateway
+    agents.backend.gateway
 
 # Sound stays with the app and the speech service: the client sees only text.
 [importlinter:contract:client-imports-no-speech-library]
-name = agent_runtime_client imports no speech library
+name = agents imports no speech library
 type = forbidden
 source_modules =
-    agent_runtime_client
+    agents
 forbidden_modules =
     speech_runtime_client
 
 # The voice loop runs on the AgentBackend port alone, so it stays off the wire and runs its own
 # tasks with the standard library's asyncio.TaskGroup.
 [importlinter:contract:voice-stays-off-the-wire]
-name = agent_runtime_client.voice imports no HTTP or MCP library, no backend implementation and no anyio
+name = agents.voice imports no HTTP or MCP library, no backend implementation and no anyio
 type = forbidden
 source_modules =
-    agent_runtime_client.voice
+    agents.voice
 forbidden_modules =
     httpx2
     httpx
     mcp
     mcp_types
     anyio
-    agent_runtime_client.backend.gateway
-    agent_runtime_client.backend.fake_gateway
-    agent_runtime_client.mcp_server
+    agents.backend.gateway
+    agents.backend.fake_gateway
+    agents.mcp_server
 
 # syntok lives in voice.sentences; the other voice modules reach it only through that module.
 [importlinter:contract:only-voice-sentences-imports-syntok]
-name = only agent_runtime_client.voice.sentences imports syntok
+name = only agents.voice.sentences imports syntok
 type = forbidden
 as_packages = False
 allow_indirect_imports = True
 source_modules =
-    agent_runtime_client.voice
-    agent_runtime_client.voice.conversation
-    agent_runtime_client.voice.echo
-    agent_runtime_client.voice.loop
-    agent_runtime_client.voice.reply
-    agent_runtime_client.voice.wake
+    agents.voice
+    agents.voice.conversation
+    agents.voice.echo
+    agents.voice.loop
+    agents.voice.reply
+    agents.voice.wake
 forbidden_modules =
     syntok

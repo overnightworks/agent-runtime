@@ -10,9 +10,9 @@ from typing import Any
 import pytest
 from mcp_types import TextResourceContents
 
-from agent_runtime_client.mcp_server import McpPersonFront
-from agent_runtime_client.mcp_server.asgi import LOGGER_NAME as LOGGER
-from agent_runtime_client.member import (
+from agents.mcp_server import McpPersonFront
+from agents.mcp_server.asgi import LOGGER_NAME as LOGGER
+from agents.member import (
     STANDING_URI,
     MemberStanding,
     PlaceEntry,
@@ -21,7 +21,7 @@ from agent_runtime_client.member import (
     StandingState,
     place_window_uri,
 )
-from agent_runtime_client.tools import Principal
+from agents.tools import Principal
 from tests.support.mcp_server_support import (
     MemberApp,
     a_member,

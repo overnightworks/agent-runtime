@@ -13,7 +13,7 @@ from contextlib import aclosing
 from dataclasses import dataclass, field
 from typing import Final, NamedTuple
 
-from agent_runtime_client.turn import MAX_EVENT_BYTES, JsonObject
+from agents.turn import MAX_EVENT_BYTES, JsonObject
 
 # JSON writes one byte of text as up to six (a \u00XX escape); the rest is the envelope.
 _JSON_ESCAPE_FACTOR: Final = 6

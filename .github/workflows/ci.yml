@@ -63,32 +63,32 @@ jobs:
       - name: The client wheel carries the repository licence
         run: |
           licence="$(mktemp -d "$RUNNER_TEMP/client-licence.XXXXXX")"
-          python3 -I -m zipfile -e dist/overnightworks_agent_runtime_client-*-py3-none-any.whl "$licence"
-          cmp LICENSE "$licence"/overnightworks_agent_runtime_client-*.dist-info/licenses/LICENSE
+          python3 -I -m zipfile -e dist/overnightworks_agents-*-py3-none-any.whl "$licence"
+          cmp LICENSE "$licence"/overnightworks_agents-*.dist-info/licenses/LICENSE
 
       - name: The client wheel imports alone, without its extras
         run: |
           proof="$(mktemp -d "$RUNNER_TEMP/client-only.XXXXXX")"
           uv venv "$proof/venv"
           uv pip install --python "$proof/venv/bin/python" \
-            "$GITHUB_WORKSPACE"/dist/overnightworks_agent_runtime_client-*-py3-none-any.whl
+            "$GITHUB_WORKSPACE"/dist/overnightworks_agents-*-py3-none-any.whl
           cd "$proof"
           "$proof/venv/bin/python" -I -c '
           import importlib
           import importlib.util
           import pkgutil
 
-          import agent_runtime_client
+          import agents
 
           assert importlib.util.find_spec("anyio") is None, "the mcp-server extra leaked in"
-          for module in pkgutil.walk_packages(agent_runtime_client.__path__, "agent_runtime_client."):
-              if module.name == "agent_runtime_client.mcp_server" or module.name.startswith(
-                  "agent_runtime_client.mcp_server."
-              ) or module.name == "agent_runtime_client.voice" or module.name.startswith(
-                  "agent_runtime_client.voice."
+          for module in pkgutil.walk_packages(agents.__path__, "agents."):
+              if module.name == "agents.mcp_server" or module.name.startswith(
+                  "agents.mcp_server."
+              ) or module.name == "agents.voice" or module.name.startswith(
+                  "agents.voice."
               ) or module.name in (
-                  "agent_runtime_client.backend.gateway",
-                  "agent_runtime_client.backend.fake_gateway",
+                  "agents.backend.gateway",
+                  "agents.backend.fake_gateway",
               ):
                   continue
               importlib.import_module(module.name)
@@ -99,44 +99,44 @@ jobs:
         run: |
           proof="$(mktemp -d "$RUNNER_TEMP/client-mcp-server.XXXXXX")"
           uv venv "$proof/venv"
-          client_wheel="$(ls "$GITHUB_WORKSPACE"/dist/overnightworks_agent_runtime_client-*-py3-none-any.whl)"
+          client_wheel="$(ls "$GITHUB_WORKSPACE"/dist/overnightworks_agents-*-py3-none-any.whl)"
           uv pip install --python "$proof/venv/bin/python" "$client_wheel[mcp-server]"
           cd "$proof"
           "$proof/venv/bin/python" -I -c '
-          import agent_runtime_client.mcp_server
+          import agents.mcp_server
 
-          print("imported", agent_runtime_client.mcp_server.__name__)
+          print("imported", agents.mcp_server.__name__)
           '
 
       - name: The client wheel with the backend extra imports the gateway backend
         run: |
           proof="$(mktemp -d "$RUNNER_TEMP/client-backend.XXXXXX")"
           uv venv "$proof/venv"
-          client_wheel="$(ls "$GITHUB_WORKSPACE"/dist/overnightworks_agent_runtime_client-*-py3-none-any.whl)"
+          client_wheel="$(ls "$GITHUB_WORKSPACE"/dist/overnightworks_agents-*-py3-none-any.whl)"
           uv pip install --python "$proof/venv/bin/python" "$client_wheel[backend]"
           cd "$proof"
           "$proof/venv/bin/python" -I -c '
-          import agent_runtime_client.backend.fake_gateway
-          import agent_runtime_client.backend.gateway
+          import agents.backend.fake_gateway
+          import agents.backend.gateway
 
-          print("imported", agent_runtime_client.backend.gateway.__name__)
+          print("imported", agents.backend.gateway.__name__)
           '
 
       - name: The client wheel with the voice extra imports its voice half
         run: |
           proof="$(mktemp -d "$RUNNER_TEMP/client-voice.XXXXXX")"
           uv venv "$proof/venv"
-          client_wheel="$(ls "$GITHUB_WORKSPACE"/dist/overnightworks_agent_runtime_client-*-py3-none-any.whl)"
+          client_wheel="$(ls "$GITHUB_WORKSPACE"/dist/overnightworks_agents-*-py3-none-any.whl)"
           uv pip install --python "$proof/venv/bin/python" "$client_wheel[voice]"
           cd "$proof"
           "$proof/venv/bin/python" -I -c '
           import importlib
           import pkgutil
 
-          import agent_runtime_client.voice
+          import agents.voice
 
           for module in pkgutil.walk_packages(
-              agent_runtime_client.voice.__path__, "agent_runtime_client.voice."
+              agents.voice.__path__, "agents.voice."
           ):
               importlib.import_module(module.name)
               print("imported", module.name)

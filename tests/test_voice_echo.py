@@ -2,16 +2,16 @@
 
 import pytest
 
-from agent_runtime_client.backend.fake_gateway import FakeGateway, completion
-from agent_runtime_client.voice import (
+from agents.backend.fake_gateway import FakeGateway, completion
+from agents.voice import (
     EchoDropped,
     SentenceRefused,
     SentenceStarted,
     VoiceRefused,
     Woke,
 )
-from agent_runtime_client.voice.echo import is_echo
-from agent_runtime_client.voice.wake import addressed_or_asked
+from agents.voice.echo import is_echo
+from agents.voice.wake import addressed_or_asked
 from tests.support import voice_support
 from tests.support.voice_lines import a_line
 from tests.support.voice_support import (

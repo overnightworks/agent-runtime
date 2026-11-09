@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 from typing import Final
 
-from agent_runtime_client.member import PlaceEntry
-from agent_runtime_client.voice import WakeRule
+from agents.member import PlaceEntry
+from agents.voice import WakeRule
 
 _CLOSING_QUOTES: Final = "\"'”’“‘»«"
 

@@ -6,17 +6,17 @@ import random
 import httpx2
 import pytest
 
-from agent_runtime_client.backend import TurnStopKind
-from agent_runtime_client.backend.fake_gateway import (
+from agents.backend import TurnStopKind
+from agents.backend.fake_gateway import (
     FakeGateway,
     completion,
     tool_call,
     tool_round,
 )
-from agent_runtime_client.backend.gateway import GatewayDetail
-from agent_runtime_client.tools import HandTool, ToolDeclaration, ToolEffect, ToolOutcome
-from agent_runtime_client.turn import FailureCode
-from agent_runtime_client.voice import (
+from agents.backend.gateway import GatewayDetail
+from agents.tools import HandTool, ToolDeclaration, ToolEffect, ToolOutcome
+from agents.turn import FailureCode
+from agents.voice import (
     DecisionFailed,
     ReplyUnreadable,
     SentenceRefused,
@@ -25,7 +25,7 @@ from agent_runtime_client.voice import (
     VoiceRefused,
     Woke,
 )
-from agent_runtime_client.voice.reply import PROTOCOL_TEXT
+from agents.voice.reply import PROTOCOL_TEXT
 from tests.support import voice_support
 from tests.support.gateway_turn_support import FailingTransport
 from tests.support.voice_lines import STREAMED_ANSWERS, a_line, random_pieces

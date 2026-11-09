@@ -8,10 +8,10 @@ import pytest
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
 
-from agent_runtime_client.mcp_server.asgi import AsgiApp
-from agent_runtime_client.mcp_server.route_call import RouteTarget, call_route
-from agent_runtime_client.tools import ToolOutcome
-from agent_runtime_client.turn import MAX_EVENT_BYTES
+from agents.mcp_server.asgi import AsgiApp
+from agents.mcp_server.route_call import RouteTarget, call_route
+from agents.tools import ToolOutcome
+from agents.turn import MAX_EVENT_BYTES
 
 
 class Note(BaseModel):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 
-from agent_runtime_client.member import PlaceEntry
+from agents.member import PlaceEntry
 
 
 def a_line(

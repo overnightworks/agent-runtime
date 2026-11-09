@@ -10,10 +10,10 @@ from collections.abc import Callable, Hashable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final
 
-from agent_runtime_client.mcp_server.asgi import AsgiApp
-from agent_runtime_client.mcp_server.person import PersonRequest, PersonTool, PersonToolHandler
-from agent_runtime_client.mcp_server.route_call import RouteTarget, call_route, placeholder_names
-from agent_runtime_client.tools import (
+from agents.mcp_server.asgi import AsgiApp
+from agents.mcp_server.person import PersonRequest, PersonTool, PersonToolHandler
+from agents.mcp_server.route_call import RouteTarget, call_route, placeholder_names
+from agents.tools import (
     AGENT_TOOL_EXTENSION,
     JsonObject,
     ToolDeclaration,

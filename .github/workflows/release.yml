@@ -60,7 +60,7 @@ jobs:
 
       - name: Refuse unless the build holds exactly the client wheel at the version
         run: |
-          expected="overnightworks_agent_runtime_client-${VERSION}-py3-none-any.whl"
+          expected="overnightworks_agents-${VERSION}-py3-none-any.whl"
           built="$(cd dist && ls -- *.whl | sort)"
           if [ "$built" != "$expected" ]; then
             echo "Refused: the build must hold exactly this wheel:" >&2
@@ -78,7 +78,7 @@ jobs:
             echo '**Install.** Pin the git tag.'
             echo
             echo '```'
-            echo "overnightworks-agent-runtime-client @ git+https://github.com/${GITHUB_REPOSITORY}@v${VERSION}"
+            echo "overnightworks-agents @ git+https://github.com/${GITHUB_REPOSITORY}@v${VERSION}"
             echo '```'
             echo 'INSTALL_LINES'
           } >> "$GITHUB_OUTPUT"

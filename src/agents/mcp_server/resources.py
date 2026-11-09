@@ -16,10 +16,10 @@ from mcp_types import (
     TextResourceContents,
 )
 
-from agent_runtime_client.mcp_server.asgi import LOGGER_NAME
-from agent_runtime_client.mcp_wire import JSON_MEDIA_TYPE
-from agent_runtime_client.member import MemberStanding, PlaceWindow
-from agent_runtime_client.turn import Principal
+from agents.mcp_server.asgi import LOGGER_NAME
+from agents.mcp_wire import JSON_MEDIA_TYPE
+from agents.member import MemberStanding, PlaceWindow
+from agents.turn import Principal
 
 _LOG: Final = logging.getLogger(LOGGER_NAME)
 _RESOURCE_FAILED_TEXT: Final = "the resource failed"

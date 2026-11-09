@@ -11,12 +11,12 @@ from dataclasses import dataclass, field
 import httpx2
 import pytest
 
-from agent_runtime_client.backend import TurnStopKind, TurnStopped
-from agent_runtime_client.backend.fake_gateway import FakeGateway, Reply, completion
-from agent_runtime_client.backend.gateway import GatewayBackend, GatewayDetail
-from agent_runtime_client.tools import HandTool, ToolDeclaration, ToolEffect, ToolOutcome
-from agent_runtime_client.turn import MAX_EVENT_BYTES, FailureCode
-from agent_runtime_client.turn_events import (
+from agents.backend import TurnStopKind, TurnStopped
+from agents.backend.fake_gateway import FakeGateway, Reply, completion
+from agents.backend.gateway import GatewayBackend, GatewayDetail
+from agents.tools import HandTool, ToolDeclaration, ToolEffect, ToolOutcome
+from agents.turn import MAX_EVENT_BYTES, FailureCode
+from agents.turn_events import (
     AssistantTextEvent,
     FinalEvent,
     ToolCallEvent,

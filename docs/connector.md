@@ -1,6 +1,6 @@
 # Connector reference
 
-For the developer of an app that runs agent turns through `agent_runtime_client`: the turn an
+For the developer of an app that runs agent turns through `agents`: the turn an
 app starts, the agent files it ships, the tools it declares, the gateway backend, the MCP
 person front and the voice loop. The standard path is that the app serves its member's standing as MCP resources and
 announces a change through the standard's subscriptions; [the standard path](#the-standard-path)
@@ -10,19 +10,19 @@ short; the shape of the client is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## The turn
 
-An app runs a turn through `agent_runtime_client.backend.AgentBackend`, installed as
+An app runs a turn through `agents.backend.AgentBackend`, installed as
 `src/<app>/agent/backend.py` with its tools in `src/<app>/agent/tools.py`.
 `backend.run(request, person)` is an async generator of `TurnEvent`s that the app consumes inside
 `contextlib.aclosing`; closing it runs the backend's cleanup. The base modules import no HTTP
 library; the one implementation, `backend.gateway.GatewayBackend`, needs the `backend` extra.
 
-`request` is a `TurnRequest` (`agent_runtime_client.agents`, frozen): `agent`, `turn`, `roles`,
+`request` is a `TurnRequest` (`agents.agent_file`, frozen): `agent`, `turn`, `roles`,
 `tools` (the agent's selected `ToolDeclaration`s), `model`, `max_duration_seconds`,
 `max_tool_calls` (`None` exactly when `tools` is empty) and `picture_size` (`None` for a text
 agent). `AgentDefinition.request(messages, *, model=None, appended_system=None)` builds it;
 `model` overrides the file's model for that run, with a model of the agent's kind, and
 `appended_system` follows the file's prompt in the system text, after a blank line.
-Proved by `tests/test_agents_file.py`: `test_request_carries_the_files_prompt_model_roles_and_tools`,
+Proved by `tests/test_agent_file.py`: `test_request_carries_the_files_prompt_model_roles_and_tools`,
 `test_request_model_is_the_override_when_given`, `test_request_is_frozen`; the appended text by
 `tests/test_voice_loop.py`: `test_a_spoken_line_that_wakes_sends_one_request_with_prompt_protocol_context_and_the_line`.
 
@@ -66,7 +66,7 @@ them. An app that shows only judged text reads `FinalEvent`. Proved by
 `test_a_tool_rounds_pieces_come_before_its_calls_which_run_after_it_and_echo_whole` and
 `test_a_round_that_streams_text_then_fails_leaves_the_text_shown_and_runs_nothing`.
 
-The app's configuration embeds `agent_runtime_client.config.AgentConfig` as the `agent` section:
+The app's configuration embeds `agents.config.AgentConfig` as the `agent` section:
 `backend` (`litellm`, the one value), `gateway` and `api_group`, none with a default.
 `ChatGateway` is `origin` (scheme, host and optional port; no path, query, fragment or
 userinfo), `key_file` and `ca_file`, both absolute paths. `ca_file` is required for HTTPS and
@@ -78,7 +78,7 @@ forbidden for HTTP. A missing or malformed value fails loud. Proved by
 
 Every app names the same files: `agent/backend.py` builds the backend, `agent/tools.py` holds
 its tools, `agent/mcp.py` its MCP surface, and `agent/settings.py` its `agent` configuration
-section. `agent/settings.py` is the one place that imports `agent_runtime_client.config`.
+section. `agent/settings.py` is the one place that imports `agents.config`.
 
 `TurnPerson` is always the verified person, and `principal.iss` is passed exactly as the app
 bound it: two spellings of one issuer split one person's budget. `busy` may carry no
@@ -93,14 +93,14 @@ scripted transport passed as `transport=`.
 ## Agent files
 
 An app declares its agents as Claude Code subagent files, `src/<pkg>/agents/<name>.md`, that
-`agent_runtime_client.agents.load_agent` reads into an `AgentDefinition`: YAML front matter
+`agents.agent_file.load_agent` reads into an `AgentDefinition`: YAML front matter
 (`name`, `description`, `tools`, `model`, `maxDurationSeconds`, `maxToolCalls`, `picture`,
 `voice`, plus the extension `appRoles`, exactly `[admin]` or `[admin, user]`) and the Markdown
 body as the prompt.
 
 - `model` is a `text/<model>` name for a text agent (lower-case letters, digits, `.` and `-`)
   and `maxDurationSeconds` a positive integer; both are required. Proved by
-  `tests/test_agents_file.py`: `test_a_file_without_a_required_key_is_refused_and_names_it`,
+  `tests/test_agent_file.py`: `test_a_file_without_a_required_key_is_refused_and_names_it`,
   `test_a_model_that_is_not_a_text_gateway_name_is_refused_and_named`.
 - `maxToolCalls` is a positive integer, required exactly when `tools` is not empty and refused
   when it is. Proved by `test_a_missing_tool_call_bound_is_refused_when_there_are_tools` and
@@ -128,7 +128,7 @@ body as the prompt.
 
 ## The tool contract
 
-`agent_runtime_client.tools.ToolDeclaration` is the one declaration of a tool: name,
+`agents.tools.ToolDeclaration` is the one declaration of a tool: name,
 description, arguments and a `ToolEffect`, `read_only` or `side_effecting`. The effect is for the
 host (`GatewayBackend` reads it for `after_side_effect`) and never reaches a prompt; it defaults
 to side-effecting, because a tool nobody classified must be assumed to change state. Proved by
@@ -138,7 +138,7 @@ to side-effecting, because a tool nobody classified must be assumed to change st
 `HandTool` is a declaration with the async handler `(Principal, JsonObject) -> ToolOutcome` that
 serves it in the app's own process; `ToolOutcome` is `content` and `is_error`. The module
 exports `Principal` and `JsonObject` too, so an app's `agent/tools.py` imports only
-`agent_runtime_client.tools`. It imports neither `mcp_wire` nor anything of the MCP extra
+`agents.tools`. It imports neither `mcp_wire` nor anything of the MCP extra
 (`.importlinter` proves it).
 
 ## The gateway backend
@@ -198,7 +198,7 @@ and `test_https_is_trusted_through_the_configured_ca_file_alone`.
 
 The fingerprint's prefix, input and algorithm are one contract across apps: a change splits
 every person's budget, so every caller computes it with
-`agent_runtime_client.turn.person_fingerprint`. Proved by
+`agents.turn.person_fingerprint`. Proved by
 `test_the_public_fingerprint_and_the_gateway_user_give_the_documented_vectors`,
 `test_a_different_principal_gets_a_different_fingerprint` and
 `test_a_fingerprint_is_67_characters_and_the_same_for_one_principal`.
@@ -323,7 +323,7 @@ exist is the gateway's: the client checks the size's shape only.
 ### The model list
 
 `await list_gateway_models(config.gateway, *, transport=None)` (in
-`agent_runtime_client.backend.gateway`) answers a `GatewayModels` for an admin page, which has no
+`agents.backend.gateway`) answers a `GatewayModels` for an admin page, which has no
 turn. It sends a bare `GET <origin>/v1/models` with a text turn's client rules and
 `Authorization: Bearer <key>` alone. The key file is read per call. The whole call has one
 deadline of 10 seconds and a reply body bound of `MAX_EVENT_BYTES`. Proved by
@@ -346,7 +346,7 @@ exception's cause nor its traceback's frames. Proved by
 
 An app sets an agent's model with `agent.request(messages, model=name)`; without `model` the
 file's model runs. A name of the wrong kind raises `ValueError` before any request
-(`test_request_refuses_an_override_of_the_wrong_kind` in `tests/test_agents_file.py`). The
+(`test_request_refuses_an_override_of_the_wrong_kind` in `tests/test_agent_file.py`). The
 gateway may later withdraw a name an app stored: that turn ends `failed: provider_unavailable`
 and the client does not fall back to the file's model.
 
@@ -363,11 +363,11 @@ the log even under DEBUG, because `httpcore2` prints a request by its method onl
 
 ## The person front
 
-`agent_runtime_client.mcp_server.McpPersonFront(tools, *, resolve_person)` is the MCP endpoint of
+`agents.mcp_server.McpPersonFront(tools, *, resolve_person)` is the MCP endpoint of
 an app for the agent of one signed-in person. It serves MCP revision 2026-07-28 on the official
 SDK and nothing older: there is no `initialize` handshake and no legacy path. `server/discover`,
 `tools/list` and `tools/call` are POST only and answered in `application/json`. It is an ASGI 3 app
-the host registers as the exact route `MCP_ENDPOINT_PATH` (in `agent_runtime_client.mcp_wire`),
+the host registers as the exact route `MCP_ENDPOINT_PATH` (in `agents.mcp_wire`),
 never a `Mount`, which redirects `/mcp` to `/mcp/`, and behind the middleware that admits the
 caller: the host's gate answers every 401 and 403 before routing, so the front answers no challenge.
 The host enters `async with front.running():` once in its own lifespan, the one thing the SDK's
@@ -429,7 +429,7 @@ the tool and the exception's class
 
 ## The member module
 
-`agent_runtime_client.member` owns what an app and an agent say to each other about a member:
+`agents.member` owns what an app and an agent say to each other about a member:
 `PlaceRef`, `StandingState`, `Invitation` and `Standing`, `MemberStanding(standings)` (what
 `STANDING_URI`, `member://standing`, answers with), `PlaceWindow(generation, starts_at, entries)`
 of `PlaceEntry(seq, kind, name, text, own, spoken)`, `LEASE_SECONDS` (120),
@@ -468,11 +468,11 @@ agent when one changed. This section is what a host wires and what a runner may 
 
 **The host** passes `resources=` and `changes=` to `McpPersonFront` and enters
 `async with front.running():` in its lifespan (see above). `resources` is one port,
-`MemberResources` (exported by `agent_runtime_client.mcp_server`): `current(principal)` returns
+`MemberResources` (exported by `agents.mcp_server`): `current(principal)` returns
 every URI that principal may read now, and `read(principal, uri)` returns the app's current
 `MemberStanding` or `PlaceWindow` for it, or `None` when it is not that principal's. The principal
 is always the request's verified one and no argument names a recipient. `changes` is one
-`ResourceChanges` (exported by `agent_runtime_client.mcp_server`), without the port a `ValueError`:
+`ResourceChanges` (exported by `agents.mcp_server`), without the port a `ValueError`:
 the host calls `changes.changed(recipient, uri)` for the recipient's `Principal` only after the
 change is visible to a read, on the front's event loop or through `anyio.from_thread.run_sync`; a
 call for a principal with no open stream does nothing. `server/discover` advertises `resources`
@@ -665,7 +665,7 @@ An app that hears a conversation and speaks in it runs the voice loop in its own
 the `voice` extra:
 
 ```python
-from agent_runtime_client.voice.loop import run_voice_loop
+from agents.voice.loop import run_voice_loop
 
 await run_voice_loop(
     agent, backend, person, hearing, voice, wakes=wake_rule, context=context, report=report
@@ -707,7 +707,7 @@ Proved by `tests/test_voice_loop.py`:
 `test_sentences_play_in_written_order_each_started_after_the_one_before_it_played` and
 `test_a_render_taking_no_longer_than_the_sentence_playing_before_it_adds_no_pause`.
 
-**The standard wake rule.** `agent_runtime_client.voice.wake.addressed_or_asked(names)` returns
+**The standard wake rule.** `agents.voice.wake.addressed_or_asked(names)` returns
 a `WakeRule`, a cheap local check of which lines cost a decision. It wakes on a line that names
 one of `names` as a whole word in any case, on a line that ends with `?` before its trailing
 spaces and closing quotes, and on the first line after an answer that played. Another agent's

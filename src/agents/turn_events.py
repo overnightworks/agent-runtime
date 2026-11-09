@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from agent_runtime_client.turn import RunFile
+from agents.turn import RunFile
 
 
 class StreamEvent(BaseModel):

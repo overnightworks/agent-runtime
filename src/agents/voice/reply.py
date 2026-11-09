@@ -14,10 +14,10 @@ from dataclasses import dataclass
 from enum import Enum, StrEnum, auto
 from typing import Final
 
-from agent_runtime_client.backend import TurnEvent
-from agent_runtime_client.turn_events import AssistantTextEvent, FinalEvent, ToolCallEvent
-from agent_runtime_client.voice import ReplyUnreadable, StayedSilent, sentences
-from agent_runtime_client.voice.conversation import WINDOW_NOTE
+from agents.backend import TurnEvent
+from agents.turn_events import AssistantTextEvent, FinalEvent, ToolCallEvent
+from agents.voice import ReplyUnreadable, StayedSilent, sentences
+from agents.voice.conversation import WINDOW_NOTE
 
 
 class Marker(StrEnum):

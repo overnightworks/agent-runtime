@@ -420,8 +420,8 @@ wheels = [
 ]
 
 [[package]]
-name = "overnightworks-agent-runtime-client"
-version = "0.28.0"
+name = "overnightworks-agents"
+version = "0.29.0"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
@@ -460,7 +460,7 @@ requires-dist = [
     { name = "fastapi", marker = "extra == 'dev'", specifier = ">=0.133,<1" },
     { name = "httpx2", marker = "extra == 'backend'", specifier = ">=2.12,<3" },
     { name = "mcp", marker = "extra == 'mcp-server'", specifier = ">=2.3,<3" },
-    { name = "overnightworks-agent-runtime-client", extras = ["backend", "mcp-server", "voice"], marker = "extra == 'dev'" },
+    { name = "overnightworks-agents", extras = ["backend", "mcp-server", "voice"], marker = "extra == 'dev'" },
     { name = "pydantic", specifier = ">=2.12,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.1,<10" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1,<8" },

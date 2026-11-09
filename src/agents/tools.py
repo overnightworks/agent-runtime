@@ -15,7 +15,7 @@ from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from agent_runtime_client.turn import JsonObject, Principal
+from agents.turn import JsonObject, Principal
 
 __all__ = [
     "HandTool",

@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_runtime_client.voice.sentences import split_sentences
+from agents.voice.sentences import split_sentences
 
 
 @pytest.mark.parametrize(

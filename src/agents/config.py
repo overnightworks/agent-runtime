@@ -10,7 +10,7 @@ from typing import Annotated, Final, Self
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, model_validator
 
-from agent_runtime_client.turn import NonEmptyUnicodeText
+from agents.turn import NonEmptyUnicodeText
 
 _ORIGIN: Final = re.compile(
     r"(https?)://(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(?::(\d+))?", re.ASCII | re.IGNORECASE

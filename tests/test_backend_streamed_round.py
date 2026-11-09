@@ -9,13 +9,13 @@ from contextlib import aclosing
 
 import pytest
 
-from agent_runtime_client.backend.streamed_round import (
+from agents.backend.streamed_round import (
     MalformedRound,
     RoundErrorEvent,
     StreamedRound,
     read_round,
 )
-from agent_runtime_client.turn import MAX_EVENT_BYTES
+from agents.turn import MAX_EVENT_BYTES
 from tests.support.gateway_turn_support import a_chunk, a_fragment, an_event_stream
 
 ROUND_LIMIT = 4 * MAX_EVENT_BYTES

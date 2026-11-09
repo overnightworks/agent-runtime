@@ -13,8 +13,8 @@ from __future__ import annotations
 import json
 from typing import Final
 
-from agent_runtime_client.member import PlaceEntry
-from agent_runtime_client.turn import TurnMessage, TurnRole
+from agents.member import PlaceEntry
+from agents.turn import TurnMessage, TurnRole
 
 WINDOW_NOTE: Final = "(Earlier parts of this conversation are no longer shown.)"
 """The line that opens the first user message once the window has dropped earlier parts."""

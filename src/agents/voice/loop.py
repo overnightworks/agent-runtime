@@ -8,10 +8,10 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Final
 
-from agent_runtime_client.agents import AgentDefinition, TurnRequest
-from agent_runtime_client.backend import AgentBackend, TurnPerson, TurnStopped
-from agent_runtime_client.member import PlaceEntry
-from agent_runtime_client.voice import (
+from agents.agent_file import AgentDefinition, TurnRequest
+from agents.backend import AgentBackend, TurnPerson, TurnStopped
+from agents.member import PlaceEntry
+from agents.voice import (
     DecisionFailed,
     EchoDropped,
     ReplyUnreadable,
@@ -24,9 +24,9 @@ from agent_runtime_client.voice import (
     WakeRule,
     Woke,
 )
-from agent_runtime_client.voice.conversation import Conversation
-from agent_runtime_client.voice.echo import is_echo
-from agent_runtime_client.voice.reply import PROTOCOL_TEXT, SILENT_REPLY, ReplyReader
+from agents.voice.conversation import Conversation
+from agents.voice.echo import is_echo
+from agents.voice.reply import PROTOCOL_TEXT, SILENT_REPLY, ReplyReader
 
 _SENTENCES_END: Final = None
 

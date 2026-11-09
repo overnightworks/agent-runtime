@@ -17,10 +17,10 @@ import anyio.to_thread
 import pytest
 from mcp.client.subscriptions import SubscriptionLost
 
-from agent_runtime_client.mcp_server import McpPersonFront, ResourceChanges
-from agent_runtime_client.mcp_server.asgi import LOGGER_NAME as LOGGER
-from agent_runtime_client.member import LISTEN_BOUND_SECONDS, STANDING_URI
-from agent_runtime_client.tools import Principal
+from agents.mcp_server import McpPersonFront, ResourceChanges
+from agents.mcp_server.asgi import LOGGER_NAME as LOGGER
+from agents.member import LISTEN_BOUND_SECONDS, STANDING_URI
+from agents.tools import Principal
 from tests.support.mcp_server_support import (
     ListenConnection,
     MemberApp,

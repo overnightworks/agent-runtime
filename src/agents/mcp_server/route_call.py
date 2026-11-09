@@ -16,15 +16,15 @@ from urllib.parse import quote, urlencode
 import anyio
 import anyio.lowlevel
 
-from agent_runtime_client.mcp_server.asgi import (
+from agents.mcp_server.asgi import (
     LOGGER_NAME,
     AsgiApp,
     Message,
     Scope,
     field_values,
 )
-from agent_runtime_client.tools import JsonObject, ToolOutcome
-from agent_runtime_client.turn import MAX_EVENT_BYTES
+from agents.tools import JsonObject, ToolOutcome
+from agents.turn import MAX_EVENT_BYTES
 
 _LOG: Final = logging.getLogger(LOGGER_NAME)
 _ARGUMENTS_REFUSED_TEXT: Final = "the arguments do not fit the tool"
