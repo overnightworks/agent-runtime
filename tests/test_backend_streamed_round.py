@@ -103,15 +103,18 @@ def test_the_last_finish_reason_counts():
 
 
 @pytest.mark.parametrize(
-    "event",
+    "data",
     [
-        "",
-        "null",
-        '{"choices": ["x"]}',
-        '{"choices": [{"delta": []}]}',
-        '{"choices": [{"delta": {"content": 5}}]}',
-        '{"choices": [{"delta": {"tool_calls": {}}}]}',
-        '{"choices": [{"finish_reason": 5}]}',
+        b"",
+        b"null",
+        b'{"choices": ["x"]}',
+        b'{"choices": [{"delta": []}]}',
+        b'{"choices": [{"delta": {"content": 5}}]}',
+        b'{"choices": [{"delta": {"tool_calls": {}}}]}',
+        b'{"choices": [{"finish_reason": 5}]}',
+        b"\xff",
+        json.dumps(a_chunk("\ud800")).encode(),
+        b"[" * 200_000,
     ],
     ids=[
         "empty-data",
@@ -121,13 +124,18 @@ def test_the_last_finish_reason_counts():
         "content-not-text",
         "tool-calls-not-a-list",
         "finish-reason-not-text",
+        "not-utf-8",
+        "lone-surrogate-in-a-piece",
+        "nested-past-the-recursion-limit",
     ],
 )
-def test_an_event_that_is_no_chunk_is_malformed(event):
-    stream = an_event_stream(a_chunk("a", finish_reason="stop"), event)
+def test_an_event_that_is_no_chunk_is_malformed_with_no_context(data):
+    before = an_event_stream(a_chunk("a", finish_reason="stop"), done=False)
 
-    with pytest.raises(MalformedRound):
-        read(stream)
+    with pytest.raises(MalformedRound) as raised:
+        read(before, b"data: " + data + b"\n\n", an_event_stream())
+
+    assert raised.value.__context__ is None
 
 
 def test_fragments_assemble_by_index_with_their_arguments_in_pieces():
