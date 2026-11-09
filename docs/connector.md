@@ -138,7 +138,14 @@ unchanged; an `api_group` the person lacks is `refused: not_enabled`. Proved by
 opaque whatever its prefix; any other content is `failed: provider_unavailable`. Proved by
 `test_an_unusable_key_file_is_provider_unavailable_and_sends_nothing` and
 `test_a_key_with_any_prefix_is_sent_as_it_is`. No log record holds it
-(`test_debug_logging_writes_the_key_into_no_record`).
+(`test_debug_logging_writes_the_key_into_no_record`). However the turn stops, the key and the
+reply's text are in none of the frames the gateway path leaves in the `TurnStopped`'s traceback. A
+stop the gateway path raises leaves `run` as a fresh exception, raised from a frame holding
+neither, with no underlying error in its `__context__` or `__cause__`
+(`test_a_stopped_turn_holds_neither_the_key_nor_the_reply_in_any_frame_or_chained_error`). A stop
+the host raises, from a handler or the groups lookup, stays the same exception, with the gateway
+path's frames cut from its traceback
+(`test_a_handlers_stop_after_a_tool_round_comes_back_the_same_and_holds_neither_key_nor_reply`).
 
 **The deadline.** `request.max_duration_seconds` is one deadline around the whole turn, every
 round and handler included; past it the turn `failed: limit_exceeded` and a running handler is

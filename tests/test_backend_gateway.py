@@ -4,24 +4,23 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import ipaddress
 import json
 import logging
 import re
-import ssl
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import httpx2
 import pytest
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.x509.oid import NameOID
 
 from agent_runtime_client.backend import MAX_RETRY_AFTER_S, TurnPerson, TurnStopKind, TurnStopped
-from agent_runtime_client.backend.fake_gateway import FakeGateway, Reply, completion
+from agent_runtime_client.backend.fake_gateway import (
+    FakeGateway,
+    Reply,
+    completion,
+    tool_call,
+    tool_round,
+)
 from agent_runtime_client.backend.gateway import GatewayBackend, GatewayDetail
+from agent_runtime_client.tools import HandTool, ToolDeclaration, ToolEffect
 from agent_runtime_client.turn import (
     MAX_EVENT_BYTES,
     FailureCode,
@@ -37,9 +36,13 @@ from tests.support.gateway_turn_support import (
     Streamed,
     _turn,
     a_chunk,
+    a_handler_raising,
+    a_handler_raising_from_a_nameless_namespace,
     a_request,
     an_event_stream,
     ending,
+    self_signed_authority,
+    server_context,
 )
 
 scenario = gateway_turn_support.scenario
@@ -623,49 +626,10 @@ def test_a_turn_advanced_from_a_new_task_per_event_reads_its_stream_over_a_socke
     ]
 
 
-def _self_signed_authority(directory: Path, name: str) -> tuple[Path, Path]:
-    """A certificate for 127.0.0.1 that is its own authority: (certificate file, key file)."""
-    key = ec.generate_private_key(ec.SECP256R1())
-    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, name)])
-    now = datetime.now(UTC)
-    certificate = (
-        x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(subject)
-        .public_key(key.public_key())
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(now - timedelta(minutes=5))
-        .not_valid_after(now + timedelta(hours=1))
-        .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
-        .add_extension(
-            x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]),
-            critical=False,
-        )
-        .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
-        .sign(key, hashes.SHA256())
-    )
-    certificate_file, key_file = directory / f"{name}.pem", directory / f"{name}.key"
-    certificate_file.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
-    key_file.write_bytes(
-        key.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.PKCS8,
-            serialization.NoEncryption(),
-        )
-    )
-    return certificate_file, key_file
-
-
-def _server_context(authority: tuple[Path, Path]) -> ssl.SSLContext:
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    context.load_cert_chain(*authority)
-    return context
-
-
 def test_https_is_trusted_through_the_configured_ca_file_alone(scenario):
-    served = _self_signed_authority(scenario.directory, "served")
-    other = _self_signed_authority(scenario.directory, "other")
-    context = _server_context(served)
+    served = self_signed_authority(scenario.directory, "served")
+    other = self_signed_authority(scenario.directory, "other")
+    context = server_context(served)
 
     trusted, trusted_stop = _loopback_turn(scenario, server_context=context, ca_file=served[0])
     distrusted, distrusted_stop = _loopback_turn(scenario, server_context=context, ca_file=other[0])
@@ -675,12 +639,12 @@ def test_https_is_trusted_through_the_configured_ca_file_alone(scenario):
 
 
 def test_an_unusable_ca_file_is_provider_unavailable(scenario):
-    served = _self_signed_authority(scenario.directory, "served")
+    served = self_signed_authority(scenario.directory, "served")
     unusable = scenario.directory / "not-a-ca.pem"
     unusable.write_text("not a certificate")
 
     events, stopped = _loopback_turn(
-        scenario, server_context=_server_context(served), ca_file=unusable
+        scenario, server_context=server_context(served), ca_file=unusable
     )
 
     assert (events, ending(stopped)) == ([], UNAVAILABLE)
@@ -730,3 +694,99 @@ def test_a_level_the_host_set_on_a_transport_logger_stands_after_a_construction(
 def test_a_fake_gateway_without_replies_is_refused():
     with pytest.raises(ValueError, match="at least one reply"):
         FakeGateway()
+
+
+REPLY_CANARY = "reply-canary-7f3a"
+A_PIECE = an_event_stream(a_chunk(REPLY_CANARY), done=False)
+
+
+def _held_texts(error: BaseException) -> list[str]:
+    """Every string a runtime frame of the traceback holds, and the text of each exception.
+
+    The host's own frames are left out: the host holds the events it was given.
+    """
+    texts: list[str] = []
+    seen: set[int] = set()
+    pending: list[BaseException | None] = [error]
+    while pending:
+        current = pending.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        texts += [str(current), repr(current.args)]
+        trace = current.__traceback__
+        while trace is not None:
+            frame = trace.tb_frame
+            if frame.f_globals.get("__name__", "").startswith("agent_runtime_client"):
+                texts += [repr(value) for value in frame.f_locals.values()]
+            trace = trace.tb_next
+        pending += [current.__context__, current.__cause__]
+    return texts
+
+
+def _leaks(error: BaseException, key: str) -> list[str]:
+    return [text for text in _held_texts(error) if key in text or REPLY_CANARY in text]
+
+
+TURN_STOPS = {
+    "status": (lambda: FakeGateway(Reply(401, body=b'{"error":{"type":"auth"}}')), 30, None),
+    "lost_connection": (lambda: FailingTransport(httpx2.ConnectError("refused")), 30, None),
+    "broken_chunk_header": (
+        lambda: Streamed((A_PIECE,), breaks_with=httpx2.RemoteProtocolError("bad chunk")),
+        30,
+        None,
+    ),
+    "incomplete_round": (lambda: Streamed((A_PIECE,)), 30, None),
+    "malformed_event": (lambda: Streamed((A_PIECE + b"data: {not json\n\n",)), 30, None),
+    "round_cut_short": (
+        lambda: Streamed(
+            (A_PIECE + b'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n',)
+        ),
+        30,
+        None,
+    ),
+    "error_event": (
+        lambda: Streamed((A_PIECE + b'data: {"error":{"type":"server_error"}}\n\n',)),
+        30,
+        None,
+    ),
+    "close_http_error": (lambda: Streamed((A_PIECE,), closes_with=httpx2.ReadError("cut")), 30, 1),
+    "close_os_error": (lambda: Streamed((A_PIECE,), closes_with=OSError("cut")), 30, 1),
+    "deadline": (_Silent, 0.05, None),
+}
+
+
+@pytest.mark.parametrize(
+    ("transport", "seconds", "leaves_after"), TURN_STOPS.values(), ids=TURN_STOPS
+)
+def test_a_stopped_turn_holds_neither_the_key_nor_the_reply_in_any_frame_or_chained_error(
+    scenario, transport, seconds, leaves_after
+):
+    request = a_request().model_copy(update={"max_duration_seconds": seconds})
+    backend = GatewayBackend(scenario.config(), transport=transport())
+
+    _, stopped = scenario.outcome(backend, request, leaves_after=leaves_after)
+
+    assert stopped is not None
+    assert _leaks(stopped, scenario.key) == []
+
+
+@pytest.mark.parametrize(
+    "handler_raising", [a_handler_raising, a_handler_raising_from_a_nameless_namespace]
+)
+def test_a_handlers_stop_after_a_tool_round_comes_back_the_same_and_holds_neither_key_nor_reply(
+    scenario, handler_raising
+):
+    refusal = TurnStopped(TurnStopKind.REFUSED, RejectionCode.BUSY)
+    declaration = ToolDeclaration(
+        name="lookup", description="Use lookup.", parameters={}, effect=ToolEffect.READ_ONLY
+    )
+    gateway = FakeGateway(tool_round(tool_call("c1", "lookup", {}), content=REPLY_CANARY))
+    handler = HandTool(declaration, handler_raising(refusal))
+    backend = GatewayBackend(scenario.config(), tools=[handler], transport=gateway)
+    request = a_request(tools=(declaration,), max_tool_calls=5)
+
+    _, stopped = scenario.outcome(backend, request)
+
+    assert stopped is refusal
+    assert _leaks(stopped, scenario.key) == []

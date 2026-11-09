@@ -4,13 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import ipaddress
 import json
+import ssl
+import types
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx2
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import NameOID
 
 from agent_runtime_client.agents import TurnRequest
 from agent_runtime_client.backend import TurnPerson, TurnStopKind, TurnStopped
@@ -63,7 +71,7 @@ class HangingTransport(httpx2.AsyncBaseTransport):
 class Streamed(httpx2.AsyncBaseTransport):
     """Answers with a streamed body, recording whether it was read and whether it was closed.
 
-    After its chunks it hangs, raises ``breaks_with`` or ends.
+    After its chunks it hangs, raises ``breaks_with`` or ends; its close raises ``closes_with``.
     """
 
     def __init__(
@@ -74,12 +82,14 @@ class Streamed(httpx2.AsyncBaseTransport):
         headers: dict[str, str] | None = None,
         hangs: bool = False,
         breaks_with: Exception | None = None,
+        closes_with: Exception | None = None,
     ) -> None:
         self._chunks = chunks
         self._status = status
         self._headers = headers or {}
         self._hangs = hangs
         self._breaks_with = breaks_with
+        self._closes_with = closes_with
         self.read = False
         self.closed = asyncio.Event()
         self.started = asyncio.Event()
@@ -100,6 +110,8 @@ class Streamed(httpx2.AsyncBaseTransport):
 
             async def aclose(self) -> None:
                 transport.closed.set()
+                if transport._closes_with is not None:
+                    raise transport._closes_with
 
         return httpx2.Response(self._status, headers=self._headers, stream=Body())
 
@@ -199,8 +211,10 @@ class Scenario:
         self.outcome(GatewayBackend(self.config(), transport=gateway), person=person)
         return json.loads(gateway.requests[0].content)["user"]
 
-    def outcome(self, backend, request=None, person=None):
-        return asyncio.run(_turn(backend, request or a_request(), person or self.person()[0]))
+    def outcome(self, backend, request=None, person=None, *, leaves_after=None):
+        return asyncio.run(
+            _turn(backend, request or a_request(), person or self.person()[0], leaves_after)
+        )
 
 
 @pytest.fixture
@@ -229,15 +243,73 @@ def a_request(**changes) -> TurnRequest:
     return TurnRequest(**{**fields, **changes})
 
 
-async def _turn(backend, request, person):
+async def _turn(backend, request, person, leaves_after=None):
+    """The events and the stop, if any; the host leaves after ``leaves_after`` events if given."""
     events = []
     try:
         async with contextlib.aclosing(backend.run(request, person)) as stream:
             async for event in stream:
                 events.append(event)
+                if len(events) == leaves_after:
+                    break
     except TurnStopped as stopped:
         return events, stopped
     return events, None
+
+
+def a_handler_raising(stop: TurnStopped):
+    async def stopping(_principal, _arguments):
+        raise stop
+
+    return stopping
+
+
+def a_handler_raising_from_a_nameless_namespace(stop: TurnStopped):
+    """A handler whose frame's globals are an empty dict, so they hold no ``__name__``."""
+
+    async def stopping(_principal, _arguments):
+        raise stop
+
+    return types.FunctionType(stopping.__code__, {}, closure=stopping.__closure__)
+
+
+def self_signed_authority(directory: Path, name: str) -> tuple[Path, Path]:
+    """A certificate for 127.0.0.1 that is its own authority: (certificate file, key file)."""
+    key = ec.generate_private_key(ec.SECP256R1())
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, name)])
+    now = datetime.now(UTC)
+    certificate = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(minutes=5))
+        .not_valid_after(now + timedelta(hours=1))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+        .add_extension(
+            x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]),
+            critical=False,
+        )
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+        .sign(key, hashes.SHA256())
+    )
+    certificate_file, key_file = directory / f"{name}.pem", directory / f"{name}.key"
+    certificate_file.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+    key_file.write_bytes(
+        key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    return certificate_file, key_file
+
+
+def server_context(authority: tuple[Path, Path]) -> ssl.SSLContext:
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(*authority)
+    return context
 
 
 UNAVAILABLE = (TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE)
