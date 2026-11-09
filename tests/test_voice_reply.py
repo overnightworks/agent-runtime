@@ -11,13 +11,13 @@ from agent_runtime_client.turn_events import (
     ToolResultEvent,
 )
 from agent_runtime_client.voice import ReplyUnreadable, StayedSilent
-from agent_runtime_client.voice import sentences as sentence_splitter
 from agent_runtime_client.voice.reply import (
     PROTOCOL_TEXT,
     SILENT_REPLY,
     ReplyReader,
     SentenceRelease,
 )
+from agent_runtime_client.voice.sentences import split_sentences
 
 SILENT = (StayedSilent(),)
 UNREADABLE = (ReplyUnreadable(),)
@@ -113,7 +113,7 @@ def test_the_protocol_text_names_the_marker_the_reader_takes_as_silence():
     ],
 )
 def test_a_sentence_is_released_only_once_content_follows_it(steps):
-    release = SentenceRelease()
+    release = SentenceRelease(split_sentences)
     assert [release.feed(text) for text, _ in steps] == [released for _, released in steps]
 
 
@@ -130,11 +130,11 @@ def test_a_sentence_is_released_only_once_content_follows_it(steps):
     ],
 )
 def test_pieces_release_whole_sentences_and_the_flush_releases_the_rest(texts, sentences):
-    assert released_by(SentenceRelease(), *texts) == sentences
+    assert released_by(SentenceRelease(split_sentences), *texts) == sentences
 
 
 def test_a_flush_empties_the_release():
-    release = SentenceRelease()
+    release = SentenceRelease(split_sentences)
     release.feed("Rest")
     release.flush()
 
@@ -142,17 +142,15 @@ def test_a_flush_empties_the_release():
 
 
 @pytest.mark.parametrize("line", ["- Punkt eins ohne Ende\n", "am 3. ", "wort "])
-def test_an_unterminated_stream_hands_the_splitter_linear_text(line, monkeypatch):
+def test_an_unterminated_stream_hands_the_splitter_linear_text(line):
     handed_over = 0
-    split = sentence_splitter.split_sentences
 
     def counting_split(text: str) -> tuple[str, ...]:
         nonlocal handed_over
         handed_over += len(text)
-        return split(text)
+        return split_sentences(text)
 
-    monkeypatch.setattr(sentence_splitter, "split_sentences", counting_split)
-    release = SentenceRelease()
+    release = SentenceRelease(counting_split)
     text = (line * 1000)[:10_000]
     for character in text:
         release.feed(character)

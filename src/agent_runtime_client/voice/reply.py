@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import string
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum, StrEnum, auto
 from typing import Final
@@ -60,7 +61,8 @@ class SentenceRelease:
     costs linear time.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, split: Callable[[str], tuple[str, ...]]) -> None:
+        self._split = split
         self._buffer = ""
         self._undecided_from = 0
 
@@ -70,7 +72,7 @@ class SentenceRelease:
         start = self._undecided_from
         if _TERMINATOR_WITH_CONTENT_AFTER.search(text, start) is None:
             return self._hold(text, start)
-        *completed, _held = sentences.split_sentences(text[start:]) or ("",)
+        *completed, _held = self._split(text[start:]) or ("",)
         if not completed:
             return self._hold(text, start)
         end = start
@@ -130,7 +132,7 @@ class ReplyReader:
     def _start_round(self) -> None:
         self._round = _Round.OPENING
         self._opening = ""
-        self._release = SentenceRelease()
+        self._release = SentenceRelease(sentences.split_sentences)
 
     def _piece(self, text: str) -> Reading:
         if self._round is _Round.SPEECH:
