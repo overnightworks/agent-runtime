@@ -7,7 +7,7 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -16,7 +16,7 @@ jobs:
   test:
     name: test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -48,7 +48,7 @@ jobs:
         run: uv run --locked --no-sync ruff check src tests
 
       - name: Tests
-        run: uv run --locked --no-sync pytest -q --cov=src --cov-report=xml:coverage.xml
+        run: uv run --locked --no-sync pytest -q -n auto --cov=src --cov-report=xml:coverage.xml
 
       - name: Upload the coverage report for the quality gate
         if: matrix.python-version == '3.14'
@@ -84,12 +84,11 @@ jobs:
           for module in pkgutil.walk_packages(agent_runtime_client.__path__, "agent_runtime_client."):
               if module.name == "agent_runtime_client.mcp_server" or module.name.startswith(
                   "agent_runtime_client.mcp_server."
+              ) or module.name == "agent_runtime_client.voice" or module.name.startswith(
+                  "agent_runtime_client.voice."
               ) or module.name in (
                   "agent_runtime_client.backend.gateway",
                   "agent_runtime_client.backend.fake_gateway",
-                  "agent_runtime_client.voice.loop",
-                  "agent_runtime_client.voice.reply",
-                  "agent_runtime_client.voice.sentences",
               ):
                   continue
               importlib.import_module(module.name)
@@ -123,7 +122,7 @@ jobs:
           print("imported", agent_runtime_client.backend.gateway.__name__)
           '
 
-      - name: The client wheel with the voice extra imports the voice loop
+      - name: The client wheel with the voice extra imports its voice half
         run: |
           proof="$(mktemp -d "$RUNNER_TEMP/client-voice.XXXXXX")"
           uv venv "$proof/venv"
@@ -131,9 +130,16 @@ jobs:
           uv pip install --python "$proof/venv/bin/python" "$client_wheel[voice]"
           cd "$proof"
           "$proof/venv/bin/python" -I -c '
-          import agent_runtime_client.voice.loop
+          import importlib
+          import pkgutil
 
-          print("imported", agent_runtime_client.voice.loop.__name__)
+          import agent_runtime_client.voice
+
+          for module in pkgutil.walk_packages(
+              agent_runtime_client.voice.__path__, "agent_runtime_client.voice."
+          ):
+              importlib.import_module(module.name)
+              print("imported", module.name)
           '
 
   checks:
@@ -150,7 +156,7 @@ jobs:
   dependency-floors:
     name: dependency-floors
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     env:
       UV_RESOLUTION: lowest-direct
     steps:
@@ -172,7 +178,7 @@ jobs:
         run: uv pip list
 
       - name: Tests
-        run: uv run --no-sync pytest -q
+        run: uv run --no-sync pytest -q -n auto
 
   quality:
     needs: [checks, dependency-floors]
