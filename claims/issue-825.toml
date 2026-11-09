@@ -1,8 +1,0 @@
-claim_id = "9200b1e75a7e44698809cf421a04b5f4"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "3bc8a269fd1eaa3a7bc2ca99eb0885627e468a89"
-branch = "claude/issue-825-voice-echo"
-scope = [".importlinter", "docs/ARCHITECTURE.md", "docs/connector.md", "src/agent_runtime_client/voice/__init__.py", "src/agent_runtime_client/voice/conversation.py", "src/agent_runtime_client/voice/echo.py", "src/agent_runtime_client/voice/loop.py", "tests/support/voice_support.py", "tests/test_voice_echo.py"]
-opened_commit = "3210f6e331e7e244d3d27f7152d51f6da1a63cd1"
-whole_reason = "One rule: its module, the loop's one call before hearing, its event, its import contract line, its tests and its two document lines."
