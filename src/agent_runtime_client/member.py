@@ -2,9 +2,10 @@
 
 An app writes these records and an agent's runner reads them: where the member stands in every
 place (``Standing``), the window of lines one place shows (``PlaceWindow``), the arguments of
-accepting an invitation and of speaking in a place, and what speaking answers. The URIs name the
-resources that serve them; a URI is no credential, so a guessed one yields nothing. This module
-is base, so a runner parses all of it without the ``mcp-server`` extra.
+accepting an invitation and of speaking in a place, what accepting answers when it refuses, and
+what speaking answers. The URIs name the resources that serve them; a URI is no credential, so a
+guessed one yields nothing. This module is base, so a runner parses all of it without the
+``mcp-server`` extra.
 """
 
 from __future__ import annotations
