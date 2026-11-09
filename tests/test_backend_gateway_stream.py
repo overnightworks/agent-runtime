@@ -117,18 +117,18 @@ def _a_call(name: str, arguments: str) -> dict:
 @pytest.mark.parametrize(
     ("body", "shown"),
     [
-        (an_event_stream(a_chunk("a"), done=False), "a"),
-        (an_event_stream(a_chunk("a")), "a"),
-        (an_event_stream(a_chunk("a"), "{not json", STOPPED), "a"),
-        (an_event_stream(a_chunk("a"), a_chunk(finish_reason="length")), "a"),
-        (an_event_stream(a_chunk("a"), STOPPED, done=False), "a"),
-        (an_event_stream(a_chunk("  \n"), STOPPED), "  \n"),
-        (an_event_stream(a_chunk("a"), CALLS_ASKED), "a"),
-        (an_event_stream(a_chunk("a"), _a_call("unoffered", "{}"), CALLS_ASKED), "a"),
-        (an_event_stream(a_chunk("a"), _a_call("lookup", "[]"), CALLS_ASKED), "a"),
+        (an_event_stream(a_chunk("a"), done=False), ["a"]),
+        (an_event_stream(a_chunk("a")), ["a"]),
+        (an_event_stream(a_chunk("a"), "{not json", STOPPED), ["a"]),
+        (an_event_stream(a_chunk("a"), a_chunk("b"), a_chunk(finish_reason="length")), ["a", "b"]),
+        (an_event_stream(a_chunk("a"), STOPPED, done=False), ["a"]),
+        (an_event_stream(a_chunk("  \n"), STOPPED), ["  \n"]),
+        (an_event_stream(a_chunk("a"), CALLS_ASKED), ["a"]),
+        (an_event_stream(a_chunk("a"), _a_call("unoffered", "{}"), CALLS_ASKED), ["a"]),
+        (an_event_stream(a_chunk("a"), _a_call("lookup", "[]"), CALLS_ASKED), ["a"]),
         (
             an_event_stream(a_chunk("a" * (MAX_EVENT_BYTES - 1)), a_chunk("bb"), STOPPED),
-            "a" * (MAX_EVENT_BYTES - 1),
+            ["a" * (MAX_EVENT_BYTES - 1)],
         ),
     ],
     ids=[
@@ -153,7 +153,7 @@ def test_a_round_that_streams_text_then_fails_leaves_the_text_shown_and_runs_not
     events, stopped = drive(scenario, transport, lookup)
 
     assert (events, ending(stopped), lookup.seen) == (
-        [AssistantTextEvent(text=shown)],
+        [AssistantTextEvent(text=piece) for piece in shown],
         PROVIDER_ERROR,
         [],
     )

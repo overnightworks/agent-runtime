@@ -543,7 +543,8 @@ async def _streamed_round(
     failure: TurnStopped | None = None
     async with contextlib.AsyncExitStack() as stack:
         response = await _before(deadline, stack.enter_async_context(opened))
-        reading = read_round(_chunks(response, deadline), round_limit_bytes=_MAX_REQUEST_BYTES)
+        chunks = await stack.enter_async_context(contextlib.aclosing(_chunks(response, deadline)))
+        reading = read_round(chunks, round_limit_bytes=_MAX_REQUEST_BYTES)
         try:
             async with contextlib.aclosing(reading) as parts:
                 async for part in parts:
