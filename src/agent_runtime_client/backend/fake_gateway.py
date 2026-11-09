@@ -33,9 +33,13 @@ def _delta(**delta: object) -> JsonObject:
     return {"choices": [{"index": 0, "delta": delta}]}
 
 
-def completion(text: str, *, finish_reason: str = "stop") -> Reply:
-    """A 200 event stream: ``text`` as one content chunk, the finish chunk and ``[DONE]``."""
-    return _event_stream(_delta(content=text), finish_reason=finish_reason)
+def completion(*pieces: str, finish_reason: str = "stop") -> Reply:
+    """A 200 event stream: one content chunk per piece, the finish chunk and ``[DONE]``.
+
+    ``completion()`` sends no content chunk, the same round as ``completion("")``: no text.
+    """
+    chunks = (_delta(content=piece) for piece in pieces)
+    return _event_stream(*chunks, finish_reason=finish_reason)
 
 
 def tool_call(call_id: str, name: str, arguments: JsonObject | str) -> JsonObject:

@@ -1,6 +1,6 @@
 [project]
 name = "overnightworks-agent-runtime-client"
-version = "0.27.1"
+version = "0.28.0"
 description = "Light client for apps that run agents: the agent file, the tool contract an app declares and the gateway backend"
 authors = [{ name = "Flex0r (Felix Hummert)", email = "felix.hummert@gmail.com" }]
 license = { text = "MIT" }
@@ -30,7 +30,7 @@ dev = [
 ]
 
 [project.urls]
-Repository = "https://github.com/overnightworks/agent-runtime"
+Repository = "https://github.com/overnightworks/agents"
 
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]

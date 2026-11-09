@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator, Iterable
+from contextlib import aclosing
 
 import pytest
 
@@ -27,8 +28,15 @@ async def _arriving(chunks: Iterable[bytes]) -> AsyncIterator[bytes]:
         yield chunk
 
 
+async def _handed_out(chunks: Iterable[bytes], limit: int) -> list[str | StreamedRound]:
+    async with aclosing(read_round(_arriving(chunks), round_limit_bytes=limit)) as parts:
+        return [part async for part in parts]
+
+
 def read(*chunks: bytes, limit: int = ROUND_LIMIT) -> StreamedRound:
-    return asyncio.run(read_round(_arriving(chunks), round_limit_bytes=limit))
+    """The round the reader hands out last, after the round's text pieces."""
+    *_, streamed = asyncio.run(_handed_out(chunks, limit))
+    return streamed
 
 
 def _event(chunk: dict) -> str:
@@ -131,9 +139,10 @@ def test_the_last_finish_reason_counts():
 )
 def test_an_event_that_is_no_chunk_is_malformed_with_no_context(data):
     before = an_event_stream(a_chunk("a", finish_reason="stop"), done=False)
+    chunks = (before, b"data: " + data + b"\n\n", an_event_stream())
 
     with pytest.raises(MalformedRound) as raised:
-        read(before, b"data: " + data + b"\n\n", an_event_stream())
+        read(*chunks)
 
     assert raised.value.__context__ is None
 

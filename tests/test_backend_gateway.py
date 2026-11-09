@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import ipaddress
 import json
 import logging
@@ -352,8 +353,8 @@ def test_busy_carries_the_standard_header_seconds_capped_or_none(scenario, retry
     assert stopped.retry_after_s == wait
 
 
-def _stopped_with(*pieces: str, reason: str = "stop") -> bytes:
-    return an_event_stream(*(a_chunk(piece) for piece in pieces), a_chunk(finish_reason=reason))
+def _stopped_with(piece: str) -> bytes:
+    return an_event_stream(a_chunk(piece), a_chunk(finish_reason="stop"))
 
 
 @pytest.mark.parametrize(
@@ -364,10 +365,8 @@ def _stopped_with(*pieces: str, reason: str = "stop") -> bytes:
         an_event_stream({"choices": []}),
         an_event_stream({"choices": "x"}),
         completion("").body,
-        _stopped_with("  \n"),
+        completion().body,
         an_event_stream(a_chunk(finish_reason="stop")),
-        _stopped_with("cut", reason="length"),
-        _stopped_with("x", reason="tool_calls"),
         _stopped_with("\ud800"),
         _stopped_with("a" * (MAX_EVENT_BYTES + 1)),
         b"data: \xff\xfe\n\n",
@@ -383,10 +382,8 @@ def _stopped_with(*pieces: str, reason: str = "stop") -> bytes:
         "no-choices",
         "choices-not-a-list",
         "empty-content",
-        "blank-content",
+        "no-pieces",
         "null-content",
-        "length",
-        "tool-calls",
         "lone-surrogate",
         "one-byte-past-the-bound",
         "not-utf8",
@@ -581,6 +578,49 @@ def test_the_proxy_environment_is_ignored(scenario, monkeypatch):
 
     assert stopped is None
     assert events[-1] == FinalEvent(text="hi")
+
+
+def test_a_turn_advanced_from_a_new_task_per_event_reads_its_stream_over_a_socket(scenario):
+    first_shown = asyncio.Event()
+
+    async def serve_the_rest_once_the_first_piece_showed(reader, writer):
+        await reader.readuntil(b"\r\n\r\n")
+        head = b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n"
+        writer.write(head + an_event_stream(a_chunk("Hel"), done=False))
+        await writer.drain()
+        await first_shown.wait()
+        writer.write(an_event_stream(a_chunk("lo"), a_chunk(finish_reason="stop")))
+        await writer.drain()
+        writer.close()
+
+    async def drive():
+        server = await asyncio.start_server(
+            serve_the_rest_once_the_first_piece_showed, "127.0.0.1", 0
+        )
+        port = server.sockets[0].getsockname()[1]
+        backend = GatewayBackend(scenario.config(origin=f"http://127.0.0.1:{port}"))
+        events = []
+
+        async def next_event(stream):
+            return await anext(stream, None)
+
+        async with server:
+            try:
+                turn = backend.run(a_request(max_duration_seconds=5), scenario.person()[0])
+                async with contextlib.aclosing(turn) as stream:
+                    while (event := await asyncio.create_task(next_event(stream))) is not None:
+                        events.append(event)
+                        first_shown.set()
+            finally:
+                # A turn that ends before its first piece still lets the server finish.
+                first_shown.set()
+        return events
+
+    assert asyncio.run(drive()) == [
+        AssistantTextEvent(text="Hel"),
+        AssistantTextEvent(text="lo"),
+        FinalEvent(text="Hello"),
+    ]
 
 
 def _self_signed_authority(directory: Path, name: str) -> tuple[Path, Path]:

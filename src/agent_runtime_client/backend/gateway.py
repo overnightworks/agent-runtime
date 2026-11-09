@@ -1,10 +1,10 @@
-"""The gateway as a backend: one streamed completion per round of a turn, read whole and judged before anything shows or runs, or one picture.
+"""The gateway as a backend: one streamed completion per round of a turn, or one picture.
 
 A turn runs under one deadline. An app can also list the models the gateway offers.
 
 The app's key never leaves this module: it is read per turn or per list, sent as the bearer
 and written to no exception or log record.
-"""  # noqa: E501 - the first line is the module's one-sentence statement
+"""
 
 from __future__ import annotations
 
@@ -14,10 +14,9 @@ import json
 import logging
 import re
 import ssl
-from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
-from functools import partial
 from pathlib import Path
 from typing import Final, NotRequired, Required, TypedDict
 
@@ -140,15 +139,21 @@ class GatewayBackend(AgentBackend):
         progress = _Progress(request.max_tool_calls or 0)
         try:
             key = await _before(deadline, self._authorise(person))
-            read = partial(_streamed_round, offered=frozenset(tools))
+            offered = frozenset(tools)
             messages = _opening_messages(request)
             user = person_fingerprint(person.principal)
             while True:
                 _refuse_after(deadline)
                 body = _bounded(_body(request, messages, user))
-                reply = await _before(deadline, self._post(_COMPLETIONS_PATH, body, key, read))
+                opened = self._post(_COMPLETIONS_PATH, body, key)
+                async with contextlib.aclosing(_streamed_round(opened, offered, deadline)) as parts:
+                    async for part in parts:
+                        if isinstance(part, str):
+                            yield AssistantTextEvent(text=part)
+                            _refuse_after(deadline)
+                            continue
+                        reply = part
                 if reply.message is None:
-                    yield AssistantTextEvent(text=reply.text)
                     yield FinalEvent(text=reply.text)
                     return
                 progress.admit(reply.calls)
@@ -185,19 +190,14 @@ class GatewayBackend(AgentBackend):
         key = await self._authorise(person)
         _refuse_after(deadline)
         body = _bounded(_picture_body(request, size, person_fingerprint(person.principal)))
-        file = await self._post(_PICTURES_PATH, body, key, _picture_of)
+        async with self._post(_PICTURES_PATH, body, key) as response:
+            file = await _picture_of(response)
         return FinalEvent(text="", files=(file,))
 
-    async def _post[Result](
-        self,
-        path: str,
-        body: str,
-        key: str,
-        read: Callable[[httpx2.Response], Awaitable[Result]],
-    ) -> Result:
-        return await _send(
-            self._config.gateway, self._transport, "POST", path, key, read, content=body
-        )
+    def _post(
+        self, path: str, body: str, key: str
+    ) -> contextlib.AbstractAsyncContextManager[httpx2.Response]:
+        return _opened(self._config.gateway, self._transport, "POST", path, key, content=body)
 
 
 @dataclass(frozen=True)
@@ -242,7 +242,8 @@ async def _get_models(
     gateway: ChatGateway, transport: httpx2.AsyncBaseTransport | None
 ) -> GatewayModels:
     key = _read_key(gateway.key_file)
-    return await _send(gateway, transport, "GET", _MODELS_PATH, key, _models_of)
+    async with _opened(gateway, transport, "GET", _MODELS_PATH, key) as response:
+        return await _models_of(response)
 
 
 def _quiet_transport_loggers() -> None:
@@ -252,16 +253,17 @@ def _quiet_transport_loggers() -> None:
             transport_logger.setLevel(logging.WARNING)
 
 
-async def _send[Result](
+@contextlib.asynccontextmanager
+async def _opened(
     gateway: ChatGateway,
     transport: httpx2.AsyncBaseTransport | None,
     method: str,
     path: str,
     key: str,
-    read: Callable[[httpx2.Response], Awaitable[Result]],
     *,
     content: str | None = None,
-) -> Result:
+) -> AsyncIterator[httpx2.Response]:
+    """The gateway's 200 response, open while it is read; a connection lost meanwhile is raised."""
     headers = {"Authorization": f"Bearer {key}"}
     if content is not None:
         headers["Content-Type"] = "application/json"
@@ -271,7 +273,8 @@ async def _send[Result](
             _client(gateway, transport) as client,
             client.stream(method, path, content=content, headers=headers) as response,
         ):
-            return await _reply_of(response, read)
+            await _raise_unless_ok(response)
+            yield response
     except httpx2.HTTPError, httpx2.InvalidURL, OSError:
         raise _unavailable(GatewayDetail.CONNECTION_FAILED) from None
 
@@ -490,12 +493,11 @@ def _unavailable(detail: GatewayDetail) -> TurnStopped:
     return TurnStopped(TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE, detail=detail)
 
 
-async def _reply_of[Result](
-    response: httpx2.Response, read: Callable[[httpx2.Response], Awaitable[Result]]
-) -> Result:
+async def _raise_unless_ok(response: httpx2.Response) -> None:
+    """A 200 passes; any other status ends the turn or the list as the status table says."""
     status = response.status_code
     if status == httpx2.codes.OK:
-        return await read(response)
+        return
     if status == httpx2.codes.TOO_MANY_REQUESTS:
         wait = _wait_seconds(response.headers.get("Retry-After"))
         raise TurnStopped(TurnStopKind.REFUSED, RejectionCode.BUSY, retry_after_s=wait)
@@ -528,20 +530,43 @@ async def _read_body(response: httpx2.Response, limit: int) -> bytes:
     return bytes(body)
 
 
-async def _streamed_round(response: httpx2.Response, *, offered: frozenset[str]) -> _Round:
-    """The round the stream completes, judged whole; a failure is raised after its handler ends."""
+async def _streamed_round(
+    opened: contextlib.AbstractAsyncContextManager[httpx2.Response],
+    offered: frozenset[str],
+    deadline: float,
+) -> AsyncIterator[str | _Round]:
+    """Each text piece of a round as it streams, then the round, judged whole.
+
+    Opening the request and each read run under the deadline, and no timeout spans a yield. A
+    failure is raised after its handler ends.
+    """
     failure: TurnStopped | None = None
-    try:
-        async with contextlib.aclosing(response.aiter_bytes()) as chunks:
-            streamed = await read_round(chunks, round_limit_bytes=_MAX_REQUEST_BYTES)
-    except httpx2.DecodingError, MalformedRound:
-        failure = _malformed_reply()
-    except RoundErrorEvent as event:
-        _LOGGER.warning("the gateway sent an error event, %s", event.kind)
-        failure = _unavailable(GatewayDetail.GATEWAY_FAILED)
-    if failure is not None:
-        raise failure
-    return _judged(streamed, offered)
+    async with contextlib.AsyncExitStack() as stack:
+        response = await _before(deadline, stack.enter_async_context(opened))
+        chunks = await stack.enter_async_context(contextlib.aclosing(_chunks(response, deadline)))
+        reading = read_round(chunks, round_limit_bytes=_MAX_REQUEST_BYTES)
+        try:
+            async with contextlib.aclosing(reading) as parts:
+                async for part in parts:
+                    if isinstance(part, StreamedRound):
+                        streamed = part
+                    else:
+                        yield part
+        except httpx2.DecodingError, MalformedRound:
+            failure = _malformed_reply()
+        except RoundErrorEvent as event:
+            _LOGGER.warning("the gateway sent an error event, %s", event.kind)
+            failure = _unavailable(GatewayDetail.GATEWAY_FAILED)
+        if failure is not None:
+            raise failure
+    yield _judged(streamed, offered)
+
+
+async def _chunks(response: httpx2.Response, deadline: float) -> AsyncIterator[bytes]:
+    """The response's byte chunks, each read under the turn's deadline."""
+    async with contextlib.aclosing(response.aiter_bytes()) as chunks:
+        while (chunk := await _before(deadline, anext(chunks, None))) is not None:
+            yield chunk
 
 
 def _judged(streamed: StreamedRound, offered: frozenset[str]) -> _Round:
@@ -600,7 +625,7 @@ async def _picture_of(response: httpx2.Response) -> RunFile:
 
 
 def _answer_of(text: str) -> _Round:
-    if not text.strip() or len(text.encode("utf-8")) > MAX_EVENT_BYTES:
+    if not text.strip():
         raise _malformed_reply()
     return _Round(text=text, calls=(), message=None)
 
@@ -611,15 +636,12 @@ def _calls_of(message: JsonObject, offered: frozenset[str]) -> _Round:
     raw_calls = message["tool_calls"]
     if (content is not None and not isinstance(content, str)) or not raw_calls:
         raise _malformed_reply()
-    if content is not None:
-        content.encode("utf-8")  # a lone surrogate is a ValueError, judged as a malformed reply
     calls = []
     for raw in raw_calls:
         function = raw["function"]
         name, call_id = function["name"], raw["id"]
         if name not in offered or not isinstance(call_id, str) or not call_id:
             raise _malformed_reply()
-        call_id.encode("utf-8")  # as above
         arguments = _ARGUMENTS.validate_json(function["arguments"])
         calls.append(_Call(id=call_id, name=name, arguments=arguments))
     echoed = [
