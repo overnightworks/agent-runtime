@@ -1,0 +1,8 @@
+claim_id = "f56dbb57e73e4f2d8b5b66327d41aa7d"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "540befa116dd0ecbf229f091bffcea50d32e9efe"
+branch = "claude/issue-808-text-pieces-as-written"
+scope = ["docs/ARCHITECTURE.md", "docs/connector.md", "pyproject.toml", "src/agent_runtime_client/backend/fake_gateway.py", "src/agent_runtime_client/backend/gateway.py", "src/agent_runtime_client/backend/streamed_round.py", "src/agent_runtime_client/turn_events.py", "tests/support/gateway_turn_support.py", "tests/test_backend_gateway.py", "tests/test_backend_gateway_stream.py", "tests/test_backend_gateway_tools.py", "tests/test_backend_streamed_round.py", "uv.lock"]
+opened_commit = "8b1ab345d3af45d8d82b1fbda010f6e4b18d0cd0"
+whole_reason = "The reader's piece hand-off, its one caller in run, the fake every host suite answers through, the event docstrings and the release version state one new event contract and switch together."
