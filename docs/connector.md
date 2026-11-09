@@ -37,6 +37,21 @@ started in the turn, whatever ended it, `refused: busy` included, so an app does
 that may have written. Proved by `tests/test_backend_gateway_tools.py`:
 `test_a_busy_gateway_at_round_two_reports_whether_a_call_may_have_written`.
 
+`TurnStopped.outcome` is what the stop means to a person, a `StopOutcome` derived from the code and
+never stored beside it:
+
+| Code | Outcome |
+| --- | --- |
+| `refused: not_enabled`, `refused: forbidden` | `not_enabled` |
+| `refused: busy` | `busy` |
+| `refused: budget_spent` | `budget_spent` |
+| every `failed` code | `unavailable` |
+
+`retry_after_s` stays as the gateway gave it, whatever the outcome. Proved by
+`tests/test_backend_port.py`: `test_every_stop_code_has_exactly_its_outcome`,
+`test_a_turn_stop_and_a_failed_decision_of_one_code_give_the_same_outcome` and
+`test_a_busy_refusal_is_busy_with_or_without_a_wait`.
+
 `AssistantTextEvent` is a piece of the assistant's text, yielded as the gateway streams it, before
 its round is judged. Pieces come from every round, including a round that ends in tool calls: its
 pieces come before its `ToolCallEvent`s. `FinalEvent.text` is the last round's judged text only, so
@@ -66,7 +81,8 @@ section. `agent/settings.py` is the one place that imports `agent_runtime_client
 `TurnPerson` is always the verified person, and `principal.iss` is passed exactly as the app
 bound it: two spellings of one issuer split one person's budget. `busy` may carry no
 `retry_after_s`, so the app needs a defined fallback; a value that varies by app stays the
-app's.
+app's. An app maps only `TurnStopped.outcome` to its wording and keeps `code` and `detail` for its
+logs; a person over budget learns that the budget is spent, never an outage.
 
 Tests use a fake `AgentBackend` that yields `TurnEvent`s and raises `TurnStopped`. A proof
 through the real entry point runs `GatewayBackend` on `backend.fake_gateway.FakeGateway`, a
@@ -674,7 +690,7 @@ await run_voice_loop(
   after a decision that played at least one sentence ended, while no decision is in flight, and
   false for every other line, one heard while an answer plays included.
 - `report` receives each `VoiceEvent`: `Woke`, `StayedSilent`, `ReplyUnreadable`,
-  `SentenceStarted(text)`, `SentenceRefused(text)`, `DecisionFailed(kind, code, detail)` and
+  `SentenceStarted(text)`, `SentenceRefused(text)`, `DecisionFailed(kind, code, detail)`, whose `outcome` is the stop's `StopOutcome`, and
   `EchoDropped(text)`.
 
 Proved by `tests/test_voice_loop.py`:

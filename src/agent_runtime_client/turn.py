@@ -68,6 +68,30 @@ class RejectionCode(StrEnum):
     FORBIDDEN = "forbidden"
 
 
+class StopOutcome(StrEnum):
+    """What a stopped turn means to a person; an app words only this, never the code."""
+
+    NOT_ENABLED = "not_enabled"
+    BUSY = "busy"
+    BUDGET_SPENT = "budget_spent"
+    UNAVAILABLE = "unavailable"
+
+
+_REJECTION_OUTCOMES: Final = {
+    RejectionCode.NOT_ENABLED: StopOutcome.NOT_ENABLED,
+    RejectionCode.FORBIDDEN: StopOutcome.NOT_ENABLED,
+    RejectionCode.BUSY: StopOutcome.BUSY,
+    RejectionCode.BUDGET_SPENT: StopOutcome.BUDGET_SPENT,
+}
+
+
+def outcome_of_stop(code: RejectionCode | FailureCode) -> StopOutcome:
+    """The one decider of what a stopped turn means to a person: every failure is unavailable."""
+    if isinstance(code, RejectionCode):
+        return _REJECTION_OUTCOMES[code]
+    return StopOutcome.UNAVAILABLE
+
+
 def refuse_non_json_constant(constant: str) -> object:
     """The one decider of NaN and Infinity in text being parsed: JSON has no word for them.
 

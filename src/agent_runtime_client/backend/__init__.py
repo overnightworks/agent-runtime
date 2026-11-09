@@ -13,7 +13,14 @@ from enum import StrEnum
 from typing import Final, Protocol
 
 from agent_runtime_client.agents import TurnRequest
-from agent_runtime_client.turn import AgentRole, FailureCode, Principal, RejectionCode
+from agent_runtime_client.turn import (
+    AgentRole,
+    FailureCode,
+    Principal,
+    RejectionCode,
+    StopOutcome,
+    outcome_of_stop,
+)
 from agent_runtime_client.turn_events import (
     AssistantTextEvent,
     FinalEvent,
@@ -65,6 +72,10 @@ class TurnStopped(Exception):
         self.retry_after_s = retry_after_s
         self.after_side_effect = after_side_effect
         self.detail = detail
+
+    @property
+    def outcome(self) -> StopOutcome:
+        return outcome_of_stop(self.code)
 
 
 class AgentBackend(Protocol):
