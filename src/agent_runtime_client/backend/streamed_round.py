@@ -136,10 +136,11 @@ def error_kind_of(error: object) -> str:
 async def read_round(chunks: AsyncIterable[bytes], *, round_limit_bytes: int) -> StreamedRound:
     """The round the stream completes at ``[DONE]`` after a finish reason, else a failure."""
     assembly = _Assembly(round_limit_bytes)
-    async for data in _events(chunks):
-        if data == _DONE:
-            return assembly.finished()
-        _take(assembly, data)
+    async with aclosing(_events(chunks)) as events:
+        async for data in events:
+            if data == _DONE:
+                return assembly.finished()
+            _take(assembly, data)
     raise MalformedRound
 
 
