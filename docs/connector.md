@@ -667,8 +667,8 @@ await run_voice_loop(
   own `play`, and cancelling or refusing a `play` stops that sound at once. Either raises
   `VoiceRefused` when the app cannot speak now. The loop plays the sentences in order: `play` for
   a sentence starts only after it returned for the one before. While one sentence plays, the loop
-  renders the next, never more than one ahead, so `render` may run while `play` does and no
-  render pauses the answer between two sentences.
+  renders the next, never more than one ahead, so `render` may run while `play` does, and a
+  render taking no longer than the sentence playing before it adds no pause between the two.
 - `wakes` is the app's `WakeRule(line, *, first_after_answer)`, asked for every line that is
   neither the agent's own nor an echo. `first_after_answer` is true for the first such line heard
   after a decision that played at least one sentence ended, while no decision is in flight, and
@@ -687,7 +687,7 @@ Proved by `tests/test_voice_loop.py`:
 `test_the_next_sentence_renders_once_written_while_the_one_before_it_plays`,
 `test_a_sentence_two_ahead_renders_only_after_the_one_playing_has_played`,
 `test_sentences_play_in_written_order_each_started_after_the_one_before_it_played` and
-`test_a_sentence_after_the_first_plays_with_no_render_pause`.
+`test_a_render_taking_no_longer_than_the_sentence_playing_before_it_adds_no_pause`.
 
 **The standard wake rule.** `agent_runtime_client.voice.wake.addressed_or_asked(names)` returns
 a `WakeRule`, a cheap local check of which lines cost a decision. It wakes on a line that names

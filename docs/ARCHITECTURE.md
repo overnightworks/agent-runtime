@@ -81,7 +81,7 @@ host's wake rule decides which line starts a decision. One decision is in flight
 turn is read to its end in one task of the loop's task group while another task plays its
 sentences in order through the host's `VoiceOut`, so the turn's deadline bounds the writing,
 never the playing. While one sentence plays, a third task renders the next one, never more than
-one ahead, so no render pauses the answer between two sentences.
+one ahead, so a render taking no longer than the sentence playing before it adds no pause.
 
 One gateway turn with a tool call:
 

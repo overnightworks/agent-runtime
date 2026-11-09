@@ -130,7 +130,7 @@ async def pause_between(trace: Trace, ended: str, next_one: str) -> float:
     return asyncio.get_running_loop().time() - ended_at
 
 
-def test_a_sentence_after_the_first_plays_with_no_render_pause(place):
+def test_a_render_taking_no_longer_than_the_sentence_playing_before_it_adds_no_pause(place):
     trace = place.trace
     voice = RecordingVoice(trace, seconds_per_render=1, seconds_per_sentence=3)
     gateway = FakeGateway(completion("Eins. Zwei. Drei."))
