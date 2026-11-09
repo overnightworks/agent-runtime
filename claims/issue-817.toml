@@ -1,0 +1,8 @@
+claim_id = "7c5fd40fb092473ab3ff71e5454dcfc2"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "5c611629826985e829d37f353bd6c31ebf50893a"
+branch = "claude/issue-817-repository-named-agents"
+scope = ["AGENTS.md", "README.md", "pyproject.toml", "sonar-project.properties", "tests/workflows/test_release_workflow.py"]
+opened_commit = "b3e4ad8132fd228b0deccaadb13725ef91ddd9c8"
+whole_reason = "The repository's names move together in one window by hal's P1 and P2: the titles, the URL, the Sonar key and name, and the test's repository value."
