@@ -3,8 +3,11 @@
 ## What it is
 
 The one interface through which every app runs its agents. An app describes its agents and its
-tools once, in the same way as every other app. It runs their turns, for text and for pictures,
-against its own model gateway, and it can hand the same tools to a signed-in person's own agent.
+tools once, in the same way as every other app. It runs their turns, for text, for pictures and
+for a conversation by voice, against its own model gateway, and it can hand the same tools to a
+signed-in person's own agent. An app that hears and speaks offers both to an agent the same way:
+heard text with its speaker in the place's window, spoken text through one standard tool. The
+sound stays with the app and the speech service; this library sees only text.
 
 ## What it does
 

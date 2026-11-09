@@ -1,8 +1,8 @@
 # Connector reference
 
 For the developer of an app that runs agent turns through `agent_runtime_client`: the turn an
-app starts, the agent files it ships, the tools it declares, the gateway backend and the MCP
-person front. The standard path is that the app serves its member's standing as MCP resources and
+app starts, the agent files it ships, the tools it declares, the gateway backend, the MCP
+person front and the voice loop. The standard path is that the app serves its member's standing as MCP resources and
 announces a change through the standard's subscriptions; [the standard path](#the-standard-path)
 says what a host wires and what a runner relies on. Each rule names the test that proves it. The
 docstrings of `agents`, `tools`, `turn`, `backend` and `mcp_server` are exact where this file is
@@ -19,10 +19,12 @@ library; the one implementation, `backend.gateway.GatewayBackend`, needs the `ba
 `request` is a `TurnRequest` (`agent_runtime_client.agents`, frozen): `agent`, `turn`, `roles`,
 `tools` (the agent's selected `ToolDeclaration`s), `model`, `max_duration_seconds`,
 `max_tool_calls` (`None` exactly when `tools` is empty) and `picture_size` (`None` for a text
-agent). `AgentDefinition.request(messages, *, model=None)` builds it; `model` overrides the
-file's model for that run, with a model of the agent's kind.
+agent). `AgentDefinition.request(messages, *, model=None, appended_system=None)` builds it;
+`model` overrides the file's model for that run, with a model of the agent's kind, and
+`appended_system` follows the file's prompt in the system text, after a blank line.
 Proved by `tests/test_agents_file.py`: `test_request_carries_the_files_prompt_model_roles_and_tools`,
-`test_request_model_is_the_override_when_given`, `test_request_is_frozen`.
+`test_request_model_is_the_override_when_given`, `test_request_is_frozen`; the appended text by
+`tests/test_voice_loop.py`: `test_a_spoken_line_that_wakes_sends_one_request_with_prompt_protocol_context_and_the_line`.
 
 `person` is a `TurnPerson` (frozen, always a person): `principal` (the verified `(iss, sub)`),
 `role` (the app role) and `groups`, an async callable returning the person's groups. Proved by
@@ -621,3 +623,99 @@ status is logged. An exception the app raises propagates to the front, which ans
 fixed text and logs the class. Proved by `test_a_2xx_gives_the_body_and_a_4xx_gives_a_failed_result_with_the_routes_body`,
 `test_an_unusable_response_gives_one_failed_result_that_repeats_nothing_of_the_body`,
 `test_a_body_exactly_at_the_bound_is_given` and `test_an_exception_the_app_raises_propagates`.
+
+## The voice loop
+
+An app that hears a conversation and speaks in it runs the voice loop in its own process, under
+the `voice` extra:
+
+```python
+from agent_runtime_client.voice.loop import run_voice_loop
+
+await run_voice_loop(
+    agent, backend, person, hearing, voice, wakes=wake_rule, context=context, report=report
+)
+```
+
+- `agent` is the `AgentDefinition`. The system text is its prompt, then the library's protocol
+  text (`voice.reply.PROTOCOL_TEXT`: the line format, plain spoken sentences, `[silent]`), then
+  `context`, the app's pinned part.
+- `backend` is the app's `AgentBackend`, and `person` the one `TurnPerson` the loop runs for,
+  never a speaker: every decision is charged to that person's budget at the gateway.
+- `hearing` is an `AsyncIterator[PlaceEntry]` in increasing `seq`; a new window generation is a
+  new loop.
+- `voice` is the app's `VoiceOut[Audio]`: `render(sentence)` returns the sound and `play(audio)`
+  returns when it has ended. Either raises `VoiceRefused` when the app cannot speak now.
+- `wakes` is the app's `WakeRule(line, *, first_after_answer)`, asked for every line that is not
+  the agent's own. `first_after_answer` is true for the first such line heard after a decision
+  that played at least one sentence ended, while no decision is in flight, and false for every
+  other line, one heard while an answer plays included.
+- `report` receives each `VoiceEvent`: `Woke`, `StayedSilent`, `ReplyUnreadable`,
+  `SentenceStarted(text)`, `SentenceRefused(text)` and `DecisionFailed(kind, code, detail)`.
+
+Proved by `tests/test_voice_loop.py`:
+`test_a_spoken_line_that_wakes_sends_one_request_with_prompt_protocol_context_and_the_line`,
+`test_sentences_play_in_order_and_the_first_starts_while_the_reply_is_still_written`,
+`test_the_first_line_after_an_answer_that_played_is_the_one_marked_first_after_answer` and
+`test_no_line_after_a_decision_that_played_nothing_is_marked_first_after_answer`.
+
+**The conversation.** Every line enters one running conversation, but the agent's own spoken
+line: the loop records what it played itself. A decision sends the pairs decided so far and one
+user message with every line since the last decision, one JSON object per line with `name`,
+`kind`, `own`, `spoken` and `text`, and `missed_before`, the number of `seq` values skipped, after
+a gap. The assistant message is what played, or `[silent]`. The conversation lives in memory
+while the loop runs and is stored nowhere. Proved by
+`test_a_line_that_does_not_wake_sends_nothing_and_leads_the_next_decisions_message`,
+`test_an_own_spoken_line_never_enters_and_an_own_written_line_enters_but_never_wakes`,
+`test_a_gap_in_seq_marks_the_next_line_with_how_many_were_missed` and
+`test_a_silent_reply_speaks_nothing_runs_its_tools_and_is_recorded_as_silent`.
+
+**The order.** At most one decision is in flight and one answer plays. A line that wakes
+meanwhile is held, and once both are done exactly one decision follows. The loop has no cap and
+no rate limit; the person's budget at the gateway bounds it. Proved by
+`test_two_lines_heard_while_deciding_of_which_one_wakes_get_exactly_one_more_decision`,
+`test_lines_heard_while_deciding_that_do_not_wake_start_nothing_and_lead_the_next`,
+`test_a_waking_line_heard_while_an_answer_plays_is_decided_after_it_plays_uncut` and
+`test_two_hundred_waking_lines_each_after_the_last_answer_get_two_hundred_decisions`.
+
+**The reply** is read per round, and a tool call ends a round. Leading whitespace is skipped. A
+round that opens with `[` is held until `]` closes it within 16 characters; the word between,
+trimmed of spaces and folded to ASCII lower case, is the marker. `silent` speaks nothing of the
+round and its tools still run; any other word, no `]` in reach or a round that ends first speaks
+nothing of it and reports `ReplyUnreadable`. Any other round is speech, a `[` inside it included:
+a sentence is released once content follows it, a number and its period read as a German
+ordinal, and the rest when the round ends. Proved by `tests/test_voice_reply.py`:
+`test_a_rounds_opening_marker_decides_whether_any_of_it_is_spoken`,
+`test_a_tool_call_ends_a_round_and_the_next_round_is_read_afresh`,
+`test_a_sentence_is_released_only_once_content_follows_it` and
+`test_an_answer_cut_anywhere_releases_each_sentence_once_whole_and_after_content`, by
+`test_a_tool_rounds_text_plays_and_its_rest_is_released_when_the_round_ends` in
+`tests/test_voice_loop.py` and by `test_text_splits_into_sentences_and_an_ordinal_does_not_end_one`
+in `tests/test_voice_sentences.py`.
+
+**Failures.**
+
+- `VoiceRefused` ends the answer: the turn is closed, the queued sentences are dropped and
+  `SentenceRefused` is reported. Proved by
+  `test_a_refused_render_ends_the_answer_closes_the_turn_and_keeps_what_played`.
+- `TurnStopped` is reported as `DecisionFailed`; the sentences already queued play out and the
+  held rest is dropped. Proved by
+  `test_a_turn_stopped_after_a_sentence_played_plays_out_the_queued_one_and_drops_the_rest`.
+- A decision that played nothing and was not silent leaves its lines undecided, and only a new
+  waking line starts the next decision, so a spent budget never makes the loop retry on its own.
+  Proved by `test_a_decision_that_played_nothing_leaves_its_lines_undecided_until_a_line_wakes`.
+- The turn is read to its end in its own task while the answer plays, so `maxDurationSeconds`
+  bounds the writing, never the playing. Proved by
+  `test_playing_longer_than_the_turns_limit_plays_every_sentence_without_a_limit_failure`.
+- When hearing ends, the loop closes the turn, stops the sound and returns. Any other error of a
+  port or the backend, and a `seq` not above the last, closes the turn, stops the sound and is
+  raised inside an `ExceptionGroup`. On the app's cancel `CancelledError` propagates and nothing
+  more is reported. Proved by
+  `test_when_hearing_ends_the_loop_closes_the_turn_stops_the_sound_and_returns`,
+  `test_a_backend_error_other_than_a_stopped_turn_is_raised`,
+  `test_a_hearing_that_breaks_its_order_or_raises_ends_the_loop_closed_and_silent`,
+  `test_a_voice_that_raises_another_error_closes_the_turn_and_raises_it` and
+  `test_the_hosts_cancel_closes_the_turn_stops_the_sound_and_reports_nothing_more`.
+- A port that never returns holds the answer while hearing goes on; the app bounds its own ports.
+  Proved by
+  `test_a_voice_that_never_returns_still_hears_lines_but_starts_no_decision_until_cancelled`.

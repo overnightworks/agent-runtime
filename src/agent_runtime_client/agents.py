@@ -171,16 +171,22 @@ class AgentDefinition(BaseModel):
         return _agent_model_kind(is_picture=self.picture_size is not None)
 
     def request(
-        self, messages: list[TurnMessage], *, model: GatewayModelName | None = None
+        self,
+        messages: list[TurnMessage],
+        *,
+        model: GatewayModelName | None = None,
+        appended_system: str | None = None,
     ) -> TurnRequest:
         """The request that starts a run of this agent over these messages.
 
         ``model`` overrides the file's model for this run; it must be of the agent's kind
-        (``image/…`` for a picture agent), else ``ValueError``.
+        (``image/…`` for a picture agent), else ``ValueError``. ``appended_system`` follows the
+        file's prompt in the system text, after a blank line.
         """
+        system = self.prompt if appended_system is None else f"{self.prompt}\n\n{appended_system}"
         request = TurnRequest(
             agent=self.name,
-            turn=Turn(system=self.prompt, messages=messages),
+            turn=Turn(system=system, messages=messages),
             roles=self.roles,
             tools=self.tools,
             model=self.model if model is None else model,
