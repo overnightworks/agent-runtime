@@ -363,7 +363,7 @@ def _stopped_with(*pieces: str, reason: str = "stop") -> bytes:
         an_event_stream("[]"),
         an_event_stream({"choices": []}),
         an_event_stream({"choices": "x"}),
-        _stopped_with(""),
+        completion("").body,
         _stopped_with("  \n"),
         an_event_stream(a_chunk(finish_reason="stop")),
         _stopped_with("cut", reason="length"),

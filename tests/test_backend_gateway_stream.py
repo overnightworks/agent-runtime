@@ -67,13 +67,9 @@ def drive(scenario, transport, lookup: Lookup | None = None):
         return runner.run(_turn(backend, request, scenario.person()[0]))
 
 
-def a_stream(body: bytes) -> FakeGateway:
-    return FakeGateway(Reply(headers={"content-type": "text/event-stream"}, body=body))
-
-
 def test_the_pieces_of_a_text_round_come_as_one_event_of_the_joined_text(scenario):
     body = an_event_stream(a_chunk("Hel"), a_chunk("lo ä"), a_chunk("!"), STOPPED)
-    transport = Streamed(tuple(body[at : at + 1] for at in range(len(body))))
+    transport = Streamed((body,))
 
     events, stopped = scenario.outcome(GatewayBackend(scenario.config(), transport=transport))
 
@@ -88,7 +84,7 @@ def test_the_pieces_of_a_text_round_come_as_one_event_of_the_joined_text(scenari
         an_event_stream(a_chunk("a")),
         an_event_stream(a_chunk("a"), "{not json", STOPPED),
         an_event_stream(a_chunk("a"), a_chunk(finish_reason="length")),
-        an_event_stream(STOPPED, done=False),
+        an_event_stream(a_chunk("a"), STOPPED, done=False),
     ],
     ids=[
         "cut-after-a-piece",
@@ -198,13 +194,8 @@ def test_calls_streamed_in_fragments_run_after_the_round_and_are_echoed_whole(sc
             a_chunk(tool_calls=[a_fragment(0, call_id="c0", name="lookup", arguments="{}")]),
             {"error": {"type": "api_error", "code": "500"}},
         ),
-        an_event_stream(
-            a_chunk(tool_calls=[a_fragment(0, call_id="c0", name="lookup", arguments="{}")]),
-            a_chunk(tool_calls=[a_fragment(2, call_id="c2", name="lookup", arguments="{}")]),
-            a_chunk(finish_reason="tool_calls"),
-        ),
     ],
-    ids=["cut-before-done", "error-event", "index-gap"],
+    ids=["cut-before-done", "error-event"],
 )
 def test_a_call_of_a_round_that_is_not_complete_runs_no_handler(scenario, body):
     lookup = Lookup()

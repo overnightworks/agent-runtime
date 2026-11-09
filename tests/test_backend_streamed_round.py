@@ -18,6 +18,7 @@ from agent_runtime_client.turn import MAX_EVENT_BYTES
 from tests.support.gateway_turn_support import a_chunk, a_fragment, an_event_stream
 
 ROUND_LIMIT = 4 * MAX_EVENT_BYTES
+DATA_BOUND = 6 * MAX_EVENT_BYTES + 65_536
 ANSWER_AB = StreamedRound("stop", {"role": "assistant", "content": "ab", "tool_calls": []})
 
 
@@ -254,14 +255,25 @@ def test_a_rounds_text_stays_within_the_event_bound_in_whatever_pieces(text, fit
 
 @pytest.mark.parametrize(("extra", "fits"), [(0, True), (1, False)], ids=["at-the-bound", "over"])
 def test_one_events_joined_data_stays_within_the_data_bound(extra, fits):
-    bound = 6 * MAX_EVENT_BYTES + 65_536
     head = '{"choices": [{"delta": {}, "finish_reason": "stop"}'
     tail = "]}"
-    padding = "\t" * (bound - len(head) - len(tail) - 2 + extra)
+    padding = "\t" * (DATA_BOUND - len(head) - len(tail) - 2 + extra)
     stream = f"data: {head}\ndata: {padding}\ndata: {tail}\n\ndata: [DONE]\n\n".encode()
 
     if fits:
         assert read(stream).finish_reason == "stop"
+    else:
+        with pytest.raises(MalformedRound):
+            read(stream)
+
+
+@pytest.mark.parametrize(("extra", "fits"), [(0, True), (1, False)], ids=["at-the-bound", "over"])
+def test_a_complete_line_stays_within_the_data_bound(extra, fits):
+    comment = ":" + " " * (DATA_BOUND - 1 + extra)
+    stream = (comment + "\n\n" + "".join(_answer_ab()) + "data: [DONE]\n\n").encode()
+
+    if fits:
+        assert read(stream) == ANSWER_AB
     else:
         with pytest.raises(MalformedRound):
             read(stream)

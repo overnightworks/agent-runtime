@@ -132,9 +132,9 @@ malformed value fails loud.
 **Proof strategy.** Behaviour is proven through the real entry points: `GatewayBackend.run`
 against `FakeGateway`'s scripted transport, `load_agent` against files, and the person front
 as an ASGI app driven with real scopes and the SDK's own `Client`. Pure rules (`mcp_wire`, the
-turn vocabulary) are called
-directly. The suite needs no live provider. `quality / verdict` holds the import contracts,
-size and clone ratchets, and coverage over the whole suite.
+turn vocabulary, the streamed-round reader) are called directly. The suite needs no live
+provider. `quality / verdict` holds the import contracts, size and clone ratchets, and coverage
+over the whole suite.
 
 ## Constraints and reasons
 
