@@ -188,28 +188,38 @@ def test_an_agent_without_a_voice_section_is_refused_before_hearing_is_read(tmp_
 
 
 @pytest.mark.parametrize(
-    "first_reply", [A_BUDGET_REFUSAL, completion("[shout] Hallo.")], ids=["failed", "unreadable"]
+    "failing_reply", [A_BUDGET_REFUSAL, completion("[shout] Hallo.")], ids=["failed", "unreadable"]
 )
-def test_lines_a_decision_dropped_stay_dropped_and_the_note_stays_when_it_played_nothing(
-    tmp_path, first_reply
+def test_pairs_a_decision_dropped_stay_dropped_and_the_note_stays_when_it_played_nothing(
+    tmp_path, failing_reply
 ):
-    gateway = FakeGateway(first_reply, completion("Gut."))
+    long_question = " ".join(
+        ["Wie schön ist es, dass wir heute über die Größe der Gärten reden?"] * 4
+    )
+    waking = [long_question, "Und die Bäume?", "Noch eine Frage?", "Und?"]
+    gateway = FakeGateway(completion("Gut."), completion("Gut."), failing_reply, completion("Gut."))
 
     async def hearing(trace):
-        for seq, text in enumerate(QUIET, start=1):
+        for seq, text in enumerate(waking[:2], start=1):
+            yield a_line(seq, text)
+            await trace.until(lambda: len(trace.played) == seq)
+        for seq, text in enumerate(QUIET[:4], start=3):
             yield a_line(seq, text, name="Ben")
-        yield a_line(len(QUIET) + 1, "Frage?")
+        yield a_line(7, waking[2])
         await trace.settled()
-        yield a_line(len(QUIET) + 2, "Noch eine Frage?")
+        yield a_line(8, waking[3])
         await trace.settled()
 
-    place = VoicePlace(tmp_path, window_bytes=600)
-    assert place.run(hearing, gateway, waking={"Frage?", "Noch eine Frage?"}) == RETURNED
+    window = 880
+    place = VoicePlace(tmp_path, window_bytes=window)
+    assert place.run(hearing, gateway, waking=set(waking)) == RETURNED
 
-    first, second = gateway.requests
-    kept = heard_texts(first)
-    assert 0 < len(kept) < len(QUIET) + 1
-    assert opens_with_the_note(second)
-    assert set(heard_texts(second)[:-1]) <= set(kept)
-    assert heard_texts(second)[-1] == "Noch eine Frage?"
-    assert place.trace.played == ["Gut."]
+    _first, _second, dropping, after = gateway.requests
+    assert opens_with_the_note(dropping)
+    assert heard_texts(dropping)[0] == waking[1]
+    # Beyond three quarters, a window that got the dropped pair back would drop two pairs now.
+    assert sent_bytes(after) * 4 > window * 3
+    assert messages_of(after)[:-1] == messages_of(dropping)[:-1]
+    assert messages_of(after)[-1]["content"].startswith(messages_of(dropping)[-1]["content"] + "\n")
+    assert heard_texts(after)[-1] == waking[3]
+    assert place.trace.played == ["Gut."] * 3
