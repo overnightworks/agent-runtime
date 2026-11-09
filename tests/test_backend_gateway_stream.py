@@ -217,11 +217,12 @@ def test_a_call_of_a_round_that_is_not_complete_runs_no_handler(scenario, body):
 
 
 def test_a_round_past_the_request_bound_runs_no_handler(scenario):
+    first = a_chunk(tool_calls=[a_fragment(0, call_id="c0", name="lookup", arguments='{"q":"')])
     pieces = [
         a_chunk(tool_calls=[a_fragment(0, arguments="x" * MAX_EVENT_BYTES)]) for _ in range(5)
     ]
-    first = a_chunk(tool_calls=[a_fragment(0, call_id="c0", name="lookup", arguments="")])
-    body = an_event_stream(first, *pieces, a_chunk(finish_reason="tool_calls"))
+    last = a_chunk(tool_calls=[a_fragment(0, arguments='"}')])
+    body = an_event_stream(first, *pieces, last, a_chunk(finish_reason="tool_calls"))
     lookup = Lookup()
 
     events, stopped = drive(scenario, Streamed((body,)), lookup)
