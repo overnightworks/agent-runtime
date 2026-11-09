@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -379,17 +380,24 @@ def test_a_refused_content_carries_exactly_its_tools_refusal_codes(
     assert [json.loads(content.model_dump_json()) for content in contents] == wires
 
 
-@pytest.mark.parametrize(("record", "codes_enum", "codes"), REFUSALS)
+ONE_CODE_EACH = [
+    pytest.param(record, codes[0], id=refusal.id)
+    for refusal in REFUSALS
+    for record, _codes_enum, codes in [refusal.values]
+]
+
+
+@pytest.mark.parametrize(("record", "code"), ONE_CODE_EACH)
 @pytest.mark.parametrize(
-    "wire_text",
+    "malformed",
     [
-        json.dumps({"refused": "too_fast"}),
-        json.dumps({"refused": "own_account_only"}),
-        json.dumps({"refused": "BUSY"}),
-        json.dumps({"refused": "busy", "extra": 1}),
-        json.dumps({}),
-        json.dumps("busy"),
-        "busy",
+        lambda _code: json.dumps({"refused": "too_fast"}),
+        lambda _code: json.dumps({"refused": "own_account_only"}),
+        lambda code: json.dumps({"refused": code.upper()}),
+        lambda code: json.dumps({"refused": code, "extra": 1}),
+        lambda _code: json.dumps({}),
+        lambda code: json.dumps(code),
+        lambda code: code,
     ],
     ids=[
         "other-code",
@@ -402,7 +410,7 @@ def test_a_refused_content_carries_exactly_its_tools_refusal_codes(
     ],
 )
 def test_a_malformed_refused_content_is_refused(
-    record: Any, codes_enum: Any, codes: tuple[str, ...], wire_text: str
+    record: Any, code: str, malformed: Callable[[str], str]
 ) -> None:
     with pytest.raises(ValidationError):
-        record.model_validate_json(wire_text)
+        record.model_validate_json(malformed(code))
