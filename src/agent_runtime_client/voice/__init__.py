@@ -44,10 +44,10 @@ class VoiceOut[Audio](Protocol):
     """
 
     async def render(self, sentence: str) -> Audio:
-        """The sentence's sound; it may queue the sound where the app plays in order."""
+        """The sentence's sound, neither played nor queued: it is heard only through ``play``."""
 
     async def play(self, audio: Audio) -> None:
-        """Return when the sound has ended; cancelling stops it at once."""
+        """Return when the sound has ended; cancelling or refusing the play stops it at once."""
 
 
 class WakeRule(Protocol):

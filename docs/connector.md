@@ -662,11 +662,13 @@ await run_voice_loop(
   never a speaker: every decision is charged to that person's budget at the gateway.
 - `hearing` is an `AsyncIterator[PlaceEntry]` in increasing `seq`; a new window generation is a
   new loop.
-- `voice` is the app's `VoiceOut[Audio]`: `render(sentence)` returns the sound and `play(audio)`
-  returns when it has ended. Either raises `VoiceRefused` when the app cannot speak now. The
-  loop plays the sentences in order: `play` for a sentence starts only after it returned for the
-  one before. While one sentence plays, the loop renders the next, never more than one ahead, so
-  `render` may run while `play` does and no render pauses the answer between two sentences.
+- `voice` is the app's `VoiceOut[Audio]`: `render(sentence)` returns the sound and neither plays
+  nor queues it, and `play(audio)` returns when it has ended. A sound is heard only through its
+  own `play`, and cancelling or refusing a `play` stops that sound at once. Either raises
+  `VoiceRefused` when the app cannot speak now. The loop plays the sentences in order: `play` for
+  a sentence starts only after it returned for the one before. While one sentence plays, the loop
+  renders the next, never more than one ahead, so `render` may run while `play` does and no
+  render pauses the answer between two sentences.
 - `wakes` is the app's `WakeRule(line, *, first_after_answer)`, asked for every line that is
   neither the agent's own nor an echo. `first_after_answer` is true for the first such line heard
   after a decision that played at least one sentence ended, while no decision is in flight, and
