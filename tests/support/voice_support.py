@@ -315,17 +315,20 @@ class VoicePlace:
         transport: httpx2.AsyncBaseTransport,
         *,
         waking: Collection[str] | None = None,
+        wakes: WakeRule | None = None,
         voice: RecordingVoice | None = None,
         tools: Sequence[HandTool] = (),
     ) -> Ending:
         """Run the loop to its end in virtual time; ``waking`` names the texts that wake.
 
-        With no ``waking``, every line wakes.
+        With no ``waking``, every line wakes; a ``wakes`` rule given decides instead. Either way
+        the trace records every line the loop asks.
         """
         config = a_gateway_config(self.directory)
         backend = GatewayBackend(config, tools=tools, transport=transport)
+        rule = self._wake_rule(waking, wakes)
         with asyncio.Runner(loop_factory=VirtualTimeLoop) as runner:
-            return runner.run(self._ended(hearing, backend, waking, voice, tools))
+            return runner.run(self._ended(hearing, backend, rule, voice, tools))
 
     def run_over_a_socket(self, hearing: Hearing, parts: Sequence[StreamPart]) -> Ending:
         """Run the loop on the wall clock against a loopback gateway that streams ``parts``."""
@@ -340,7 +343,9 @@ class VoicePlace:
             backend = GatewayBackend(config.model_copy(update={"gateway": gateway}))
             async with server:
                 try:
-                    return await self._ended(hearing, backend, None, None, ())
+                    return await self._ended(
+                        hearing, backend, self._wake_rule(None, None), None, ()
+                    )
                 finally:
                     server.close_clients()
 
@@ -350,7 +355,7 @@ class VoicePlace:
         self,
         hearing: Hearing,
         backend: GatewayBackend,
-        waking: Collection[str] | None,
+        wakes: WakeRule,
         voice: RecordingVoice | None,
         tools: Sequence[HandTool],
     ) -> Ending:
@@ -361,7 +366,7 @@ class VoicePlace:
                 a_person(),
                 hearing(self.trace),
                 RecordingVoice(self.trace) if voice is None else voice,
-                wakes=self._wake_rule(waking),
+                wakes=wakes,
                 context=CONTEXT,
                 report=self.trace.record,
             )
@@ -375,9 +380,11 @@ class VoicePlace:
             return Ending(cancelled=True)
         return Ending(raised=loop.exception())
 
-    def _wake_rule(self, waking: Collection[str] | None) -> WakeRule:
+    def _wake_rule(self, waking: Collection[str] | None, rule: WakeRule | None) -> WakeRule:
         def wakes(line: PlaceEntry, *, first_after_answer: bool) -> bool:
             self.trace.record(("asked", line.text, first_after_answer))
+            if rule is not None:
+                return rule(line, first_after_answer=first_after_answer)
             return waking is None or line.text in waking
 
         return wakes

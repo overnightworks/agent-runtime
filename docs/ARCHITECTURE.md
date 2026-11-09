@@ -229,9 +229,10 @@ over the whole suite.
 - An app that stops pulling without closing holds the response open: the deadline is checked at
   its next pull.
 - The echo rule is a stopgap that judges text alone: it misses an echo mixed with more words of a
-  person, and it drops what a person said when at least half of its long words are the latest
-  answer's. An app counts its drops through `EchoDropped`. The rule goes, with `EchoDropped` and its
-  lines in `connector.md`, once a measurement of the echo in a room or a hearing that stops while
+  person, and it drops what a person said when at least half of its words longer than two
+  letters, counted without the punctuation at their edges, are the latest answer's. An app counts
+  its drops through `EchoDropped`. The rule goes, with `EchoDropped` and its lines in
+  `connector.md`, once a measurement of the echo in a room or a hearing that stops while
   the agent speaks, such as a mode of the speech service's browser package, makes it unneeded.
 - LiteLLM sends a finish reason of its own when a provider's stream ends cleanly without one, so
   such a cut round reads as complete. Measured through LiteLLM, a cut tool round lost its call, and

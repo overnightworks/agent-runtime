@@ -694,10 +694,11 @@ line wakes by the same rule, and a line that does not wake still enters the conv
 
 **The echo rule.** The agent's own voice, heard back through a person's microphone, arrives as
 that person's spoken line; the loop drops it so the agent does not answer itself. A spoken line
-that is not the agent's own is an echo when it has words longer than two characters, split at
-whitespace, and at least half of them are among every word of the agent's latest answer, short
-ones included, compared in lower case without the punctuation at their edges; a word that is
-only punctuation counts on neither side. The latest answer is the most recent decision that
+that is not the agent's own is an echo when it has counted words and at least half of them are
+counted words of the agent's latest answer. A counted word is split at whitespace, stripped of
+the punctuation at its edges and still longer than two characters, and is compared in lower
+case; a short reply such as "Ja, ok." therefore always enters, and a word that is only
+punctuation counts on neither side. The latest answer is the most recent decision that
 played at least one sentence; its words are those of every sentence that started playing, the
 one playing now included, never a queued one or a refused one. An echo does not enter the
 conversation, is not asked of `wakes`, leaves `first_after_answer` to the next line and is
@@ -705,16 +706,17 @@ reported as `EchoDropped(text)`. It keeps its place in `seq` order like the agen
 line: an echo out of order ends the loop like any line, and it never counts in the next line's
 `missed_before`. A written line is never an echo. The rule is a text-level guard, so it misses
 an echo mixed with more words of a person, and it drops what a person said when at least half
-of its long words are words of the latest answer; `EchoDropped` lets an app count the drops.
+of its counted words are the latest answer's; `EchoDropped` lets an app count the drops.
 Proved by `tests/test_voice_echo.py`:
 `test_a_spoken_line_is_an_echo_when_half_its_long_words_are_words_of_the_answer`,
-`test_case_and_the_punctuation_at_word_edges_do_not_hide_an_echo`,
+`test_a_word_counts_and_compares_without_the_punctuation_at_its_edges`,
 `test_only_a_spoken_line_that_is_not_the_agents_own_can_be_an_echo`,
 `test_a_spoken_line_repeating_the_answer_is_dropped_never_asked_and_never_sent`,
 `test_an_echo_heard_while_the_next_decision_is_read_repeats_the_answer_before_it`,
 `test_a_line_repeating_only_an_older_answer_enters_while_the_latest_one_plays`,
 `test_a_line_repeating_only_an_older_answer_enters_while_the_next_decision_is_read`,
 `test_a_written_line_with_the_answers_words_enters_and_is_asked`,
+`test_a_short_spoken_reply_to_the_agents_question_wakes_it_as_the_first_line_after`,
 `test_a_sentence_still_queued_does_not_count_while_the_one_before_it_plays`,
 `test_a_sentence_still_rendering_does_not_count_and_the_one_played_before_it_does`,
 `test_a_refused_sentence_does_not_count_and_the_one_played_before_it_does`,

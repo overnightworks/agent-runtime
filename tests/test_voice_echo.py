@@ -11,6 +11,7 @@ from agent_runtime_client.voice import (
     Woke,
 )
 from agent_runtime_client.voice.echo import is_echo
+from agent_runtime_client.voice.wake import addressed_or_asked
 from tests.support import voice_support
 from tests.support.voice_lines import a_line
 from tests.support.voice_support import (
@@ -56,10 +57,26 @@ COUNTED_WORDS = [
     pytest.param(
         "Folie\nzeigt\tUmsatz", ["Die Folie zeigt den Umsatz"], True, id="any whitespace splits"
     ),
-    pytest.param("Ja, genau", ["Ja, gerne"], True, id="a short word with its comma is long"),
     pytest.param("geht's", ["gehts"], False, id="punctuation inside a word stays"),
     pytest.param(
         "---", ["Warte ... gleich."], False, id="a word that is only punctuation counts nowhere"
+    ),
+    pytest.param(
+        "--- Folie Kaffee",
+        ["Folie Kaffee"],
+        True,
+        id="a word that is only punctuation does not count in the line",
+    ),
+    pytest.param(
+        "Ja, ok.",
+        ["Ist das so ok für dich?"],
+        False,
+        id="a short reply to the answer's question",
+    ),
+    pytest.param("So, ok.", ["Ist das so ok für dich?"], False, id="another short reply"),
+    pytest.param("Ja, ja.", ["Da hast du ja recht."], False, id="a short word said twice"),
+    pytest.param(
+        "Ja, ok.", ["Ist das ok?"], False, id="a short word with its punctuation is still short"
     ),
     pytest.param(
         "Genau, die Folie zeigt den Umsatz",
@@ -75,12 +92,17 @@ COUNTED_WORDS = [
     ),
 ]
 
-PUNCTUATION_AND_CASE = [
+# Cases that words split at whitespace alone, punctuation kept, would decide the other way.
+BARE_WORDS = [
     pytest.param("Danke schön", ["Danke, schön."], True, id="a comma and a period"),
     pytest.param("Umsatz? Kosten!", ["Der Umsatz, die Kosten."], True, id="other punctuation"),
     pytest.param("„Gern geschehen…“", ["Gern geschehen."], True, id="quotes and an ellipsis"),
     pytest.param("DANKE SCHÖN!", ["Danke, schön."], True, id="case and punctuation together"),
-    pytest.param("Ja, ok.", ["Ja ok"], True, id="the answer's short words count"),
+    pytest.param("Gern.", ["gern"], True, id="a period after a long word"),
+    pytest.param(
+        "Ja, genau", ["Ja, gerne"], False, id="a short word carrying the same comma counts nowhere"
+    ),
+    pytest.param("--- Folie", ["--- Kaffee"], False, id="the same bare punctuation counts nowhere"),
 ]
 
 
@@ -91,8 +113,8 @@ def test_a_spoken_line_is_an_echo_when_half_its_long_words_are_words_of_the_answ
     assert is_echo(a_line(1, text), answer) is expected
 
 
-@pytest.mark.parametrize(("text", "answer", "expected"), PUNCTUATION_AND_CASE)
-def test_case_and_the_punctuation_at_word_edges_do_not_hide_an_echo(text, answer, expected):
+@pytest.mark.parametrize(("text", "answer", "expected"), BARE_WORDS)
+def test_a_word_counts_and_compares_without_the_punctuation_at_its_edges(text, answer, expected):
     assert is_echo(a_line(1, text), answer) is expected
 
 
@@ -271,6 +293,25 @@ def test_a_written_line_with_the_answers_words_enters_and_is_asked(place):
     assert place.trace.events.count(EchoDropped(FIRST_HEARD_BACK)) == 1
     assert place.trace.asked == [(QUESTION, False), (FIRST_HEARD_BACK, True)]
     assert lines_sent(gateway.requests[-1]) == [QUESTION, FIRST_HEARD_BACK]
+
+
+def test_a_short_spoken_reply_to_the_agents_question_wakes_it_as_the_first_line_after(place):
+    asking = "Ist das so ok für dich?"
+    gateway = FakeGateway(completion(asking), completion("Gut."))
+
+    async def hearing(trace):
+        yield a_line(1, QUESTION)
+        await trace.settled()
+        yield a_line(2, "Ja, ok.")
+        await trace.settled()
+
+    assert (
+        place.run(hearing, gateway, wakes=addressed_or_asked(frozenset({"Listener"}))) == RETURNED
+    )
+
+    assert EchoDropped("Ja, ok.") not in place.trace.events
+    assert place.trace.asked == [(QUESTION, False), ("Ja, ok.", True)]
+    assert lines_sent(gateway.requests[-1]) == [QUESTION, "Ja, ok."]
 
 
 def test_a_sentence_still_queued_does_not_count_while_the_one_before_it_plays(place):
