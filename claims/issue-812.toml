@@ -1,0 +1,8 @@
+claim_id = "12525e8dafee47298e0a33a34c8698b1"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "76ceb9ceb9aa86982b726536a1ded4b833a25d62"
+branch = "claude/issue-812-place-window-hears-speech"
+scope = ["docs/connector.md", "src/agent_runtime_client/member.py", "tests/test_mcp_server_resources.py", "tests/test_member.py"]
+opened_commit = "c4ab4cb3bbed0afe5a9002289b7b653fecea6876"
+whole_reason = "The records, their tests, the served-window test that proves the wire carries them, and the connector that states them are one contract."
