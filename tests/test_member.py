@@ -412,5 +412,6 @@ ONE_CODE_EACH = [
 def test_a_malformed_refused_content_is_refused(
     record: Any, code: str, malformed: Callable[[str], str]
 ) -> None:
+    wire = malformed(code)
     with pytest.raises(ValidationError):
-        record.model_validate_json(malformed(code))
+        record.model_validate_json(wire)
