@@ -60,13 +60,29 @@ class Lookup:
         return HandTool(declaration, handler)
 
 
-def drive(scenario, transport, lookup: Lookup | None = None):
+def drive(scenario, transport, lookup: Lookup | None = None, pull=_turn):
     lookup = lookup or Lookup()
     tool = lookup.tool()
     request = a_request(tools=(tool.declaration,), max_tool_calls=3)
     backend = GatewayBackend(scenario.config(), tools=[tool], transport=transport)
     with asyncio.Runner(loop_factory=VirtualTimeLoop) as runner:
-        return runner.run(_turn(backend, request, scenario.person()[0]))
+        return runner.run(pull(backend, request, scenario.person()[0]))
+
+
+async def _turn_pulled_per_task(backend, request, person):
+    """The turn's events and its stop, each event pulled from a task of its own."""
+
+    async def next_event(stream):
+        return await anext(stream, None)
+
+    events = []
+    try:
+        async with contextlib.aclosing(backend.run(request, person)) as stream:
+            while (event := await asyncio.create_task(next_event(stream))) is not None:
+                events.append(event)
+    except TurnStopped as stopped:
+        return events, stopped
+    return events, None
 
 
 def test_each_text_piece_comes_as_its_own_event_in_order_then_the_joined_answer(scenario):
@@ -145,10 +161,13 @@ def test_a_round_that_streams_text_then_fails_leaves_the_text_shown_and_runs_not
     assert transport.closed.is_set()
 
 
-def test_a_gateway_that_stalls_after_a_piece_ends_the_turn_at_the_deadline(scenario):
+@pytest.mark.parametrize(
+    "pull", [_turn, _turn_pulled_per_task], ids=["one-task", "a-task-per-event"]
+)
+def test_a_gateway_that_stalls_after_a_piece_ends_the_turn_at_the_deadline(scenario, pull):
     transport = Streamed((an_event_stream(a_chunk("a"), done=False),), hangs=True)
 
-    events, stopped = drive(scenario, transport)
+    events, stopped = drive(scenario, transport, pull=pull)
 
     assert (events, ending(stopped)) == ([AssistantTextEvent(text="a")], LIMIT_EXCEEDED)
     assert transport.closed.is_set()
@@ -174,7 +193,7 @@ def test_an_app_that_pulls_after_the_deadline_gets_limit_exceeded_and_nothing_mo
         try:
             async with contextlib.aclosing(backend.run(request, scenario.person()[0])) as stream:
                 events.append(await anext(stream))
-                asyncio.get_running_loop().skew_seconds += request.max_duration_seconds
+                await asyncio.sleep(request.max_duration_seconds)
                 events.append(await anext(stream))
         except TurnStopped as stopped:
             return events, ending(stopped)
