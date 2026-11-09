@@ -9,7 +9,6 @@ import pytest
 from agent_runtime_client.backend import TurnStopKind
 from agent_runtime_client.backend.fake_gateway import (
     FakeGateway,
-    Reply,
     completion,
     tool_call,
     tool_round,
@@ -29,19 +28,18 @@ from agent_runtime_client.voice import (
 from agent_runtime_client.voice.reply import PROTOCOL_TEXT
 from tests.support import voice_support
 from tests.support.gateway_turn_support import FailingTransport
+from tests.support.voice_lines import STREAMED_ANSWERS, a_line, random_pieces
 from tests.support.voice_support import (
+    A_GATEWAY_REFUSAL,
     CONTEXT,
     PROMPT,
     RETURNED,
-    STREAMED_ANSWERS,
     PacedGateway,
     RecordingVoice,
-    a_line,
     finish,
     hang,
     messages_of,
     piece,
-    random_pieces,
     rows_of,
     written_piece_by_piece,
 )
@@ -356,9 +354,6 @@ def test_the_first_line_after_an_answer_that_played_is_the_one_marked_first_afte
     ]
 
 
-A_BUDGET_REFUSAL = Reply(status=400, body=b'{"error": {"type": "budget_exceeded"}}')
-
-
 @pytest.mark.parametrize(
     ("first_reply", "voice_raises", "signature"),
     [
@@ -366,7 +361,7 @@ A_BUDGET_REFUSAL = Reply(status=400, body=b'{"error": {"type": "budget_exceeded"
         (completion("[shout] Hallo."), {}, ReplyUnreadable()),
         (completion("Eins. Zwei."), {("play", "Eins."): VoiceRefused()}, SentenceRefused("Eins.")),
         (
-            A_BUDGET_REFUSAL,
+            A_GATEWAY_REFUSAL,
             {},
             DecisionFailed(
                 TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE, GatewayDetail.GATEWAY_REFUSED
@@ -407,9 +402,9 @@ A_SILENT_ROUND = tool_round(tool_call("call-1", "look_up", {}), content="[silent
             {("play", "Eins."): VoiceRefused()},
             [Woke(), SentenceStarted("Eins."), SentenceRefused("Eins.")],
         ),
-        ((A_BUDGET_REFUSAL,), {}, [Woke(), A_REFUSED_TURN]),
+        ((A_GATEWAY_REFUSAL,), {}, [Woke(), A_REFUSED_TURN]),
         (
-            (A_SILENT_ROUND, A_BUDGET_REFUSAL),
+            (A_SILENT_ROUND, A_GATEWAY_REFUSAL),
             {},
             [Woke(), StayedSilent(), A_REFUSED_TURN],
         ),

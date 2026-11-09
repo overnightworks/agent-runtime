@@ -46,7 +46,9 @@ async def run_voice_loop[Audio](
     not the agent's own and that ``wakes`` accepts starts a decision; at most one is in flight
     and one answer plays, and a line that wakes meanwhile gets exactly one decision after it,
     over every line since the last one. The system text is the agent's prompt, the protocol
-    text and ``context``.
+    text and ``context``. A decision sends at most the agent's voice window of the conversation;
+    only the newest line goes beyond it, alone and behind the window note once anything went. An
+    agent without a voice section raises ``ValueError`` before ``hearing`` is read.
 
     Each decision's turn is read to its end in its own task while its sentences play. A
     ``VoiceRefused`` ends the answer: the turn is closed and the queued sentences dropped. A
@@ -59,8 +61,13 @@ async def run_voice_loop[Audio](
     sound and is raised inside an ``ExceptionGroup``. On the host's cancel nothing more is
     reported. A port that never returns holds the answer while hearing goes on.
     """
+    if agent.voice_window_bytes is None:
+        raise ValueError(f"agent {agent.name}: the voice loop needs a voice section")
+    conversation = Conversation(agent.voice_window_bytes)
     async with asyncio.TaskGroup() as group:
-        loop = _VoiceLoop(agent, backend, person, voice, wakes, context, report, group)
+        loop = _VoiceLoop(
+            agent, backend, person, conversation, voice, wakes, context, report, group
+        )
         answering = group.create_task(loop.answer_when_woken())
         async for line in hearing:
             loop.hear(line)
@@ -89,6 +96,7 @@ class _VoiceLoop[Audio]:
         agent: AgentDefinition,
         backend: AgentBackend,
         person: TurnPerson,
+        conversation: Conversation,
         voice: VoiceOut[Audio],
         wakes: WakeRule,
         context: str,
@@ -103,7 +111,7 @@ class _VoiceLoop[Audio]:
         self._report = report
         self._group = group
         self._appended_system = "\n\n".join(part for part in (PROTOCOL_TEXT, context) if part)
-        self._conversation = Conversation()
+        self._conversation = conversation
         self._woken = asyncio.Event()
         self._first_after_answer = False
 

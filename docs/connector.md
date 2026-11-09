@@ -76,9 +76,9 @@ scripted transport passed as `transport=`.
 
 An app declares its agents as Claude Code subagent files, `src/<pkg>/agents/<name>.md`, that
 `agent_runtime_client.agents.load_agent` reads into an `AgentDefinition`: YAML front matter
-(`name`, `description`, `tools`, `model`, `maxDurationSeconds`, `maxToolCalls`, `picture`, plus
-the extension `appRoles`, exactly `[admin]` or `[admin, user]`) and the Markdown body as the
-prompt.
+(`name`, `description`, `tools`, `model`, `maxDurationSeconds`, `maxToolCalls`, `picture`,
+`voice`, plus the extension `appRoles`, exactly `[admin]` or `[admin, user]`) and the Markdown
+body as the prompt.
 
 - `model` is a `text/<model>` name for a text agent (lower-case letters, digits, `.` and `-`)
   and `maxDurationSeconds` a positive integer; both are required. Proved by
@@ -91,6 +91,13 @@ prompt.
   makes a picture agent: its `model` must be an `image/<model>` name, and it selects no `tools`
   and carries no `maxToolCalls`. Proved by
   `test_a_picture_file_that_does_not_fit_a_picture_agent_is_refused_and_named`.
+- `voice: {windowBytes: <positive integer>}` (nothing else in the mapping) lets the agent run
+  the voice loop and bounds what each of its decisions sends (see *The voice loop*);
+  `AgentDefinition.voice_window_bytes` carries it, and a picture agent carries none, neither in
+  its file nor in an `AgentDefinition` built by hand. Proved by
+  `test_a_voice_agent_carries_its_window_and_any_other_agent_none`,
+  `test_a_voice_section_that_is_not_one_positive_window_is_refused_and_named`, the picture
+  test above and `test_a_definition_that_breaks_a_file_rule_is_refused_where_it_is_built`.
 - A tool the file names must be declared, once. Proved by `test_undeclared_tool_is_refused_and_named`
   and `test_duplicate_tool_in_the_file_is_refused`.
 - The file is read strictly: an unknown or duplicate key, malformed front matter, an unquoted
@@ -647,9 +654,10 @@ await run_voice_loop(
 )
 ```
 
-- `agent` is the `AgentDefinition`. The system text is its prompt, then the library's protocol
-  text (`voice.reply.PROTOCOL_TEXT`: the line format, plain spoken sentences, `[silent]`), then
-  `context`, the app's pinned part.
+- `agent` is the `AgentDefinition`, with a `voice` section; without one, `run_voice_loop` raises
+  `ValueError` before it reads `hearing`. The system text is its prompt, then the library's
+  protocol text (`voice.reply.PROTOCOL_TEXT`: the line format, the window note, plain spoken
+  sentences, `[silent]`), then `context`, the app's pinned part.
 - `backend` is the app's `AgentBackend`, and `person` the one `TurnPerson` the loop runs for,
   never a speaker: every decision is charged to that person's budget at the gateway.
 - `hearing` is an `AsyncIterator[PlaceEntry]` in increasing `seq`; a new window generation is a
@@ -667,7 +675,9 @@ Proved by `tests/test_voice_loop.py`:
 `test_a_spoken_line_that_wakes_sends_one_request_with_prompt_protocol_context_and_the_line`,
 `test_sentences_play_in_order_and_the_first_starts_while_the_reply_is_still_written`,
 `test_the_first_line_after_an_answer_that_played_is_the_one_marked_first_after_answer` and
-`test_no_line_after_a_decision_that_played_nothing_is_marked_first_after_answer`.
+`test_no_line_after_a_decision_that_played_nothing_is_marked_first_after_answer`; the missing
+`voice` section by `test_an_agent_without_a_voice_section_is_refused_before_hearing_is_read` in
+`tests/test_voice_window.py`.
 
 **The standard wake rule.** `agent_runtime_client.voice.wake.addressed_or_asked(names)` returns
 a `WakeRule`, a cheap local check of which lines cost a decision. It wakes on a line that names
@@ -682,15 +692,44 @@ line wakes by the same rule, and a line that does not wake still enters the conv
 `test_in_the_loop_a_named_asked_or_first_line_after_a_played_answer_wakes_and_all_are_heard`.
 
 **The conversation.** Every line enters one running conversation, but the agent's own spoken
-line: the loop records what it played itself. A decision sends the pairs decided so far and one
-user message with every line since the last decision, one JSON object per line with `name`,
-`kind`, `own`, `spoken` and `text`, and `missed_before`, the number of `seq` values skipped, after
-a gap. The assistant message is what played, or `[silent]`. The conversation lives in memory
-while the loop runs and is stored nowhere. Proved by
+line: the loop records what it played itself. Within the window below, a decision sends the
+pairs decided so far and one user message with every line since the last decision, one JSON
+object per line with `name`, `kind`, `own`, `spoken` and `text`, and `missed_before`, the number
+of `seq` values skipped, after a gap. The assistant message is what played, or `[silent]`. The
+conversation lives in memory while the loop runs and is stored nowhere. Proved by
 `test_a_line_that_does_not_wake_sends_nothing_and_leads_the_next_decisions_message`,
 `test_an_own_spoken_line_never_enters_and_an_own_written_line_enters_but_never_wakes`,
 `test_a_gap_in_seq_marks_the_next_line_with_how_many_were_missed` and
 `test_a_silent_reply_speaks_nothing_runs_its_tools_and_is_recorded_as_silent`.
+
+**The window.** Each decision sends only a window of the conversation, so a call does not cost
+more the longer a talk runs. Between drops the messages only grow, so a request's prefix changes
+only at a drop. Dropping decided pairs frees a quarter of the window, so a talk whose decisions
+are recorded drops once per quarter it grows, never once per line. Undecided lines that alone
+exceed the window lose only what they must, down to the window, because freeing more would drop
+more lines the agent never saw; so while decisions give their lines back (a failed turn, an
+unreadable reply, a refusal before anything played), each of them drops again and rewrites the
+prompt. The bound limits the bytes sent, never whether the agent answers, and what a decision
+dropped stays dropped, even when its lines stay undecided.
+
+| Bound | Value | Over it |
+| --- | --- | --- |
+| One decision's messages | the agent file's `windowBytes`, in UTF-8 bytes of the messages' texts, because the library cannot count a provider's tokens; the system text does not count and never goes | the oldest whole decided pairs go until a quarter of the window is free; then, while the undecided lines alone exceed the window, the oldest of them go down to it; the newest line always stays, even when it alone exceeds the window. From the first drop on, `voice.conversation.WINDOW_NOTE` opens the first user message |
+
+Every line enters the conversation, and a decided pair leaves the window only after it was sent.
+The oldest undecided lines a drop takes are the one exception: they may never reach any request, and
+only `WINDOW_NOTE` tells the agent that earlier parts are no longer shown.
+
+Proved by `tests/test_voice_window.py`:
+`test_a_talk_within_the_window_drops_nothing_and_each_request_extends_the_last`,
+`test_a_request_beyond_the_window_drops_the_oldest_whole_pairs_until_a_quarter_is_free`,
+`test_a_long_talk_drops_once_per_quarter_of_the_window_it_grows_never_once_per_line`,
+`test_lines_beyond_the_window_on_their_own_lose_their_oldest_and_keep_the_newest`,
+`test_a_line_larger_than_the_window_still_goes_whole_and_the_agent_answers` and
+`test_pairs_a_decision_dropped_stay_dropped_and_the_note_stays_when_it_played_nothing`; the
+note's sentence in the protocol text by
+`test_the_protocol_text_names_the_note_that_opens_a_window_with_earlier_parts_dropped` in
+`tests/test_voice_reply.py`.
 
 **The order.** At most one decision is in flight and one answer plays. A line that wakes
 meanwhile is held, and once both are done exactly one decision follows. The loop has no cap and

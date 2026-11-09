@@ -20,7 +20,7 @@ from agent_runtime_client.voice.reply import (
     SentenceRelease,
 )
 from agent_runtime_client.voice.sentences import split_sentences
-from tests.support.voice_support import STREAMED_ANSWERS, a_line, random_pieces
+from tests.support.voice_lines import STREAMED_ANSWERS, a_line, random_pieces
 
 SILENT = (StayedSilent(),)
 UNREADABLE = (ReplyUnreadable(),)
@@ -107,7 +107,7 @@ def test_the_protocol_text_names_the_marker_the_reader_takes_as_silence():
 
 
 def test_the_protocol_text_names_every_key_a_written_line_carries():
-    conversation = Conversation()
+    conversation = Conversation(window_bytes=4096)
     conversation.hear(a_line(1, "Eins."))
     conversation.hear(a_line(3, "Drei."))
 
@@ -115,6 +115,18 @@ def test_the_protocol_text_names_every_key_a_written_line_carries():
 
     keys = {key for line in written for key in json.loads(line)}
     assert {key for key in keys if f'"{key}"' not in PROTOCOL_TEXT} == set()
+
+
+def test_the_protocol_text_names_the_note_that_opens_a_window_with_earlier_parts_dropped():
+    conversation = Conversation(window_bytes=1)
+    conversation.hear(a_line(1, "Eins."))
+    conversation.open_decision()
+    conversation.close_decision("Gut.")
+    conversation.hear(a_line(2, "Zwei."))
+
+    opening = conversation.open_decision()[0].text.splitlines()[0]
+
+    assert opening in PROTOCOL_TEXT
 
 
 @pytest.mark.parametrize(

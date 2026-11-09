@@ -1,8 +1,9 @@
-"""What the voice loop's tests share: lines, a trace, a recording voice, a paced gateway and a run.
+"""What the voice loop's tests share: a trace, a recording voice, a paced gateway and a run.
 
 Every run drives ``run_voice_loop`` with the real ``GatewayBackend`` over a scripted transport.
 The trace holds, in order, what the loop reported, what it called on the voice, what it asked
-the wake rule and what the paced gateway saw, so a test waits on and asserts outcomes only.
+the wake rule and what the paced gateway saw, so a test waits on and asserts outcomes only. The
+lines and answers live in ``voice_lines``, which every test imports directly.
 """
 
 from __future__ import annotations
@@ -10,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import functools
 import json
-import random
 import re
 from collections.abc import AsyncIterator, Awaitable, Callable, Collection, Sequence
 from dataclasses import dataclass, field
@@ -21,6 +21,7 @@ import httpx2
 import pytest
 
 from agent_runtime_client.agents import AgentDefinition
+from agent_runtime_client.backend.fake_gateway import Reply
 from agent_runtime_client.backend.gateway import GatewayBackend
 from agent_runtime_client.member import PlaceEntry
 from agent_runtime_client.tools import HandTool
@@ -35,14 +36,11 @@ _SETTLE_SECONDS: Final = 1.0
 _REAL_TIME_BOUND_SECONDS: Final = 10.0
 _VOICE_EVENTS: Final = VoiceEvent.__value__
 
+A_GATEWAY_REFUSAL: Final = Reply(status=400, body=b'{"error": {"type": "budget_exceeded"}}')
+"""A decision the gateway refuses with a 400: the turn ends failed, not as a spent budget."""
+
 type Wait = Callable[[], Awaitable[object]]
 type StreamPart = bytes | Wait | Exception
-
-
-def a_line(
-    seq: int, text: str, *, name: str = "Ada", kind: str = "person", own=False, spoken=True
-) -> PlaceEntry:
-    return PlaceEntry(seq=seq, kind=kind, name=name, text=text, own=own, spoken=spoken)
 
 
 def piece(text: str) -> bytes:
@@ -53,55 +51,6 @@ def piece(text: str) -> bytes:
 def finish(reason: str = "stop") -> bytes:
     """The finish chunk and ``[DONE]``."""
     return an_event_stream(a_chunk(finish_reason=reason))
-
-
-STREAMED_ANSWERS = [
-    (
-        "Am 3. Mai beginnt die Konferenz in Berlin. Sie dauert drei Tage! "
-        "Wer von euch kommt mit? Dr. Müller hält z. B. den ersten Vortrag.",
-        [
-            "Am 3. Mai beginnt die Konferenz in Berlin.",
-            "Sie dauert drei Tage!",
-            "Wer von euch kommt mit?",
-            "Dr. Müller hält z. B. den ersten Vortrag.",
-        ],
-    ),
-    (
-        # A closing German quote ends no sentence here: it is released with the next one.
-        "Er sagte: „Das geht nie.“ Doch er kam. Dann ging er wieder.",
-        ["Er sagte: „Das geht nie.“ Doch er kam.", "Dann ging er wieder."],
-    ),
-    (
-        "We meet at 10 a.m. in the hall. Bring Dr. Smith along! "
-        "Does everyone have the slides? Good.",
-        [
-            "We meet at 10 a.m. in the hall.",
-            "Bring Dr. Smith along!",
-            "Does everyone have the slides?",
-            "Good.",
-        ],
-    ),
-    (
-        "Erstens die Zahlen.\nZweitens der Plan. Um 9.30 Uhr geht es los.",
-        ["Erstens die Zahlen.", "Zweitens der Plan.", "Um 9.30 Uhr geht es los."],
-    ),
-    (
-        # Longer than the words the release re-judges; the end after its abbreviation needs them.
-        "Zur Sitzung am Montag kommen wie immer die Kollegen aus Hamburg, Bremen und Berlin u. ä. "
-        "Danach gehen wir essen. Gut so.",
-        [
-            "Zur Sitzung am Montag kommen wie immer die Kollegen aus Hamburg, Bremen und Berlin "
-            "u. ä.",
-            "Danach gehen wir essen.",
-            "Gut so.",
-        ],
-    ),
-]
-
-
-def random_pieces(text: str, chooser: random.Random) -> list[str]:
-    cuts = sorted(chooser.sample(range(1, len(text)), chooser.randint(1, len(text) // 3)))
-    return [text[start:end] for start, end in zip([0, *cuts], [*cuts, len(text)], strict=True)]
 
 
 async def hang() -> None:
@@ -337,10 +286,15 @@ type Hearing = Callable[[Trace], AsyncIterator[PlaceEntry]]
 
 @dataclass
 class VoicePlace:
-    """The agent, its person and gateway configuration, and the trace of one loop run."""
+    """The agent, its person and gateway configuration, and the trace of one loop run.
+
+    ``window_bytes`` is the agent's voice window, ``None`` for an agent without a voice section;
+    the default is wider than any conversation a test here holds.
+    """
 
     directory: Path
     trace: Trace = field(default_factory=Trace)
+    window_bytes: int | None = 1_000_000
 
     def agent(self, tools: Sequence[HandTool] = ()) -> AgentDefinition:
         return AgentDefinition(
@@ -352,6 +306,7 @@ class VoicePlace:
             model="text/standin",
             max_duration_seconds=60,
             max_tool_calls=3 if tools else None,
+            voice_window_bytes=self.window_bytes,
         )
 
     def run(

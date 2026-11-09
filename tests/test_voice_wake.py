@@ -11,7 +11,8 @@ from agent_runtime_client.voice.wake import addressed_or_asked
 from tests.support import voice_support
 from tests.support.gateway_turn_support import a_gateway_config, a_person
 from tests.support.virtual_time import VirtualTimeLoop
-from tests.support.voice_support import CONTEXT, RecordingVoice, a_line, messages_of, rows_of
+from tests.support.voice_lines import a_line
+from tests.support.voice_support import CONTEXT, RecordingVoice, messages_of, rows_of
 
 place = voice_support.place
 
