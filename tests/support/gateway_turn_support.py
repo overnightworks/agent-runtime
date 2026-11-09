@@ -243,6 +243,17 @@ def a_request(**changes) -> TurnRequest:
     return TurnRequest(**{**fields, **changes})
 
 
+def a_picture_request(**changes) -> TurnRequest:
+    turn = Turn(system="Paint it.", messages=[TurnMessage(role=TurnRole.USER, text="a cat")])
+    fields = {
+        "agent": "painter",
+        "turn": turn,
+        "model": "image/standin",
+        "picture_size": "1024x1024",
+    }
+    return a_request(**{**fields, **changes})
+
+
 async def _turn(backend, request, person, leaves_after=None):
     """The events and the stop, if any; the host leaves after ``leaves_after`` events if given."""
     events = []

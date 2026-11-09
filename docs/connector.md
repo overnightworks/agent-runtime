@@ -185,7 +185,8 @@ every person's budget, so every caller computes it with
 | 200 otherwise (a stream that ends or breaks before `[DONE]`, a `[DONE]` with no finish reason, an event that is no JSON object or no chunk, a line that is no UTF-8, empty text, another `finish_reason`, a lone surrogate, a longer reply, a round that is not whole) | `failed: provider_error`, detail `malformed_reply`; pieces already yielded stand |
 | 200, an event stream with an error event (a JSON object with an `error` key), with or without a following `[DONE]` | `failed: provider_unavailable`, detail `gateway_failed`; the log carries the error's type and code when they are well formed, never its message |
 | 429 | `refused: busy`; `retry_after_s` from the `Retry-After` seconds, at most `MAX_RETRY_AFTER_S`; an HTTP-date or no header gives none |
-| another 4xx, a budget refusal included | `failed: provider_unavailable`, detail `gateway_refused`; the body is read within `MAX_EVENT_BYTES` only for the logged error type and code |
+| 422 whose error `type` is `budget_exceeded` (a spent person or app budget) | `refused: budget_spent`; decided from the status and the checked error type, never the message |
+| another 4xx | `failed: provider_unavailable`, detail `gateway_refused`; the body is read within `MAX_EVENT_BYTES` only for the logged error type and code |
 | 1xx, a 2xx other than 200, 3xx or 5xx (a `Retry-After` is ignored) | `failed: provider_unavailable`, detail `gateway_failed`; the body is read as for a 4xx |
 | connection refused or reset, or lost while the stream runs, TLS failure, an origin the HTTP library refuses | `failed: provider_unavailable`, detail `connection_failed` |
 
@@ -201,10 +202,10 @@ Proved by `tests/test_backend_gateway.py`: `test_a_text_turn_ends_with_the_answe
 `test_a_connection_lost_while_the_stream_runs_is_connection_failed` and
 `test_a_stopped_turn_holds_no_text_from_the_wire`. A round is complete only at `[DONE]` after
 `stop` or `tool_calls`; the client judges what the gateway sends, so a provider stream the
-gateway cuts and closes with a finish reason of its own reads as complete. A person over budget reads as
-"unavailable", the same as any other refusal. `detail` is for logs only. A refusal logs the
+gateway cuts and closes with a finish reason of its own reads as complete. A person or app over budget reads as
+`budget_spent`, no outage. `detail` is for logs only. A refusal logs the
 gateway's error type and code, never its message
-(`tests/test_backend_gateway_refusal.py`).
+(`tests/test_backend_gateway_refusal.py`, which also proves `budget_spent`).
 
 ### The tool loop
 
