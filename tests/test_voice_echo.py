@@ -62,12 +62,6 @@ COUNTED_WORDS = [
         "---", ["Warte ... gleich."], False, id="a word that is only punctuation counts nowhere"
     ),
     pytest.param(
-        "--- Folie Kaffee",
-        ["Folie Kaffee"],
-        True,
-        id="a word that is only punctuation does not count in the line",
-    ),
-    pytest.param(
         "Ja, ok.",
         ["Ist das so ok für dich?"],
         False,
@@ -103,6 +97,18 @@ BARE_WORDS = [
         "Ja, genau", ["Ja, gerne"], False, id="a short word carrying the same comma counts nowhere"
     ),
     pytest.param("--- Folie", ["--- Kaffee"], False, id="the same bare punctuation counts nowhere"),
+    pytest.param(
+        "Ja, ok, Folie",
+        ["Die Folie"],
+        True,
+        id="a short word with punctuation does not count in the line",
+    ),
+    pytest.param(
+        "--- Folie Torte",
+        ["Folie"],
+        True,
+        id="a word that is only punctuation does not count in the line",
+    ),
 ]
 
 
