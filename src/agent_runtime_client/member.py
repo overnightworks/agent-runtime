@@ -106,9 +106,11 @@ class AcceptInvitationArguments(StrictModel):
 
 class AcceptInvitationRefusal(StrEnum):
     """Why the app does not accept an invitation: ``stale_invitation`` when the invitation is no
-    longer standing or its epoch is past, ``two_seats`` when the member already has a seat in the
-    place, ``sponsor_away`` when the person who brought the member is not there, ``busy`` when the
-    place cannot take the member now."""
+    longer standing, has expired, or its id or epoch no longer matches; ``two_seats`` when the
+    person who brought the member does not hold exactly one seat in the place, the inviting one;
+    ``sponsor_away`` when that person's seat lost its connection and waits to resume; ``busy`` when
+    the place or the app already holds as many members as it takes, or that person already brings
+    another."""
 
     STALE_INVITATION = "stale_invitation"
     TWO_SEATS = "two_seats"
