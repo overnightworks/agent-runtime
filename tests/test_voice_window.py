@@ -5,12 +5,11 @@ from itertools import pairwise
 
 import pytest
 
-from agent_runtime_client.backend.fake_gateway import FakeGateway, Reply, completion
+from agent_runtime_client.backend.fake_gateway import FakeGateway, completion
 from agent_runtime_client.voice.reply import WINDOW_NOTE
 from tests.support.voice_lines import a_line
-from tests.support.voice_support import RETURNED, VoicePlace, messages_of
+from tests.support.voice_support import A_BUDGET_REFUSAL, RETURNED, VoicePlace, messages_of
 
-A_BUDGET_REFUSAL = Reply(status=400, body=b'{"error": {"type": "budget_exceeded"}}')
 QUIET = [f"Leise {number:02d}." for number in range(1, 13)]
 
 

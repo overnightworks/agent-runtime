@@ -21,6 +21,7 @@ import httpx2
 import pytest
 
 from agent_runtime_client.agents import AgentDefinition
+from agent_runtime_client.backend.fake_gateway import Reply
 from agent_runtime_client.backend.gateway import GatewayBackend
 from agent_runtime_client.member import PlaceEntry
 from agent_runtime_client.tools import HandTool
@@ -37,6 +38,9 @@ CONTEXT: Final = "Im Raum sind Ada und Ben."
 _SETTLE_SECONDS: Final = 1.0
 _REAL_TIME_BOUND_SECONDS: Final = 10.0
 _VOICE_EVENTS: Final = VoiceEvent.__value__
+
+A_BUDGET_REFUSAL: Final = Reply(status=400, body=b'{"error": {"type": "budget_exceeded"}}')
+"""The gateway refusing a decision because the person's budget is spent."""
 
 type Wait = Callable[[], Awaitable[object]]
 type StreamPart = bytes | Wait | Exception
