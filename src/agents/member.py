@@ -27,6 +27,7 @@ from agents.turn import NonEmptyUnicodeText, StrictModel
 
 __all__ = [
     "ACCEPT_INVITATION_TOOL",
+    "INVITATION_SECONDS",
     "LEASE_SECONDS",
     "LISTEN_BOUND_SECONDS",
     "SPEAK_TOOL",
@@ -53,6 +54,8 @@ __all__ = [
 
 LEASE_SECONDS: Final = 120
 """How long a member's lease lasts; each admitted call renews it."""
+INVITATION_SECONDS: Final = 120
+"""How long an invitation stands before it expires; the app opens it with this length."""
 LISTEN_BOUND_SECONDS: Final = 50
 """The longest a listen lasts before it ends with the completion result."""
 ACCEPT_INVITATION_TOOL: Final = "accept_invitation"

@@ -471,6 +471,9 @@ inviting one), `sponsor_away` (that person's seat lost its connection and waits 
 another). A code the app adds for every tool alike is its own and not part of the record; a runner
 reading it gets a validation error and decides itself. Proved by `tests/test_member.py`.
 
+How a person calls an agent to a place and sends it away is the same in every app:
+[calling.md](calling.md).
+
 ## The standard path
 
 An agent learns what changes through the standard's resources and subscriptions, never by
@@ -522,9 +525,9 @@ log only the exception's type. Proved by `tests/test_mcp_server_listen.py`.
 and the app renews the member's lease on each. A runner that calls again within `LEASE_SECONDS`
 keeps its lease.
 
-**What each app owns:** its places and who stands where, the invitation, its expiry and the epoch
-check at accept, the participation and permission decisions, and enforcing the lease, removing a
-member whose lease ran out.
+**What each app owns:** its places and who stands where, the invitation, its expiry (it lasts
+`INVITATION_SECONDS`) and the epoch check at accept, the participation and permission
+decisions, and enforcing the lease, removing a member whose lease ran out.
 
 ## Hearing and speaking
 
