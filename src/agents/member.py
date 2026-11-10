@@ -29,6 +29,7 @@ __all__ = [
     "ACCEPT_INVITATION_TOOL",
     "INVITATION_SECONDS",
     "LEASE_SECONDS",
+    "LISTEN_ALLOWANCE_SECONDS",
     "LISTEN_BOUND_SECONDS",
     "SPEAK_TOOL",
     "STANDING_URI",
@@ -58,6 +59,10 @@ INVITATION_SECONDS: Final = 120
 """How long an invitation stands before it expires; the app opens it with this length."""
 LISTEN_BOUND_SECONDS: Final = 50
 """The longest a listen lasts before it ends with the completion result."""
+LISTEN_ALLOWANCE_SECONDS: Final = 5
+"""How long an ended listen still counts as one: a runner listens again at once, which takes the
+connection and one call of the port (a few milliseconds plus the port's latency), so the answer
+never turns no between two listens; far below ``LEASE_SECONDS``."""
 ACCEPT_INVITATION_TOOL: Final = "accept_invitation"
 """The name of the tool that accepts an open invitation."""
 SPEAK_TOOL: Final = "speak"
