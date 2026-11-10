@@ -43,12 +43,14 @@ from agents.member import (
 from agents.turn import Principal
 
 
-class _PendingUris:
-    """One open stream's changed URIs: a repeated URI stays once, at its first arrival."""
+class _OpenStream:
+    """One open stream: its changed URIs, a repeated one staying once at its first arrival, and
+    the URIs it honors from its acknowledgement on."""
 
     def __init__(self) -> None:
         self._uris: dict[str, None] = {}
         self._arrived = anyio.Event()
+        self._honored: frozenset[str] = frozenset()
 
     def add(self, uri: str) -> None:
         self._uris[uri] = None
@@ -62,12 +64,19 @@ class _PendingUris:
         del self._uris[uri]
         return uri
 
+    @property
+    def honored(self) -> frozenset[str]:
+        return self._honored
+
+    def honor(self, uris: Collection[str]) -> None:
+        self._honored = frozenset(uris)
+
 
 class ResourceChanges:
     """How an app says that a member's resource changed; no argument of a request reaches it."""
 
     def __init__(self) -> None:
-        self._streams: dict[Principal, set[_PendingUris]] = {}
+        self._streams: dict[Principal, set[_OpenStream]] = {}
 
     def changed(self, recipient: Principal, uri: str) -> None:
         """Signal every open stream of the recipient.
@@ -78,16 +87,24 @@ class ResourceChanges:
         for pending in self._streams.get(recipient, ()):
             pending.add(uri)
 
+    def listens_to(self, principal: Principal, uri: str) -> bool:
+        """Whether the principal holds an open stream whose acknowledgement honored the URI.
+
+        A stream open but not yet acknowledged, one that ended and one honoring only other URIs
+        do not count; the URI asked is compared as it is, so a place window is not the standing.
+        """
+        return any(uri in stream.honored for stream in self._streams.get(principal, ()))
+
     @contextmanager
-    def opened(self, recipient: Principal) -> Iterator[_PendingUris]:
-        """One stream's pending URIs for as long as the stream is open."""
-        pending = _PendingUris()
-        self._streams.setdefault(recipient, set()).add(pending)
+    def opened(self, recipient: Principal) -> Iterator[_OpenStream]:
+        """One stream for as long as it is open."""
+        stream = _OpenStream()
+        self._streams.setdefault(recipient, set()).add(stream)
         try:
-            yield pending
+            yield stream
         finally:
             streams = self._streams[recipient]
-            streams.discard(pending)
+            streams.discard(stream)
             if not streams:
                 del self._streams[recipient]
 
@@ -145,14 +162,13 @@ class _Stream:
 async def _deliver(
     resources: MemberResources,
     principal: Principal,
-    pending: _PendingUris,
-    honored: Collection[str],
+    open_stream: _OpenStream,
     stream: _Stream,
 ) -> None:
     """Writes each wanted pulse the principal may still read, until a port failure ends it."""
     while True:
-        uri = await pending.next()
-        if not _wanted(uri, honored):
+        uri = await open_stream.next()
+        if not _wanted(uri, open_stream.honored):
             continue
         try:
             still_readable = uri in await resources.current(principal)
@@ -175,12 +191,13 @@ async def on_subscriptions_listen(
     No exception of the port reaches the SDK; a cancellation propagates.
     """
     stream = _Stream(context)
-    with changes.opened(principal) as pending, anyio.move_on_after(LISTEN_BOUND_SECONDS):
+    with changes.opened(principal) as open_stream, anyio.move_on_after(LISTEN_BOUND_SECONDS):
         try:
             readable = frozenset(await resources.current(principal))
         except Exception as failure:
             return _failure(LISTEN_METHOD, failure)
         honored = _honored(params.notifications.resource_subscriptions or (), readable)
         await stream.acknowledge(honored)
-        await _deliver(resources, principal, pending, frozenset(honored), stream)
+        open_stream.honor(honored)
+        await _deliver(resources, principal, open_stream, stream)
     return stream.completed()

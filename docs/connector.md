@@ -521,9 +521,22 @@ revocation, not on the absence of a pulse. A port that raises at the acknowledge
 `-32603` with one fixed text, one that raises later ends the stream with the completion, and both
 log only the exception's type. Proved by `tests/test_mcp_server_listen.py`.
 
+**Whether a member listens.** `changes.listens_to(principal, uri)` answers whether that principal
+holds an open stream whose acknowledgement honored the URI; an app that offers an agent only while
+it can answer an invitation asks for `STANDING_URI`. The answer is no before the acknowledgement,
+after the stream ended and for a stream that honored only a place window, because the URI is
+compared as asked and not widened to the places a standing subscriber also receives. Several
+streams of one principal count while any of them honors the URI. Between two listens that follow
+one another the answer is no for as long as the runner takes to listen again, the connection and
+one `current` call; a runner that must never show that gap opens its next listen before the
+previous one ends. The answer is a pull: the library sends no signal when a principal starts or
+stops listening, and while the port's `current` answers for a new listen the stream is not yet
+acknowledged, so the answer is still no. Proved by `tests/test_mcp_server_listen_liveness.py`.
+
 **The lease.** Every call a member makes is an admitted call, each opening of a stream included,
 and the app renews the member's lease on each. A runner that calls again within `LEASE_SECONDS`
-keeps its lease.
+keeps its lease. The lease says nothing about listening: a call from an agent that listens
+nowhere renews it too.
 
 **What each app owns:** its places and who stands where, the invitation, its expiry (it lasts
 `INVITATION_SECONDS`) and the epoch check at accept, the participation and permission

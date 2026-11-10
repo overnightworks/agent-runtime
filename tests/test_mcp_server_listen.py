@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable
 from typing import Any
 
 import anyio.from_thread
@@ -21,6 +21,7 @@ from agents.mcp_server import McpPersonFront, ResourceChanges
 from agents.mcp_server.asgi import LOGGER_NAME as LOGGER
 from agents.member import LISTEN_BOUND_SECONDS, STANDING_URI
 from agents.tools import Principal
+from tests.support import listen_support
 from tests.support.mcp_server_support import (
     ListenConnection,
     MemberApp,
@@ -44,45 +45,17 @@ from tests.support.mcp_server_support import (
     settled,
     window_uri,
 )
-from tests.support.virtual_time import in_virtual_time
+
+alice = listen_support.alice
+bob = listen_support.bob
+app = listen_support.app
+changes = listen_support.changes
+front = listen_support.front
+served = listen_support.served
 
 _SUBSCRIPTION_ID = "io.modelcontextprotocol/subscriptionId"
 _FAILED_TEXT = "the resource failed"
 _ACKNOWLEDGED = "notifications/subscriptions/acknowledged"
-
-
-@pytest.fixture
-def alice() -> Principal:
-    return a_member("alice")
-
-
-@pytest.fixture
-def bob() -> Principal:
-    return a_member("bob")
-
-
-@pytest.fixture
-def app(alice: Principal, bob: Principal) -> MemberApp:
-    return MemberApp(
-        readable={
-            alice: readable_uris(STANDING_URI, window_uri("first"), window_uri("second")),
-            bob: readable_uris(STANDING_URI),
-        }
-    )
-
-
-@pytest.fixture
-def changes() -> ResourceChanges:
-    return ResourceChanges()
-
-
-@pytest.fixture
-def front(app: MemberApp, changes: ResourceChanges) -> McpPersonFront:
-    return McpPersonFront([], resolve_person=resolve_member, resources=app, changes=changes)
-
-
-def served[T](main: Coroutine[Any, Any, T]) -> T:
-    return in_virtual_time(main)
 
 
 def open_and_leave(
