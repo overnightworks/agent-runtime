@@ -1,8 +1,0 @@
-claim_id = "0c6bb36f91e445f79c1a316842b546f6"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "bf9e8cfb2997594714ee20d58acd784d7fcd9eed"
-branch = "claude/issue-845-listen-liveness"
-scope = ["docs/calling.md", "docs/connector.md", "src/agents/mcp_server/listen.py", "src/agents/member.py", "tests/support", "tests/test_mcp_server_listen.py", "tests/test_mcp_server_listen_liveness.py"]
-opened_commit = "517109851c735c41ecd8bdfec1d3407366a5c059"
-whole_reason = "The port, its tests and the two sentences that state it are one contract; tests/test_mcp_server_listen.py is the suite that drives the listen."
