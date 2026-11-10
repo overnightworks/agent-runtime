@@ -134,7 +134,7 @@ decides when an agent leaves it without being sent away (CALLING-13).
 **CALLING-23.** Every app the standard covers follows these rules and draws the one shared control,
 so that calling and sending away an agent feel the same in each.
 
-**CALLING-24.** This file owns the rules; the shared design kit holds the control's look. The
+**CALLING-24.** This file owns the rules; the shared design kit holds the control's look and the words of its reasons. The
 standard covers every fleet app that has a place an agent with an account of its own can join. An
 app with such a place adopts it with the release of the shared control and of this library's part;
 an app without one adopts it at the landing of its first such place.
