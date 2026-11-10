@@ -14,10 +14,11 @@ so a removal ends delivery during an open stream.
 
 from __future__ import annotations
 
-from collections.abc import Collection, Iterator, Sequence
+import asyncio
+from collections.abc import Callable, Collection, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Final
 
 import anyio
 from mcp.server.context import ServerRequestContext
@@ -42,6 +43,11 @@ from agents.member import (
 )
 from agents.turn import Principal
 
+LISTEN_ALLOWANCE_SECONDS: Final = 5
+"""How long an ended listen still counts as one: a runner listens again at once, which takes the
+connection and one call of the port (a few milliseconds plus the port's latency), so the answer
+never turns no between two listens; far below ``LEASE_SECONDS``."""
+
 
 class _OpenStream:
     """One open stream: its changed URIs, a repeated one staying once at its first arrival, and
@@ -50,7 +56,7 @@ class _OpenStream:
     def __init__(self) -> None:
         self._uris: dict[str, None] = {}
         self._arrived = anyio.Event()
-        self._honored: frozenset[str] = frozenset()
+        self._honored: dict[str, None] = {}
 
     def add(self, uri: str) -> None:
         self._uris[uri] = None
@@ -65,18 +71,28 @@ class _OpenStream:
         return uri
 
     @property
-    def honored(self) -> frozenset[str]:
-        return self._honored
+    def honored(self) -> Collection[str]:
+        return self._honored.keys()
 
     def honor(self, uris: Collection[str]) -> None:
-        self._honored = frozenset(uris)
+        self._honored = dict.fromkeys(uris)
 
 
 class ResourceChanges:
-    """How an app says that a member's resource changed; no argument of a request reaches it."""
+    """How an app says that a member's resource changed; no argument of a request reaches it.
 
-    def __init__(self) -> None:
+    ``listening_changed`` is called with the principal, the URI and the new answer of
+    ``listens_to`` whenever that answer changes: to yes on the request task that wrote the first
+    acknowledgement honoring the URI, to no on the event loop once the last such stream ended and
+    ``LISTEN_ALLOWANCE_SECONDS`` passed. It must not block; its failure is logged by type and
+    never reaches a listen.
+    """
+
+    def __init__(
+        self, listening_changed: Callable[[Principal, str, bool], None] | None = None
+    ) -> None:
         self._streams: dict[Principal, set[_OpenStream]] = {}
+        self._listening_changed = listening_changed
 
     def changed(self, recipient: Principal, uri: str) -> None:
         """Signal every open stream of the recipient.
@@ -88,25 +104,59 @@ class ResourceChanges:
             pending.add(uri)
 
     def listens_to(self, principal: Principal, uri: str) -> bool:
-        """Whether the principal holds an open stream whose acknowledgement honored the URI.
+        """Whether a stream of the principal honored the URI and is open or ended not yet
+        ``LISTEN_ALLOWANCE_SECONDS`` ago.
 
-        A stream open but not yet acknowledged, one that ended and one honoring only other URIs
-        do not count; the URI asked is compared as it is, so a place window is not the standing.
+        A stream not yet acknowledged and one honoring only other URIs do not count; the URI
+        asked is compared as it is, so a place window is not the standing. Runs on the front's
+        event loop, as ``changed`` does.
         """
         return any(uri in stream.honored for stream in self._streams.get(principal, ()))
 
     @contextmanager
     def opened(self, recipient: Principal) -> Iterator[_OpenStream]:
-        """One stream for as long as it is open."""
+        """One stream for as long as it is open; one that honored a URI counts on for the
+        allowance after it ends."""
         stream = _OpenStream()
         self._streams.setdefault(recipient, set()).add(stream)
         try:
             yield stream
         finally:
-            streams = self._streams[recipient]
-            streams.discard(stream)
-            if not streams:
-                del self._streams[recipient]
+            if stream.honored:
+                asyncio.get_running_loop().call_later(
+                    LISTEN_ALLOWANCE_SECONDS, self._lapsed, recipient, stream
+                )
+            else:
+                self._forget(recipient, stream)
+
+    def acknowledged(
+        self, recipient: Principal, stream: _OpenStream, honored: Collection[str]
+    ) -> None:
+        """The stream's acknowledgement was written: it honors the URIs from now on."""
+        newly_listened = [uri for uri in honored if not self.listens_to(recipient, uri)]
+        stream.honor(honored)
+        for uri in newly_listened:
+            self._signal(recipient, uri, listens=True)
+
+    def _lapsed(self, recipient: Principal, stream: _OpenStream) -> None:
+        self._forget(recipient, stream)
+        for uri in stream.honored:
+            if not self.listens_to(recipient, uri):
+                self._signal(recipient, uri, listens=False)
+
+    def _forget(self, recipient: Principal, stream: _OpenStream) -> None:
+        streams = self._streams[recipient]
+        streams.discard(stream)
+        if not streams:
+            del self._streams[recipient]
+
+    def _signal(self, recipient: Principal, uri: str, *, listens: bool) -> None:
+        if self._listening_changed is None:
+            return
+        try:
+            self._listening_changed(recipient, uri, listens)
+        except Exception as failure:
+            _failure(LISTEN_METHOD, failure)
 
 
 def _wanted(uri: str, honored: Collection[str]) -> bool:
@@ -198,6 +248,6 @@ async def on_subscriptions_listen(
             return _failure(LISTEN_METHOD, failure)
         honored = _honored(params.notifications.resource_subscriptions or (), readable)
         await stream.acknowledge(honored)
-        open_stream.honor(honored)
+        changes.acknowledged(principal, open_stream, honored)
         await _deliver(resources, principal, open_stream, stream)
     return stream.completed()
