@@ -12,9 +12,16 @@ from __future__ import annotations
 
 from enum import StrEnum
 from typing import Annotated, Final, Self
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlsplit
 
-from pydantic import AwareDatetime, Field, ValidationError, model_validator
+from pydantic import (
+    AwareDatetime,
+    Field,
+    StringConstraints,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from agents.turn import NonEmptyUnicodeText, StrictModel
 
@@ -27,6 +34,7 @@ __all__ = [
     "AcceptInvitationArguments",
     "AcceptInvitationRefusal",
     "AcceptInvitationRefused",
+    "FigureRef",
     "Invitation",
     "MemberStanding",
     "PlaceEntry",
@@ -38,6 +46,7 @@ __all__ = [
     "Spoken",
     "Standing",
     "StandingState",
+    "VoiceName",
     "place_ref_from_window_uri",
     "place_window_uri",
 ]
@@ -97,12 +106,63 @@ class MemberStanding(StrictModel):
     standings: tuple[Standing, ...]
 
 
+_FORBIDDEN_HOST_CHARACTERS: Final = frozenset('%"<>^`{|}')
+
+
+class FigureRef(StrictModel):
+    """Where an agent's 3D figure is and the digest its bytes must have: ``url`` is an absolute
+    ``https`` address with a host and no user part, query or fragment, and ``sha256`` is 64
+    lowercase hexadecimal characters. The record checks the form only; whether to fetch the
+    figure is the app's decision."""
+
+    url: str
+    sha256: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+
+    @field_validator("url")
+    @classmethod
+    def _url_is_a_plain_https_address(cls, url: str) -> str:
+        message = "a figure url is an absolute https address without user part, query or fragment"
+        if (
+            not url.isprintable()
+            or any(character.isspace() or character == "\\" for character in url)
+            or "?" in url
+            or "#" in url
+        ):
+            raise ValueError(message)
+        try:
+            parts = urlsplit(url)
+            parts.port  # noqa: B018 - reading the port is what validates it
+        except ValueError as error:
+            raise ValueError(message) from error
+        if (
+            parts.scheme != "https"
+            or not parts.hostname
+            or "@" in parts.netloc
+            or any(character in _FORBIDDEN_HOST_CHARACTERS for character in parts.hostname)
+        ):
+            raise ValueError(message)
+        return url
+
+
+VoiceName = Annotated[str, StringConstraints(pattern=r"^[a-z0-9._-]{1,64}$")]
+"""The name of the voice an agent speaks with: 1 to 64 lowercase letters, digits, ``.``, ``_`` or
+``-``. The app's speech service decides whether it offers that voice."""
+
+
+def _is_none(value: object) -> bool:
+    return value is None
+
+
 class AcceptInvitationArguments(StrictModel):
-    """The arguments of ``accept_invitation``: the place and the invitation's id and epoch."""
+    """The arguments of ``accept_invitation``: the place and the invitation's id and epoch, and
+    optionally the agent's ``figure`` and the ``voice`` it speaks with; an absent one means the
+    app's own default."""
 
     place: PlaceRef
     invitation: NonEmptyUnicodeText
     epoch: int = Field(ge=0)
+    figure: FigureRef | None = Field(default=None, exclude_if=_is_none)
+    voice: VoiceName | None = Field(default=None, exclude_if=_is_none)
 
 
 class AcceptInvitationRefusal(StrEnum):

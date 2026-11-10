@@ -433,7 +433,7 @@ the tool and the exception's class
 `PlaceRef`, `StandingState`, `Invitation` and `Standing`, `MemberStanding(standings)` (what
 `STANDING_URI`, `member://standing`, answers with), `PlaceWindow(generation, starts_at, entries)`
 of `PlaceEntry(seq, kind, name, text, own, spoken)`, `LEASE_SECONDS` (120),
-`LISTEN_BOUND_SECONDS` (50), `AcceptInvitationArguments(place, invitation, epoch)` for the tool
+`LISTEN_BOUND_SECONDS` (50), `AcceptInvitationArguments(place, invitation, epoch, figure, voice)` for the tool
 `ACCEPT_INVITATION_TOOL`, and the records of the tool `SPEAK_TOOL`
 ([hearing and speaking](#hearing-and-speaking)). `spoken` is true for a line said aloud and
 heard, false for a written one; every dumped entry carries it, and an entry without it reads as
@@ -443,6 +443,17 @@ window is the resource `place_window_uri(place)`, `member://standing/places/{kin
 segment percent-encoded, so `/` in an opaque `kind` or `id` stays inside its segment;
 `place_ref_from_window_uri(uri)` returns the `PlaceRef` for that canonical spelling only and
 `None` for anything else. A URI is no credential.
+
+An accept may name the agent's 3D figure, `figure` as `FigureRef(url, sha256)`, and the `voice` it
+speaks with; both are optional, and an accept without them dumps without their keys. The record
+checks only their form: `url` is an absolute `https` address with a host and no user part, query or
+fragment, `sha256` is 64 lowercase hexadecimal characters, and `voice` is 1 to 64 lowercase
+letters, digits, `.`, `_` or `-`. The app decides the rest:
+
+- It fetches a figure only from sources it allows, and serves only bytes whose sha256 matches.
+- It passes the voice to its speech service. A voice that service does not offer is refused there,
+  and the app answers with the refusal it already has; the library adds no refusal member for it.
+- An absent field means the app's own default.
 
 A `Standing` is a `PlaceRef(kind, id)`, opaque to all but the app, a `StandingState` (`invited`,
 `active` or `paused`) and, exactly when invited, an `Invitation(id, epoch, expires_at)`; any
