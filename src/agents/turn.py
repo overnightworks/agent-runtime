@@ -21,6 +21,7 @@ from pydantic import (
     BeforeValidator,
     ConfigDict,
     Field,
+    JsonValue,
     PlainSerializer,
 )
 
@@ -165,6 +166,9 @@ def _refuse_lone_surrogates(text: str) -> None:
 
 JsonObject = Annotated[dict[str, Any], AfterValidator(_refuse_non_json_object)]
 """The one decider of a JSON object on the wire: one that survives a round trip unchanged."""
+
+JsonDocument = Annotated[dict[str, JsonValue], AfterValidator(_refuse_non_json_object)]
+"""``JsonObject``'s decider over a typed value: a JSON object whose values are JSON values."""
 
 
 def _refuse_non_unicode_text(text: str) -> str:

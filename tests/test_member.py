@@ -22,6 +22,7 @@ from agents.member import (
     MemberStanding,
     PlaceEntry,
     PlaceRef,
+    PlaceView,
     PlaceWindow,
     SpeakArguments,
     SpeakRefusal,
@@ -29,7 +30,9 @@ from agents.member import (
     Spoken,
     Standing,
     StandingState,
+    place_ref_from_view_uri,
     place_ref_from_window_uri,
+    place_view_uri,
     place_window_uri,
 )
 
@@ -544,3 +547,134 @@ def test_a_malformed_refused_content_is_refused(
     wire = malformed(code)
     with pytest.raises(ValidationError):
         record.model_validate_json(wire)
+
+
+NESTED_STATE: dict[str, Any] = {
+    "hand": [{"suit": "hearts", "rank": 7}, [None, True, 1.5], "ä"],
+    "turn": 3,
+    "empty": {},
+}
+
+
+def test_a_place_view_reads_back_from_its_json_with_its_state_untouched() -> None:
+    view = PlaceView(revision=4, awaits_you=True, state=NESTED_STATE)
+
+    read = PlaceView.model_validate_json(view.model_dump_json())
+
+    assert read == view
+    assert read.state == NESTED_STATE
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"state": {"when": datetime(2026, 11, 8, 12, tzinfo=UTC)}},
+        {"state": {"bytes": b"x"}},
+        {"state": {"nested": [{"set": {1}}]}},
+        {"state": {"number": float("nan")}},
+        {"state": {"lone": "\ud800"}},
+        {"state": ["not", "an", "object"]},
+        {"revision": -1},
+        {"revision": 1.0},
+        {"awaits_you": 1},
+        {"extra": "field"},
+    ],
+    ids=[
+        "datetime-in-state",
+        "bytes-in-state",
+        "set-in-nested-state",
+        "nan-in-state",
+        "lone-surrogate-in-state",
+        "array-state",
+        "negative-revision",
+        "fractional-revision",
+        "integer-awaits-you",
+        "unknown-field",
+    ],
+)
+def test_a_place_view_with_a_malformed_field_is_refused(fields: dict[str, Any]) -> None:
+    valid = {"revision": 0, "awaits_you": False, "state": {}}
+
+    with pytest.raises(ValidationError):
+        PlaceView.model_validate(valid | fields)
+
+
+@pytest.mark.parametrize("place", [PLACE, *HOSTILE_PLACES])
+def test_a_place_view_uri_is_the_window_uri_and_a_view_segment_and_names_its_place(
+    place: PlaceRef,
+) -> None:
+    uri = place_view_uri(place)
+
+    assert uri == f"{place_window_uri(place)}/view"
+    assert place_ref_from_view_uri(uri) == place
+
+
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "member://standing/places/room/r-1",
+        "member://standing/places/room/view",
+        "member://standing/places/room/r-1/view/",
+        "member://standing/places/room/r-1/views",
+        "member://standing/places/room/r-1/View",
+        "member://standing/places/room/r-1/view/more",
+        "member://standing/places/room/r-1/view?x=1",
+        "member://standing/places/room/r-1/view#f",
+        "member://standing/places/room//view",
+        "member://standing/places//r-1/view",
+        "member://standing/places/ro%6Fm/r-1/view",
+        "member://standing/places/room/r%2d1/view",
+        "member://standing/places/room/%zz/view",
+        "member://standing/places/room/%ff/view",
+        "member://standing/places/\ud800/b/view",
+        "member://standing/view",
+        "/view",
+        "view",
+        "",
+        None,
+    ],
+)
+def test_a_uri_that_is_not_the_canonical_place_view_uri_yields_no_place(uri: str | None) -> None:
+    assert place_ref_from_view_uri(uri) is None  # type: ignore[arg-type]
+
+
+def test_a_place_named_view_has_a_window_uri_that_is_no_view_uri() -> None:
+    place = PlaceRef(kind="room", id="view")
+
+    assert place_ref_from_view_uri(place_window_uri(place)) is None
+    assert place_ref_from_window_uri(place_view_uri(place)) is None
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [{}, {"serves_view": False}],
+    ids=["unset", "false"],
+)
+def test_a_standing_that_does_not_serve_a_view_dumps_without_the_field(
+    fields: dict[str, Any],
+) -> None:
+    standing = Standing(place=PLACE, state=StandingState.ACTIVE, **fields)
+
+    assert standing.model_dump_json() == (
+        '{"place":{"kind":"room","id":"r-1"},"state":"active","invitation":null}'
+    )
+    assert standing.model_dump() == {
+        "place": {"kind": "room", "id": "r-1"},
+        "state": StandingState.ACTIVE,
+        "invitation": None,
+    }
+
+
+def test_a_standing_that_serves_a_view_reads_back_from_its_json() -> None:
+    standing = Standing(place=PLACE, state=StandingState.ACTIVE, serves_view=True)
+
+    dumped = standing.model_dump_json()
+
+    assert json.loads(dumped)["serves_view"] is True
+    assert Standing.model_validate_json(dumped) == standing
+
+
+@pytest.mark.parametrize("serves_view", [1, "true", None])
+def test_a_standing_whose_serves_view_is_no_boolean_is_refused(serves_view: object) -> None:
+    with pytest.raises(ValidationError):
+        Standing(place=PLACE, state=StandingState.ACTIVE, serves_view=serves_view)  # type: ignore[arg-type]

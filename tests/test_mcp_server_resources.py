@@ -17,6 +17,7 @@ from agents.member import (
     MemberStanding,
     PlaceEntry,
     PlaceRef,
+    PlaceView,
     PlaceWindow,
     StandingState,
     place_window_uri,
@@ -26,12 +27,14 @@ from tests.support.mcp_server_support import (
     MemberApp,
     a_member,
     a_standing,
+    a_view,
     drive,
     member_scope,
     post,
     resolve_member,
     rpc_body,
     sdk_client,
+    view_uri,
 )
 
 _UNKNOWN_RESOURCE = "Unknown resource"
@@ -59,6 +62,7 @@ def app() -> MemberApp:
             alice: {
                 STANDING_URI: a_standing_record("p1"),
                 window_uri("p1"): a_window("alice line"),
+                view_uri("p1"): a_view(),
             },
             bob: {STANDING_URI: a_standing_record("p2"), window_uri("p2"): a_window("bob line")},
         }
@@ -107,6 +111,9 @@ def test_one_uri_read_by_two_members_answers_each_its_own_record_for_the_verifie
         pytest.param("member://nothing", id="an unknown uri"),
         pytest.param(window_uri("p1")[:-2] + "%70%31", id="a non-canonical spelling"),
         pytest.param(window_uri("p1").upper(), id="a case-changed spelling"),
+        pytest.param(view_uri("p2"), id="another member's view"),
+        pytest.param(view_uri("p1")[:-2] + "%65w", id="a non-canonical view spelling"),
+        pytest.param(view_uri("p1") + "/", id="a view with a trailing slash"),
     ],
 )
 def test_a_guessed_uri_answers_one_fixed_error_that_does_not_echo_the_uri(
@@ -122,7 +129,7 @@ def test_a_guessed_uri_answers_one_fixed_error_that_does_not_echo_the_uri(
 @pytest.mark.parametrize(
     ("sub", "expected"),
     [
-        ("alice", sorted([STANDING_URI, window_uri("p1")])),
+        ("alice", sorted([STANDING_URI, window_uri("p1"), view_uri("p1")])),
         ("bob", sorted([STANDING_URI, window_uri("p2")])),
         ("nobody", []),
     ],
@@ -153,7 +160,11 @@ def test_both_answers_carry_a_zero_ttl_and_a_private_cache_scope_on_the_wire(
 
 @pytest.mark.parametrize(
     ("uri", "record_type"),
-    [(STANDING_URI, MemberStanding), (window_uri("p1"), PlaceWindow)],
+    [
+        (STANDING_URI, MemberStanding),
+        (window_uri("p1"), PlaceWindow),
+        (view_uri("p1"), PlaceView),
+    ],
 )
 def test_a_runner_parses_what_it_reads_into_the_record_the_app_gave(
     front: McpPersonFront, app: MemberApp, uri: str, record_type: Any
@@ -165,6 +176,18 @@ def test_a_runner_parses_what_it_reads_into_the_record_the_app_gave(
     assert content["mimeType"] == "application/json"
     assert content["text"] == record.model_dump_json()
     assert record_type.model_validate_json(content["text"]) == record
+
+
+def test_a_views_state_reaches_the_reader_equal_to_what_the_app_gave(
+    front: McpPersonFront, app: MemberApp
+) -> None:
+    alice = a_member("alice")
+    [content] = answered(front, alice, "resources/read", uri=view_uri("p1"))["result"]["contents"]
+
+    wire = json.loads(content["text"])
+
+    assert wire["state"] == app.readable[alice][view_uri("p1")].state  # type: ignore[union-attr]
+    assert wire["revision"] == 1
 
 
 @pytest.mark.parametrize("with_port", [True, False], ids=["with the port", "without the port"])

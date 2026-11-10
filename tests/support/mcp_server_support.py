@@ -26,9 +26,11 @@ from agents.member import (
     Invitation,
     MemberStanding,
     PlaceRef,
+    PlaceView,
     PlaceWindow,
     Standing,
     StandingState,
+    place_view_uri,
     place_window_uri,
 )
 from agents.tools import Principal, ToolDeclaration, ToolEffect, ToolOutcome
@@ -41,6 +43,16 @@ type Headers = list[tuple[bytes, bytes]]
 
 def window_uri(place_id: str) -> str:
     return place_window_uri(PlaceRef(kind="call", id=place_id))
+
+
+def view_uri(place_id: str) -> str:
+    return place_view_uri(PlaceRef(kind="call", id=place_id))
+
+
+def a_view(revision: int = 1) -> PlaceView:
+    """A view whose state nests objects, arrays and every JSON scalar."""
+    state = {"hand": [{"suit": "hearts", "rank": 7}, None], "score": 2.5, "open": True, "note": ""}
+    return PlaceView(revision=revision, awaits_you=False, state=state)
 
 
 def an_empty_record() -> MemberStanding:
@@ -100,7 +112,9 @@ class MemberApp:
     ``before_current`` before it answers, so a test can change the state at that moment.
     """
 
-    readable: dict[Principal, dict[str, MemberStanding | PlaceWindow]] = field(default_factory=dict)
+    readable: dict[Principal, dict[str, MemberStanding | PlaceWindow | PlaceView]] = field(
+        default_factory=dict
+    )
     failure: Exception | None = None
     unusable: Any = None
     asked: list[tuple[Principal, str]] = field(default_factory=list)
@@ -118,7 +132,9 @@ class MemberApp:
             return self.unusable
         return sorted(self.readable.get(principal, {}), reverse=True)
 
-    async def read(self, principal: Principal, uri: str) -> MemberStanding | PlaceWindow | None:
+    async def read(
+        self, principal: Principal, uri: str
+    ) -> MemberStanding | PlaceWindow | PlaceView | None:
         await asyncio.sleep(0)
         self.asked.append((principal, uri))
         if self.failure is not None:
