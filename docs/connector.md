@@ -433,7 +433,7 @@ the tool and the exception's class
 `PlaceRef`, `StandingState`, `Invitation` and `Standing`, `MemberStanding(standings)` (what
 `STANDING_URI`, `member://standing`, answers with), `PlaceWindow(generation, starts_at, entries)`
 of `PlaceEntry(seq, kind, name, text, own, spoken)`, `LEASE_SECONDS` (120),
-`LISTEN_BOUND_SECONDS` (50), `AcceptInvitationArguments(place, invitation, epoch, figure, voice)` for the tool
+`INVITATION_SECONDS` (120), `LISTEN_BOUND_SECONDS` (50), `AcceptInvitationArguments(place, invitation, epoch, figure, voice)` for the tool
 `ACCEPT_INVITATION_TOOL`, and the records of the tool `SPEAK_TOOL`
 ([hearing and speaking](#hearing-and-speaking)). `spoken` is true for a line said aloud and
 heard, false for a written one; every dumped entry carries it, and an entry without it reads as
@@ -470,6 +470,9 @@ inviting one), `sponsor_away` (that person's seat lost its connection and waits 
 (the place or the app already holds as many members as it takes, or that person already brings
 another). A code the app adds for every tool alike is its own and not part of the record; a runner
 reading it gets a validation error and decides itself. Proved by `tests/test_member.py`.
+
+How a person calls an agent to a place and sends it away is the same in every app:
+[calling.md](calling.md).
 
 ## The standard path
 
@@ -522,9 +525,9 @@ log only the exception's type. Proved by `tests/test_mcp_server_listen.py`.
 and the app renews the member's lease on each. A runner that calls again within `LEASE_SECONDS`
 keeps its lease.
 
-**What each app owns:** its places and who stands where, the invitation, its expiry and the epoch
-check at accept, the participation and permission decisions, and enforcing the lease, removing a
-member whose lease ran out.
+**What each app owns:** its places and who stands where, the invitation, its expiry (it lasts
+`INVITATION_SECONDS`) and the epoch check at accept, the participation and permission
+decisions, and enforcing the lease, removing a member whose lease ran out.
 
 ## Hearing and speaking
 

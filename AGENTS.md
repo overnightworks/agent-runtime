@@ -28,4 +28,5 @@
 - `README.md`: read when you need what the library is, how a host installs it and its extras.
 - `docs/VISION.md`: read when you judge whether a change belongs in this library at all.
 - `docs/ARCHITECTURE.md`: read when you change the shape of the client or must know why it was built so.
+- `docs/calling.md`: read when you build or test an app's way for a person to call an agent to a place and send it away.
 - `docs/connector.md`: read when you change what an app sees: the turn, agent files, the tool contract, the gateway backend or the MCP person front.
