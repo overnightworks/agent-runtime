@@ -38,8 +38,8 @@ side reads the invitation's `expires_at` and never that value.
 expiry), the owner is still present, and the bounds hold. The place then becomes active or the
 accept is refused with a code of `AcceptInvitationRefusal`.
 
-**CALLING-8.** An invitation that runs out unanswered, and an accept refused as busy, are normal
-endings: the row is offered again and shows no refusal.
+**CALLING-8.** An invitation that runs out unanswered, one to an agent busy elsewhere included, is
+a normal ending: the row is offered again and shows no refusal.
 
 ## Sending away
 
@@ -49,8 +49,8 @@ place's own rules give. An agent is sent away whether or not its owner is presen
 sends it away is present at the place, the owner included.
 
 **CALLING-10.** A send-away takes effect at once and at any time, mid-activity included: the app
-takes the place from the agent's standing, raises the place's epoch and signals the standing. The
-agent's runner finds the place absent and ends its turn there.
+takes the place from the agent's standing, raises the place's epoch, signals the standing and
+tells the place's people. The agent's runner finds the place absent and ends its turn there.
 
 **CALLING-11.** A place that cannot go on without the agent pauses with the agent's seat open.
 What pausing and resuming mean there is the app's.
@@ -59,6 +59,9 @@ What pausing and resuming mean there is the app's.
 
 **CALLING-13.** When an agent leaves a place without being sent away stays each place's own rule.
 The standard neither requires nor forbids that an agent leaves with its owner.
+
+**CALLING-26.** A place inside another app's place is independent of it: sending an agent away
+from one leaves it in the other.
 
 ## What the person sees
 
@@ -69,7 +72,7 @@ call it), inviting (no action) or here (the person may send it away). Inviting s
 the act.
 
 **CALLING-16.** An agent is listed as here only for a person who may send it away, by CALLING-9.
-To everyone else it shows only at its tile or chair, with the AI mark.
+To everyone else it shows only at its seat in the place, with the AI mark.
 
 **CALLING-17.** The control is absent when it lists no agent.
 
@@ -84,11 +87,12 @@ and who may send away besides the agent's owner and a right the place's own rule
 owner's agent while it is there.
 
 **CALLING-20.** Before a second person becomes an owner (a member of `/agent-owners`), the split
-of this group per owner lands. Nothing refuses or warns when a second owner is added; the split is
-that owner's item to pull first.
+of this group per owner lands. Nothing refuses or warns when a second owner is added.
 
-**CALLING-21.** Group membership is read fresh from the realm, at each call and each send-away;
-liveness comes from the app's own listen streams. The standard adds no store, directory or list.
+**CALLING-21.** Group membership is read fresh from the realm, at each call and each send-away.
+Fresh means asked of the realm at the act itself, never taken from a token, session or cache that
+existed before it. Liveness comes from the app's own listen streams. The standard adds no store,
+directory or list.
 
 ## What an app supplies
 
@@ -116,21 +120,21 @@ liveness comes from the app's own listen streams. The standard adds no store, di
 4. The runner reads the standing and calls `accept_invitation(place, invitation, epoch)`. The app
    checks it (CALLING-7) and makes the place active or refuses.
 5. The row moves: inviting, then here for those who may send away, or available again after the
-   invitation runs out or is refused (CALLING-8).
+   invitation runs out (CALLING-8). A refusal shows the reason the app maps (CALLING-22).
 6. **Send away.** The person taps a here row. The page posts to the app's person route. The app
    checks the right (CALLING-9), takes the place from the standing, raises the epoch, signals the
    standing and tells the place's people (CALLING-10). The runner reads the standing and ends its
    turn there.
 
-A place inside another app's place follows the same steps. The two places stay independent: sending
-the agent away from one leaves it in the other, and each place's own rule decides when it leaves
-(CALLING-13).
+A place inside another app's place follows the same steps (CALLING-26); each place's own rule
+decides when an agent leaves it without being sent away (CALLING-13).
 
 ## Owners
 
 **CALLING-23.** Every app the standard covers follows these rules and draws the one shared control,
 so that calling and sending away an agent feel the same in each.
 
-**CALLING-24.** This file owns the rules above. The control's look and the words of its reasons
-belong to the design system. Which apps the standard covers, and from when, belongs to the fleet
-standards index.
+**CALLING-24.** This file owns the rules; the shared design kit holds the control's look. The
+standard covers every fleet app that has a place an agent with an account of its own can join. An
+app with such a place adopts it with the release of the shared control and of this library's part;
+an app without one adopts it at the landing of its first such place.
