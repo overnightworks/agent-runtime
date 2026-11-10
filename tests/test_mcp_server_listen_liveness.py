@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import pytest
 
 from agents.mcp_server import McpPersonFront, ResourceChanges
-from agents.mcp_server.listen import LISTEN_ALLOWANCE_SECONDS
-from agents.member import LISTEN_BOUND_SECONDS, STANDING_URI
+from agents.mcp_server.asgi import LOGGER_NAME
+from agents.member import LISTEN_ALLOWANCE_SECONDS, LISTEN_BOUND_SECONDS, STANDING_URI
 from agents.tools import Principal
 from tests.support import listen_support
 from tests.support.mcp_server_support import (
@@ -51,31 +52,44 @@ def signalling_front(app: MemberApp, signalling_changes: ResourceChanges) -> Mcp
 
 
 @pytest.mark.parametrize(
-    ("requested", "listens"),
+    ("requested", "asked", "listens"),
     [
-        pytest.param([STANDING_URI], True, id="the standing is acknowledged"),
+        pytest.param([STANDING_URI], STANDING_URI, True, id="the standing is acknowledged"),
         pytest.param(
-            [window_uri("first"), STANDING_URI], True, id="the standing among other places"
+            [window_uri("first"), STANDING_URI],
+            STANDING_URI,
+            True,
+            id="the standing among other places",
         ),
-        pytest.param([window_uri("first")], False, id="only a place window"),
+        pytest.param([window_uri("first")], STANDING_URI, False, id="only a place window"),
         pytest.param(
-            [window_uri("foreign")], False, id="a requested URI the principal may not read"
+            [window_uri("foreign")],
+            STANDING_URI,
+            False,
+            id="a requested URI the principal may not read",
         ),
-        pytest.param([], False, id="nothing requested"),
+        pytest.param([], STANDING_URI, False, id="nothing requested"),
+        pytest.param(
+            [STANDING_URI],
+            window_uri("first"),
+            False,
+            id="a place window while only the standing is acknowledged",
+        ),
     ],
 )
-def test_a_principal_listens_to_the_standing_when_an_acknowledged_stream_covers_it(
+def test_a_principal_listens_to_a_uri_when_an_acknowledged_stream_honored_it(
     front: McpPersonFront,
     alice: Principal,
     changes: ResourceChanges,
     requested: list[str],
+    asked: str,
     listens: bool,
 ) -> None:
     connection = listen_connection(front, alice, requested)
 
     async def scenario() -> bool:
         async with front.running(), open_stream(connection):
-            return changes.listens_to(alice, STANDING_URI)
+            return changes.listens_to(alice, asked)
 
     assert served(scenario()) is listens
 
@@ -177,7 +191,7 @@ def test_a_reopened_listen_within_the_allowance_keeps_the_answer_yes_and_signals
     "staying_seconds",
     [
         pytest.param(0, id="the client leaves"),
-        pytest.param(LISTEN_BOUND_SECONDS * 2, id="the bound"),
+        pytest.param(LISTEN_BOUND_SECONDS + 1, id="the bound"),
     ],
 )
 def test_a_listen_nothing_follows_turns_the_answer_no_after_the_allowance_with_one_signal(
@@ -200,9 +214,7 @@ def test_a_listen_nothing_follows_turns_the_answer_no_after_the_allowance_with_o
             answers.append(signalling_changes.listens_to(alice, STANDING_URI))
         return answers
 
-    answers = served(scenario())
-
-    assert answers[-1] is False
+    assert served(scenario()) == [True, False]
     assert signals == [(alice, STANDING_URI, True), (alice, STANDING_URI, False)]
 
 
@@ -247,11 +259,13 @@ def test_a_stream_signals_only_once_acknowledged(
     assert served(scenario()) == ([], [(alice, STANDING_URI, True)])
 
 
-def test_a_callable_that_raises_leaves_the_listen_unharmed(
-    app: MemberApp, alice: Principal
+def test_a_callable_that_raises_leaves_the_listen_unharmed_and_is_logged_by_type_only(
+    app: MemberApp, alice: Principal, caplog: pytest.LogCaptureFixture
 ) -> None:
+    caplog.set_level(logging.ERROR, logger=LOGGER_NAME)
+
     def raises(_principal: Principal, _uri: str, _listens: bool) -> None:
-        raise RuntimeError("the host's callable failed")
+        raise RuntimeError("the host's secret detail")
 
     changes = ResourceChanges(raises)
     front = McpPersonFront([], resolve_person=resolve_member, resources=app, changes=changes)
@@ -271,3 +285,39 @@ def test_a_callable_that_raises_leaves_the_listen_unharmed(
     assert served(scenario()) == [True, False]
     assert connection.updated_uris == [STANDING_URI]
     assert connection.status == 200
+    logged = " ".join(record.getMessage() for record in caplog.records)
+    assert "listening_changed" in logged
+    assert "RuntimeError" in logged
+    assert "resource method" not in logged
+    assert "secret detail" not in logged
+
+
+@pytest.mark.parametrize(
+    "requested",
+    [
+        pytest.param([STANDING_URI], id="the standing"),
+        pytest.param([window_uri("first"), STANDING_URI], id="the standing among a place"),
+    ],
+)
+def test_the_answer_equals_the_signal_at_every_signal(
+    app: MemberApp, alice: Principal, requested: list[str]
+) -> None:
+    seen: list[tuple[bool, bool]] = []
+
+    def records_the_answer(principal: Principal, uri: str, listens: bool) -> None:
+        seen.append((listens, changes.listens_to(principal, uri)))
+
+    changes = ResourceChanges(records_the_answer)
+    front = McpPersonFront([], resolve_person=resolve_member, resources=app, changes=changes)
+    connection = listen_connection(front, alice, requested)
+
+    async def scenario() -> None:
+        async with front.running():
+            async with open_stream(connection):
+                pass
+            await asyncio.sleep(_PAST_THE_ALLOWANCE)
+
+    served(scenario())
+
+    assert {listens for listens, _answer in seen} == {True, False}
+    assert all(listens is answer for listens, answer in seen)

@@ -15,6 +15,7 @@ so a removal ends delivery during an open stream.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Callable, Collection, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -34,19 +35,17 @@ from mcp_types import (
     SubscriptionsListenResult,
 )
 
-from agents.mcp_server.asgi import LISTEN_METHOD
+from agents.mcp_server.asgi import LISTEN_METHOD, LOGGER_NAME
 from agents.mcp_server.resources import MemberResources, _failure
 from agents.member import (
+    LISTEN_ALLOWANCE_SECONDS,
     LISTEN_BOUND_SECONDS,
     STANDING_URI,
     place_ref_from_window_uri,
 )
 from agents.turn import Principal
 
-LISTEN_ALLOWANCE_SECONDS: Final = 5
-"""How long an ended listen still counts as one: a runner listens again at once, which takes the
-connection and one call of the port (a few milliseconds plus the port's latency), so the answer
-never turns no between two listens; far below ``LEASE_SECONDS``."""
+_LOG: Final = logging.getLogger(LOGGER_NAME)
 
 
 class _OpenStream:
@@ -156,7 +155,9 @@ class ResourceChanges:
         try:
             self._listening_changed(recipient, uri, listens)
         except Exception as failure:
-            _failure(LISTEN_METHOD, failure)
+            _LOG.error(
+                "the listening_changed callable failed: it raised %s", type(failure).__name__
+            )
 
 
 def _wanted(uri: str, honored: Collection[str]) -> bool:

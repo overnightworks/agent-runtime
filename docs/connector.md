@@ -371,7 +371,8 @@ the host registers as the exact route `MCP_ENDPOINT_PATH` (in `agents.mcp_wire`)
 never a `Mount`, which redirects `/mcp` to `/mcp/`, and behind the middleware that admits the
 caller: the host's gate answers every 401 and 403 before routing, so the front answers no challenge.
 The host enters `async with front.running():` once in its own lifespan, the one thing the SDK's
-session manager needs; a request outside it raises `RuntimeError`. Proved by
+session manager needs; a request outside it raises `RuntimeError`. The front runs on `asyncio`:
+the allowance timer of a listen uses the running loop, which `anyio` alone does not offer. Proved by
 `tests/test_mcp_server_person.py`:
 `test_an_exact_starlette_route_serves_discovery_list_and_call_without_a_redirect`,
 `test_a_request_outside_running_fails_loud`.
@@ -433,7 +434,8 @@ the tool and the exception's class
 `PlaceRef`, `StandingState`, `Invitation` and `Standing`, `MemberStanding(standings)` (what
 `STANDING_URI`, `member://standing`, answers with), `PlaceWindow(generation, starts_at, entries)`
 of `PlaceEntry(seq, kind, name, text, own, spoken)`, `LEASE_SECONDS` (120),
-`INVITATION_SECONDS` (120), `LISTEN_BOUND_SECONDS` (50), `AcceptInvitationArguments(place, invitation, epoch, figure, voice)` for the tool
+`INVITATION_SECONDS` (120), `LISTEN_BOUND_SECONDS` (50),
+`LISTEN_ALLOWANCE_SECONDS` (5), `AcceptInvitationArguments(place, invitation, epoch, figure, voice)` for the tool
 `ACCEPT_INVITATION_TOOL`, and the records of the tool `SPEAK_TOOL`
 ([hearing and speaking](#hearing-and-speaking)). `spoken` is true for a line said aloud and
 heard, false for a written one; every dumped entry carries it, and an entry without it reads as
@@ -530,6 +532,11 @@ no before the acknowledgement, after the allowance of the last such stream and f
 honored only a place window, because the URI is compared as asked and not widened to the places a
 standing subscriber also receives. Several streams of one principal count while any of them
 counts. It runs on the front's event loop, like `changed`.
+
+The answer reads what the stream's acknowledgement honored; it does not re-check the member's
+current resources, so a removal turns it no only once the stream has ended and the allowance has
+passed. The standing is every admitted member's own resource, and whether the member still holds
+its account and its places is the app's own record: an app combines the answer with that record.
 
 `ResourceChanges(listening_changed)` takes one optional callable, `(principal, uri, listens) ->
 None`, called when the answer for a principal and URI changes: with `True` on the request task
