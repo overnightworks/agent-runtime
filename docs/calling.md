@@ -20,7 +20,8 @@ STANDING_URI)` and learns of a change from the `listening_changed` callable it p
 rule.
 
 **CALLING-3.** A person is offered an agent only if they are present at the place and a member of
-the realm group `/agent-adders`, read fresh at the call.
+the realm group `/agent-adders`. The list rests on the view's membership (CALLING-17); the call
+reads it fresh (CALLING-21).
 
 **CALLING-4.** An agent is not offered at a place where it is invited or already joined, nor at a
 place that has no room for it.
@@ -80,8 +81,8 @@ To everyone else it shows only at its seat in the place, with the AI mark.
 (CALLING-19) or holds a send-away right the place's own rules give (CALLING-9), and to any person
 for whom it lists an agent. When it lists no agent, it shows one sentence that no agent can be
 reached, and no reason per agent. The app decides whether to show it from the groups its session
-carries, or from one read of the group when the view is built, and the place's rights; it is never
-read per render. Only the act reads the group fresh (CALLING-21), so a person whom a stale view
+carries, or from one read of the group when the view is built, and the place's rights. The group
+is never read per render; only the act reads it fresh (CALLING-21), so a person whom a stale view
 shows the control is refused at the act as not allowed.
 
 **CALLING-18.** The control stands at the place itself, at the same position whether or not the
@@ -97,10 +98,10 @@ owner's agent while it is there.
 **CALLING-20.** Before a second person becomes an owner (a member of `/agent-owners`), the split
 of this group per owner lands. Nothing refuses or warns when a second owner is added.
 
-**CALLING-21.** Group membership is read fresh from the realm, at each call and each send-away.
-Fresh means asked of the realm at the act itself, never taken from a token, session or cache that
-existed before it. Liveness comes from the app's own listen streams. The standard adds no store,
-directory or list.
+**CALLING-21.** Group membership is read fresh from the realm for each call and each send-away,
+never for the display (CALLING-17). Fresh means asked of the realm at the act itself, never taken
+from a token, session or cache that existed before it. Liveness comes from the app's own listen
+streams. The standard adds no store, directory or list.
 
 ## What an app supplies
 
