@@ -291,6 +291,9 @@ def test_accept_invitation_arguments_take_the_place_straight_from_the_standing()
     assert AcceptInvitationArguments.model_validate_json(arguments.model_dump_json()) == arguments
 
 
+ACCEPT_WIRE = {"place": {"kind": "room", "id": "r-1"}, "invitation": "i-1", "epoch": 3}
+
+
 @pytest.mark.parametrize(
     "fields",
     [{"epoch": -1}, {"epoch": 1.0}, {"invitation": ""}, {"extra": 1}],
@@ -299,7 +302,7 @@ def test_accept_invitation_arguments_take_the_place_straight_from_the_standing()
 def test_accept_invitation_arguments_with_a_malformed_field_are_refused(
     fields: dict[str, Any],
 ) -> None:
-    wire = {"place": {"kind": "room", "id": "r-1"}, "invitation": "i-1", "epoch": 3} | fields
+    wire = ACCEPT_WIRE | fields
 
     wire_text = json.dumps(wire)
 
@@ -307,7 +310,6 @@ def test_accept_invitation_arguments_with_a_malformed_field_are_refused(
         AcceptInvitationArguments.model_validate_json(wire_text)
 
 
-ACCEPT_WIRE = {"place": {"kind": "room", "id": "r-1"}, "invitation": "i-1", "epoch": 3}
 FIGURE_WIRE = {"url": "https://figures.example/a.glb", "sha256": "ab12" * 16}
 
 
@@ -352,6 +354,14 @@ def test_accept_invitation_arguments_take_a_figure_and_a_voice_or_neither(
         "https://host/a\\b.glb",
         "https://host:abc/a.glb",
         "https://host:99999/a.glb",
+        'https://ho"st/a.glb',
+        "https://ho<st/a.glb",
+        "https://ho>st/a.glb",
+        "https://ho^st/a.glb",
+        "https://ho`st/a.glb",
+        "https://ho{st/a.glb",
+        "https://ho|st/a.glb",
+        "https://ho}st/a.glb",
     ],
     ids=[
         "http",
@@ -372,6 +382,14 @@ def test_accept_invitation_arguments_take_a_figure_and_a_voice_or_neither(
         "backslash-in-path",
         "non-numeric-port",
         "port-over-65535",
+        "double-quote-in-host",
+        "less-than-in-host",
+        "greater-than-in-host",
+        "caret-in-host",
+        "backtick-in-host",
+        "open-brace-in-host",
+        "pipe-in-host",
+        "close-brace-in-host",
     ],
 )
 def test_accept_invitation_arguments_refuse_a_figure_url_that_is_not_a_plain_https_address(
