@@ -17,6 +17,7 @@ from agents.member import (
     AcceptInvitationArguments,
     AcceptInvitationRefusal,
     AcceptInvitationRefused,
+    FigureRef,
     Invitation,
     MemberStanding,
     PlaceEntry,
@@ -304,6 +305,85 @@ def test_accept_invitation_arguments_with_a_malformed_field_are_refused(
 
     with pytest.raises(ValidationError):
         AcceptInvitationArguments.model_validate_json(wire_text)
+
+
+ACCEPT_WIRE = {"place": {"kind": "room", "id": "r-1"}, "invitation": "i-1", "epoch": 3}
+FIGURE_WIRE = {"url": "https://figures.example/a.glb", "sha256": "ab12" * 16}
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {},
+        {"figure": FIGURE_WIRE},
+        {"voice": "nova-2.hd_x"},
+        {"figure": FIGURE_WIRE, "voice": "nova"},
+    ],
+    ids=["neither", "figure-only", "voice-only", "both"],
+)
+def test_accept_invitation_arguments_take_a_figure_and_a_voice_or_neither(
+    fields: dict[str, Any],
+) -> None:
+    arguments = AcceptInvitationArguments.model_validate_json(json.dumps(ACCEPT_WIRE | fields))
+
+    assert arguments.figure == (FigureRef(**fields["figure"]) if "figure" in fields else None)
+    assert arguments.voice == fields.get("voice")
+    assert AcceptInvitationArguments.model_validate_json(arguments.model_dump_json()) == arguments
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://figures.example/a.glb",
+        "https://user@figures.example/a.glb",
+        "https://user:secret@figures.example/a.glb",
+        "https://figures.example/a.glb?v=1",
+        "https://figures.example/a.glb#top",
+        "/figures/a.glb",
+        "figures.example/a.glb",
+        "https:///a.glb",
+    ],
+    ids=["http", "user", "user-password", "query", "fragment", "relative", "no-scheme", "no-host"],
+)
+def test_accept_invitation_arguments_refuse_a_figure_url_that_is_not_a_plain_https_address(
+    url: str,
+) -> None:
+    wire = ACCEPT_WIRE | {"figure": FIGURE_WIRE | {"url": url}}
+
+    with pytest.raises(ValidationError):
+        AcceptInvitationArguments.model_validate_json(json.dumps(wire))
+
+
+@pytest.mark.parametrize(
+    "digest",
+    ["a" * 63, "a" * 65, "A" * 64, "g" * 64, "", " " + "a" * 63],
+    ids=["short", "long", "uppercase", "non-hex", "empty", "space"],
+)
+def test_accept_invitation_arguments_refuse_a_figure_digest_that_is_not_64_lowercase_hex(
+    digest: str,
+) -> None:
+    wire = ACCEPT_WIRE | {"figure": FIGURE_WIRE | {"sha256": digest}}
+
+    with pytest.raises(ValidationError):
+        AcceptInvitationArguments.model_validate_json(json.dumps(wire))
+
+
+@pytest.mark.parametrize(
+    "voice",
+    ["Nova", "no va", "no/va", "", "a" * 65],
+    ids=["uppercase", "space", "slash", "empty", "65-characters"],
+)
+def test_accept_invitation_arguments_refuse_a_voice_outside_the_grammar(voice: str) -> None:
+    with pytest.raises(ValidationError):
+        AcceptInvitationArguments.model_validate_json(json.dumps(ACCEPT_WIRE | {"voice": voice}))
+
+
+def test_accept_invitation_arguments_take_a_voice_of_64_characters() -> None:
+    arguments = AcceptInvitationArguments.model_validate_json(
+        json.dumps(ACCEPT_WIRE | {"voice": "a" * 64})
+    )
+
+    assert arguments.voice == "a" * 64
 
 
 def test_speak_arguments_carry_the_place_and_one_sentence_on_the_wire() -> None:
