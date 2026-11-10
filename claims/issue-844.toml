@@ -1,8 +1,0 @@
-claim_id = "0c3a79292f85402faf6ae3077ee328c1"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "350bc834f18f04b13b33d20206558c035349709e"
-branch = "claude/issue-844-calling-standard"
-scope = ["AGENTS.md", "README.md", "docs/calling.md", "docs/connector.md", "src/agents/member.py"]
-opened_commit = "f0e618fa9f2cbd3df113e2b74c785bf68eb22600"
-whole_reason = "The value and the standard that names it are one contract; the three pointers are one line each."
