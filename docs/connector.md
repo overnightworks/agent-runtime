@@ -433,7 +433,7 @@ the tool and the exception's class
 `PlaceRef`, `StandingState`, `Invitation` and `Standing`, `MemberStanding(standings)` (what
 `STANDING_URI`, `member://standing`, answers with), `PlaceWindow(generation, starts_at, entries)`
 of `PlaceEntry(seq, kind, name, text, own, spoken)`, `LEASE_SECONDS` (120),
-`LISTEN_BOUND_SECONDS` (50), `AcceptInvitationArguments(place, invitation, epoch, figure, voice)` for the tool
+`INVITATION_SECONDS` (120), `LISTEN_BOUND_SECONDS` (50), `AcceptInvitationArguments(place, invitation, epoch, figure, voice)` for the tool
 `ACCEPT_INVITATION_TOOL`, and the records of the tool `SPEAK_TOOL`
 ([hearing and speaking](#hearing-and-speaking)). `spoken` is true for a line said aloud and
 heard, false for a written one; every dumped entry carries it, and an entry without it reads as

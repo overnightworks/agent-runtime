@@ -25,6 +25,9 @@ place that has no room for it.
 
 **CALLING-5.** While an invitation is open, only its inviter sees the agent, as inviting.
 
+**CALLING-25.** An agent's runner holds a listen on an app's standing only while it accepts
+invitations to that app's places.
+
 ## Calling
 
 **CALLING-6.** The invitation is the app's. It is bound to its inviter and to the owner's
@@ -42,7 +45,8 @@ endings: the row is offered again and shows no refusal.
 
 **CALLING-9.** A person present at the place may send an agent away that holds it when they are a
 member of `/agent-adders` (read fresh at the send-away), the agent's owner, or hold a right the
-place's own rules give. The owner's presence is not required.
+place's own rules give. An agent is sent away whether or not its owner is present; the person who
+sends it away is present at the place, the owner included.
 
 **CALLING-10.** A send-away takes effect at once and at any time, mid-activity included: the app
 takes the place from the agent's standing, raises the place's epoch and signals the standing. The
@@ -67,22 +71,24 @@ the act.
 **CALLING-16.** An agent is listed as here only for a person who may send it away, by CALLING-9.
 To everyone else it shows only at its tile or chair, with the AI mark.
 
-**CALLING-17.** The control is absent when no agent can be called or sent away.
+**CALLING-17.** The control is absent when it lists no agent.
 
 **CALLING-18.** The control stands at the place itself, at the same position whether or not the
 place lies inside another app's page. No app fetches an agent into another app's place.
 
 ## The group
 
-**CALLING-19.** One realm group, `/agent-adders`, decides who may call and send away, for every
-owner's agent. Each app names it as a constant. Any member of the group may call or send away any
+**CALLING-19.** One realm group, `/agent-adders`, decides who may call, for every owner's agent,
+and who may send away besides the agent's owner and a right the place's own rules give
+(CALLING-9). Each app names it as a constant. Any member of the group may call or send away any
 owner's agent while it is there.
 
 **CALLING-20.** Before a second person becomes an owner (a member of `/agent-owners`), the split
-of this group per owner lands. Until then the app refuses nothing and warns of nothing for it.
+of this group per owner lands. Nothing refuses or warns when a second owner is added; the split is
+that owner's item to pull first.
 
-**CALLING-21.** Rights come from the realm, read fresh at each call and each send-away; liveness
-comes from the app's own listen streams. The standard adds no store, directory or list.
+**CALLING-21.** Group membership is read fresh from the realm, at each call and each send-away;
+liveness comes from the app's own listen streams. The standard adds no store, directory or list.
 
 ## What an app supplies
 
@@ -100,7 +106,8 @@ comes from the app's own listen streams. The standard adds no store, directory o
 
 ## The steps
 
-1. The agent's runner listens on the app's `member://standing`, so the agent is live (CALLING-1).
+1. The agent's runner listens on the app's `member://standing`, so the agent is live (CALLING-1),
+   and does so only while it accepts invitations to the app's places (CALLING-25).
 2. A person opens the place. The page shows the control at the place itself and lists agents per
    CALLING-1 to CALLING-5.
 3. **Call.** The person taps an available row. The page posts to the app's person route. The app
