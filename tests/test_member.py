@@ -348,10 +348,10 @@ def test_accept_invitation_arguments_take_a_figure_and_a_voice_or_neither(
 def test_accept_invitation_arguments_refuse_a_figure_url_that_is_not_a_plain_https_address(
     url: str,
 ) -> None:
-    wire = ACCEPT_WIRE | {"figure": FIGURE_WIRE | {"url": url}}
+    wire_text = json.dumps(ACCEPT_WIRE | {"figure": FIGURE_WIRE | {"url": url}})
 
     with pytest.raises(ValidationError):
-        AcceptInvitationArguments.model_validate_json(json.dumps(wire))
+        AcceptInvitationArguments.model_validate_json(wire_text)
 
 
 @pytest.mark.parametrize(
@@ -362,10 +362,10 @@ def test_accept_invitation_arguments_refuse_a_figure_url_that_is_not_a_plain_htt
 def test_accept_invitation_arguments_refuse_a_figure_digest_that_is_not_64_lowercase_hex(
     digest: str,
 ) -> None:
-    wire = ACCEPT_WIRE | {"figure": FIGURE_WIRE | {"sha256": digest}}
+    wire_text = json.dumps(ACCEPT_WIRE | {"figure": FIGURE_WIRE | {"sha256": digest}})
 
     with pytest.raises(ValidationError):
-        AcceptInvitationArguments.model_validate_json(json.dumps(wire))
+        AcceptInvitationArguments.model_validate_json(wire_text)
 
 
 @pytest.mark.parametrize(
@@ -374,8 +374,10 @@ def test_accept_invitation_arguments_refuse_a_figure_digest_that_is_not_64_lower
     ids=["uppercase", "space", "slash", "empty", "65-characters"],
 )
 def test_accept_invitation_arguments_refuse_a_voice_outside_the_grammar(voice: str) -> None:
+    wire_text = json.dumps(ACCEPT_WIRE | {"voice": voice})
+
     with pytest.raises(ValidationError):
-        AcceptInvitationArguments.model_validate_json(json.dumps(ACCEPT_WIRE | {"voice": voice}))
+        AcceptInvitationArguments.model_validate_json(wire_text)
 
 
 def test_accept_invitation_arguments_take_a_voice_of_64_characters() -> None:
