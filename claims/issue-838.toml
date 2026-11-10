@@ -1,7 +1,0 @@
-claim_id = "877d6273727242d796706e97d9ccc8e2"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "92f614646f4217546d290cd744d3231dd3904579"
-branch = "claude/issue-838-accept-figure-voice"
-scope = ["docs/connector.md", "src/agents/member.py", "tests/test_member.py"]
-opened_commit = "4f14b5d755ac6a2dd3de14ec716629ec21374bd5"
