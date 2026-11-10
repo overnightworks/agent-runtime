@@ -48,8 +48,8 @@ from agents.turn import Principal
 _LOG: Final = logging.getLogger(LOGGER_NAME)
 
 
-class _OpenStream:
-    """One open stream: its changed URIs, a repeated one staying once at its first arrival, and
+class _ListenStream:
+    """One listen stream: its pending URIs, a repeated one staying once at its first arrival, and
     the URIs it honors from its acknowledgement on."""
 
     def __init__(self) -> None:
@@ -90,11 +90,12 @@ class ResourceChanges:
     def __init__(
         self, listening_changed: Callable[[Principal, str, bool], None] | None = None
     ) -> None:
-        self._streams: dict[Principal, set[_OpenStream]] = {}
+        self._streams: dict[Principal, set[_ListenStream]] = {}
         self._listening_changed = listening_changed
 
     def changed(self, recipient: Principal, uri: str) -> None:
-        """Signal every open stream of the recipient.
+        """Signal every registered stream of the recipient; a stream that has ended and waits out
+        its allowance never reads the pulse.
 
         Runs on the front's event loop or through ``anyio.from_thread.run_sync``, and only after
         the change is visible to the read.
@@ -113,10 +114,10 @@ class ResourceChanges:
         return any(uri in stream.honored for stream in self._streams.get(principal, ()))
 
     @contextmanager
-    def opened(self, recipient: Principal) -> Iterator[_OpenStream]:
+    def opened(self, recipient: Principal) -> Iterator[_ListenStream]:
         """One stream for as long as it is open; one that honored a URI counts on for the
         allowance after it ends."""
-        stream = _OpenStream()
+        stream = _ListenStream()
         self._streams.setdefault(recipient, set()).add(stream)
         try:
             yield stream
@@ -129,7 +130,7 @@ class ResourceChanges:
                 self._forget(recipient, stream)
 
     def acknowledged(
-        self, recipient: Principal, stream: _OpenStream, honored: Collection[str]
+        self, recipient: Principal, stream: _ListenStream, honored: Collection[str]
     ) -> None:
         """The stream's acknowledgement was written: it honors the URIs from now on."""
         newly_listened = [uri for uri in honored if not self.listens_to(recipient, uri)]
@@ -137,13 +138,13 @@ class ResourceChanges:
         for uri in newly_listened:
             self._signal(recipient, uri, listens=True)
 
-    def _lapsed(self, recipient: Principal, stream: _OpenStream) -> None:
+    def _lapsed(self, recipient: Principal, stream: _ListenStream) -> None:
         self._forget(recipient, stream)
         for uri in stream.honored:
             if not self.listens_to(recipient, uri):
                 self._signal(recipient, uri, listens=False)
 
-    def _forget(self, recipient: Principal, stream: _OpenStream) -> None:
+    def _forget(self, recipient: Principal, stream: _ListenStream) -> None:
         streams = self._streams[recipient]
         streams.discard(stream)
         if not streams:
@@ -213,7 +214,7 @@ class _Stream:
 async def _deliver(
     resources: MemberResources,
     principal: Principal,
-    open_stream: _OpenStream,
+    open_stream: _ListenStream,
     stream: _Stream,
 ) -> None:
     """Writes each wanted pulse the principal may still read, until a port failure ends it."""
