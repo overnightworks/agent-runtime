@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pytest
 
 from agents.mcp_server import McpPersonFront, ResourceChanges
@@ -32,97 +34,81 @@ def viewing_app(app: MemberApp, alice: Principal) -> MemberApp:
     return app
 
 
+def woken_by(
+    front: McpPersonFront,
+    changes: ResourceChanges,
+    member: Principal,
+    listened: str,
+    signalled: list[str],
+    after_signal: Callable[[int], None] = lambda _index: None,
+) -> list[str]:
+    """The URIs a listen for ``listened`` delivers when each of ``signalled`` is signalled, and
+    ``after_signal`` runs after each, before the stream drains it."""
+    connection = listen_connection(front, member, [listened])
+
+    async def scenario() -> None:
+        async with front.running(), open_stream(connection):
+            for index, uri in enumerate(signalled):
+                changes.changed(member, uri)
+                after_signal(index)
+                await settled()
+
+    served(scenario())
+    return connection.updated_uris
+
+
 @pytest.mark.usefixtures("viewing_app")
-def test_a_standing_subscriber_is_woken_with_the_view_uri_an_app_signals(
-    front: McpPersonFront, alice: Principal, changes: ResourceChanges
+@pytest.mark.parametrize(
+    ("listened", "signalled", "woken"),
+    [
+        pytest.param(
+            STANDING_URI,
+            [view_uri("first")],
+            [view_uri("first")],
+            id="a standing subscriber and the app signals a view",
+        ),
+        pytest.param(
+            view_uri("first"),
+            [STANDING_URI, window_uri("first"), view_uri("first")],
+            [view_uri("first")],
+            id="a subscriber of one view gets that view alone",
+        ),
+        pytest.param(
+            STANDING_URI,
+            [view_uri("second")],
+            [],
+            id="a view the app does not list among the member's resources",
+        ),
+    ],
+)
+def test_a_view_wakes_its_subscribers_when_the_app_lists_it(
+    front: McpPersonFront,
+    alice: Principal,
+    changes: ResourceChanges,
+    listened: str,
+    signalled: list[str],
+    woken: list[str],
 ) -> None:
-    connection = listen_connection(front, alice, [STANDING_URI])
-
-    async def scenario() -> None:
-        async with front.running(), open_stream(connection):
-            changes.changed(alice, view_uri("first"))
-            await settled()
-
-    served(scenario())
-
-    assert connection.updated_uris == [view_uri("first")]
-
-
-@pytest.mark.usefixtures("viewing_app")
-def test_a_subscriber_of_one_view_is_woken_for_that_view_alone(
-    front: McpPersonFront, alice: Principal, changes: ResourceChanges
-) -> None:
-    connection = listen_connection(front, alice, [view_uri("first")])
-
-    async def scenario() -> None:
-        async with front.running(), open_stream(connection):
-            changes.changed(alice, STANDING_URI)
-            changes.changed(alice, window_uri("first"))
-            changes.changed(alice, view_uri("first"))
-            await settled()
-
-    served(scenario())
-
-    assert connection.updated_uris == [view_uri("first")]
-
-
-def test_a_standing_subscriber_is_not_woken_for_a_view_the_app_does_not_list(
-    front: McpPersonFront, alice: Principal, changes: ResourceChanges
-) -> None:
-    connection = listen_connection(front, alice, [STANDING_URI])
-
-    async def scenario() -> None:
-        async with front.running(), open_stream(connection):
-            changes.changed(alice, view_uri("first"))
-            await settled()
-
-    served(scenario())
-
-    assert connection.updated_uris == []
+    assert woken_by(front, changes, alice, listened, signalled) == woken
 
 
 @pytest.mark.parametrize(
-    "removed_before_the_pulse", [True, False], ids=["queued before", "after the pulse"]
+    ("removed_at", "woken"),
+    [(0, []), (1, [view_uri("first")])],
+    ids=["removed with the first pulse queued", "removed with the second pulse queued"],
 )
 def test_delivery_for_a_view_ends_when_the_member_is_removed_from_the_place(
     front: McpPersonFront,
     viewing_app: MemberApp,
     alice: Principal,
     changes: ResourceChanges,
-    removed_before_the_pulse: bool,
+    removed_at: int,
+    woken: list[str],
 ) -> None:
-    connection = listen_connection(front, alice, [STANDING_URI])
+    def remove_at_the_pulse(index: int) -> None:
+        if index == removed_at:
+            del viewing_app.readable[alice][view_uri("first")]
 
-    async def scenario() -> None:
-        async with front.running(), open_stream(connection):
-            if removed_before_the_pulse:
-                changes.changed(alice, view_uri("first"))
-                del viewing_app.readable[alice][view_uri("first")]
-                await settled()
-            else:
-                changes.changed(alice, view_uri("first"))
-                await settled()
-                del viewing_app.readable[alice][view_uri("first")]
-                changes.changed(alice, view_uri("first"))
-                await settled()
+    uris = [view_uri("first")] * 2
 
-    served(scenario())
-
-    assert connection.updated_uris == ([] if removed_before_the_pulse else [view_uri("first")])
-
-
-@pytest.mark.usefixtures("viewing_app")
-def test_a_member_whose_resources_hold_no_view_is_not_woken_for_it(
-    front: McpPersonFront, bob: Principal, alice: Principal, changes: ResourceChanges
-) -> None:
-    connection = listen_connection(front, bob, [STANDING_URI])
-
-    async def scenario() -> None:
-        async with front.running(), open_stream(connection):
-            changes.changed(alice, view_uri("first"))
-            changes.changed(bob, view_uri("first"))
-            await settled()
-
-    served(scenario())
-
-    assert connection.updated_uris == []
+    assert woken_by(front, changes, alice, STANDING_URI, uris, remove_at_the_pulse) == woken
