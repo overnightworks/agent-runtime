@@ -51,7 +51,11 @@ def view_uri(place_id: str) -> str:
 
 def a_view(revision: int = 1) -> PlaceView:
     """A view whose state nests objects, arrays and every JSON scalar."""
-    state = {"items": [{"label": "ä", "count": 2}, [None, True, 1.5]], "open": True, "note": None}
+    state = {
+        "items": [{"label": "ä", "count": 2}, [None, True, 1, 1.0, 1.5]],
+        "open": True,
+        "note": None,
+    }
     return PlaceView(revision=revision, awaits_you=False, state=state)
 
 

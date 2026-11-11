@@ -186,7 +186,9 @@ def test_a_views_state_reaches_the_reader_equal_to_what_the_app_gave(
 
     wire = json.loads(content["text"])
 
-    assert wire["state"] == app.readable[alice][view_uri("p1")].state  # type: ignore[union-attr]
+    given_state = app.readable[alice][view_uri("p1")].state  # type: ignore[union-attr]
+    assert wire["state"] == given_state
+    assert json.dumps(wire["state"]) == json.dumps(given_state)
     assert wire["revision"] == 1
 
 

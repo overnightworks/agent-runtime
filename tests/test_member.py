@@ -551,7 +551,7 @@ def test_a_malformed_refused_content_is_refused(
 
 def test_a_place_view_reads_back_from_its_json_with_its_state_untouched() -> None:
     state = {
-        "items": [{"label": "ä", "count": 2}, [None, 1.5]],
+        "items": [{"label": "ä", "count": 2}, [None, 1.0, 1, True, 1.5]],
         "group": {"open": True},
         "note": None,
     }
@@ -561,6 +561,7 @@ def test_a_place_view_reads_back_from_its_json_with_its_state_untouched() -> Non
 
     assert read == view
     assert read.state == state
+    assert json.dumps(read.state) == json.dumps(state)
 
 
 @pytest.mark.parametrize(
