@@ -3,6 +3,6 @@ agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
 role = "builder"
 base = "f037f0f1284d398b527d1d5d1fc7ccd5717f67bf"
 branch = "claude/issue-849-place-view"
-scope = ["docs/connector.md", "src/agents/mcp_server/listen.py", "src/agents/mcp_server/resources.py", "src/agents/member.py", "src/agents/turn.py", "tests/support", "tests/test_mcp_server_listen.py", "tests/test_mcp_server_listen_view.py", "tests/test_mcp_server_resources.py", "tests/test_member.py"]
+scope = ["docs/ARCHITECTURE.md", "docs/connector.md", "src/agents/mcp_server/listen.py", "src/agents/mcp_server/resources.py", "src/agents/member.py", "src/agents/turn.py", "tests/support", "tests/test_mcp_server_listen.py", "tests/test_mcp_server_listen_view.py", "tests/test_mcp_server_resources.py", "tests/test_member.py"]
 opened_commit = "b53da715de993a98d9d6ce5ab9b9c3b3d0eb0fa9"
 whole_reason = "The record, its URI, the read's return type and the listen clause are one contract: without any of them a view is either unreadable or never wakes its member; the test modules are their suites, with the listen clause's tests in a module of their own because tests/test_mcp_server_listen.py stands at 769 of 800 lines, on the fixtures in tests/support."
