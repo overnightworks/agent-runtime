@@ -308,5 +308,4 @@ def place_ref_from_view_uri(uri: str) -> PlaceRef | None:
     """The place a view URI names, or ``None`` for anything but its canonical spelling."""
     if not isinstance(uri, str) or not uri.endswith(_VIEW_SEGMENT):
         return None
-    place = place_ref_from_window_uri(uri.removesuffix(_VIEW_SEGMENT))
-    return place if place is not None and place_view_uri(place) == uri else None
+    return place_ref_from_window_uri(uri.removesuffix(_VIEW_SEGMENT))

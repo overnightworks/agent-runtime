@@ -35,6 +35,7 @@ from agents.member import (
     place_view_uri,
     place_window_uri,
 )
+from tests.support.mcp_server_support import a_view
 
 PLACE = PlaceRef(kind="room", id="r-1")
 INVITATION = Invitation(id="i-1", epoch=3, expires_at=datetime(2026, 11, 8, 12, tzinfo=UTC))
@@ -549,20 +550,13 @@ def test_a_malformed_refused_content_is_refused(
         record.model_validate_json(wire)
 
 
-NESTED_STATE: dict[str, Any] = {
-    "hand": [{"suit": "hearts", "rank": 7}, [None, True, 1.5], "ä"],
-    "turn": 3,
-    "empty": {},
-}
-
-
 def test_a_place_view_reads_back_from_its_json_with_its_state_untouched() -> None:
-    view = PlaceView(revision=4, awaits_you=True, state=NESTED_STATE)
+    view = a_view(revision=4, awaits_you=True)
 
     read = PlaceView.model_validate_json(view.model_dump_json())
 
     assert read == view
-    assert read.state == NESTED_STATE
+    assert read.state == view.state
 
 
 @pytest.mark.parametrize(

@@ -49,10 +49,10 @@ def view_uri(place_id: str) -> str:
     return place_view_uri(PlaceRef(kind="call", id=place_id))
 
 
-def a_view(revision: int = 1) -> PlaceView:
+def a_view(revision: int = 1, *, awaits_you: bool = False) -> PlaceView:
     """A view whose state nests objects, arrays and every JSON scalar."""
-    state = {"hand": [{"suit": "hearts", "rank": 7}, None], "score": 2.5, "open": True, "note": ""}
-    return PlaceView(revision=revision, awaits_you=False, state=state)
+    state = {"items": [{"label": "ä", "count": 2}, [None, True, 1.5]], "open": True, "note": None}
+    return PlaceView(revision=revision, awaits_you=awaits_you, state=state)
 
 
 def an_empty_record() -> MemberStanding:

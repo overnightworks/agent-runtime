@@ -456,7 +456,7 @@ the app decides it from the state at that revision, so one revision has one `awa
 view is the resource `place_view_uri(place)`, the place's window URI with the segment `view`
 after it; `place_ref_from_view_uri(uri)` returns the `PlaceRef` for that canonical spelling only
 and `None` for anything else. A `Standing` carries `serves_view`, false unless set and then left
-out of its JSON, so a standing that does not set it dumps as it always did. The listing rule: an
+out of its JSON, so a standing that does not set it dumps without the key. The listing rule: an
 app that sets `serves_view` on a standing lists that place's view URI among the member's current
 resources; otherwise no pulse for the view is delivered. A place that serves both a window and a
 view is not specified. Proved by `tests/test_member.py`, `tests/test_mcp_server_resources.py` and
