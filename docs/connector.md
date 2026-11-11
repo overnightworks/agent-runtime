@@ -446,6 +446,22 @@ segment percent-encoded, so `/` in an opaque `kind` or `id` stays inside its seg
 `place_ref_from_window_uri(uri)` returns the `PlaceRef` for that canonical spelling only and
 `None` for anything else. A URI is no credential.
 
+**A place's view.** A place whose state is no conversation serves the member a
+`PlaceView(revision, awaits_you, state)` instead of a window: `state` is the app's JSON object,
+carried untouched and never read by the library (a value that is no JSON value is refused);
+`revision`, an integer from 0, changes whenever the place moves on for this member, that is
+whenever what the member may do or must act on changes, while parts of `state` that say only who
+is present may change without it; `awaits_you` says the place waits for this member to act, and
+the app decides it from the state at that revision, so one revision has one `awaits_you`. The
+view is the resource `place_view_uri(place)`, the place's window URI with the segment `view`
+after it; `place_ref_from_view_uri(uri)` returns the `PlaceRef` for that canonical spelling only
+and `None` for anything else. A `Standing` carries `serves_view`, false unless set and then left
+out of its JSON, so a standing that does not set it dumps without the key. The listing rule: an
+app that sets `serves_view` on a standing lists that place's view URI among the member's current
+resources; otherwise no pulse for the view is delivered. A place that serves both a window and a
+view is not specified. Proved by `tests/test_member.py`, `tests/test_mcp_server_resources.py` and
+`tests/test_mcp_server_listen_view.py`.
+
 An accept may name the agent's 3D figure, `figure` as `FigureRef(url, sha256)`, and the `voice` it
 speaks with; both are optional, and an accept without them dumps without their keys. The record
 checks only their form: `url` is an absolute `https` address with a host and no user part, query or
@@ -479,14 +495,14 @@ How a person calls an agent to a place and sends it away is the same in every ap
 ## The standard path
 
 An agent learns what changes through the standard's resources and subscriptions, never by
-polling a tool: the app serves `member://standing` and one window per place, and tells the
+polling a tool: the app serves `member://standing` and one window or view per place, and tells the
 agent when one changed. This section is what a host wires and what a runner may rely on.
 
 **The host** passes `resources=` and `changes=` to `McpPersonFront` and enters
 `async with front.running():` in its lifespan (see above). `resources` is one port,
 `MemberResources` (exported by `agents.mcp_server`): `current(principal)` returns
 every URI that principal may read now, and `read(principal, uri)` returns the app's current
-`MemberStanding` or `PlaceWindow` for it, or `None` when it is not that principal's. The principal
+`MemberStanding`, `PlaceWindow` or `PlaceView` for it, or `None` when it is not that principal's. The principal
 is always the request's verified one and no argument names a recipient. `changes` is one
 `ResourceChanges` (exported by `agents.mcp_server`), without the port a `ValueError`:
 the host calls `changes.changed(recipient, uri)` for the recipient's `Principal` only after the
@@ -507,7 +523,7 @@ first frame and holds the requested URIs in `current(principal)`, retains what a
 then reads, so a change in a gap between streams is never lost. A notification says only that
 something changed: `MemberStanding` is the whole standing, so after a lost, repeated or late one
 the next read shows today's truth. A subscriber of `member://standing` also receives the URI of a
-place window `current` holds; a subscriber of one place gets that place alone. The stream ends
+place window or view `current` holds; a subscriber of one place gets that place alone. The stream ends
 after `LISTEN_BOUND_SECONDS` with a completion result carrying the subscription id; a stream cut
 without one is `SubscriptionLost` at the SDK's client. After either the runner listens again, and
 reads again once acknowledged. A listen needs an SSE `Accept`, else it is `406`. The SDK's

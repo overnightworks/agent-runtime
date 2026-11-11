@@ -41,6 +41,7 @@ from agents.member import (
     LISTEN_ALLOWANCE_SECONDS,
     LISTEN_BOUND_SECONDS,
     STANDING_URI,
+    place_ref_from_view_uri,
     place_ref_from_window_uri,
 )
 from agents.turn import Principal
@@ -162,9 +163,10 @@ class ResourceChanges:
 
 
 def _wanted(uri: str, honored: Collection[str]) -> bool:
-    """Its own URI was honored, or the standing was and the URI is a place window."""
+    """Its own URI was honored, or the standing was and the URI is a place window or view."""
     return uri in honored or (
-        STANDING_URI in honored and place_ref_from_window_uri(uri) is not None
+        STANDING_URI in honored
+        and (place_ref_from_window_uri(uri) is not None or place_ref_from_view_uri(uri) is not None)
     )
 
 

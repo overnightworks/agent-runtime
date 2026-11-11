@@ -1,11 +1,11 @@
 """What an app and an agent say to each other about a member, written once.
 
 An app writes these records and an agent's runner reads them: where the member stands in every
-place (``Standing``), the window of lines one place shows (``PlaceWindow``), the arguments of
-accepting an invitation and of speaking in a place, what accepting answers when it refuses, and
-what speaking answers. The URIs name the resources that serve them; a URI is no credential, so a
-guessed one yields nothing. This module is base, so a runner parses all of it without the
-``mcp-server`` extra.
+place (``Standing``), the window of lines one place shows (``PlaceWindow``), the state of one
+place (``PlaceView``), the arguments of accepting an invitation and of speaking in a place, what
+accepting answers when it refuses, and what speaking answers. The URIs name the resources that
+serve them; a URI is no credential, so a guessed one yields nothing. This module is base, so a
+runner parses all of it without the ``mcp-server`` extra.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from pydantic import (
     model_validator,
 )
 
-from agents.turn import NonEmptyUnicodeText, StrictModel
+from agents.turn import JsonDocument, NonEmptyUnicodeText, StrictModel
 
 __all__ = [
     "ACCEPT_INVITATION_TOOL",
@@ -41,6 +41,7 @@ __all__ = [
     "MemberStanding",
     "PlaceEntry",
     "PlaceRef",
+    "PlaceView",
     "PlaceWindow",
     "SpeakArguments",
     "SpeakRefusal",
@@ -49,7 +50,9 @@ __all__ = [
     "Standing",
     "StandingState",
     "VoiceName",
+    "place_ref_from_view_uri",
     "place_ref_from_window_uri",
+    "place_view_uri",
     "place_window_uri",
 ]
 
@@ -70,6 +73,7 @@ SPEAK_TOOL: Final = "speak"
 STANDING_URI: Final = "member://standing"
 """The resource that answers with the member's ``MemberStanding``."""
 _PLACE_WINDOW_URI_PREFIX: Final = f"{STANDING_URI}/places/"
+_VIEW_SEGMENT: Final = "/view"
 
 
 class PlaceRef(StrictModel):
@@ -94,12 +98,19 @@ class Invitation(StrictModel):
     expires_at: AwareDatetime
 
 
+def _is_false(value: bool) -> bool:
+    return not value
+
+
 class Standing(StrictModel):
     """One place, the member's state there and, exactly when invited, the invitation."""
 
     place: PlaceRef
     state: Annotated[StandingState, Field(strict=False)]
     invitation: Invitation | None = None
+    serves_view: bool = Field(default=False, exclude_if=_is_false)
+    """Whether the app serves this place's ``PlaceView``; its URI is then listed among the
+    member's current resources."""
 
     @model_validator(mode="after")
     def _invitation_exactly_when_invited(self) -> Self:
@@ -271,3 +282,30 @@ def place_ref_from_window_uri(uri: str) -> PlaceRef | None:
     except UnicodeDecodeError, ValidationError:
         return None
     return place if place_window_uri(place) == uri else None
+
+
+class PlaceView(StrictModel):
+    """The state of one place for the member, as the app serves it.
+
+    ``state`` is the app's document, carried untouched and never read here. ``revision`` changes
+    whenever the place moves on for this member, that is whenever what the member may do or must
+    act on changes; parts of ``state`` that say only who is present may change without it.
+    ``awaits_you`` says the place waits for this member to act; the app decides it from the state
+    at that revision, so one revision has one ``awaits_you``.
+    """
+
+    revision: int = Field(ge=0)
+    awaits_you: bool
+    state: JsonDocument
+
+
+def place_view_uri(place: PlaceRef) -> str:
+    """The resource of one place's view: the place's window URI and the segment ``view``."""
+    return place_window_uri(place) + _VIEW_SEGMENT
+
+
+def place_ref_from_view_uri(uri: str) -> PlaceRef | None:
+    """The place a view URI names, or ``None`` for anything but its canonical spelling."""
+    if not isinstance(uri, str) or not uri.endswith(_VIEW_SEGMENT):
+        return None
+    return place_ref_from_window_uri(uri.removesuffix(_VIEW_SEGMENT))
