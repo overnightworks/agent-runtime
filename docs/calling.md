@@ -20,7 +20,8 @@ STANDING_URI)` and learns of a change from the `listening_changed` callable it p
 rule.
 
 **CALLING-3.** A person is offered an agent only if they are present at the place and a member of
-the realm group `/agent-adders`, read fresh at the call.
+the realm group `/agent-adders`. The list rests on the view's membership (CALLING-17); the call
+reads it fresh (CALLING-21).
 
 **CALLING-4.** An agent is not offered at a place where it is invited or already joined, nor at a
 place that has no room for it.
@@ -76,7 +77,13 @@ the act.
 **CALLING-16.** An agent is listed as here only for a person who may send it away, by CALLING-9.
 To everyone else it shows only at its seat in the place, with the AI mark.
 
-**CALLING-17.** The control is absent when it lists no agent.
+**CALLING-17.** The control is shown to a person present at the place who is a member of the group
+(CALLING-19) or holds a send-away right the place's own rules give (CALLING-9), and to any person
+for whom it lists an agent. When it lists no agent, it shows one sentence that no agent can be
+reached, and no reason per agent. The app decides whether to show it from the groups its session
+carries, or from one read of the group when the view is built, and the place's rights. The group
+is never read per render; only the act reads it fresh (CALLING-21), so a person whom a stale view
+shows the control is refused at the act as not allowed.
 
 **CALLING-18.** The control stands at the place itself, at the same position whether or not the
 place lies inside another app's page. No app fetches an agent into another app's place.
@@ -91,10 +98,10 @@ owner's agent while it is there.
 **CALLING-20.** Before a second person becomes an owner (a member of `/agent-owners`), the split
 of this group per owner lands. Nothing refuses or warns when a second owner is added.
 
-**CALLING-21.** Group membership is read fresh from the realm, at each call and each send-away.
-Fresh means asked of the realm at the act itself, never taken from a token, session or cache that
-existed before it. Liveness comes from the app's own listen streams. The standard adds no store,
-directory or list.
+**CALLING-21.** Group membership is read fresh from the realm for each call and each send-away,
+never for the display (CALLING-17). Fresh means asked of the realm at the act itself, never taken
+from a token, session or cache that existed before it. Liveness comes from the app's own listen
+streams. The standard adds no store, directory or list.
 
 ## What an app supplies
 
@@ -114,8 +121,8 @@ directory or list.
 
 1. The agent's runner listens on the app's `member://standing`, so the agent is live (CALLING-1),
    and does so only while it accepts invitations to the app's places (CALLING-25).
-2. A person opens the place. The page shows the control at the place itself and lists agents per
-   CALLING-1 to CALLING-5.
+2. A person opens the place. The page shows the control at the place itself where CALLING-17 shows
+   it, and lists agents per CALLING-1 to CALLING-5.
 3. **Call.** The person taps an available row. The page posts to the app's person route. The app
    reads the person's groups fresh, opens an invitation (CALLING-6), adds it to the agent's
    standing and signals it.
@@ -136,7 +143,8 @@ decides when an agent leaves it without being sent away (CALLING-13).
 **CALLING-23.** Every app the standard covers follows these rules and draws the one shared control,
 so that calling and sending away an agent feel the same in each.
 
-**CALLING-24.** This file owns the rules; the shared design kit holds the control's look and the words of its reasons. The
-standard covers every fleet app that has a place an agent with an account of its own can join. An
-app with such a place adopts it with the release of the shared control and of this library's part;
-an app without one adopts it at the landing of its first such place.
+**CALLING-24.** This file owns the rules; the shared design kit holds the control's look, the words
+of its reasons and the sentence of an empty list. The standard covers every fleet app that has a
+place an agent with an account of its own can join. An app with such a place adopts it with the
+release of the shared control and of this library's part; an app without one adopts it at the
+landing of its first such place.
