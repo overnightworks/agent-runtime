@@ -74,14 +74,16 @@ chunk: `prompt_tokens`, `prompt_tokens_details.cached_tokens` (absent: 0),
 `prompt_tokens_details.cache_write_tokens` else `cache_creation_input_tokens` else 0, and
 `completion_tokens`. The usage is read from a chunk with `choices: []`, with `choices` absent or
 null, or alongside a choice; a chunk with neither `choices` nor a `usage` key fails the round as a
-malformed reply, and a `usage` key holding null is a round with no usage. `usage` is `None`, never
-a partial sum, when any round sent none or one with a missing, negative or non-integer count, and
-for a picture turn; reading usage changes nothing else the turn yields. The library passes the gateway's counts through unchecked: it does
-not verify that `cached_input_tokens` is no larger than `input_tokens`. A turn that ends with
-`TurnStopped` reports none, though its rounds were paid. Proved by
+malformed reply. A chunk whose `usage` key holds null carries no usage: the round's usage is the
+last non-null one, and a round with none has no usage. `usage` is `None`, never a partial sum, when
+any round sent none or one with a missing, negative or non-integer count, and for a picture turn;
+reading usage changes nothing else the turn yields. The library passes the gateway's counts through
+unchecked: it does not verify that `cached_input_tokens` is no larger than `input_tokens`. A turn
+that ends with `TurnStopped` reports none, though its rounds were paid. Proved by
 `tests/test_backend_streamed_round.py`:
 `test_a_usage_chunk_with_no_choice_gives_the_rounds_usage`,
-`test_usage_on_a_chunk_that_carries_a_choice_gives_the_rounds_usage` and
+`test_usage_on_a_chunk_that_carries_a_choice_gives_the_rounds_usage`,
+`test_a_later_chunk_with_null_usage_keeps_the_usage_already_read` and
 `test_unreadable_usage_gives_a_round_with_no_usage_and_the_same_message`; and by
 `tests/test_backend_gateway_usage.py`: `test_the_final_event_carries_the_usage_the_gateway_sent`,
 `test_a_usage_chunk_without_choices_gives_the_turn_its_usage`,
