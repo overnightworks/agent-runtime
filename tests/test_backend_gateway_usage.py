@@ -11,7 +11,7 @@ from agents.backend.fake_gateway import Reply, completion, tool_call, tool_round
 from agents.turn import FailureCode, TurnUsage
 from agents.turn_events import AssistantTextEvent, FinalEvent, ToolCallEvent, ToolResultEvent
 from tests.support import gateway_turn_support
-from tests.support.gateway_turn_support import ending
+from tests.support.gateway_turn_support import a_chunk, an_event_stream, ending
 
 shop = gateway_turn_support.shop
 
@@ -65,6 +65,40 @@ def test_a_turn_whose_round_has_no_readable_usage_ends_with_no_usage_and_the_sam
 
     assert stopped is None
     assert events == [AssistantTextEvent(text="The answer."), FinalEvent(text="The answer.")]
+
+
+def an_answer_closed_by(last_chunk: dict) -> Reply:
+    """The text round ``ab``, its finish chunk, then ``last_chunk``, as the gateway streams them."""
+    chunks = (a_chunk("ab"), a_chunk(finish_reason="stop"), last_chunk)
+    return Reply(headers={"content-type": "text/event-stream"}, body=an_event_stream(*chunks))
+
+
+@pytest.mark.parametrize(
+    "last_chunk",
+    [{"usage": usage_sent(120, 9)}, {"choices": None, "usage": usage_sent(120, 9)}],
+    ids=["no-choices-key", "choices-null"],
+)
+def test_a_usage_chunk_without_choices_gives_the_turn_its_usage(shop, last_chunk):
+    events, stopped, _ = run(shop, an_answer_closed_by(last_chunk))
+
+    assert stopped is None
+    assert events[-1] == FinalEvent(
+        text="ab",
+        usage=TurnUsage(
+            input_tokens=120, cached_input_tokens=0, cache_write_tokens=0, output_tokens=9
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    "last_chunk",
+    [{}, {"choices": None}, {"usage": None}],
+    ids=["empty", "choices-null", "no-usage"],
+)
+def test_a_chunk_with_neither_choices_nor_usage_still_stops_the_turn(shop, last_chunk):
+    _, stopped, _ = run(shop, an_answer_closed_by(last_chunk))
+
+    assert ending(stopped) == (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
 
 
 def raw_members(body: bytes) -> dict[str, str]:

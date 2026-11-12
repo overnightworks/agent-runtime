@@ -248,9 +248,12 @@ def _take(assembly: _Assembly, data: str) -> str | None:
     event = _parsed(data)
     if "error" in event:
         raise RoundErrorEvent(error_kind_of(event["error"]))
-    if (usage := event.get("usage")) is not None:
+    usage = event.get("usage")
+    if usage is not None:
         assembly.usage = _usage_of(usage)
     choices = event.get("choices")
+    if choices is None and usage is not None:
+        return None
     if not isinstance(choices, list):
         raise MalformedRound
     return _add_choice(assembly, choices[0]) if choices else None

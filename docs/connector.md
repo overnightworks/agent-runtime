@@ -82,6 +82,7 @@ not verify that `cached_input_tokens` is no larger than `input_tokens`. A turn t
 `test_usage_on_a_chunk_that_carries_a_choice_gives_the_rounds_usage` and
 `test_unreadable_usage_gives_a_round_with_no_usage_and_the_same_message`; and by
 `tests/test_backend_gateway_usage.py`: `test_the_final_event_carries_the_usage_the_gateway_sent`,
+`test_a_usage_chunk_without_choices_gives_the_turn_its_usage`,
 `test_the_final_events_usage_sums_the_usage_of_every_round`,
 `test_a_turn_whose_round_has_no_readable_usage_ends_with_no_usage_and_the_same_text`,
 `test_a_turn_with_a_round_that_has_no_usage_ends_with_no_usage` and
