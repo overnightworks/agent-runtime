@@ -13,7 +13,7 @@ import math
 import re
 from collections.abc import Iterator
 from enum import StrEnum
-from typing import Annotated, Any, Final, Literal
+from typing import Annotated, Final, Literal
 
 from pydantic import (
     AfterValidator,
@@ -102,59 +102,43 @@ def refuse_non_json_constant(constant: str) -> object:
     raise ValueError(f"{constant} is not a JSON value")
 
 
-def _refuse_non_json_object(value: dict[Any, Any]) -> dict[str, Any]:
-    # The depth limit means depth never stops a built input from encoding:
-    # pydantic's serializer refuses a value nested about 255 levels deep.
-    # Only the containers on the current path count as open, so a value shared
-    # by two branches is accepted, as ``json.dumps`` accepts it. The path holds
-    # each open container's remaining children, so the walk's own bookkeeping
-    # never mixes with the caller's values.
-    open_containers: set[int] = set()
-    path = [_enter_container(value, open_containers)]
+def _refuse_non_json_object(value: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    # pydantic has already refused a value that is no JSON value, a non-string key and a
+    # self-containing value; what remains is the depth limit, which means depth never stops a
+    # built input from encoding (pydantic's serializer refuses a value nested about 255 levels
+    # deep), a number that is not finite and a string with a lone surrogate. The path holds each
+    # open container's remaining children, so the walk's own bookkeeping never mixes with the
+    # caller's values.
+    path = [_children(value)]
     while path:
-        container_id, children = path[-1]
-        for child in children:
+        for child in path[-1]:
             if isinstance(child, dict | list):
-                path.append(_enter_container(child, open_containers))
+                if len(path) == MAX_TOOL_INPUT_DEPTH:
+                    raise ValueError(
+                        f"tool input nests deeper than {MAX_TOOL_INPUT_DEPTH} objects and arrays"
+                    )
+                path.append(_children(child))
                 break
             _refuse_non_json_scalar(child)
         else:
             path.pop()
-            open_containers.remove(container_id)
     return value
 
 
-def _enter_container(
-    container: dict[Any, Any] | list[Any], open_containers: set[int]
-) -> tuple[int, Iterator[object]]:
-    if id(container) in open_containers:
-        raise ValueError("a value that contains itself is not JSON")
-    if len(open_containers) == MAX_TOOL_INPUT_DEPTH:
-        raise ValueError(f"tool input nests deeper than {MAX_TOOL_INPUT_DEPTH} objects and arrays")
-    open_containers.add(id(container))
+def _children(container: dict[str, JsonValue] | list[JsonValue]) -> Iterator[JsonValue]:
     if isinstance(container, dict):
         for key in container:
-            _refuse_non_json_key(key)
-        return id(container), iter(container.values())
-    return id(container), iter(container)
+            _refuse_lone_surrogates(key)
+        return iter(container.values())
+    return iter(container)
 
 
-def _refuse_non_json_key(key: object) -> None:
-    if not isinstance(key, str):
-        raise ValueError(f"a {type(key).__name__} key is not a JSON object key")
-    _refuse_lone_surrogates(key)
-
-
-def _refuse_non_json_scalar(value: object) -> None:
-    if value is None or isinstance(value, bool | int):
-        return
+def _refuse_non_json_scalar(value: str | int | float | bool | None) -> None:
     if isinstance(value, float):
         if not math.isfinite(value):
             raise ValueError(f"{value} is not a JSON number")
     elif isinstance(value, str):
         _refuse_lone_surrogates(value)
-    else:
-        raise ValueError(f"a {type(value).__name__} is not a JSON value")
 
 
 def _refuse_lone_surrogates(text: str) -> None:
@@ -164,11 +148,8 @@ def _refuse_lone_surrogates(text: str) -> None:
         raise ValueError("a string with a lone surrogate is not valid Unicode") from error
 
 
-JsonObject = Annotated[dict[str, Any], AfterValidator(_refuse_non_json_object)]
+JsonObject = Annotated[dict[str, JsonValue], AfterValidator(_refuse_non_json_object)]
 """The one decider of a JSON object on the wire: one that survives a round trip unchanged."""
-
-JsonDocument = Annotated[dict[str, JsonValue], AfterValidator(_refuse_non_json_object)]
-"""``JsonObject``'s decider over a typed value: a JSON object whose values are JSON values."""
 
 
 def _refuse_non_unicode_text(text: str) -> str:

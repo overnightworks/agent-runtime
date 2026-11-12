@@ -138,8 +138,9 @@ to side-effecting, because a tool nobody classified must be assumed to change st
 `HandTool` is a declaration with the async handler `(Principal, JsonObject) -> ToolOutcome` that
 serves it in the app's own process; `ToolOutcome` is `content` and `is_error`. The module
 exports `Principal` and `JsonObject` too, so an app's `agent/tools.py` imports only
-`agents.tools`. It imports neither `mcp_wire` nor anything of the MCP extra
-(`.importlinter` proves it).
+`agents.tools`. `JsonObject` is a `dict[str, JsonValue]` (pydantic's `JsonValue`), so a handler
+narrows a nested value with `isinstance` before it reads it. The module imports neither `mcp_wire`
+nor anything of the MCP extra (`.importlinter` proves it).
 
 ## The gateway backend
 

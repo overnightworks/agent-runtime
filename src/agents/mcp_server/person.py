@@ -102,7 +102,7 @@ _PARSE_ERROR_TEXT: Final = "Parse error"
 _SDK_LOGGER_NAMES: Final = ("mcp.server", "mcp.shared")
 _ABOVE_ANY_RECORD: Final = logging.CRITICAL + 1
 _ECHOABLE_REQUEST_ID: Final[TypeAdapter[int | str]] = TypeAdapter(StrictInt | UnicodeText)
-_TOOL_ARGUMENTS: Final[TypeAdapter[dict[str, Any]]] = TypeAdapter(JsonObject)
+_TOOL_ARGUMENTS: Final[TypeAdapter[JsonObject]] = TypeAdapter(JsonObject)
 
 
 @dataclass(frozen=True)
