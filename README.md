@@ -56,6 +56,7 @@ already started. [docs/connector.md](docs/connector.md) has the full contract.
 | changing the client | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): building blocks, trust, constraints |
 | an app author | [docs/connector.md](docs/connector.md): agent files, tools, the gateway backend, the MCP person front |
 | an app author adding the control to call an agent | [docs/calling.md](docs/calling.md): the rules every app follows to call and send away an agent |
+| an app author letting an agent hear the people at a place | [docs/hearing.md](docs/hearing.md): the rules every app follows when an agent hears people |
 | an agent working here | [AGENTS.md](AGENTS.md): commands, traps, release rules |
 
 The docstrings own the exact behaviour of each module.
