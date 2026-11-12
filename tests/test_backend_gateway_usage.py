@@ -17,25 +17,13 @@ from tests.support.gateway_turn_support import a_request, ending
 
 scenario = gateway_turn_support.scenario
 
-LIMIT_EXCEEDED = (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
-GATEWAY_USAGE = {
-    "prompt_tokens": 120,
-    "completion_tokens": 9,
-    "prompt_tokens_details": {"cached_tokens": 80, "cache_write_tokens": 25},
-}
-READ_USAGE = TurnUsage(
-    input_tokens=120, cached_input_tokens=80, cache_write_tokens=25, output_tokens=9
-)
-FIRST_ROUND_USAGE = {
-    "prompt_tokens": 100,
-    "completion_tokens": 5,
-    "prompt_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 90},
-}
-LAST_ROUND_USAGE = {
-    "prompt_tokens": 130,
-    "completion_tokens": 8,
-    "prompt_tokens_details": {"cached_tokens": 90},
-}
+
+def usage_sent(prompt_tokens: int, completion_tokens: int, **details: int) -> dict:
+    """The usage object a gateway sends for a round; the keywords are its prompt token details."""
+    usage: dict = {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens}
+    if details:
+        usage["prompt_tokens_details"] = details
+    return usage
 
 
 def run(scenario, *replies: Reply, max_tool_calls: int = 5):
@@ -66,12 +54,19 @@ def run(scenario, *replies: Reply, max_tool_calls: int = 5):
 
 
 def test_the_final_event_carries_the_usage_the_gateway_sent(scenario):
-    events, stopped, _ = run(scenario, completion("The answer.", usage=GATEWAY_USAGE))
+    sent = usage_sent(120, 9, cached_tokens=80, cache_write_tokens=25)
+
+    events, stopped, _ = run(scenario, completion("The answer.", usage=sent))
 
     assert stopped is None
     assert events == [
         AssistantTextEvent(text="The answer."),
-        FinalEvent(text="The answer.", usage=READ_USAGE),
+        FinalEvent(
+            text="The answer.",
+            usage=TurnUsage(
+                input_tokens=120, cached_input_tokens=80, cache_write_tokens=25, output_tokens=9
+            ),
+        ),
     ]
 
 
@@ -128,10 +123,13 @@ def test_a_second_rounds_body_begins_with_the_first_rounds_model_tools_and_messa
 
 
 def test_the_final_events_usage_sums_the_usage_of_every_round(scenario):
+    first_round = usage_sent(100, 5, cached_tokens=0, cache_write_tokens=90)
+    last_round = usage_sent(130, 8, cached_tokens=90)
+
     events, stopped, _ = run(
         scenario,
-        tool_round(tool_call("c1", "lookup", {}), usage=FIRST_ROUND_USAGE),
-        completion("Done.", usage=LAST_ROUND_USAGE),
+        tool_round(tool_call("c1", "lookup", {}), usage=first_round),
+        completion("Done.", usage=last_round),
     )
 
     assert stopped is None
@@ -143,9 +141,9 @@ def test_the_final_events_usage_sums_the_usage_of_every_round(scenario):
 @pytest.mark.parametrize(
     ("first", "last"),
     [
-        (None, LAST_ROUND_USAGE),
-        (FIRST_ROUND_USAGE, None),
-        (FIRST_ROUND_USAGE, {"prompt_tokens": -1}),
+        (None, usage_sent(130, 8)),
+        (usage_sent(100, 5), None),
+        (usage_sent(100, 5), {"prompt_tokens": -1}),
     ],
     ids=["first-round-has-none", "last-round-has-none", "last-round-unreadable"],
 )
@@ -163,10 +161,10 @@ def test_a_turn_with_a_round_that_has_no_usage_ends_with_no_usage(scenario, firs
 def test_a_turn_that_stops_after_a_paid_round_yields_what_it_yields_without_usage(scenario):
     events, stopped, _ = run(
         scenario,
-        tool_round(tool_call("c1", "lookup", {}), usage=FIRST_ROUND_USAGE),
-        tool_round(tool_call("c2", "lookup", {}), usage=LAST_ROUND_USAGE),
+        tool_round(tool_call("c1", "lookup", {}), usage=usage_sent(100, 5)),
+        tool_round(tool_call("c2", "lookup", {}), usage=usage_sent(130, 8)),
         max_tool_calls=1,
     )
 
-    assert ending(stopped) == LIMIT_EXCEEDED
+    assert ending(stopped) == (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
     assert [type(event) for event in events] == [ToolCallEvent, ToolResultEvent]
