@@ -291,11 +291,13 @@ def test_an_end_reaches_only_its_member_speaker_or_place(
 
     end(hearing, alice, "seat-1")
 
-    assert {
+    heard_afterwards = {
         "first": who_hears(hearing, 2.0, speaker="seat-1"),
         "second": who_hears(hearing, 2.0, speaker="seat-2"),
         "elsewhere": who_hears(hearing, 2.0, place=other_room, speaker="seat-1"),
-    } == still_hearing
+    }
+
+    assert heard_afterwards == still_hearing
 
 
 @ENDS
