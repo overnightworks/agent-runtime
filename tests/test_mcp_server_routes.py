@@ -361,8 +361,22 @@ def body_of(*media_types: str) -> dict[str, Any]:
     return {"requestBody": {"required": True, "content": content}}
 
 
-def json_body(schema: object) -> dict[str, Any]:
-    return {"requestBody": {"required": True, "content": {"application/json": {"schema": schema}}}}
+def with_document(method: str, document: dict[str, Any]) -> Registration:
+    return Registration(method, "/notes", nothing, tool="a", document=document)
+
+
+def body_with(content: object) -> Registration:
+    return with_document("POST", {"requestBody": {"required": True, "content": content}})
+
+
+def query_with(overrides: dict[str, object]) -> Registration:
+    parameter = {"name": "q", "in": "query", "schema": {"type": "string"}, **overrides}
+    return with_document("GET", {"parameters": [parameter]})
+
+
+def answer_with(content: object) -> Registration:
+    answer = {"description": "Answer.", "content": content}
+    return with_document("GET", {"responses": {"200": answer}})
 
 
 @pytest.mark.parametrize(
@@ -432,139 +446,26 @@ def json_body(schema: object) -> dict[str, Any]:
         Registration("HEAD", "/notes", nothing, tool="a"),
         Registration("OPTIONS", "/notes", nothing, tool="a"),
         Registration("POST", "/notes", aliased_route, tool="a"),
-        Registration(
-            "POST", "/notes", nothing, tool="a", document={"requestBody": "application/json"}
+        with_document("POST", {"requestBody": "application/json"}),
+        with_document("POST", {"requestBody": {"required": True, "content": ["application/json"]}}),
+        body_with({"application/json": "x"}),
+        body_with({"application/json": {"schema": "object"}}),
+        body_with({"application/json": {"schema": {"type": "object", "properties": ["title"]}}}),
+        body_with(
+            {"application/json": {"schema": {"type": "object", "properties": {}, "required": 3}}}
         ),
-        Registration(
-            "POST",
-            "/notes",
-            nothing,
-            tool="a",
-            document={"requestBody": {"required": True, "content": ["application/json"]}},
-        ),
-        Registration(
-            "POST",
-            "/notes",
-            nothing,
-            tool="a",
-            document={"requestBody": {"required": True, "content": {"application/json": "x"}}},
-        ),
-        Registration(
-            "POST",
-            "/notes",
-            nothing,
-            tool="a",
-            document=json_body("object"),
-        ),
-        Registration(
-            "POST",
-            "/notes",
-            nothing,
-            tool="a",
-            document=json_body({"type": "object", "properties": ["title"]}),
-        ),
-        Registration(
-            "POST",
-            "/notes",
-            nothing,
-            tool="a",
-            document=json_body({"type": "object", "properties": {}, "required": 3}),
-        ),
-        Registration(
-            "GET",
-            "/notes",
-            nothing,
-            tool="a",
-            document={"parameters": {"name": "q", "in": "query", "schema": {"type": "string"}}},
-        ),
-        Registration("GET", "/notes", nothing, tool="a", document={"parameters": ["q"]}),
-        Registration(
-            "GET",
-            "/notes",
-            nothing,
-            tool="a",
-            document={"parameters": [{"name": ["q"], "in": "query", "schema": {"type": "string"}}]},
-        ),
-        Registration(
-            "GET",
-            "/notes",
-            nothing,
-            tool="a",
-            document={"parameters": [{"name": "q", "in": ["query"], "schema": {"type": "string"}}]},
-        ),
-        Registration(
-            "GET",
-            "/notes",
-            nothing,
-            tool="a",
-            document={"parameters": [{"name": "q", "in": "query", "schema": "string"}]},
-        ),
-        Registration(
-            "GET",
-            "/notes",
-            nothing,
-            tool="a",
-            document={"parameters": [{"name": "q", "in": "query", "schema": {"type": ["string"]}}]},
-        ),
-        Registration(
-            "GET",
-            "/notes",
-            nothing,
-            tool="a",
-            document={
-                "parameters": [
-                    {"name": "q", "in": "query", "schema": {"anyOf": {"type": "string"}}}
-                ]
-            },
-        ),
-        Registration(
-            "GET",
-            "/notes",
-            nothing,
-            tool="a",
-            document={
-                "parameters": [
-                    {"name": "q", "in": "query", "schema": {"anyOf": ["string", {"type": "null"}]}}
-                ]
-            },
-        ),
-        Registration(
-            "GET", "/notes", nothing, tool="a", document={"responses": {"200": "Answer."}}
-        ),
-        Registration(
-            "GET",
-            "/notes",
-            nothing,
-            tool="a",
-            document={
-                "responses": {"200": {"description": "Answer.", "content": ["application/json"]}}
-            },
-        ),
-        Registration(
-            "GET",
-            "/notes",
-            nothing,
-            tool="a",
-            document={
-                "responses": {
-                    "200": {"description": "Answer.", "content": {"application/json": "x"}}
-                }
-            },
-        ),
-        Registration(
-            "GET",
-            "/notes",
-            nothing,
-            tool="a",
-            document={
-                "responses": {
-                    "200": {
-                        "description": "Answer.",
-                        "content": {"application/json": {"schema": "object"}},
-                    }
-                }
-            },
-        ),
+        with_document("GET", {"parameters": "q"}),
+        with_document("GET", {"parameters": ["q"]}),
+        query_with({"name": ["q"]}),
+        query_with({"in": ["query"]}),
+        query_with({"schema": "string"}),
+        query_with({"schema": {"type": ["string"]}}),
+        query_with({"schema": {"anyOf": {"type": "string"}}}),
+        query_with({"schema": {"anyOf": ["string", {"type": "null"}]}}),
+        with_document("GET", {"responses": {"200": "Answer."}}),
+        answer_with(["application/json"]),
+        answer_with({"application/json": "x"}),
+        answer_with({"application/json": {"schema": "object"}}),
     ],
     ids=[
         "header parameter",
@@ -624,39 +525,27 @@ def test_a_marked_route_outside_the_profile_is_refused_naming_the_operation(
 
 def referenced_schema_is_no_object(spec: dict[str, Any]) -> None:
     spec["components"] = {"schemas": {"NoteDraft": "a schema"}}
-    spec["paths"]["/notes"]["get"]["parameters"] = [
-        {"name": "q", "in": "query", "schema": {"$ref": "#/components/schemas/NoteDraft"}}
-    ]
+    parameter = {"name": "q", "in": "query", "schema": {"$ref": "#/components/schemas/NoteDraft"}}
+    spec["paths"]["/notes"]["get"]["parameters"] = [parameter]
 
 
 @pytest.mark.parametrize(
     "change",
     [
-        lambda spec: spec.update(components=[]),
-        lambda spec: spec.update(components={"schemas": []}),
-        referenced_schema_is_no_object,
-        lambda spec: spec.update(paths=[]),
-        lambda spec: spec["paths"].update({"/notes": ["get"]}),
-        lambda spec: spec["paths"]["/notes"].update(get=3),
-    ],
-    ids=[
-        "components not an object",
-        "component schemas not an object",
-        "referenced schema not an object",
-        "paths not an object",
-        "path item not an object",
-        "operation not an object",
+        pytest.param(lambda spec: spec.update(components=[]), id="components not object"),
+        pytest.param(lambda spec: spec.update(components={"schemas": []}), id="schemas not object"),
+        pytest.param(referenced_schema_is_no_object, id="referenced schema not object"),
+        pytest.param(lambda spec: spec.update(paths=[]), id="paths not object"),
+        pytest.param(
+            lambda spec: spec["paths"].update({"/notes": ["get"]}), id="path item not object"
+        ),
+        pytest.param(lambda spec: spec["paths"]["/notes"].update(get=3), id="operation not object"),
     ],
 )
-def test_a_document_node_of_the_wrong_shape_is_refused_with_the_profile_error(
-    change: Callable[[dict[str, Any]], None],
-) -> None:
+def test_a_wrong_shaped_node_is_refused(change: Callable[[dict[str, Any]], None]) -> None:
     app = application(Registration("GET", "/notes", nothing, tool="a"))
-    spec = app.openapi()
-    change(spec)
-
-    with pytest.raises(RouteProfileError):
-        route_tools(spec, app, mark_route=lambda method, template: (method, template))
+    change(app.openapi())
+    refused(app)
 
 
 @pytest.mark.parametrize(
