@@ -11,7 +11,7 @@ import re
 from collections.abc import AsyncIterable, AsyncIterator
 from contextlib import aclosing
 from dataclasses import dataclass, field
-from typing import Final, NamedTuple
+from typing import Final, Literal, NamedTuple, TypedDict
 
 from agents.turn import MAX_EVENT_BYTES, JsonObject
 
@@ -37,12 +37,33 @@ class RoundErrorEvent(Exception):
         self.kind = kind
 
 
+class AssembledFunction(TypedDict):
+    name: str
+    arguments: str
+
+
+class AssembledToolCall(TypedDict):
+    """One function call as the round assembled it; the gateway echoes it back unchanged."""
+
+    id: str
+    type: Literal["function"]
+    function: AssembledFunction
+
+
+class AssembledMessage(TypedDict):
+    """The assistant message a round assembled: its text or ``None``, and its calls, maybe none."""
+
+    role: Literal["assistant"]
+    content: str | None
+    tool_calls: list[AssembledToolCall]
+
+
 @dataclass(frozen=True)
 class StreamedRound:
     """What a buffered completion carried: the finish reason and the assistant message."""
 
     finish_reason: str
-    message: JsonObject
+    message: AssembledMessage
 
 
 @dataclass
@@ -107,7 +128,7 @@ class _Assembly:
     def finished(self) -> StreamedRound:
         if self.finish_reason is None:
             raise MalformedRound
-        calls = [
+        calls: list[AssembledToolCall] = [
             {
                 "id": call.id,
                 "type": "function",
@@ -115,7 +136,11 @@ class _Assembly:
             }
             for call in self.calls
         ]
-        message = {"role": "assistant", "content": "".join(self.text) or None, "tool_calls": calls}
+        message: AssembledMessage = {
+            "role": "assistant",
+            "content": "".join(self.text) or None,
+            "tool_calls": calls,
+        }
         return StreamedRound(self.finish_reason, message)
 
 
