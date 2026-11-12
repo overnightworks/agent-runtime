@@ -77,7 +77,6 @@ PINNED_ABSENT_BODY_KEYS = {
     "num_retries",
     "mock_response",
     "api_key",
-    "stream_options",
     "max_tokens",
     "tools",
 }
@@ -109,8 +108,9 @@ def test_the_request_is_one_post_with_the_system_prompt_and_the_messages(scenari
     assert sent.headers["authorization"] == f"Bearer {scenario.key}"
     assert sent.headers["content-type"] == "application/json"
     body = json.loads(sent.content)
-    assert set(body) == {"model", "messages", "user", "stream"}
+    assert list(body) == ["model", "messages", "user", "stream", "stream_options"]
     assert body["stream"] is True
+    assert body["stream_options"] == {"include_usage": True}
     assert body["model"] == "text/standin"
     assert body["messages"] == [
         {"role": "system", "content": "Answer briefly."},
@@ -135,7 +135,7 @@ def test_no_pinned_absent_field_is_sent(scenario):
 
     text = gateway.requests[0].content.decode()
     assert not PINNED_ABSENT_BODY_KEYS & set(json.loads(text))
-    assert not re.search(r"extra_|x-litellm|anthropic-", text)
+    assert not re.search(r"extra_|x-litellm|anthropic-|cache_control", text)
 
 
 @pytest.mark.parametrize(

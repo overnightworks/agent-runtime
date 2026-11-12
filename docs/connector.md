@@ -66,6 +66,34 @@ them. An app that shows only judged text reads `FinalEvent`. Proved by
 `test_a_tool_rounds_pieces_come_before_its_calls_which_run_after_it_and_echo_whole` and
 `test_a_round_that_streams_text_then_fails_leaves_the_text_shown_and_runs_nothing`.
 
+`FinalEvent.usage` is a `TurnUsage` (`agents.turn`): four non-negative counts summed over every
+round of the turn. `input_tokens` is everything the model read, cached tokens included;
+`cached_input_tokens` is the part read from the provider's cache, `cache_write_tokens` the part
+written to it, `output_tokens` what the model wrote. A round's usage is the gateway's last usage
+chunk: `prompt_tokens`, `prompt_tokens_details.cached_tokens` (absent: 0),
+`prompt_tokens_details.cache_write_tokens` else `cache_creation_input_tokens` else 0, and
+`completion_tokens`. The usage is read from a chunk with `choices: []`, with `choices` absent or
+null, or alongside a choice; a chunk with neither `choices` nor a non-null `usage` fails the round as
+a malformed reply. A chunk whose `usage` is null carries no usage: the round's usage is the last
+non-null one, and a round with none has no usage. `usage` is `None`, never a partial sum, when
+any round sent none or one with a missing, negative or non-integer count, and for a picture turn;
+reading usage changes nothing else the turn yields. The library passes the gateway's counts through
+unchecked: it does not verify that `cached_input_tokens` is no larger than `input_tokens`. A turn
+that ends with `TurnStopped` reports none, though its rounds were paid. Proved by
+`tests/test_backend_streamed_round.py`:
+`test_a_usage_chunk_with_no_choice_gives_the_rounds_usage`,
+`test_usage_on_a_chunk_that_carries_a_choice_gives_the_rounds_usage`,
+`test_a_usage_chunk_without_choices_gives_the_rounds_usage`,
+`test_a_later_chunk_with_null_usage_keeps_the_usage_already_read`,
+`test_an_event_that_is_no_chunk_is_malformed_with_no_context` and
+`test_unreadable_usage_gives_a_round_with_no_usage_and_the_same_message`; and by
+`tests/test_backend_gateway_usage.py`: `test_the_final_event_carries_the_usage_the_gateway_sent`,
+`test_a_usage_chunk_without_choices_gives_the_turn_its_usage`,
+`test_the_final_events_usage_sums_the_usage_of_every_round`,
+`test_a_turn_whose_round_has_no_readable_usage_ends_with_no_usage_and_the_same_text`,
+`test_a_turn_with_a_round_that_has_no_usage_ends_with_no_usage` and
+`test_a_turn_that_stops_after_a_paid_round_yields_what_it_yields_without_usage`.
+
 The app's configuration embeds `agents.config.AgentConfig` as the `agent` section:
 `backend` (`litellm`, the one value), `gateway` and `api_group`, none with a default.
 `ChatGateway` is `origin` (scheme, host and optional port; no path, query, fragment or
@@ -132,7 +160,7 @@ body as the prompt.
 description, arguments and a `ToolEffect`, `read_only` or `side_effecting`. The effect is for the
 host (`GatewayBackend` reads it for `after_side_effect`) and never reaches a prompt; it defaults
 to side-effecting, because a tool nobody classified must be assumed to change state. Proved by
-`test_the_request_carries_only_model_messages_user_and_tools_without_the_effect` in
+`test_the_request_carries_only_model_messages_user_stream_options_and_tools_without_the_effect` in
 `tests/test_backend_gateway_tools.py`.
 
 `HandTool` is a declaration with the async handler `(Principal, JsonObject) -> ToolOutcome` that
@@ -189,13 +217,20 @@ What the client sends for a text turn, and nothing else:
 | --- | --- |
 | Request | `POST <origin>/v1/chat/completions`, no redirect followed, no cookie kept, no proxy variable read; HTTPS trusts `ca_file` alone |
 | Headers | `Authorization: Bearer <key>`, `Content-Type: application/json`, and the transport's own defaults; no `x-litellm-*` or `anthropic-*` header |
-| Body | exactly `model` (the request's `text/<model>` name), `messages` (the system prompt, then the turn's messages, then the round's calls and results), `user`, `stream` (`true`) and, when the agent has tools, `tools` (OpenAI function tools of each declaration's `name`, `description` and `parameters`); no `stream_options`, `max_tokens`, `metadata`, `tags`, `fallbacks`, `num_retries`, `mock_response` or `api_key` |
+| Body | exactly `model` (the request's `text/<model>` name), `messages` (the system prompt, then the turn's messages, then the round's calls and results), `user`, `stream` (`true`), `stream_options` (`{"include_usage": true}`, on every round) and, when the agent has tools, `tools` (OpenAI function tools of each declaration's `name`, `description` and `parameters`); no `max_tokens`, `metadata`, `tags`, `fallbacks`, `num_retries`, `mock_response`, `api_key` or cache marker |
 | `user` | `"fp-" + sha256(json.dumps([iss, sub], ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()`, 67 characters |
 
 Proved by `tests/test_backend_gateway.py`: `test_the_request_is_one_post_with_the_system_prompt_and_the_messages`,
 `test_no_header_beyond_the_transports_own_defaults_is_sent`, `test_no_pinned_absent_field_is_sent`,
 `test_a_redirect_is_not_followed_and_a_cookie_is_not_kept`, `test_the_proxy_environment_is_ignored`
 and `test_https_is_trusted_through_the_configured_ca_file_alone`.
+
+The same values in the same order give the same bytes, and within a turn a round's body begins
+with the round before: its `model`, its `tools` and its messages up to that round's last message
+are byte-identical. The library sorts nothing, so a host that wants the provider's cache to hit
+across turns keeps its tool order and its schemas' key order. Proved by
+`tests/test_backend_gateway_usage.py`:
+`test_a_second_rounds_body_begins_with_the_first_rounds_model_tools_and_messages`.
 
 The fingerprint's prefix, input and algorithm are one contract across apps: a change splits
 every person's budget, so every caller computes it with

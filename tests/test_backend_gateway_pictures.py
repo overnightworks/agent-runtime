@@ -137,6 +137,7 @@ def test_one_picture_ends_the_turn_as_a_file_with_no_other_event(studio):
     assert events == [
         FinalEvent(text="", files=(RunFile(name="picture", content=b"\x89PNG bytes"),))
     ]
+    assert events[0].usage is None
 
 
 def test_a_null_url_beside_the_picture_passes(studio):
@@ -330,6 +331,6 @@ def test_a_text_agents_request_is_unchanged(studio):
     assert (stopped, gateway.requests[0].url.path, set(body)) == (
         None,
         "/v1/chat/completions",
-        {"model", "messages", "user", "stream"},
+        {"model", "messages", "user", "stream", "stream_options"},
     )
     assert events[-1] == FinalEvent(text="ok")

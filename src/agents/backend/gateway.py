@@ -60,6 +60,7 @@ from agents.turn import (
     ModelKind,
     RejectionCode,
     RunFile,
+    TurnUsage,
     base64_length,
     model_kind_of,
     person_fingerprint,
@@ -173,6 +174,7 @@ class GatewayBackend(AgentBackend):
             offered = frozenset(tools)
             messages = _opening_messages(request)
             user = person_fingerprint(person.principal)
+            usages: list[TurnUsage | None] = []
             while True:
                 _refuse_after(deadline)
                 body = _bounded(_body(request, messages, user))
@@ -184,8 +186,9 @@ class GatewayBackend(AgentBackend):
                             _refuse_after(deadline)
                             continue
                         reply = part
+                usages.append(reply.usage)
                 if reply.message is None:
-                    yield FinalEvent(text=reply.text)
+                    yield FinalEvent(text=reply.text, usage=_summed(usages))
                     return
                 progress.admit(reply.calls)
                 messages.append(reply.message)
@@ -352,11 +355,16 @@ class _PictureBody(TypedDict):
     user: str
 
 
+class _StreamOptions(TypedDict):
+    include_usage: bool
+
+
 class _Body(TypedDict):
     model: str
     messages: list[_Message]
     user: str
     stream: bool
+    stream_options: _StreamOptions
     tools: NotRequired[list[_FunctionTool]]
 
 
@@ -374,6 +382,7 @@ class _Round:
     text: str
     calls: tuple[_Call, ...]
     message: _Message | None
+    usage: TurnUsage | None = None
 
 
 @dataclass
@@ -467,7 +476,13 @@ def _result_message(result: ToolResultEvent) -> _Message:
 
 
 def _body(request: TurnRequest, messages: list[_Message], user: str) -> str:
-    body: _Body = {"model": request.model, "messages": messages, "user": user, "stream": True}
+    body: _Body = {
+        "model": request.model,
+        "messages": messages,
+        "user": user,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
     if request.tools:
         # ``effect`` is for the client, so the projection names its fields.
         body["tools"] = [
@@ -482,6 +497,16 @@ def _body(request: TurnRequest, messages: list[_Message], user: str) -> str:
             for tool in request.tools
         ]
     return json.dumps(body)
+
+
+def _summed(usages: list[TurnUsage | None]) -> TurnUsage | None:
+    """The turn's usage: its rounds' summed, or ``None`` when any round has none."""
+    total = TurnUsage(input_tokens=0, cached_input_tokens=0, cache_write_tokens=0, output_tokens=0)
+    for usage in usages:
+        if usage is None:
+            return None
+        total += usage
+    return total
 
 
 def _picture_body(request: TurnRequest, size: str, user: str) -> str:
@@ -629,9 +654,9 @@ async def _chunks(response: httpx2.Response, deadline: float) -> AsyncIterator[b
 def _judged(streamed: StreamedRound, offered: frozenset[str]) -> _Round:
     try:
         if streamed.finish_reason == "tool_calls":
-            return _calls_of(streamed.message, offered)
+            return _calls_of(streamed.message, offered, streamed.usage)
         if streamed.finish_reason == "stop":
-            return _answer_of(streamed.message["content"])
+            return _answer_of(streamed.message["content"], streamed.usage)
     except _UNREADABLE_REPLY:
         pass
     raise _malformed_reply()
@@ -681,13 +706,15 @@ async def _picture_of(response: httpx2.Response) -> RunFile:
     return file
 
 
-def _answer_of(text: str) -> _Round:
+def _answer_of(text: str, usage: TurnUsage | None) -> _Round:
     if not text.strip():
         raise _malformed_reply()
-    return _Round(text=text, calls=(), message=None)
+    return _Round(text=text, calls=(), message=None, usage=usage)
 
 
-def _calls_of(message: AssembledMessage, offered: frozenset[str]) -> _Round:
+def _calls_of(
+    message: AssembledMessage, offered: frozenset[str], usage: TurnUsage | None
+) -> _Round:
     """Every call of a round is judged before any is shown or run."""
     raw_calls = message["tool_calls"]
     if not raw_calls:
@@ -705,7 +732,7 @@ def _calls_of(message: AssembledMessage, offered: frozenset[str]) -> _Round:
         "content": message["content"],
         "tool_calls": raw_calls,
     }
-    return _Round(text="", calls=tuple(calls), message=reply)
+    return _Round(text="", calls=tuple(calls), message=reply, usage=usage)
 
 
 def _malformed_reply() -> TurnStopped:

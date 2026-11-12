@@ -4,17 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import logging
 from collections import UserString
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from agents.agent_file import TurnRequest
 from agents.backend import TurnStopKind, TurnStopped
 from agents.backend.fake_gateway import (
     FakeGateway,
@@ -24,12 +19,7 @@ from agents.backend.fake_gateway import (
     tool_round,
 )
 from agents.backend.gateway import GatewayBackend
-from agents.config import AgentConfig
 from agents.tools import (
-    HandTool,
-    JsonObject,
-    Principal,
-    ToolDeclaration,
     ToolEffect,
     ToolOutcome,
 )
@@ -38,9 +28,6 @@ from agents.turn import (
     MAX_TOOL_INPUT_DEPTH,
     FailureCode,
     RejectionCode,
-    Turn,
-    TurnMessage,
-    TurnRole,
 )
 from agents.turn_events import (
     AssistantTextEvent,
@@ -48,93 +35,21 @@ from agents.turn_events import (
     ToolCallEvent,
     ToolResultEvent,
 )
+from tests.support import gateway_turn_support
 from tests.support.gateway_turn_support import (
-    a_gateway_config,
+    TURN_BUDGET_SECONDS,
     a_person,
+    a_tool_request,
     ending,
+    sent,
+    shop_turn,
 )
-from tests.support.virtual_time import VirtualTimeLoop
+
+shop = gateway_turn_support.shop
 
 PROVIDER_ERROR = (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
 LIMIT_EXCEEDED = (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
 BUSY = (TurnStopKind.REFUSED, RejectionCode.BUSY)
-TURN_BUDGET_SECONDS = 30
-
-
-@dataclass
-class Shop:
-    """The app side of a turn: its hand tools, what they were called with, and the gateway."""
-
-    directory: Path
-    replies: tuple[Reply, ...] = ()
-    seen: list[tuple[str, Principal, JsonObject]] = field(default_factory=list)
-    tools: list[HandTool] = field(default_factory=list)
-
-    def add_tool(
-        self,
-        name: str,
-        *,
-        effect: ToolEffect = ToolEffect.READ_ONLY,
-        answer: Callable[[], Awaitable[ToolOutcome]] | None = None,
-    ) -> HandTool:
-        async def handler(principal: Principal, arguments: JsonObject) -> ToolOutcome:
-            self.seen.append((name, principal, arguments))
-            return await (answer or _noted)()
-
-        tool = HandTool(
-            ToolDeclaration(name=name, description=f"Use {name}.", parameters={}, effect=effect),
-            handler,
-        )
-        self.tools.append(tool)
-        return tool
-
-    def run(
-        self,
-        *replies: Reply,
-        max_tool_calls: int = 5,
-        selected: tuple[str, ...] | None = None,
-        late_after: type | None = None,
-    ) -> tuple[list, TurnStopped | None, FakeGateway]:
-        gateway = FakeGateway(*replies)
-        chosen = [t for t in self.tools if selected is None or t.declaration.name in selected]
-        request = a_request(chosen, max_tool_calls)
-        backend = GatewayBackend(self.config(), tools=self.tools, transport=gateway)
-        with asyncio.Runner(loop_factory=VirtualTimeLoop) as runner:
-            events, stopped = runner.run(_turn(backend, request, late_after))
-        return events, stopped, gateway
-
-    def config(self) -> AgentConfig:
-        return a_gateway_config(self.directory)
-
-
-async def _noted() -> ToolOutcome:
-    return ToolOutcome("noted", is_error=False)
-
-
-def a_request(tools: list[HandTool], max_tool_calls: int) -> TurnRequest:
-    return TurnRequest(
-        agent="helper",
-        turn=Turn(system="Answer briefly.", messages=[TurnMessage(role=TurnRole.USER, text="Hi")]),
-        roles=["admin", "user"],
-        tools=tuple(tool.declaration for tool in tools),
-        model="text/standin",
-        max_duration_seconds=TURN_BUDGET_SECONDS,
-        max_tool_calls=max_tool_calls if tools else None,
-    )
-
-
-async def _turn(backend: GatewayBackend, request: TurnRequest, late_after: type | None = None):
-    """Run a turn; the app takes `late_after` events so long that the turn's deadline has passed."""
-    events = []
-    try:
-        async with contextlib.aclosing(backend.run(request, a_person())) as stream:
-            async for event in stream:
-                events.append(event)
-                if late_after is not None and isinstance(event, late_after):
-                    asyncio.get_running_loop().skew_seconds += request.max_duration_seconds + 1
-    except TurnStopped as stopped:
-        return events, stopped
-    return events, None
 
 
 def call_records(caplog) -> list[logging.LogRecord]:
@@ -145,15 +60,6 @@ def logged_flag(caplog) -> str:
     """The is_error state the one INFO record of the call states, as printed."""
     (record,) = call_records(caplog)
     return record.getMessage().rsplit("is_error=", 1)[1]
-
-
-def sent(gateway: FakeGateway, index: int) -> dict:
-    return json.loads(gateway.requests[index].content)
-
-
-@pytest.fixture
-def shop(tmp_path: Path) -> Shop:
-    return Shop(tmp_path)
 
 
 def test_one_round_runs_the_call_then_the_answer_follows(shop):
@@ -586,7 +492,8 @@ def test_cancelling_between_a_call_and_its_result_reaches_the_caller_unchanged(s
     caplog.set_level(logging.INFO)
 
     async def consume() -> None:
-        async with contextlib.aclosing(backend.run(a_request(shop.tools, 3), a_person())) as stream:
+        request = a_tool_request(shop.tools, 3)
+        async with contextlib.aclosing(backend.run(request, a_person())) as stream:
             async for event in stream:
                 events.append(event)
 
@@ -650,9 +557,9 @@ def test_repeated_large_results_stop_the_turn_before_a_request_over_the_bound(sh
 def test_a_selected_tool_without_a_handler_raises_before_any_request(shop):
     shop.add_tool("lookup")
     gateway = FakeGateway(completion("never"))
-    request = a_request(shop.tools, 3)
+    request = a_tool_request(shop.tools, 3)
     backend = GatewayBackend(shop.config(), tools=(), transport=gateway)
-    turn = _turn(backend, request)
+    turn = shop_turn(backend, request)
 
     with pytest.raises(ValueError, match="lookup"):
         asyncio.run(turn)
@@ -673,7 +580,7 @@ def test_two_tools_with_one_name_are_refused_at_construction(shop):
 def test_a_request_declaration_that_differs_from_its_handler_s_raises_before_any_request(shop):
     shop.add_tool("write", effect=ToolEffect.SIDE_EFFECTING)
     gateway = FakeGateway(completion("never"))
-    declared_read_only = a_request(shop.tools, 3).model_copy(
+    declared_read_only = a_tool_request(shop.tools, 3).model_copy(
         update={
             "tools": (
                 shop.tools[0].declaration.model_copy(update={"effect": ToolEffect.READ_ONLY}),
@@ -681,7 +588,7 @@ def test_a_request_declaration_that_differs_from_its_handler_s_raises_before_any
         }
     )
     backend = GatewayBackend(shop.config(), tools=shop.tools, transport=gateway)
-    turn = _turn(backend, declared_read_only)
+    turn = shop_turn(backend, declared_read_only)
 
     with pytest.raises(ValueError, match="write"):
         asyncio.run(turn)
@@ -689,13 +596,15 @@ def test_a_request_declaration_that_differs_from_its_handler_s_raises_before_any
     assert gateway.requests == []
 
 
-def test_the_request_carries_only_model_messages_user_and_tools_without_the_effect(shop):
+def test_the_request_carries_only_model_messages_user_stream_options_and_tools_without_the_effect(
+    shop,
+):
     shop.add_tool("lookup", effect=ToolEffect.READ_ONLY)
 
     _, _, gateway = shop.run(completion("ok"))
 
     body = sent(gateway, 0)
-    assert set(body) == {"model", "messages", "user", "stream", "tools"}
+    assert set(body) == {"model", "messages", "user", "stream", "stream_options", "tools"}
     assert body["tools"] == [
         {
             "type": "function",

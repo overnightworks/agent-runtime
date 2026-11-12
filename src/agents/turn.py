@@ -265,6 +265,30 @@ class Turn(StrictModel):
     messages: list[TurnMessage] = Field(min_length=1)
 
 
+TokenCount = Annotated[int, Field(ge=0)]
+
+
+class TurnUsage(StrictModel):
+    """The tokens a turn used, in the provider-neutral words of the turn.
+
+    ``input_tokens`` is everything the model read, cached tokens included; ``cached_input_tokens``
+    is the part read from the provider's cache and ``cache_write_tokens`` the part written to it.
+    """
+
+    input_tokens: TokenCount
+    cached_input_tokens: TokenCount
+    cache_write_tokens: TokenCount
+    output_tokens: TokenCount
+
+    def __add__(self, other: TurnUsage) -> TurnUsage:
+        return TurnUsage(
+            input_tokens=self.input_tokens + other.input_tokens,
+            cached_input_tokens=self.cached_input_tokens + other.cached_input_tokens,
+            cache_write_tokens=self.cache_write_tokens + other.cache_write_tokens,
+            output_tokens=self.output_tokens + other.output_tokens,
+        )
+
+
 class Principal(StrictModel):
     """The verified caller exactly as the app bound it: no bound, no normalization."""
 
