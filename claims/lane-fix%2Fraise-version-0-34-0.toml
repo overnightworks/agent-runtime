@@ -1,0 +1,8 @@
+claim_id = "4dd112c545494002bca1b4805087fc99"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "5b52b26a1c620a85e9e7672aabc5c7021234f8b7"
+branch = "fix/raise-version-0-34-0"
+scope = ["AGENTS.md", "README.md", "pyproject.toml", "uv.lock"]
+opened_commit = "bea3870432c266533cfa0403f93fd18022c792be"
+whole_reason = "The version raise with the two document lists that must name the document the release carries."
