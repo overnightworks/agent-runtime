@@ -35,6 +35,7 @@ from agents.tools import (
 )
 from agents.turn import (
     MAX_EVENT_BYTES,
+    MAX_TOOL_INPUT_DEPTH,
     FailureCode,
     RejectionCode,
     Turn,
@@ -214,12 +215,18 @@ def test_two_calls_in_one_round_run_in_order_each_between_its_events(shop):
     assert [name for name, _, _ in shop.seen] == ["first", "second"]
 
 
+_NESTED_PAST_THE_DEPTH = '{"a": ' + "[" * MAX_TOOL_INPUT_DEPTH + "]" * MAX_TOOL_INPUT_DEPTH + "}"
+
+
 @pytest.mark.parametrize(
     "bad_round",
     [
         tool_round(tool_call("c1", "lookup", {}), tool_call("c2", "unoffered", {})),
         tool_round(tool_call("c1", "lookup", "{not json")),
         tool_round(tool_call("c1", "lookup", "[]")),
+        tool_round(tool_call("c1", "lookup", _NESTED_PAST_THE_DEPTH)),
+        tool_round(tool_call("c1", "lookup", '{"a": NaN}')),
+        tool_round(tool_call("c1", "lookup", '{"a": "\\ud800"}')),
         tool_round(tool_call("c1", "lookup", {}), tool_call("c1", "lookup", {})),
         tool_round(),
         tool_round(tool_call("\ud800", "lookup", {})),
@@ -230,6 +237,9 @@ def test_two_calls_in_one_round_run_in_order_each_between_its_events(shop):
         "unoffered",
         "not-json",
         "not-an-object",
+        "arguments-nested-past-the-depth",
+        "arguments-not-finite",
+        "arguments-lone-surrogate",
         "duplicate-id",
         "no-calls",
         "surrogate-id",

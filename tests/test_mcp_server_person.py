@@ -335,6 +335,21 @@ def test_a_call_hands_the_handler_the_resolved_person_and_the_request_scope(
     assert request.scope is person.resolved[0]
 
 
+def test_a_call_hands_the_handler_exactly_the_parsed_nested_arguments(
+    front: McpPersonFront, person: Person
+) -> None:
+    arguments: dict[str, Any] = {
+        "note": "n1",
+        "tags": ["a", ["b", {"deep": [1, 2.5, None, True]}]],
+        "meta": {"empty": {}, "list": [], "text": "caf\u00e9"},
+    }
+
+    post(front, rpc_body("tools/call", call_params("read_note", **arguments)))
+
+    [(_, _, received)] = person.calls
+    assert received == arguments
+
+
 def test_concurrent_calls_each_get_the_person_and_the_scope_of_their_own_request(
     front: McpPersonFront, person: Person
 ) -> None:

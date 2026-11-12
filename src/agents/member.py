@@ -23,7 +23,7 @@ from pydantic import (
     model_validator,
 )
 
-from agents.turn import JsonDocument, NonEmptyUnicodeText, StrictModel
+from agents.turn import JsonObject, NonEmptyUnicodeText, StrictModel
 
 __all__ = [
     "ACCEPT_INVITATION_TOOL",
@@ -296,7 +296,7 @@ class PlaceView(StrictModel):
 
     revision: int = Field(ge=0)
     awaits_you: bool
-    state: JsonDocument
+    state: JsonObject
 
 
 def place_view_uri(place: PlaceRef) -> str:
