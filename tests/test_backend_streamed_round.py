@@ -395,12 +395,19 @@ def test_usage_on_a_chunk_that_carries_a_choice_gives_the_rounds_usage():
     )
 
 
-def test_a_later_chunk_with_null_usage_keeps_the_usage_already_read():
+@pytest.mark.parametrize(
+    "null_usage_chunk",
+    [_usage_chunk(None), {"usage": None}, {"choices": None, "usage": None}],
+    ids=["empty-choices", "no-choices-key", "choices-null"],
+)
+def test_a_later_chunk_with_null_usage_keeps_the_usage_already_read(null_usage_chunk):
     usage = {"prompt_tokens": 9, "completion_tokens": 2}
 
-    streamed = read(_answer_with(_usage_chunk(usage), _usage_chunk(None)))
+    streamed = read(_answer_with(_usage_chunk(usage), null_usage_chunk))
 
-    assert streamed.usage is not None
+    assert streamed.usage == TurnUsage(
+        input_tokens=9, cached_input_tokens=0, cache_write_tokens=0, output_tokens=2
+    )
 
 
 def test_a_round_with_no_usage_chunk_carries_no_usage():
