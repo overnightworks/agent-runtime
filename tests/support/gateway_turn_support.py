@@ -341,13 +341,16 @@ class Shop:
         *,
         effect: ToolEffect = ToolEffect.READ_ONLY,
         answer: Callable[[], Awaitable[ToolOutcome]] | None = None,
+        parameters: JsonObject | None = None,
     ) -> HandTool:
         async def handler(principal: Principal, arguments: JsonObject) -> ToolOutcome:
             self.seen.append((name, principal, arguments))
             return await (answer or _noted)()
 
         tool = HandTool(
-            ToolDeclaration(name=name, description=f"Use {name}.", parameters={}, effect=effect),
+            ToolDeclaration(
+                name=name, description=f"Use {name}.", parameters=parameters or {}, effect=effect
+            ),
             handler,
         )
         self.tools.append(tool)

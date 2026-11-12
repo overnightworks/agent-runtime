@@ -131,14 +131,21 @@ def raw_members(body: bytes) -> dict[str, str]:
 
 
 def test_a_second_rounds_body_begins_with_the_first_rounds_model_tools_and_messages(shop):
-    _, stopped, gateway = run(
-        shop, tool_round(tool_call("c1", "lookup", {"topic": "x"})), completion("Done.")
+    schema = {
+        "type": "object",
+        "required": ["topic"],
+        "properties": {"topic": {"type": "string", "description": "What to look up."}},
+    }
+    shop.add_tool("lookup", parameters=schema)
+    _, stopped, gateway = shop.run(
+        tool_round(tool_call("c1", "lookup", {"topic": "x"})), completion("Done.")
     )
 
     first, second = (raw_members(request.content) for request in gateway.requests)
     assert stopped is None
     assert second["model"] == first["model"]
     assert second["tools"] == first["tools"]
+    assert first["tools"].index('"required"') < first["tools"].index('"properties"')
     assert second["messages"].startswith(first["messages"].removesuffix("]"))
     assert len(json.loads(second["messages"])) > len(json.loads(first["messages"]))
     assert all("cache_control" not in request.content.decode() for request in gateway.requests)
