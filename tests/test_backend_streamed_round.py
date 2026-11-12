@@ -8,6 +8,7 @@ from collections.abc import AsyncIterator, Iterable
 from contextlib import aclosing
 
 import pytest
+from pydantic import ValidationError
 
 from agents.backend.streamed_round import (
     MalformedRound,
@@ -404,6 +405,13 @@ def test_a_later_chunk_with_null_usage_keeps_the_usage_already_read():
 
 def test_a_round_with_no_usage_chunk_carries_no_usage():
     assert read(_answer_with()).usage is None
+
+
+def test_a_turns_usage_refuses_a_count_assigned_after_it_was_made():
+    usage = TurnUsage(input_tokens=9, cached_input_tokens=0, cache_write_tokens=0, output_tokens=2)
+
+    with pytest.raises(ValidationError):
+        usage.input_tokens = 10  # type: ignore[misc]
 
 
 @pytest.mark.parametrize(
