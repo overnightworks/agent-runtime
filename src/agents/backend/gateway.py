@@ -15,7 +15,7 @@ import logging
 import re
 import ssl
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Iterable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
 from types import TracebackType
@@ -654,9 +654,9 @@ async def _chunks(response: httpx2.Response, deadline: float) -> AsyncIterator[b
 def _judged(streamed: StreamedRound, offered: frozenset[str]) -> _Round:
     try:
         if streamed.finish_reason == "tool_calls":
-            return replace(_calls_of(streamed.message, offered), usage=streamed.usage)
+            return _calls_of(streamed.message, offered, streamed.usage)
         if streamed.finish_reason == "stop":
-            return replace(_answer_of(streamed.message["content"]), usage=streamed.usage)
+            return _answer_of(streamed.message["content"], streamed.usage)
     except _UNREADABLE_REPLY:
         pass
     raise _malformed_reply()
@@ -706,13 +706,15 @@ async def _picture_of(response: httpx2.Response) -> RunFile:
     return file
 
 
-def _answer_of(text: str) -> _Round:
+def _answer_of(text: str, usage: TurnUsage | None) -> _Round:
     if not text.strip():
         raise _malformed_reply()
-    return _Round(text=text, calls=(), message=None)
+    return _Round(text=text, calls=(), message=None, usage=usage)
 
 
-def _calls_of(message: AssembledMessage, offered: frozenset[str]) -> _Round:
+def _calls_of(
+    message: AssembledMessage, offered: frozenset[str], usage: TurnUsage | None
+) -> _Round:
     """Every call of a round is judged before any is shown or run."""
     raw_calls = message["tool_calls"]
     if not raw_calls:
@@ -730,7 +732,7 @@ def _calls_of(message: AssembledMessage, offered: frozenset[str]) -> _Round:
         "content": message["content"],
         "tool_calls": raw_calls,
     }
-    return _Round(text="", calls=tuple(calls), message=reply)
+    return _Round(text="", calls=tuple(calls), message=reply, usage=usage)
 
 
 def _malformed_reply() -> TurnStopped:
