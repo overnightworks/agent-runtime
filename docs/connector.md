@@ -617,7 +617,8 @@ records, the same way in every app. The library carries text only: the app turns
 and a sentence into sound.
 
 **Hearing.** Heard speech is a window entry with `spoken` true: its `text` is one finished
-utterance and its `name` the speaker's shown name.
+utterance and its `name` the speaker's shown name. Which member hears which speaker, and the
+line a heard utterance becomes, is `MemberHearing`; the rules are in [hearing.md](hearing.md).
 
 **Speaking** is the side-effecting tool `SPEAK_TOOL`, `speak`. Its arguments are
 `SpeakArguments(place, text)`: the `PlaceRef`, as for `accept_invitation`, and one sentence. On
@@ -631,11 +632,8 @@ A refusal is an `is_error` result whose content is `SpeakRefused(refused)` as JS
 
 Proved by `tests/test_member.py`.
 
-**What each app that hears and speaks owns:**
+**What each app that hears and speaks owns**, besides what [hearing.md](hearing.md) gives it:
 
-- It appends finished utterances only, one entry per utterance, under the speaker's shown name
-  and its own `kind`, and never provisional text.
-- It enters a person's speech only while that person allows it under the app's own rule.
 - It appends the member's own sentences as `own` and `spoken` when they start playing.
 - It plays one member's sentences in order, each behind that member's previous sentence, and
   answers each with the sound's length.

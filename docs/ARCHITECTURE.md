@@ -57,9 +57,10 @@ flowchart TB
 - The **`mcp-server` extra** adds `anyio` and the official MCP SDK for
   `agents.mcp_server`, a thin ASGI shell before the SDK that serves an app's tools
   to one signed-in person's agent on MCP revision 2026-07-28, and the `MemberResources` port
-  through which a member reads an app's truth per verified principal; `mcp_wire` holds what the
-  SDK does not own (the endpoint path, the strict JSON reader, the bearer-reflection check) and
-  imports no extra.
+  through which a member reads an app's truth per verified principal, and `MemberHearing`, the
+  in-memory record of which member hears which speaker ([hearing.md](hearing.md)); `mcp_wire`
+  holds what the SDK does not own (the endpoint path, the strict JSON reader, the bearer-reflection
+  check) and imports no extra.
 - The **`voice` extra** adds `syntok` for `agents.voice`: the voice loop
   (`voice.loop.run_voice_loop`) on the `AgentBackend` port, its ports `VoiceOut` and `WakeRule`
   and its events. `voice.reply` owns the reply markers, the protocol text composed from them and

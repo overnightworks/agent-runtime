@@ -4,6 +4,7 @@ No base module of ``agents`` imports this package, so the base keeps its two
 dependencies, pydantic and ruamel.yaml.
 """
 
+from agents.mcp_server.hearing import Heard, MemberHearing, Sense, SpokenLine, Utterance
 from agents.mcp_server.listen import ResourceChanges
 from agents.mcp_server.person import (
     McpPersonFront,
@@ -16,7 +17,9 @@ from agents.mcp_server.resources import MemberResources
 from agents.mcp_server.routes import RouteProfileError, RouteTools, route_tools
 
 __all__ = [
+    "Heard",
     "McpPersonFront",
+    "MemberHearing",
     "MemberResources",
     "PersonRequest",
     "PersonTool",
@@ -25,5 +28,8 @@ __all__ = [
     "ResourceChanges",
     "RouteProfileError",
     "RouteTools",
+    "Sense",
+    "SpokenLine",
+    "Utterance",
     "route_tools",
 ]
