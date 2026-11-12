@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 import httpx2
+from pydantic import JsonValue
 
 from agents.tools import JsonObject
 
@@ -24,12 +25,13 @@ class Reply:
 
 
 def _event_stream(*chunks: JsonObject, finish_reason: str) -> Reply:
-    chunks += ({"choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}]},)
+    finish: JsonObject = {"choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}]}
+    chunks += (finish,)
     events = [f"data: {json.dumps(chunk)}\n\n" for chunk in chunks] + ["data: [DONE]\n\n"]
     return Reply(headers={"content-type": "text/event-stream"}, body="".join(events).encode())
 
 
-def _delta(**delta: object) -> JsonObject:
+def _delta(**delta: JsonValue) -> JsonObject:
     return {"choices": [{"index": 0, "delta": delta}]}
 
 
