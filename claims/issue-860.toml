@@ -1,0 +1,7 @@
+claim_id = "e3f5233b636b4fb2a10ad4b61aa5e6f8"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "f432ff646bac8a041e7b54f611f19452bafd8750"
+branch = "claude/issue-860-routes-refuse-wrong-shapes"
+scope = ["src/agents/mcp_server/routes.py", "tests/test_mcp_server_routes.py"]
+opened_commit = "1b702656a30e3a4111f311bc503a975963661319"
