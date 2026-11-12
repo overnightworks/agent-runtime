@@ -202,8 +202,8 @@ def _check_description(operation: _Operation) -> str:
 class _Inputs:
     """The input schema being collected; a name given twice is a breach."""
 
-    properties: dict[str, JsonValue] = field(default_factory=dict)
-    required: list[JsonValue] = field(default_factory=list)
+    properties: dict[str, JsonValue] = field(default_factory=dict[str, JsonValue])
+    required: list[JsonValue] = field(default_factory=list[JsonValue])
 
     def add(self, name: str, schema: JsonValue, *, is_required: bool) -> None:
         if name in self.properties:
@@ -346,7 +346,7 @@ def route_tools[Mark: Hashable](
         raise RouteProfileError(str(breach)) from breach
     _require_decided(operations)
     tools: dict[str, PersonTool] = {}
-    marks = set()
+    marks: set[Mark] = set()
     for operation in operations:
         tool = _decided(operation, operations, app, components)
         if tool is None:
