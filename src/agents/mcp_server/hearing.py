@@ -19,10 +19,20 @@ from collections.abc import Callable
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import AfterValidator, Field
 
 from agents.member import PlaceRef
 from agents.turn import NonEmptyUnicodeText, Principal, StrictModel
+
+
+def _refuse_blank(text: str) -> str:
+    if not text.strip():
+        raise ValueError("must hold a character that is not whitespace")
+    return text
+
+
+SpokenText = Annotated[NonEmptyUnicodeText, AfterValidator(_refuse_blank)]
+"""Text of a heard line: unchanged when valid, refused when only whitespace."""
 
 
 class Sense(StrEnum):
@@ -37,18 +47,18 @@ class Utterance(StrictModel):
 
     place: PlaceRef
     speaker: NonEmptyUnicodeText
-    kind: NonEmptyUnicodeText
-    name: NonEmptyUnicodeText
-    text: NonEmptyUnicodeText
+    kind: SpokenText
+    name: SpokenText
+    text: SpokenText
     began_at: Annotated[float, Field(allow_inf_nan=False)]
 
 
 class SpokenLine(StrictModel):
     """A line said aloud and heard, as a ``PlaceEntry`` without the ``seq`` the app adds."""
 
-    kind: NonEmptyUnicodeText
-    name: NonEmptyUnicodeText
-    text: NonEmptyUnicodeText
+    kind: SpokenText
+    name: SpokenText
+    text: SpokenText
     own: Literal[False] = False
     spoken: Literal[True] = True
 

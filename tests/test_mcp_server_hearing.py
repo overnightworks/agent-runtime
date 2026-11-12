@@ -7,8 +7,10 @@ share.
 from __future__ import annotations
 
 import asyncio
+import gc
 import logging
 import math
+import types
 from collections.abc import Callable
 from typing import Any
 
@@ -362,8 +364,16 @@ def test_no_call_writes_a_log_record(
     assert caplog.records == []
 
 
-@pytest.mark.parametrize("field", ["speaker", "kind", "name", "text"])
-def test_an_utterance_with_an_empty_speaker_key_kind_name_or_text_is_refused(field: str) -> None:
+@pytest.mark.parametrize(
+    ("field", "refused"),
+    [
+        ("speaker", ""),
+        *((field, blank) for field in ("kind", "name", "text") for blank in ("", " ", " \t\n")),
+    ],
+)
+def test_an_utterance_with_an_empty_speaker_key_or_a_blank_kind_name_or_text_is_refused(
+    field: str, refused: str
+) -> None:
     fields: dict[str, Any] = {
         "place": room,
         "speaker": "seat-1",
@@ -371,11 +381,21 @@ def test_an_utterance_with_an_empty_speaker_key_kind_name_or_text_is_refused(fie
         "name": "Carol",
         "text": "hello there",
         "began_at": 1.0,
-        field: "",
+        field: refused,
     }
 
     with pytest.raises(ValidationError):
         Utterance(**fields)
+
+
+def test_an_utterance_text_with_surrounding_whitespace_is_heard_unchanged(
+    hearing: MemberHearing, clock: Clock
+) -> None:
+    allow_at(hearing, clock, 1.0)
+
+    line = hearing.heard(utterance(2.0, text="  hello there \n")).line
+
+    assert line.text == "  hello there \n"
 
 
 @pytest.mark.parametrize("began_at", [math.nan, math.inf, -math.inf])
@@ -391,11 +411,44 @@ def test_the_default_clock_is_the_running_loops_time_read_when_allow_runs() -> N
 
     async def hear_around_a_switch_on() -> tuple[bool, bool]:
         loop_time = asyncio.get_running_loop().time
+        before_allow = loop_time()
         hearing.allow(room, "seat-1", alice, Sense.HEARING, True)
-        switched_on_at = loop_time()
+        after_allow = loop_time()
         return (
-            alice in who_hears(hearing, switched_on_at - 1.0),
-            alice in who_hears(hearing, switched_on_at + 1.0),
+            alice in who_hears(hearing, before_allow - 1.0),
+            alice in who_hears(hearing, after_allow),
         )
 
     assert asyncio.run(hear_around_a_switch_on()) == (False, True)
+
+
+def reachable_strings(root: object) -> set[str]:
+    """Every string reachable from ``root`` through its instances and containers, leaving out the
+    code and types they belong to."""
+    skipped = (type, types.FunctionType, types.MethodType, types.ModuleType)
+    seen: set[int] = set()
+    strings: set[str] = set()
+    pending = [root]
+    while pending:
+        item = pending.pop()
+        if id(item) in seen or isinstance(item, skipped):
+            continue
+        seen.add(id(item))
+        if isinstance(item, str):
+            strings.add(item)
+        pending.extend(gc.get_referents(item))
+    return strings
+
+
+def test_the_record_keeps_neither_an_utterance_nor_its_line_once_the_caller_lets_go(
+    hearing: MemberHearing, clock: Clock
+) -> None:
+    allow_at(hearing, clock, 1.0)
+    spoken = {"kind": "kind-marker", "name": "name-marker", "text": "text-marker"}
+
+    heard = hearing.heard(utterance(2.0, **spoken))
+    assert heard.members == {alice}
+    del heard
+    gc.collect()
+
+    assert not set(spoken.values()) & reachable_strings(hearing)

@@ -104,7 +104,8 @@ is not safe.
 
 **HEARING-13 (L).** The record is in memory only: nothing is persisted, an utterance's text and
 name pass through `heard` and are kept nowhere, and no call logs. Proved by
-`test_no_call_writes_a_log_record`.
+`test_no_call_writes_a_log_record` and
+`test_the_record_keeps_neither_an_utterance_nor_its_line_once_the_caller_lets_go`.
 
 ## What an app supplies
 
