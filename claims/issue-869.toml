@@ -1,7 +1,0 @@
-claim_id = "0d087c6d304743c6bdf37905cc390f73"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "c91b7a85add69702aa04c1ffaba82752259c7f56"
-branch = "claude/issue-869-voice-name-capitals"
-scope = ["docs/connector.md", "src/agents/member.py", "tests/test_member.py"]
-opened_commit = "e1230e5c3d8203ffecbaf1c065ec4ec1a1f30980"
