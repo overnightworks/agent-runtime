@@ -1,0 +1,8 @@
+claim_id = "d661f5115e89476b98381acb2547594d"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "7c6c1f0fac31f2cb43879ddf63046a751056e3bd"
+branch = "claude/issue-873-member-hearing"
+scope = ["docs/ARCHITECTURE.md", "docs/connector.md", "docs/hearing.md", "src/agents/mcp_server/__init__.py", "src/agents/mcp_server/hearing.py", "tests/test_mcp_server_hearing.py"]
+opened_commit = "18646f1a99bdbf8d7c8b343a71eecad39bae334b"
+whole_reason = "One new module with its standard section and tests; the record, its ends and its questions are one fact and split only into two slices of the same lane."
