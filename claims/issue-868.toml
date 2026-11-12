@@ -3,6 +3,6 @@ agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
 role = "builder"
 base = "9ecbe38940abb0d342acbdc4f18627f8dd0f57f9"
 branch = "claude/issue-868-turn-usage"
-scope = ["docs/connector.md", "src/agents/backend/fake_gateway.py", "src/agents/backend/gateway.py", "src/agents/backend/streamed_round.py", "src/agents/turn.py", "src/agents/turn_events.py", "tests/test_backend_gateway.py", "tests/test_backend_streamed_round.py"]
+scope = ["docs/connector.md", "src/agents/backend/fake_gateway.py", "src/agents/backend/gateway.py", "src/agents/backend/streamed_round.py", "src/agents/turn.py", "src/agents/turn_events.py", "tests/support/gateway_turn_support.py", "tests/test_backend_gateway.py", "tests/test_backend_gateway_pictures.py", "tests/test_backend_gateway_tools.py", "tests/test_backend_gateway_usage.py", "tests/test_backend_streamed_round.py"]
 opened_commit = "9773a8ee76d269b7861354dbc60f431fdcea547f"
 whole_reason = "One vertical slice from the request that asks for usage to the event that carries it; the parser alone would be reached only by tests."
