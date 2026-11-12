@@ -322,9 +322,10 @@ FIGURE_WIRE = {"url": "https://figures.example/a.glb", "sha256": "ab12" * 16}
         {},
         {"figure": FIGURE_WIRE},
         {"voice": "nova-2.hd_x"},
+        {"voice": "en_US-example-medium"},
         {"figure": FIGURE_WIRE, "voice": "nova"},
     ],
-    ids=["neither", "figure-only", "voice-only", "both"],
+    ids=["neither", "figure-only", "voice-only", "voice-with-capitals", "both"],
 )
 def test_accept_invitation_arguments_take_a_figure_and_a_voice_or_neither(
     fields: dict[str, Any],
@@ -420,8 +421,8 @@ def test_accept_invitation_arguments_refuse_a_figure_digest_that_is_not_64_lower
 
 @pytest.mark.parametrize(
     "voice",
-    ["Nova", "no va", "no/va", "", "a" * 65],
-    ids=["uppercase", "space", "slash", "empty", "65-characters"],
+    ["no va", "no/va", "", "a" * 65, "n\u00f6va", "nova\n"],
+    ids=["space", "slash", "empty", "65-characters", "non-ascii-letter", "trailing-newline"],
 )
 def test_accept_invitation_arguments_refuse_a_voice_outside_the_grammar(voice: str) -> None:
     wire_text = json.dumps(ACCEPT_WIRE | {"voice": voice})

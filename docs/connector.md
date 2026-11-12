@@ -466,12 +466,13 @@ view is not specified. Proved by `tests/test_member.py`, `tests/test_mcp_server_
 An accept may name the agent's 3D figure, `figure` as `FigureRef(url, sha256)`, and the `voice` it
 speaks with; both are optional, and an accept without them dumps without their keys. The record
 checks only their form: `url` is an absolute `https` address with a host and no user part, query or
-fragment, `sha256` is 64 lowercase hexadecimal characters, and `voice` is 1 to 64 lowercase
-letters, digits, `.`, `_` or `-`. The app decides the rest:
+fragment, `sha256` is 64 lowercase hexadecimal characters, and `voice` is 1 to 64 ASCII letters
+of either case, digits, `.`, `_` or `-`. The app decides the rest:
 
 - It fetches a figure only from sources it allows, and serves only bytes whose sha256 matches.
-- It passes the voice to its speech service. A voice that service does not offer is refused there,
-  and the app answers with the refusal it already has; the library adds no refusal member for it.
+- It passes the voice to its speech service unchanged; the library folds no case. A voice that
+  service does not offer is refused there, and the app answers with the refusal it already has; the
+  library adds no refusal member for it.
 - An absent field means the app's own default.
 
 A `Standing` is a `PlaceRef(kind, id)`, opaque to all but the app, a `StandingState` (`invited`,
