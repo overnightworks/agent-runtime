@@ -163,9 +163,10 @@ class FigureRef(StrictModel):
         return url
 
 
-VoiceName = Annotated[str, StringConstraints(pattern=r"^[a-z0-9._-]{1,64}$")]
-"""The name of the voice an agent speaks with: 1 to 64 lowercase letters, digits, ``.``, ``_`` or
-``-``. The app's speech service decides whether it offers that voice."""
+VoiceName = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._-]{1,64}$")]
+"""The name of the voice an agent speaks with: 1 to 64 ASCII letters of either case, digits, ``.``,
+``_`` or ``-``. The name is passed through unchanged; the app's speech service decides whether it
+offers that voice."""
 
 
 def _is_none(value: object) -> bool:
