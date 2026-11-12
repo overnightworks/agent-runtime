@@ -361,6 +361,10 @@ def body_of(*media_types: str) -> dict[str, Any]:
     return {"requestBody": {"required": True, "content": content}}
 
 
+def json_body(schema: object) -> dict[str, Any]:
+    return {"requestBody": {"required": True, "content": {"application/json": {"schema": schema}}}}
+
+
 @pytest.mark.parametrize(
     "registration",
     [
@@ -428,6 +432,139 @@ def body_of(*media_types: str) -> dict[str, Any]:
         Registration("HEAD", "/notes", nothing, tool="a"),
         Registration("OPTIONS", "/notes", nothing, tool="a"),
         Registration("POST", "/notes", aliased_route, tool="a"),
+        Registration(
+            "POST", "/notes", nothing, tool="a", document={"requestBody": "application/json"}
+        ),
+        Registration(
+            "POST",
+            "/notes",
+            nothing,
+            tool="a",
+            document={"requestBody": {"required": True, "content": ["application/json"]}},
+        ),
+        Registration(
+            "POST",
+            "/notes",
+            nothing,
+            tool="a",
+            document={"requestBody": {"required": True, "content": {"application/json": "x"}}},
+        ),
+        Registration(
+            "POST",
+            "/notes",
+            nothing,
+            tool="a",
+            document=json_body("object"),
+        ),
+        Registration(
+            "POST",
+            "/notes",
+            nothing,
+            tool="a",
+            document=json_body({"type": "object", "properties": ["title"]}),
+        ),
+        Registration(
+            "POST",
+            "/notes",
+            nothing,
+            tool="a",
+            document=json_body({"type": "object", "properties": {}, "required": 3}),
+        ),
+        Registration(
+            "GET",
+            "/notes",
+            nothing,
+            tool="a",
+            document={"parameters": {"name": "q", "in": "query", "schema": {"type": "string"}}},
+        ),
+        Registration("GET", "/notes", nothing, tool="a", document={"parameters": ["q"]}),
+        Registration(
+            "GET",
+            "/notes",
+            nothing,
+            tool="a",
+            document={"parameters": [{"name": ["q"], "in": "query", "schema": {"type": "string"}}]},
+        ),
+        Registration(
+            "GET",
+            "/notes",
+            nothing,
+            tool="a",
+            document={"parameters": [{"name": "q", "in": ["query"], "schema": {"type": "string"}}]},
+        ),
+        Registration(
+            "GET",
+            "/notes",
+            nothing,
+            tool="a",
+            document={"parameters": [{"name": "q", "in": "query", "schema": "string"}]},
+        ),
+        Registration(
+            "GET",
+            "/notes",
+            nothing,
+            tool="a",
+            document={"parameters": [{"name": "q", "in": "query", "schema": {"type": ["string"]}}]},
+        ),
+        Registration(
+            "GET",
+            "/notes",
+            nothing,
+            tool="a",
+            document={
+                "parameters": [
+                    {"name": "q", "in": "query", "schema": {"anyOf": {"type": "string"}}}
+                ]
+            },
+        ),
+        Registration(
+            "GET",
+            "/notes",
+            nothing,
+            tool="a",
+            document={
+                "parameters": [
+                    {"name": "q", "in": "query", "schema": {"anyOf": ["string", {"type": "null"}]}}
+                ]
+            },
+        ),
+        Registration(
+            "GET", "/notes", nothing, tool="a", document={"responses": {"200": "Answer."}}
+        ),
+        Registration(
+            "GET",
+            "/notes",
+            nothing,
+            tool="a",
+            document={
+                "responses": {"200": {"description": "Answer.", "content": ["application/json"]}}
+            },
+        ),
+        Registration(
+            "GET",
+            "/notes",
+            nothing,
+            tool="a",
+            document={
+                "responses": {
+                    "200": {"description": "Answer.", "content": {"application/json": "x"}}
+                }
+            },
+        ),
+        Registration(
+            "GET",
+            "/notes",
+            nothing,
+            tool="a",
+            document={
+                "responses": {
+                    "200": {
+                        "description": "Answer.",
+                        "content": {"application/json": {"schema": "object"}},
+                    }
+                }
+            },
+        ),
     ],
     ids=[
         "header parameter",
@@ -450,6 +587,24 @@ def body_of(*media_types: str) -> dict[str, Any]:
         "head",
         "options",
         "body field named ref",
+        "request body not an object",
+        "request body content as a list",
+        "request body media type not an object",
+        "request body schema not an object",
+        "request body properties not an object",
+        "request body required names not a list",
+        "parameters not a list",
+        "parameter not an object",
+        "parameter name not a string",
+        "parameter location not a string",
+        "parameter schema not an object",
+        "parameter type not a string",
+        "anyOf not a list",
+        "anyOf option not an object",
+        "response not an object",
+        "response content as a list",
+        "response media type not an object",
+        "response schema not an object",
     ],
 )
 def test_a_marked_route_outside_the_profile_is_refused_naming_the_operation(
@@ -465,6 +620,43 @@ def test_a_marked_route_outside_the_profile_is_refused_naming_the_operation(
     assert registration.method in str(failure)
     assert registration.path in str(failure)
     assert operation_id in str(failure)
+
+
+def referenced_schema_is_no_object(spec: dict[str, Any]) -> None:
+    spec["components"] = {"schemas": {"NoteDraft": "a schema"}}
+    spec["paths"]["/notes"]["get"]["parameters"] = [
+        {"name": "q", "in": "query", "schema": {"$ref": "#/components/schemas/NoteDraft"}}
+    ]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda spec: spec.update(components=[]),
+        lambda spec: spec.update(components={"schemas": []}),
+        referenced_schema_is_no_object,
+        lambda spec: spec.update(paths=[]),
+        lambda spec: spec["paths"].update({"/notes": ["get"]}),
+        lambda spec: spec["paths"]["/notes"].update(get=3),
+    ],
+    ids=[
+        "components not an object",
+        "component schemas not an object",
+        "referenced schema not an object",
+        "paths not an object",
+        "path item not an object",
+        "operation not an object",
+    ],
+)
+def test_a_document_node_of_the_wrong_shape_is_refused_with_the_profile_error(
+    change: Callable[[dict[str, Any]], None],
+) -> None:
+    app = application(Registration("GET", "/notes", nothing, tool="a"))
+    spec = app.openapi()
+    change(spec)
+
+    with pytest.raises(RouteProfileError):
+        route_tools(spec, app, mark_route=lambda method, template: (method, template))
 
 
 @pytest.mark.parametrize(
