@@ -121,6 +121,10 @@ def test_the_last_finish_reason_counts():
         b'{"choices": [{"delta": {"content": 5}}]}',
         b'{"choices": [{"delta": {"tool_calls": {}}}]}',
         b'{"choices": [{"finish_reason": 5}]}',
+        b"{}",
+        b'{"choices": null}',
+        b'{"usage": null}',
+        b'{"choices": null, "usage": null}',
         b"\xff",
         json.dumps(a_chunk("\ud800")).encode(),
         b"[" * 200_000,
@@ -133,6 +137,10 @@ def test_the_last_finish_reason_counts():
         "content-not-text",
         "tool-calls-not-a-list",
         "finish-reason-not-text",
+        "neither-choices-nor-usage",
+        "choices-null",
+        "usage-null-without-choices",
+        "choices-null-and-usage-null",
         "not-utf-8",
         "lone-surrogate-in-a-piece",
         "nested-past-the-recursion-limit",
@@ -396,14 +404,24 @@ def test_usage_on_a_chunk_that_carries_a_choice_gives_the_rounds_usage():
 
 
 @pytest.mark.parametrize(
-    "null_usage_chunk",
-    [_usage_chunk(None), {"usage": None}, {"choices": None, "usage": None}],
-    ids=["empty-choices", "no-choices-key", "choices-null"],
+    "choices_member",
+    [{}, {"choices": None}],
+    ids=["no-choices-key", "choices-null"],
 )
-def test_a_later_chunk_with_null_usage_keeps_the_usage_already_read(null_usage_chunk):
+def test_a_usage_chunk_without_choices_gives_the_rounds_usage(choices_member):
     usage = {"prompt_tokens": 9, "completion_tokens": 2}
 
-    streamed = read(_answer_with(_usage_chunk(usage), null_usage_chunk))
+    streamed = read(_answer_with(choices_member | {"usage": usage}))
+
+    assert streamed.usage == TurnUsage(
+        input_tokens=9, cached_input_tokens=0, cache_write_tokens=0, output_tokens=2
+    )
+
+
+def test_a_later_chunk_with_null_usage_keeps_the_usage_already_read():
+    usage = {"prompt_tokens": 9, "completion_tokens": 2}
+
+    streamed = read(_answer_with(_usage_chunk(usage), _usage_chunk(None)))
 
     assert streamed.usage == TurnUsage(
         input_tokens=9, cached_input_tokens=0, cache_write_tokens=0, output_tokens=2

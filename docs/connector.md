@@ -73,9 +73,9 @@ written to it, `output_tokens` what the model wrote. A round's usage is the gate
 chunk: `prompt_tokens`, `prompt_tokens_details.cached_tokens` (absent: 0),
 `prompt_tokens_details.cache_write_tokens` else `cache_creation_input_tokens` else 0, and
 `completion_tokens`. The usage is read from a chunk with `choices: []`, with `choices` absent or
-null, or alongside a choice; a chunk with neither `choices` nor a `usage` key fails the round as a
-malformed reply. A chunk whose `usage` key holds null carries no usage: the round's usage is the
-last non-null one, and a round with none has no usage. `usage` is `None`, never a partial sum, when
+null, or alongside a choice; a chunk with neither `choices` nor a non-null `usage` fails the round as
+a malformed reply. A chunk whose `usage` is null carries no usage: the round's usage is the last
+non-null one, and a round with none has no usage. `usage` is `None`, never a partial sum, when
 any round sent none or one with a missing, negative or non-integer count, and for a picture turn;
 reading usage changes nothing else the turn yields. The library passes the gateway's counts through
 unchecked: it does not verify that `cached_input_tokens` is no larger than `input_tokens`. A turn

@@ -73,13 +73,8 @@ def an_answer_closed_by(last_chunk: dict) -> Reply:
     return Reply(headers={"content-type": "text/event-stream"}, body=an_event_stream(*chunks))
 
 
-@pytest.mark.parametrize(
-    "last_chunk",
-    [{"usage": usage_sent(120, 9)}, {"choices": None, "usage": usage_sent(120, 9)}],
-    ids=["no-choices-key", "choices-null"],
-)
-def test_a_usage_chunk_without_choices_gives_the_turn_its_usage(shop, last_chunk):
-    events, stopped, _ = run(shop, an_answer_closed_by(last_chunk))
+def test_a_usage_chunk_without_choices_gives_the_turn_its_usage(shop):
+    events, stopped, _ = run(shop, an_answer_closed_by({"usage": usage_sent(120, 9)}))
 
     assert stopped is None
     assert events[-1] == FinalEvent(
@@ -88,29 +83,6 @@ def test_a_usage_chunk_without_choices_gives_the_turn_its_usage(shop, last_chunk
             input_tokens=120, cached_input_tokens=0, cache_write_tokens=0, output_tokens=9
         ),
     )
-
-
-@pytest.mark.parametrize(
-    "last_chunk",
-    [{}, {"choices": None}],
-    ids=["empty", "choices-null"],
-)
-def test_a_chunk_with_neither_choices_nor_usage_still_stops_the_turn(shop, last_chunk):
-    _, stopped, _ = run(shop, an_answer_closed_by(last_chunk))
-
-    assert ending(stopped) == (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
-
-
-@pytest.mark.parametrize(
-    "last_chunk",
-    [{"usage": None}, {"choices": None, "usage": None}],
-    ids=["no-choices-key", "choices-null"],
-)
-def test_a_usage_chunk_with_a_null_usage_ends_the_turn_with_no_usage(shop, last_chunk):
-    events, stopped, _ = run(shop, an_answer_closed_by(last_chunk))
-
-    assert stopped is None
-    assert events == [AssistantTextEvent(text="ab"), FinalEvent(text="ab")]
 
 
 def raw_members(body: bytes) -> dict[str, str]:

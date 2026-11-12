@@ -252,7 +252,7 @@ def _take(assembly: _Assembly, data: str) -> str | None:
     if usage is not None:
         assembly.usage = _usage_of(usage)
     choices = event.get("choices")
-    if choices is None and "usage" in event:
+    if choices is None and usage is not None:
         return None
     if not isinstance(choices, list):
         raise MalformedRound
