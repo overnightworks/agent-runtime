@@ -73,7 +73,7 @@ written to it, `output_tokens` what the model wrote. A round's usage is the gate
 chunk: `prompt_tokens`, `prompt_tokens_details.cached_tokens` (absent: 0),
 `prompt_tokens_details.cache_write_tokens` else `cache_creation_input_tokens` else 0, and
 `completion_tokens`. `usage` is `None`, never a partial sum, when any round sent none or one with a
-missing, negative or non-integer required count, and for a picture turn; reading usage changes
+missing, negative or non-integer count, and for a picture turn; reading usage changes
 nothing else the turn yields. A turn that ends with `TurnStopped` reports none, though its rounds
 were paid. Proved by `tests/test_backend_streamed_round.py`:
 `test_a_usage_chunk_with_no_choice_gives_the_rounds_usage`,
