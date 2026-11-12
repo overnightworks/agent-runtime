@@ -74,8 +74,10 @@ chunk: `prompt_tokens`, `prompt_tokens_details.cached_tokens` (absent: 0),
 `prompt_tokens_details.cache_write_tokens` else `cache_creation_input_tokens` else 0, and
 `completion_tokens`. `usage` is `None`, never a partial sum, when any round sent none or one with a
 missing, negative or non-integer count, and for a picture turn; reading usage changes
-nothing else the turn yields. A turn that ends with `TurnStopped` reports none, though its rounds
-were paid. Proved by `tests/test_backend_streamed_round.py`:
+nothing else the turn yields. The library passes the gateway's counts through unchecked: it does
+not verify that `cached_input_tokens` is no larger than `input_tokens`. A turn that ends with
+`TurnStopped` reports none, though its rounds were paid. Proved by
+`tests/test_backend_streamed_round.py`:
 `test_a_usage_chunk_with_no_choice_gives_the_rounds_usage`,
 `test_usage_on_a_chunk_that_carries_a_choice_gives_the_rounds_usage` and
 `test_unreadable_usage_gives_a_round_with_no_usage_and_the_same_message`; and by

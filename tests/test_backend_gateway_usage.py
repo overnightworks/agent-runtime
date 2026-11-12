@@ -7,15 +7,13 @@ import json
 import pytest
 
 from agents.backend import TurnStopKind
-from agents.backend.fake_gateway import FakeGateway, Reply, completion, tool_call, tool_round
-from agents.backend.gateway import GatewayBackend
-from agents.tools import HandTool, ToolDeclaration, ToolEffect, ToolOutcome
+from agents.backend.fake_gateway import Reply, completion, tool_call, tool_round
 from agents.turn import FailureCode, TurnUsage
 from agents.turn_events import AssistantTextEvent, FinalEvent, ToolCallEvent, ToolResultEvent
 from tests.support import gateway_turn_support
-from tests.support.gateway_turn_support import a_request, ending
+from tests.support.gateway_turn_support import ending
 
-scenario = gateway_turn_support.scenario
+shop = gateway_turn_support.shop
 
 
 def usage_sent(prompt_tokens: int, completion_tokens: int, **details: int) -> dict:
@@ -26,37 +24,17 @@ def usage_sent(prompt_tokens: int, completion_tokens: int, **details: int) -> di
     return usage
 
 
-def run(scenario, *replies: Reply, max_tool_calls: int = 5):
+def run(shop, *replies: Reply, max_tool_calls: int = 5):
     """A turn of an agent with the tools ``lookup`` and ``note`` against the scripted gateway."""
-
-    async def handler(principal, arguments):
-        return ToolOutcome("noted", is_error=False)
-
-    tools = [
-        HandTool(
-            ToolDeclaration(
-                name=name,
-                description=f"Use {name}.",
-                parameters={"type": "object", "properties": {"topic": {"type": "string"}}},
-                effect=ToolEffect.READ_ONLY,
-            ),
-            handler,
-        )
-        for name in ("lookup", "note")
-    ]
-    gateway = FakeGateway(*replies)
-    backend = GatewayBackend(scenario.config(), tools=tools, transport=gateway)
-    request = a_request(
-        tools=tuple(tool.declaration for tool in tools), max_tool_calls=max_tool_calls
-    )
-    events, stopped = scenario.outcome(backend, request)
-    return events, stopped, gateway
+    shop.add_tool("lookup")
+    shop.add_tool("note")
+    return shop.run(*replies, max_tool_calls=max_tool_calls)
 
 
-def test_the_final_event_carries_the_usage_the_gateway_sent(scenario):
+def test_the_final_event_carries_the_usage_the_gateway_sent(shop):
     sent = usage_sent(120, 9, cached_tokens=80, cache_write_tokens=25)
 
-    events, stopped, _ = run(scenario, completion("The answer.", usage=sent))
+    events, stopped, _ = run(shop, completion("The answer.", usage=sent))
 
     assert stopped is None
     assert events == [
@@ -82,10 +60,8 @@ def test_the_final_event_carries_the_usage_the_gateway_sent(scenario):
     ],
     ids=["none-sent", "not-an-object", "missing-count", "negative", "fractional", "boolean"],
 )
-def test_a_turn_whose_round_has_no_readable_usage_ends_with_no_usage_and_the_same_text(
-    scenario, usage
-):
-    events, stopped, _ = run(scenario, completion("The answer.", usage=usage))
+def test_a_turn_whose_round_has_no_readable_usage_ends_with_no_usage_and_the_same_text(shop, usage):
+    events, stopped, _ = run(shop, completion("The answer.", usage=usage))
 
     assert stopped is None
     assert events == [AssistantTextEvent(text="The answer."), FinalEvent(text="The answer.")]
@@ -108,9 +84,9 @@ def raw_members(body: bytes) -> dict[str, str]:
         at = end
 
 
-def test_a_second_rounds_body_begins_with_the_first_rounds_model_tools_and_messages(scenario):
+def test_a_second_rounds_body_begins_with_the_first_rounds_model_tools_and_messages(shop):
     _, stopped, gateway = run(
-        scenario, tool_round(tool_call("c1", "lookup", {"topic": "x"})), completion("Done.")
+        shop, tool_round(tool_call("c1", "lookup", {"topic": "x"})), completion("Done.")
     )
 
     first, second = (raw_members(request.content) for request in gateway.requests)
@@ -122,12 +98,12 @@ def test_a_second_rounds_body_begins_with_the_first_rounds_model_tools_and_messa
     assert all("cache_control" not in request.content.decode() for request in gateway.requests)
 
 
-def test_the_final_events_usage_sums_the_usage_of_every_round(scenario):
+def test_the_final_events_usage_sums_the_usage_of_every_round(shop):
     first_round = usage_sent(100, 5, cached_tokens=0, cache_write_tokens=90)
     last_round = usage_sent(130, 8, cached_tokens=90)
 
     events, stopped, _ = run(
-        scenario,
+        shop,
         tool_round(tool_call("c1", "lookup", {}), usage=first_round),
         completion("Done.", usage=last_round),
     )
@@ -147,9 +123,9 @@ def test_the_final_events_usage_sums_the_usage_of_every_round(scenario):
     ],
     ids=["first-round-has-none", "last-round-has-none", "last-round-unreadable"],
 )
-def test_a_turn_with_a_round_that_has_no_usage_ends_with_no_usage(scenario, first, last):
+def test_a_turn_with_a_round_that_has_no_usage_ends_with_no_usage(shop, first, last):
     events, stopped, _ = run(
-        scenario,
+        shop,
         tool_round(tool_call("c1", "lookup", {}), usage=first),
         completion("Done.", usage=last),
     )
@@ -158,9 +134,9 @@ def test_a_turn_with_a_round_that_has_no_usage_ends_with_no_usage(scenario, firs
     assert events[-1] == FinalEvent(text="Done.")
 
 
-def test_a_turn_that_stops_after_a_paid_round_yields_what_it_yields_without_usage(scenario):
+def test_a_turn_that_stops_after_a_paid_round_yields_what_it_yields_without_usage(shop):
     events, stopped, _ = run(
-        scenario,
+        shop,
         tool_round(tool_call("c1", "lookup", {}), usage=usage_sent(100, 5)),
         tool_round(tool_call("c2", "lookup", {}), usage=usage_sent(130, 8)),
         max_tool_calls=1,

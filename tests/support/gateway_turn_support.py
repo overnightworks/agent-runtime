@@ -8,8 +8,8 @@ import ipaddress
 import json
 import ssl
 import types
-from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -22,9 +22,10 @@ from cryptography.x509.oid import NameOID
 
 from agents.agent_file import TurnRequest
 from agents.backend import TurnPerson, TurnStopKind, TurnStopped
-from agents.backend.fake_gateway import FakeGateway, completion
+from agents.backend.fake_gateway import FakeGateway, Reply, completion
 from agents.backend.gateway import GatewayBackend
 from agents.config import AgentConfig
+from agents.tools import HandTool, JsonObject, ToolDeclaration, ToolEffect, ToolOutcome
 from agents.turn import (
     FailureCode,
     Principal,
@@ -32,10 +33,12 @@ from agents.turn import (
     TurnMessage,
     TurnRole,
 )
+from tests.support.virtual_time import VirtualTimeLoop
 
 API_GROUP = "/apps/example"
 GATEWAY_ORIGIN = "http://gateway.test"
 GATEWAY_KEY = "stand-in-key-0001"
+TURN_BUDGET_SECONDS = 30
 
 
 class FailingTransport(httpx2.AsyncBaseTransport):
@@ -321,6 +324,91 @@ def server_context(authority: tuple[Path, Path]) -> ssl.SSLContext:
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(*authority)
     return context
+
+
+@dataclass
+class Shop:
+    """The app side of a turn: its hand tools, what they were called with, and the gateway."""
+
+    directory: Path
+    replies: tuple[Reply, ...] = ()
+    seen: list[tuple[str, Principal, JsonObject]] = field(default_factory=list)
+    tools: list[HandTool] = field(default_factory=list)
+
+    def add_tool(
+        self,
+        name: str,
+        *,
+        effect: ToolEffect = ToolEffect.READ_ONLY,
+        answer: Callable[[], Awaitable[ToolOutcome]] | None = None,
+    ) -> HandTool:
+        async def handler(principal: Principal, arguments: JsonObject) -> ToolOutcome:
+            self.seen.append((name, principal, arguments))
+            return await (answer or _noted)()
+
+        tool = HandTool(
+            ToolDeclaration(name=name, description=f"Use {name}.", parameters={}, effect=effect),
+            handler,
+        )
+        self.tools.append(tool)
+        return tool
+
+    def run(
+        self,
+        *replies: Reply,
+        max_tool_calls: int = 5,
+        selected: tuple[str, ...] | None = None,
+        late_after: type | None = None,
+    ) -> tuple[list, TurnStopped | None, FakeGateway]:
+        gateway = FakeGateway(*replies)
+        chosen = [t for t in self.tools if selected is None or t.declaration.name in selected]
+        request = a_tool_request(chosen, max_tool_calls)
+        backend = GatewayBackend(self.config(), tools=self.tools, transport=gateway)
+        with asyncio.Runner(loop_factory=VirtualTimeLoop) as runner:
+            events, stopped = runner.run(shop_turn(backend, request, late_after))
+        return events, stopped, gateway
+
+    def config(self) -> AgentConfig:
+        return a_gateway_config(self.directory)
+
+
+async def _noted() -> ToolOutcome:
+    return ToolOutcome("noted", is_error=False)
+
+
+def a_tool_request(tools: list[HandTool], max_tool_calls: int) -> TurnRequest:
+    return TurnRequest(
+        agent="helper",
+        turn=Turn(system="Answer briefly.", messages=[TurnMessage(role=TurnRole.USER, text="Hi")]),
+        roles=["admin", "user"],
+        tools=tuple(tool.declaration for tool in tools),
+        model="text/standin",
+        max_duration_seconds=TURN_BUDGET_SECONDS,
+        max_tool_calls=max_tool_calls if tools else None,
+    )
+
+
+async def shop_turn(backend: GatewayBackend, request: TurnRequest, late_after: type | None = None):
+    """Run a turn; the app takes `late_after` events so long that the turn's deadline has passed."""
+    events = []
+    try:
+        async with contextlib.aclosing(backend.run(request, a_person())) as stream:
+            async for event in stream:
+                events.append(event)
+                if late_after is not None and isinstance(event, late_after):
+                    asyncio.get_running_loop().skew_seconds += request.max_duration_seconds + 1
+    except TurnStopped as stopped:
+        return events, stopped
+    return events, None
+
+
+def sent(gateway: FakeGateway, index: int) -> dict:
+    return json.loads(gateway.requests[index].content)
+
+
+@pytest.fixture
+def shop(tmp_path: Path) -> Shop:
+    return Shop(tmp_path)
 
 
 UNAVAILABLE = (TurnStopKind.FAILED, FailureCode.PROVIDER_UNAVAILABLE)
