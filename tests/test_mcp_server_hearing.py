@@ -1,12 +1,13 @@
 """``MemberHearing``: which member hears which speaker, and the one line a heard utterance becomes.
 
-The tests name the rules of ``docs/hearing.md`` by their IDs. A fake clock stands for the one
-clock the app's ``began_at`` and the record's switch-on times share.
+A fake clock stands for the one clock the app's ``began_at`` and the record's switch-on times
+share.
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 from collections.abc import Callable
 from typing import Any
@@ -343,6 +344,22 @@ def test_sensing_names_a_member_whose_switch_on_is_later_than_a_running_utteranc
         {alice},
         frozenset(),
     )
+
+
+def test_no_call_writes_a_log_record(
+    hearing: MemberHearing, clock: Clock, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.DEBUG)
+
+    allow_at(hearing, clock, 1.0)
+    hearing.heard(utterance(2.0))
+    hearing.allows(room, "seat-1", alice, Sense.HEARING)
+    hearing.sensing(room, "seat-1", Sense.HEARING)
+    hearing.member_ended(room, alice)
+    hearing.speaker_ended(room, "seat-1")
+    hearing.place_ended(room)
+
+    assert caplog.records == []
 
 
 @pytest.mark.parametrize("field", ["speaker", "kind", "name", "text"])
