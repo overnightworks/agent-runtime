@@ -1,0 +1,8 @@
+claim_id = "53c2587e67b6455abeaaa04572145e36"
+agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
+role = "builder"
+base = "c7881f6e5a16cb7528d1de9bf8e166ce50a6c450"
+branch = "claude/issue-850-json-object-without-any"
+scope = ["docs/ARCHITECTURE.md", "docs/connector.md", "src/agents/mcp_server/person.py", "src/agents/member.py", "src/agents/turn.py", "tests/test_mcp_server_person.py", "tests/test_member.py"]
+opened_commit = "f9eb92f717da88f17e29b9ceb88450ead0b1df47"
+whole_reason = "One alias retyped in its owner with the two records and two documents that name it; splitting would leave two names for one decider between landings."
