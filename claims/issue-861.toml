@@ -1,7 +1,0 @@
-claim_id = "6cd3a2ebc5e744b5b6d218b332244c5e"
-agent = "Claude 5603e37a-9f69-4a58-9644-a65eed3278d4"
-role = "builder"
-base = "f432ff646bac8a041e7b54f611f19452bafd8750"
-branch = "claude/issue-861-typed-assembled-message"
-scope = ["src/agents/backend/gateway.py", "src/agents/backend/streamed_round.py", "tests/support/fake_gateway.py"]
-opened_commit = "0034bf1c25d4c18fcf3e33d95c3b2f9c4fd60d4f"
