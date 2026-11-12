@@ -8,7 +8,9 @@ profile is refused at start with one ``RouteProfileError``.
 
 from collections.abc import Callable, Hashable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Final
+from typing import Final
+
+from pydantic import JsonValue
 
 from agents.mcp_server.asgi import AsgiApp
 from agents.mcp_server.person import PersonRequest, PersonTool, PersonToolHandler
@@ -48,6 +50,25 @@ class _Breach(Exception):  # noqa: N818 - internal; carries the reason an operat
     pass
 
 
+def _object(node: JsonValue, where: str) -> JsonObject:
+    """The node as a JSON object; any other node is a breach naming where it stands."""
+    if not isinstance(node, dict):
+        raise _Breach(f"{where} must be an object")
+    return node
+
+
+def _array(node: JsonValue, where: str) -> list[JsonValue]:
+    if not isinstance(node, list):
+        raise _Breach(f"{where} must be an array")
+    return node
+
+
+def _text(node: JsonValue, where: str) -> str:
+    if not isinstance(node, str):
+        raise _Breach(f"{where} must be a string")
+    return node
+
+
 @dataclass(frozen=True)
 class RouteTools[Mark: Hashable]:
     """The tools of the marked routes, and the host's own marks for the same routes."""
@@ -79,11 +100,12 @@ def _overlap(first: str, second: str) -> bool:
     )
 
 
-def _inlined(node: Any, components: JsonObject, seen: tuple[str, ...] = ()) -> Any:
+def _inlined(node: JsonValue, components: JsonObject, seen: tuple[str, ...] = ()) -> JsonValue:
     """The schema with every ``$ref`` replaced by its component.
 
     An annotation beside a reference wins over the component's own; a recursive reference, a
-    reference that is no string, or a keyword beside it that is no annotation, is a breach.
+    reference that is no string, a component that is no object, or a keyword beside it that is
+    no annotation, is a breach.
     """
     if isinstance(node, list):
         return [_inlined(item, components, seen) for item in node]
@@ -97,24 +119,31 @@ def _inlined(node: Any, components: JsonObject, seen: tuple[str, ...] = ()) -> A
     name = reference.removeprefix(_SCHEMA_REFERENCE)
     if name in seen or name not in components:
         raise _Breach("a schema is recursive or unresolved")
-    resolved = _inlined(components[name], components, (*seen, name))
+    resolved = _object(_inlined(components[name], components, (*seen, name)), "a referenced schema")
     siblings = {key: value for key, value in node.items() if key != "$ref"}
     if siblings.keys() - _ANNOTATIONS:
         raise _Breach("a reference may carry only an annotation beside it")
     return {**resolved, **siblings}
 
 
+def _schema(node: JsonValue, components: JsonObject, where: str) -> JsonObject:
+    """The node as a schema object with every reference inlined; any other node is a breach."""
+    return _object(_inlined(node, components), where)
+
+
 def _scalar(schema: JsonObject) -> bool:
     options = schema.get("anyOf")
     if options is None:
-        return schema.get("type") in _SCALAR_TYPES
-    present = [option for option in options if option.get("type") != "null"]
-    return len(options) == 2 and len(present) == 1 and _scalar(present[0])
+        kind = schema.get("type")
+        return isinstance(kind, str) and kind in _SCALAR_TYPES
+    branches = [_object(option, "an anyOf option") for option in _array(options, "anyOf")]
+    present = [branch for branch in branches if branch.get("type") != "null"]
+    return len(branches) == 2 and len(present) == 1 and _scalar(present[0])
 
 
 def _parameter_schema(parameter: JsonObject, components: JsonObject) -> JsonObject:
-    schema = _inlined(parameter.get("schema", {}), components)
-    where = parameter["in"]
+    schema = _schema(parameter.get("schema", {}), components, "a parameter schema")
+    where = _text(parameter["in"], "a parameter location")
     if where == "path" and schema.get("type") != "string":
         raise _Breach("a path parameter must be a string")
     if where not in {"path", "query"} or not _scalar(schema):
@@ -122,25 +151,33 @@ def _parameter_schema(parameter: JsonObject, components: JsonObject) -> JsonObje
     return schema
 
 
-def _body(operation: _Operation, components: JsonObject) -> tuple[JsonObject, Sequence[str]] | None:
+def _body(
+    operation: _Operation, components: JsonObject
+) -> tuple[JsonObject, frozenset[str]] | None:
     """The body's properties and required names, or ``None`` for an operation without one."""
-    body = operation.node.get("requestBody")
-    if body is None:
+    requested = operation.node.get("requestBody")
+    if requested is None:
         return None
-    if body.get("required") is not True or set(body.get("content", {})) != {_JSON}:
+    body = _object(requested, "the request body")
+    content = _object(body.get("content", {}), "the request body content")
+    if body.get("required") is not True or set(content) != {_JSON}:
         raise _Breach("a body must be a required application/json object")
-    schema = _inlined(body["content"][_JSON].get("schema", {}), components)
+    media = _object(content[_JSON], "the request body media type")
+    schema = _schema(media.get("schema", {}), components, "the request body schema")
     if schema.get("type") != "object" or "properties" not in schema:
         raise _Breach("a body must be an object")
     if (schema.keys() - _BODY_KEYWORDS) or schema.get("additionalProperties", False) is not False:
         raise _Breach("a body object may carry only its properties, required names and annotations")
-    return schema["properties"], schema.get("required", [])
+    properties = _object(schema["properties"], "the body properties")
+    names = _array(schema.get("required", []), "the body's required names")
+    return properties, frozenset(_text(name, "a required name") for name in names)
 
 
 def _check_responses(operation: _Operation, components: JsonObject) -> None:
     successes = 0
-    for status, response in operation.node.get("responses", {}).items():
-        content = response.get("content", {})
+    for status, node in _object(operation.node.get("responses", {}), "the responses").items():
+        response = _object(node, "a response")
+        content = _object(response.get("content", {}), "a response content")
         if str(status).startswith("2"):
             if set(content) != {_JSON}:
                 raise _Breach("a success response must be JSON")
@@ -148,7 +185,8 @@ def _check_responses(operation: _Operation, components: JsonObject) -> None:
         elif not set(content) <= {_JSON, _PROBLEM_JSON}:
             raise _Breach("an error response must be JSON or RFC 9457 problem details")
         for declared in content.values():
-            _inlined(declared.get("schema", {}), components)
+            media = _object(declared, "a response media type")
+            _schema(media.get("schema", {}), components, "a response schema")
     if not successes:
         raise _Breach("a success response must be JSON")
 
@@ -164,10 +202,10 @@ def _check_description(operation: _Operation) -> str:
 class _Inputs:
     """The input schema being collected; a name given twice is a breach."""
 
-    properties: dict[str, Any] = field(default_factory=dict)
-    required: list[str] = field(default_factory=list)
+    properties: dict[str, JsonValue] = field(default_factory=dict[str, JsonValue])
+    required: list[JsonValue] = field(default_factory=list[JsonValue])
 
-    def add(self, name: str, schema: Any, *, is_required: bool) -> None:
+    def add(self, name: str, schema: JsonValue, *, is_required: bool) -> None:
         if name in self.properties:
             raise _Breach(f"the name {name} is shared by two inputs")
         self.properties[name] = schema
@@ -189,11 +227,14 @@ def _declared_inputs(
 ) -> tuple[RouteTarget, JsonObject]:
     """Where each argument goes, and the input schema."""
     inputs = _Inputs()
-    paths, queries = [], []
-    for parameter in operation.node.get("parameters", []):
+    paths: list[str] = []
+    queries: list[str] = []
+    for node in _array(operation.node.get("parameters", []), "the parameters"):
+        parameter = _object(node, "a parameter")
         schema = _parameter_schema(parameter, components)
-        (paths if parameter["in"] == "path" else queries).append(parameter["name"])
-        inputs.add(parameter["name"], schema, is_required=parameter.get("required", False))
+        name = _text(parameter["name"], "a parameter name")
+        (paths if parameter["in"] == "path" else queries).append(name)
+        inputs.add(name, schema, is_required=bool(parameter.get("required", False)))
     if frozenset(paths) != placeholder_names(operation.template):
         raise _Breach("the path parameters do not match the template")
     body = _body(operation, components)
@@ -236,11 +277,16 @@ def _tool(operation: _Operation, app: AsgiApp, components: JsonObject) -> Person
     return PersonTool(declaration, _handler(app, target))
 
 
+def _components(openapi: JsonObject) -> JsonObject:
+    components = _object(openapi.get("components", {}), "the components")
+    return _object(components.get("schemas", {}), "the component schemas")
+
+
 def _operations(openapi: JsonObject) -> list[_Operation]:
     return [
-        _Operation(method, template, node)
-        for template, item in openapi.get("paths", {}).items()
-        for method, node in item.items()
+        _Operation(method, template, _object(node, "an operation"))
+        for template, item in _object(openapi.get("paths", {}), "the paths").items()
+        for method, node in _object(item, "a path item").items()
         if method in _OPERATION_METHODS
     ]
 
@@ -293,11 +339,14 @@ def route_tools[Mark: Hashable](
     whole application. A ``ValueError`` from ``mark_route`` becomes a ``RouteProfileError`` with
     the host's error as its cause.
     """
-    components = openapi.get("components", {}).get("schemas", {})
-    operations = _operations(openapi)
+    try:
+        components = _components(openapi)
+        operations = _operations(openapi)
+    except _Breach as breach:
+        raise RouteProfileError(str(breach)) from breach
     _require_decided(operations)
     tools: dict[str, PersonTool] = {}
-    marks = set()
+    marks: set[Mark] = set()
     for operation in operations:
         tool = _decided(operation, operations, app, components)
         if tool is None:

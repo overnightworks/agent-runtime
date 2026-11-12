@@ -361,6 +361,24 @@ def body_of(*media_types: str) -> dict[str, Any]:
     return {"requestBody": {"required": True, "content": content}}
 
 
+def with_document(method: str, document: dict[str, Any]) -> Registration:
+    return Registration(method, "/notes", nothing, tool="a", document=document)
+
+
+def body_with(content: object) -> Registration:
+    return with_document("POST", {"requestBody": {"required": True, "content": content}})
+
+
+def query_with(overrides: dict[str, object]) -> Registration:
+    parameter = {"name": "q", "in": "query", "schema": {"type": "string"}, **overrides}
+    return with_document("GET", {"parameters": [parameter]})
+
+
+def answer_with(content: object) -> Registration:
+    answer = {"description": "Answer.", "content": content}
+    return with_document("GET", {"responses": {"200": answer}})
+
+
 @pytest.mark.parametrize(
     "registration",
     [
@@ -428,6 +446,26 @@ def body_of(*media_types: str) -> dict[str, Any]:
         Registration("HEAD", "/notes", nothing, tool="a"),
         Registration("OPTIONS", "/notes", nothing, tool="a"),
         Registration("POST", "/notes", aliased_route, tool="a"),
+        with_document("POST", {"requestBody": "application/json"}),
+        with_document("POST", {"requestBody": {"required": True, "content": ["application/json"]}}),
+        body_with({"application/json": "x"}),
+        body_with({"application/json": {"schema": "object"}}),
+        body_with({"application/json": {"schema": {"type": "object", "properties": ["title"]}}}),
+        body_with(
+            {"application/json": {"schema": {"type": "object", "properties": {}, "required": 3}}}
+        ),
+        with_document("GET", {"parameters": "q"}),
+        with_document("GET", {"parameters": ["q"]}),
+        query_with({"name": ["q"]}),
+        query_with({"in": ["query"]}),
+        query_with({"schema": "string"}),
+        query_with({"schema": {"type": ["string"]}}),
+        query_with({"schema": {"anyOf": {"type": "string"}}}),
+        query_with({"schema": {"anyOf": ["string", {"type": "null"}]}}),
+        with_document("GET", {"responses": {"200": "Answer."}}),
+        answer_with(["application/json"]),
+        answer_with({"application/json": "x"}),
+        answer_with({"application/json": {"schema": "object"}}),
     ],
     ids=[
         "header parameter",
@@ -450,6 +488,24 @@ def body_of(*media_types: str) -> dict[str, Any]:
         "head",
         "options",
         "body field named ref",
+        "request body not an object",
+        "request body content as a list",
+        "request body media type not an object",
+        "request body schema not an object",
+        "request body properties not an object",
+        "request body required names not a list",
+        "parameters not a list",
+        "parameter not an object",
+        "parameter name not a string",
+        "parameter location not a string",
+        "parameter schema not an object",
+        "parameter type not a string",
+        "anyOf not a list",
+        "anyOf option not an object",
+        "response not an object",
+        "response content as a list",
+        "response media type not an object",
+        "response schema not an object",
     ],
 )
 def test_a_marked_route_outside_the_profile_is_refused_naming_the_operation(
@@ -465,6 +521,31 @@ def test_a_marked_route_outside_the_profile_is_refused_naming_the_operation(
     assert registration.method in str(failure)
     assert registration.path in str(failure)
     assert operation_id in str(failure)
+
+
+def referenced_schema_is_no_object(spec: dict[str, Any]) -> None:
+    spec["components"] = {"schemas": {"NoteDraft": "a schema"}}
+    parameter = {"name": "q", "in": "query", "schema": {"$ref": "#/components/schemas/NoteDraft"}}
+    spec["paths"]["/notes"]["get"]["parameters"] = [parameter]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        pytest.param(lambda spec: spec.update(components=[]), id="components not object"),
+        pytest.param(lambda spec: spec.update(components={"schemas": []}), id="schemas not object"),
+        pytest.param(referenced_schema_is_no_object, id="referenced schema not object"),
+        pytest.param(lambda spec: spec.update(paths=[]), id="paths not object"),
+        pytest.param(
+            lambda spec: spec["paths"].update({"/notes": ["get"]}), id="path item not object"
+        ),
+        pytest.param(lambda spec: spec["paths"]["/notes"].update(get=3), id="operation not object"),
+    ],
+)
+def test_a_wrong_shaped_node_is_refused(change: Callable[[dict[str, Any]], None]) -> None:
+    app = application(Registration("GET", "/notes", nothing, tool="a"))
+    change(app.openapi())
+    refused(app)
 
 
 @pytest.mark.parametrize(
