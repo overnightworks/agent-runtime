@@ -1,0 +1,172 @@
+"""What a turn's rounds ask for and what its final event reports: the prefix and the usage."""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from agents.backend import TurnStopKind
+from agents.backend.fake_gateway import FakeGateway, Reply, completion, tool_call, tool_round
+from agents.backend.gateway import GatewayBackend
+from agents.tools import HandTool, ToolDeclaration, ToolEffect, ToolOutcome
+from agents.turn import FailureCode, TurnUsage
+from agents.turn_events import AssistantTextEvent, FinalEvent, ToolCallEvent, ToolResultEvent
+from tests.support import gateway_turn_support
+from tests.support.gateway_turn_support import a_request, ending
+
+scenario = gateway_turn_support.scenario
+
+LIMIT_EXCEEDED = (TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
+GATEWAY_USAGE = {
+    "prompt_tokens": 120,
+    "completion_tokens": 9,
+    "prompt_tokens_details": {"cached_tokens": 80, "cache_write_tokens": 25},
+}
+READ_USAGE = TurnUsage(
+    input_tokens=120, cached_input_tokens=80, cache_write_tokens=25, output_tokens=9
+)
+FIRST_ROUND_USAGE = {
+    "prompt_tokens": 100,
+    "completion_tokens": 5,
+    "prompt_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 90},
+}
+LAST_ROUND_USAGE = {
+    "prompt_tokens": 130,
+    "completion_tokens": 8,
+    "prompt_tokens_details": {"cached_tokens": 90},
+}
+
+
+def run(scenario, *replies: Reply, max_tool_calls: int = 5):
+    """A turn of an agent with the tools ``lookup`` and ``note`` against the scripted gateway."""
+
+    async def handler(principal, arguments):
+        return ToolOutcome("noted", is_error=False)
+
+    tools = [
+        HandTool(
+            ToolDeclaration(
+                name=name,
+                description=f"Use {name}.",
+                parameters={"type": "object", "properties": {"topic": {"type": "string"}}},
+                effect=ToolEffect.READ_ONLY,
+            ),
+            handler,
+        )
+        for name in ("lookup", "note")
+    ]
+    gateway = FakeGateway(*replies)
+    backend = GatewayBackend(scenario.config(), tools=tools, transport=gateway)
+    request = a_request(
+        tools=tuple(tool.declaration for tool in tools), max_tool_calls=max_tool_calls
+    )
+    events, stopped = scenario.outcome(backend, request)
+    return events, stopped, gateway
+
+
+def test_the_final_event_carries_the_usage_the_gateway_sent(scenario):
+    events, stopped, _ = run(scenario, completion("The answer.", usage=GATEWAY_USAGE))
+
+    assert stopped is None
+    assert events == [
+        AssistantTextEvent(text="The answer."),
+        FinalEvent(text="The answer.", usage=READ_USAGE),
+    ]
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [
+        None,
+        "many",
+        {"prompt_tokens": 120},
+        {"prompt_tokens": -1, "completion_tokens": 9},
+        {"prompt_tokens": 1.5, "completion_tokens": 9},
+        {"prompt_tokens": True, "completion_tokens": 9},
+    ],
+    ids=["none-sent", "not-an-object", "missing-count", "negative", "fractional", "boolean"],
+)
+def test_a_turn_whose_round_has_no_readable_usage_ends_with_no_usage_and_the_same_text(
+    scenario, usage
+):
+    events, stopped, _ = run(scenario, completion("The answer.", usage=usage))
+
+    assert stopped is None
+    assert events == [AssistantTextEvent(text="The answer."), FinalEvent(text="The answer.")]
+
+
+def raw_members(body: bytes) -> dict[str, str]:
+    """Each top-level member of a JSON object, as the exact text the body wrote for it."""
+    text, decoder = body.decode(), json.JSONDecoder()
+    members: dict[str, str] = {}
+    at = text.index("{") + 1
+    while True:
+        at += len(text[at:]) - len(text[at:].lstrip(" ,\n"))
+        if text[at] == "}":
+            return members
+        key, at = decoder.raw_decode(text, at)
+        at = text.index(":", at) + 1
+        at += len(text[at:]) - len(text[at:].lstrip(" "))
+        _, end = decoder.raw_decode(text, at)
+        members[key] = text[at:end]
+        at = end
+
+
+def test_a_second_rounds_body_begins_with_the_first_rounds_model_tools_and_messages(scenario):
+    _, stopped, gateway = run(
+        scenario, tool_round(tool_call("c1", "lookup", {"topic": "x"})), completion("Done.")
+    )
+
+    first, second = (raw_members(request.content) for request in gateway.requests)
+    assert stopped is None
+    assert second["model"] == first["model"]
+    assert second["tools"] == first["tools"]
+    assert second["messages"].startswith(first["messages"].removesuffix("]"))
+    assert len(json.loads(second["messages"])) > len(json.loads(first["messages"]))
+    assert all("cache_control" not in request.content.decode() for request in gateway.requests)
+
+
+def test_the_final_events_usage_sums_the_usage_of_every_round(scenario):
+    events, stopped, _ = run(
+        scenario,
+        tool_round(tool_call("c1", "lookup", {}), usage=FIRST_ROUND_USAGE),
+        completion("Done.", usage=LAST_ROUND_USAGE),
+    )
+
+    assert stopped is None
+    assert events[-1].usage == TurnUsage(
+        input_tokens=230, cached_input_tokens=90, cache_write_tokens=90, output_tokens=13
+    )
+
+
+@pytest.mark.parametrize(
+    ("first", "last"),
+    [
+        (None, LAST_ROUND_USAGE),
+        (FIRST_ROUND_USAGE, None),
+        (FIRST_ROUND_USAGE, {"prompt_tokens": -1}),
+    ],
+    ids=["first-round-has-none", "last-round-has-none", "last-round-unreadable"],
+)
+def test_a_turn_with_a_round_that_has_no_usage_ends_with_no_usage(scenario, first, last):
+    events, stopped, _ = run(
+        scenario,
+        tool_round(tool_call("c1", "lookup", {}), usage=first),
+        completion("Done.", usage=last),
+    )
+
+    assert stopped is None
+    assert events[-1] == FinalEvent(text="Done.")
+
+
+def test_a_turn_that_stops_after_a_paid_round_yields_what_it_yields_without_usage(scenario):
+    events, stopped, _ = run(
+        scenario,
+        tool_round(tool_call("c1", "lookup", {}), usage=FIRST_ROUND_USAGE),
+        tool_round(tool_call("c2", "lookup", {}), usage=LAST_ROUND_USAGE),
+        max_tool_calls=1,
+    )
+
+    assert ending(stopped) == LIMIT_EXCEEDED
+    assert [type(event) for event in events] == [ToolCallEvent, ToolResultEvent]

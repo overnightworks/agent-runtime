@@ -24,9 +24,12 @@ class Reply:
     body: bytes = b""
 
 
-def _event_stream(*chunks: JsonObject, finish_reason: str) -> Reply:
+def _event_stream(*chunks: JsonObject, finish_reason: str, usage: JsonValue | None) -> Reply:
     finish: JsonObject = {"choices": [{"index": 0, "delta": {}, "finish_reason": finish_reason}]}
     chunks += (finish,)
+    if usage is not None:
+        usage_chunk: JsonObject = {"choices": [], "usage": usage}
+        chunks += (usage_chunk,)
     events = [f"data: {json.dumps(chunk)}\n\n" for chunk in chunks] + ["data: [DONE]\n\n"]
     return Reply(headers={"content-type": "text/event-stream"}, body="".join(events).encode())
 
@@ -35,13 +38,15 @@ def _delta(**delta: JsonValue) -> JsonObject:
     return {"choices": [{"index": 0, "delta": delta}]}
 
 
-def completion(*pieces: str, finish_reason: str = "stop") -> Reply:
+def completion(*pieces: str, finish_reason: str = "stop", usage: JsonValue | None = None) -> Reply:
     """A 200 event stream: one content chunk per piece, the finish chunk and ``[DONE]``.
+
+    A ``usage`` is sent as the gateway sends it: the last chunk, with no choice.
 
     ``completion()`` sends no content chunk, the same round as ``completion("")``: no text.
     """
     chunks = (_delta(content=piece) for piece in pieces)
-    return _event_stream(*chunks, finish_reason=finish_reason)
+    return _event_stream(*chunks, finish_reason=finish_reason, usage=usage)
 
 
 def tool_call(call_id: str, name: str, arguments: JsonObject | str) -> JsonObject:
@@ -50,15 +55,17 @@ def tool_call(call_id: str, name: str, arguments: JsonObject | str) -> JsonObjec
     return {"id": call_id, "type": "function", "function": {"name": name, "arguments": written}}
 
 
-def tool_round(*calls: JsonObject, content: str | None = None) -> Reply:
+def tool_round(
+    *calls: JsonObject, content: str | None = None, usage: JsonValue | None = None
+) -> Reply:
     """A 200 event stream that asks for these calls.
 
     An optional content chunk, one fragment per call with its whole arguments, the ``tool_calls``
-    finish chunk and ``[DONE]``.
+    finish chunk, an optional ``usage`` chunk as in ``completion`` and ``[DONE]``.
     """
     chunks = [] if content is None else [_delta(content=content)]
     chunks += [_delta(tool_calls=[{"index": index, **call}]) for index, call in enumerate(calls)]
-    return _event_stream(*chunks, finish_reason="tool_calls")
+    return _event_stream(*chunks, finish_reason="tool_calls", usage=usage)
 
 
 def picture(content: bytes) -> Reply:

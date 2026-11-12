@@ -689,13 +689,15 @@ def test_a_request_declaration_that_differs_from_its_handler_s_raises_before_any
     assert gateway.requests == []
 
 
-def test_the_request_carries_only_model_messages_user_and_tools_without_the_effect(shop):
+def test_the_request_carries_only_model_messages_user_stream_options_and_tools_without_the_effect(
+    shop,
+):
     shop.add_tool("lookup", effect=ToolEffect.READ_ONLY)
 
     _, _, gateway = shop.run(completion("ok"))
 
     body = sent(gateway, 0)
-    assert set(body) == {"model", "messages", "user", "stream", "tools"}
+    assert set(body) == {"model", "messages", "user", "stream", "stream_options", "tools"}
     assert body["tools"] == [
         {
             "type": "function",

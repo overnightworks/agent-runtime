@@ -13,7 +13,9 @@ from contextlib import aclosing
 from dataclasses import dataclass, field
 from typing import Final, Literal, NamedTuple, TypedDict
 
-from agents.turn import MAX_EVENT_BYTES, JsonObject
+from pydantic import ValidationError
+
+from agents.turn import MAX_EVENT_BYTES, JsonObject, TurnUsage
 
 # JSON writes one byte of text as up to six (a \u00XX escape); the rest is the envelope.
 _JSON_ESCAPE_FACTOR: Final = 6
@@ -60,10 +62,14 @@ class AssembledMessage(TypedDict):
 
 @dataclass(frozen=True)
 class StreamedRound:
-    """What a buffered completion carried: the finish reason and the assistant message."""
+    """What a buffered completion carried: the finish reason, the assistant message and the usage.
+
+    ``usage`` is ``None`` when the round sent none or sent one that cannot be read.
+    """
 
     finish_reason: str
     message: AssembledMessage
+    usage: TurnUsage | None = None
 
 
 @dataclass
@@ -83,6 +89,7 @@ class _Assembly:
     calls: list[_Call] = field(default_factory=list)
     held_bytes: int = 0
     finish_reason: str | None = None
+    usage: TurnUsage | None = None
 
     def add_text(self, piece: str) -> None:
         size = _utf8_size(piece)
@@ -141,7 +148,7 @@ class _Assembly:
             "content": "".join(self.text) or None,
             "tool_calls": calls,
         }
-        return StreamedRound(self.finish_reason, message)
+        return StreamedRound(self.finish_reason, message, self.usage)
 
 
 class CheckedError(NamedTuple):
@@ -241,10 +248,41 @@ def _take(assembly: _Assembly, data: str) -> str | None:
     event = _parsed(data)
     if "error" in event:
         raise RoundErrorEvent(error_kind_of(event["error"]))
+    if (usage := event.get("usage")) is not None:
+        assembly.usage = _usage_of(usage)
     choices = event.get("choices")
     if not isinstance(choices, list):
         raise MalformedRound
     return _add_choice(assembly, choices[0]) if choices else None
+
+
+def _usage_of(usage: object) -> TurnUsage | None:
+    """The turn's words for a chunk's usage; ``None`` when a count is missing or not a count."""
+    if not isinstance(usage, dict):
+        return None
+    details = usage.get("prompt_tokens_details")
+    if details is None:
+        details = {}
+    if not isinstance(details, dict):
+        return None
+    try:
+        return TurnUsage.model_validate(
+            {
+                "input_tokens": usage.get("prompt_tokens"),
+                "cached_input_tokens": _first_sent(details.get("cached_tokens")),
+                "cache_write_tokens": _first_sent(
+                    details.get("cache_write_tokens"), usage.get("cache_creation_input_tokens")
+                ),
+                "output_tokens": usage.get("completion_tokens"),
+            }
+        )
+    except ValidationError:
+        return None
+
+
+def _first_sent(*counts: object) -> object:
+    """The first count that was sent (a null is not sent), else zero."""
+    return next((count for count in counts if count is not None), 0)
 
 
 def _parsed(data: str) -> JsonObject:

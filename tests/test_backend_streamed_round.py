@@ -15,7 +15,7 @@ from agents.backend.streamed_round import (
     StreamedRound,
     read_round,
 )
-from agents.turn import MAX_EVENT_BYTES
+from agents.turn import MAX_EVENT_BYTES, TurnUsage
 from tests.support.gateway_turn_support import a_chunk, a_fragment, an_event_stream
 
 ROUND_LIMIT = 4 * MAX_EVENT_BYTES
@@ -313,3 +313,152 @@ def test_the_assembled_round_stays_within_the_limit_it_is_given(limit, fits):
     else:
         with pytest.raises(MalformedRound):
             read(chunks, limit=limit)
+
+
+def _answer_with(*usage_chunks: dict) -> bytes:
+    return an_event_stream(a_chunk("a"), a_chunk("b"), a_chunk(finish_reason="stop"), *usage_chunks)
+
+
+def _usage_chunk(usage: object) -> dict:
+    return {"choices": [], "usage": usage}
+
+
+@pytest.mark.parametrize(
+    ("usage", "counted"),
+    [
+        (
+            {
+                "prompt_tokens": 100,
+                "completion_tokens": 7,
+                "prompt_tokens_details": {"cached_tokens": 60, "cache_write_tokens": 30},
+            },
+            TurnUsage(
+                input_tokens=100, cached_input_tokens=60, cache_write_tokens=30, output_tokens=7
+            ),
+        ),
+        (
+            {"prompt_tokens": 100, "completion_tokens": 7},
+            TurnUsage(
+                input_tokens=100, cached_input_tokens=0, cache_write_tokens=0, output_tokens=7
+            ),
+        ),
+        (
+            {
+                "prompt_tokens": 100,
+                "completion_tokens": 7,
+                "prompt_tokens_details": {"cached_tokens": None},
+                "cache_creation_input_tokens": None,
+            },
+            TurnUsage(
+                input_tokens=100, cached_input_tokens=0, cache_write_tokens=0, output_tokens=7
+            ),
+        ),
+        (
+            {"prompt_tokens": 100, "completion_tokens": 7, "cache_creation_input_tokens": 40},
+            TurnUsage(
+                input_tokens=100, cached_input_tokens=0, cache_write_tokens=40, output_tokens=7
+            ),
+        ),
+        (
+            {
+                "prompt_tokens": 100,
+                "completion_tokens": 7,
+                "prompt_tokens_details": {"cache_write_tokens": 30},
+                "cache_creation_input_tokens": 40,
+            },
+            TurnUsage(
+                input_tokens=100, cached_input_tokens=0, cache_write_tokens=30, output_tokens=7
+            ),
+        ),
+    ],
+    ids=[
+        "details-carry-both-cache-counts",
+        "cache-counts-absent-are-zero",
+        "cache-counts-null-are-zero",
+        "top-level-cache-write-when-details-have-none",
+        "details-cache-write-before-the-top-level-one",
+    ],
+)
+def test_a_usage_chunk_with_no_choice_gives_the_rounds_usage(usage, counted):
+    assert read(_answer_with(_usage_chunk(usage))).usage == counted
+
+
+def test_usage_on_a_chunk_that_carries_a_choice_gives_the_rounds_usage():
+    usage = {"prompt_tokens": 9, "completion_tokens": 2}
+    finish = a_chunk(finish_reason="stop") | {"usage": usage}
+
+    streamed = read(an_event_stream(a_chunk("ab"), finish))
+
+    assert streamed.usage == TurnUsage(
+        input_tokens=9, cached_input_tokens=0, cache_write_tokens=0, output_tokens=2
+    )
+
+
+def test_a_later_chunk_with_null_usage_keeps_the_usage_already_read():
+    usage = {"prompt_tokens": 9, "completion_tokens": 2}
+
+    streamed = read(_answer_with(_usage_chunk(usage), _usage_chunk(None)))
+
+    assert streamed.usage is not None
+
+
+def test_a_round_with_no_usage_chunk_carries_no_usage():
+    assert read(_answer_with()).usage is None
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [
+        "many",
+        ["prompt_tokens"],
+        5,
+        True,
+        {},
+        {"completion_tokens": 7},
+        {"prompt_tokens": 100},
+        {"prompt_tokens": -1, "completion_tokens": 7},
+        {"prompt_tokens": 100, "completion_tokens": -7},
+        {"prompt_tokens": 1.5, "completion_tokens": 7},
+        {"prompt_tokens": 100.0, "completion_tokens": 7},
+        {"prompt_tokens": "100", "completion_tokens": 7},
+        {"prompt_tokens": True, "completion_tokens": 7},
+        {"prompt_tokens": 100, "completion_tokens": None},
+        {"prompt_tokens": 100, "completion_tokens": 7, "prompt_tokens_details": "all"},
+        {
+            "prompt_tokens": 100,
+            "completion_tokens": 7,
+            "prompt_tokens_details": {"cached_tokens": -2},
+        },
+        {
+            "prompt_tokens": 100,
+            "completion_tokens": 7,
+            "prompt_tokens_details": {"cache_write_tokens": True},
+        },
+        {"prompt_tokens": 100, "completion_tokens": 7, "cache_creation_input_tokens": "3"},
+    ],
+    ids=[
+        "text",
+        "list",
+        "number",
+        "boolean",
+        "empty",
+        "no-prompt-tokens",
+        "no-completion-tokens",
+        "negative-prompt-tokens",
+        "negative-completion-tokens",
+        "fractional-count",
+        "float-count",
+        "text-count",
+        "boolean-count",
+        "null-required-count",
+        "details-not-an-object",
+        "negative-cached-count",
+        "boolean-cache-write-count",
+        "text-top-level-cache-write-count",
+    ],
+)
+def test_unreadable_usage_gives_a_round_with_no_usage_and_the_same_message(usage):
+    streamed = read(_answer_with(_usage_chunk(usage)))
+
+    assert streamed == ANSWER_AB
+    assert streamed.usage is None
