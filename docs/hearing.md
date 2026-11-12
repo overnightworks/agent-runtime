@@ -24,7 +24,10 @@ app proves it.
 ## Who may hear
 
 **HEARING-1 (A).** Only the app's own rule decides who may hear whom, and the app records every
-decision with `allow(place, speaker, member, sense, allowed)`.
+decision with `allow(place, speaker, member, sense, allowed)`. A person's speech is entered only
+while that person allows it under the app's own rule, so the app records `allowed` true for a
+member of a person speaker only while that person allows it, and false when the person withdraws
+it.
 
 **HEARING-2 (L).** The record is keyed by place, the app's opaque speaker key, member and `Sense`;
 only `Sense.HEARING` is defined. The speaker key is the app's own, not a `Principal`, so a seat
@@ -105,7 +108,7 @@ name pass through `heard` and are kept nowhere, and no call logs. Proved by
 
 ## What an app supplies
 
-**HEARING-14.** The library owns no sound, no speech client, no token, no switch and no mark. An
+**HEARING-14 (A).** The library owns no sound, no speech client, no token, no switch and no mark. An
 app supplies:
 
 - its rule for who may hear whom, and every `allow` and end that follows from it;
@@ -118,7 +121,7 @@ app supplies:
 
 ## Owners
 
-**HEARING-15.** Every app the standard covers follows these rules, so that who may hear whom
+**HEARING-15 (A).** Every app the standard covers follows these rules, so that who may hear whom
 works the same in each. This file owns the rules; the shared design kit holds the switch and the
 mark. The standard covers every fleet app that lets an agent with an account of its own hear
 people at a place; an app that does adopts it with the release of this library's part. Seeing is
