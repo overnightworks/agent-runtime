@@ -34,6 +34,8 @@ from agents.backend import (
     TurnStopped,
 )
 from agents.backend.streamed_round import (
+    AssembledMessage,
+    AssembledToolCall,
     MalformedRound,
     RoundErrorEvent,
     StreamedRound,
@@ -325,17 +327,11 @@ def _client(
     )
 
 
-class _ToolCallEcho(TypedDict):
-    id: str
-    type: str
-    function: dict[str, str]
-
-
 class _Message(TypedDict):
     role: Required[str]
     content: NotRequired[str | None]
     tool_call_id: NotRequired[str]
-    tool_calls: NotRequired[list[_ToolCallEcho]]
+    tool_calls: NotRequired[list[AssembledToolCall]]
 
 
 class _FunctionSpec(TypedDict):
@@ -691,29 +687,24 @@ def _answer_of(text: str) -> _Round:
     return _Round(text=text, calls=(), message=None)
 
 
-def _calls_of(message: JsonObject, offered: frozenset[str]) -> _Round:
+def _calls_of(message: AssembledMessage, offered: frozenset[str]) -> _Round:
     """Every call of a round is judged before any is shown or run."""
-    content = message.get("content")
     raw_calls = message["tool_calls"]
-    if (content is not None and not isinstance(content, str)) or not raw_calls:
+    if not raw_calls:
         raise _malformed_reply()
-    calls = []
+    calls: list[_Call] = []
     for raw in raw_calls:
         function = raw["function"]
         name, call_id = function["name"], raw["id"]
-        if name not in offered or not isinstance(call_id, str) or not call_id:
+        if name not in offered or not call_id:
             raise _malformed_reply()
         arguments = _ARGUMENTS.validate_json(function["arguments"])
         calls.append(_Call(id=call_id, name=name, arguments=arguments))
-    echoed = [
-        {
-            "id": call.id,
-            "type": "function",
-            "function": {"name": call.name, "arguments": raw["function"]["arguments"]},
-        }
-        for call, raw in zip(calls, raw_calls, strict=True)
-    ]
-    reply: _Message = {"role": "assistant", "content": content, "tool_calls": echoed}
+    reply: _Message = {
+        "role": "assistant",
+        "content": message["content"],
+        "tool_calls": raw_calls,
+    }
     return _Round(text="", calls=tuple(calls), message=reply)
 
 
