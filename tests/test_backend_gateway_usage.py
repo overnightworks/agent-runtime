@@ -92,13 +92,25 @@ def test_a_usage_chunk_without_choices_gives_the_turn_its_usage(shop, last_chunk
 
 @pytest.mark.parametrize(
     "last_chunk",
-    [{}, {"choices": None}, {"usage": None}],
-    ids=["empty", "choices-null", "no-usage"],
+    [{}, {"choices": None}],
+    ids=["empty", "choices-null"],
 )
 def test_a_chunk_with_neither_choices_nor_usage_still_stops_the_turn(shop, last_chunk):
     _, stopped, _ = run(shop, an_answer_closed_by(last_chunk))
 
     assert ending(stopped) == (TurnStopKind.FAILED, FailureCode.PROVIDER_ERROR)
+
+
+@pytest.mark.parametrize(
+    "last_chunk",
+    [{"usage": None}, {"choices": None, "usage": None}],
+    ids=["no-choices-key", "choices-null"],
+)
+def test_a_usage_chunk_with_a_null_usage_ends_the_turn_with_no_usage(shop, last_chunk):
+    events, stopped, _ = run(shop, an_answer_closed_by(last_chunk))
+
+    assert stopped is None
+    assert events == [AssistantTextEvent(text="ab"), FinalEvent(text="ab")]
 
 
 def raw_members(body: bytes) -> dict[str, str]:
