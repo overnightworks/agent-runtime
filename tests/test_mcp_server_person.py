@@ -335,26 +335,29 @@ def test_a_call_hands_the_handler_the_resolved_person_and_the_request_scope(
     assert request.scope is person.resolved[0]
 
 
+def _arguments_nested_to_depth(depth: int) -> dict[str, Any]:
+    """Arguments whose object and the arrays and objects inside it make ``depth`` containers."""
+    nested: list[Any] = []
+    for _ in range(depth - 2):
+        nested = [nested]
+    return {"note": nested}
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {
+            "note": "n1",
+            "tags": ["a", ["b", {"deep": [1, 2.5, None, True]}]],
+            "meta": {"empty": {}, "list": [], "text": "caf\u00e9"},
+        },
+        _arguments_nested_to_depth(MAX_TOOL_INPUT_DEPTH),
+    ],
+    ids=["nested values", "nested exactly to the depth limit"],
+)
 def test_a_call_hands_the_handler_exactly_the_parsed_nested_arguments(
-    front: McpPersonFront, person: Person
+    front: McpPersonFront, person: Person, arguments: dict[str, Any]
 ) -> None:
-    arguments: dict[str, Any] = {
-        "note": "n1",
-        "tags": ["a", ["b", {"deep": [1, 2.5, None, True]}]],
-        "meta": {"empty": {}, "list": [], "text": "caf\u00e9"},
-    }
-
-    post(front, rpc_body("tools/call", call_params("read_note", **arguments)))
-
-    [(_, _, received)] = person.calls
-    assert received == arguments
-
-
-def test_arguments_nested_exactly_to_the_depth_limit_reach_the_handler(
-    front: McpPersonFront, person: Person
-) -> None:
-    arguments = _arguments_nested_to_depth(MAX_TOOL_INPUT_DEPTH)
-
     reply = post(front, rpc_body("tools/call", call_params("read_note", **arguments)))
 
     [(_, _, received)] = person.calls
@@ -382,14 +385,6 @@ def test_concurrent_calls_each_get_the_person_and_the_scope_of_their_own_request
         ("alice", "alice"),
         ("bob", "bob"),
     ]
-
-
-def _arguments_nested_to_depth(depth: int) -> dict[str, Any]:
-    """Arguments whose object and the arrays and objects inside it make ``depth`` containers."""
-    nested: list[Any] = []
-    for _ in range(depth - 2):
-        nested = [nested]
-    return {"note": nested}
 
 
 @pytest.mark.parametrize(
