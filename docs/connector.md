@@ -72,7 +72,9 @@ round of the turn. `input_tokens` is everything the model read, cached tokens in
 written to it, `output_tokens` what the model wrote. A round's usage is the gateway's last usage
 chunk: `prompt_tokens`, `prompt_tokens_details.cached_tokens` (absent: 0),
 `prompt_tokens_details.cache_write_tokens` else `cache_creation_input_tokens` else 0, and
-`completion_tokens`. `usage` is `None`, never a partial sum, when any round sent none or one with a
+`completion_tokens`. The usage is read from a chunk with `choices: []`, with `choices` absent or
+null, or alongside a choice; a chunk with neither `choices` nor a `usage` key fails the round as a
+malformed reply, and a `usage` key holding null is a round with no usage. `usage` is `None`, never a partial sum, when any round sent none or one with a
 missing, negative or non-integer count, and for a picture turn; reading usage changes
 nothing else the turn yields. The library passes the gateway's counts through unchecked: it does
 not verify that `cached_input_tokens` is no larger than `input_tokens`. A turn that ends with
@@ -83,6 +85,8 @@ not verify that `cached_input_tokens` is no larger than `input_tokens`. A turn t
 `test_unreadable_usage_gives_a_round_with_no_usage_and_the_same_message`; and by
 `tests/test_backend_gateway_usage.py`: `test_the_final_event_carries_the_usage_the_gateway_sent`,
 `test_a_usage_chunk_without_choices_gives_the_turn_its_usage`,
+`test_a_usage_chunk_with_a_null_usage_ends_the_turn_with_no_usage`,
+`test_a_chunk_with_neither_choices_nor_usage_still_stops_the_turn`,
 `test_the_final_events_usage_sums_the_usage_of_every_round`,
 `test_a_turn_whose_round_has_no_readable_usage_ends_with_no_usage_and_the_same_text`,
 `test_a_turn_with_a_round_that_has_no_usage_ends_with_no_usage` and
