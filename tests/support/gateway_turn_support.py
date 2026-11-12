@@ -331,7 +331,6 @@ class Shop:
     """The app side of a turn: its hand tools, what they were called with, and the gateway."""
 
     directory: Path
-    replies: tuple[Reply, ...] = ()
     seen: list[tuple[str, Principal, JsonObject]] = field(default_factory=list)
     tools: list[HandTool] = field(default_factory=list)
 
