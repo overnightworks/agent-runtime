@@ -1,8 +1,0 @@
-claim_id = "2c5dd3ed763d4f07bf3685672e290c72"
-agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
-role = "builder"
-base = "4f5b0d7277ba1f892725b6a5a37713415dc63fef"
-branch = "claude/issue-893-a-member-learns-it-is-talked-over-and-ca"
-scope = ["docs/connector.md", "docs/hearing.md", "src/agents/member.py", "tests"]
-opened_commit = "b7d7826ac6bc83d4f72a8aa16564d7ef7cc461d5"
-whole_reason = "One interruption contract: the window record, the stop tool and the style field are read and served together by every app and runner."
