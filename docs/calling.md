@@ -29,8 +29,7 @@ place that has no room for it.
 **CALLING-5.** While an invitation is open, only its inviter sees the agent, as inviting.
 
 **CALLING-25.** An agent's runner holds a listen on an app's standing only while it answers
-invitations to that app's places, by accepting or declining them (letting one run out stays
-allowed, CALLING-8).
+invitations to that app's places, by accepting or declining them.
 
 ## Calling
 
