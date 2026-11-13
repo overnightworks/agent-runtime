@@ -39,7 +39,7 @@ from mcp_types import (
     SubscriptionsListenResult,
 )
 
-from agents.mcp_server.asgi import LISTEN_METHOD, LOGGER_NAME, WrittenFrames
+from agents.mcp_server.asgi import LISTEN_METHOD, LOGGER_NAME
 from agents.mcp_server.resources import MemberResources, failure_answer, served_uris
 from agents.member import (
     LISTEN_ALLOWANCE_SECONDS,
@@ -54,8 +54,6 @@ _LOG: Final = logging.getLogger(LOGGER_NAME)
 
 type _Pulse = ResourceUpdated | ToolsListChanged
 
-_TOOLS_NOTICE_METHOD: Final = event_to_notification(ToolsListChanged(), {}).method.encode("ascii")
-
 
 class _ListenStream:
     """One listen stream: its pending pulses, a repeated one staying once at its first arrival,
@@ -66,22 +64,22 @@ class _ListenStream:
         self._arrived = anyio.Event()
         self._honored: dict[str, None] = {}
         self._honors_tools = False
-        self._tools_notice_unwritten = False
+        self._being_written: _Pulse | None = None
 
     def add(self, pulse: _Pulse) -> None:
-        if isinstance(pulse, ToolsListChanged) and self._tools_notice_unwritten:
+        if pulse == self._being_written:
             return
         self._pulses[pulse] = None
         self._arrived.set()
 
-    def writing_tools_notice(self) -> None:
-        """From now until its frame is on the wire, a tools change is that notice."""
-        self._tools_notice_unwritten = True
-
-    def frame_written(self, frame: bytes) -> None:
-        """A frame is on the wire; once it is the tools notice, that notice is out."""
-        if _TOOLS_NOTICE_METHOD in frame:
-            self._tools_notice_unwritten = False
+    @contextmanager
+    def written(self, pulse: _Pulse) -> Generator[None]:
+        """While the pulse is being written, the same pulse arriving again is that write."""
+        self._being_written = pulse
+        try:
+            yield
+        finally:
+            self._being_written = None
 
     async def next(self) -> _Pulse:
         while not self._pulses:
@@ -268,8 +266,8 @@ async def _deliver(
         pulse = await open_stream.next()
         if isinstance(pulse, ToolsListChanged):
             if open_stream.honors_tools:
-                open_stream.writing_tools_notice()
-                await stream.pulse(pulse)
+                with open_stream.written(pulse):
+                    await stream.pulse(pulse)
             continue
         if not _wanted(pulse.uri, open_stream.honored):
             continue
@@ -288,7 +286,6 @@ async def on_subscriptions_listen(
     principal: Principal,
     context: ServerRequestContext[Any],
     params: SubscriptionsListenRequestParams,
-    frames: WrittenFrames,
     *,
     announces_tools: bool,
 ) -> SubscriptionsListenResult | ErrorData:
@@ -303,7 +300,6 @@ async def on_subscriptions_listen(
             readable = await served_uris(resources, principal)
         except Exception as failure:
             return failure_answer(LISTEN_METHOD, failure)
-        frames.watch(open_stream.frame_written)
         honored = _honored(params.notifications.resource_subscriptions or (), readable)
         tools = announces_tools and params.notifications.tools_list_changed is True
         await stream.acknowledge(honored, tools=tools)

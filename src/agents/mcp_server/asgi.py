@@ -87,33 +87,17 @@ _SERVED_METHODS: Final = frozenset(
 )
 
 
-class WrittenFrames:
-    """What a stream's transport tells its handler: each body it has put on the wire."""
-
-    def __init__(self) -> None:
-        self._watcher: Callable[[bytes], None] = lambda frame: None
-
-    def watch(self, watcher: Callable[[bytes], None]) -> None:
-        self._watcher = watcher
-
-    def written(self, frame: bytes) -> None:
-        self._watcher(frame)
-
-
 async def write_stream(
     respond: Callable[[Send], Awaitable[None]],
     send: Send,
     bearers: Collection[str],
-    frames: WrittenFrames,
     *,
     seconds: float,
 ) -> bool:
     """Runs ``respond`` for at most ``seconds``, writing every frame that carries no bearer.
 
-    ``frames`` is told each body once it is on the wire, so the handler knows when its notice is
-    out rather than handed to the SDK. Answers whether a frame was cut. The response start waits
-    for the first body, so a bearer in the first frame still answers ``WITHHELD``; a later one cuts
-    the stream with nothing written.
+    Answers whether a frame was cut. The response start waits for the first body, so a bearer in
+    the first frame still answers ``WITHHELD``; a later one cuts the stream with nothing written.
     Each ``send`` is one whole frame, so a bearer never spans two. The SDK's own writes carry no
     timeout, so the limit is what ends a call whose client stopped reading.
     """
@@ -135,7 +119,6 @@ async def write_stream(
                 held, start = start, None
                 await send(held)
             await send(message)
-            frames.written(message.get("body", b""))
 
     with anyio.move_on_after(seconds) as limit:
         await respond(guarded)
