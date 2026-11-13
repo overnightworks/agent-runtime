@@ -39,9 +39,11 @@ side reads the invitation's `expires_at` and never that value.
 
 **CALLING-7.** The agent's accept is checked by the app: the invitation still stands (id, epoch,
 expiry), the owner is still present, and the bounds hold. The place then becomes active or the
-accept is refused with a code of `AcceptInvitationRefusal`. A refused accept ends the call without
-a seat: the inviter's row shows the outcome the app maps from the code (CALLING-14, CALLING-22),
-owner away for `sponsor_away`, and no refusal.
+accept is refused with a code of `AcceptInvitationRefusal`. An accept of a standing invitation
+refused with `two_seats`, `sponsor_away` or `busy` ends the invitation as a decline does
+(CALLING-30) and the call without a seat: the inviter's row shows the outcome the app maps from the
+code (CALLING-14, CALLING-22), owner away for `sponsor_away`, and no refusal. A `stale_invitation`
+refusal changes nothing.
 
 **CALLING-8.** An invitation that runs out unanswered ends the call without a seat: the inviter's
 row shows the outcome no answer (CALLING-14), and no refusal. A runner that lets an invitation run
@@ -56,7 +58,7 @@ app never computes it and does not check the reason.
 invitation and still stands (id, epoch, expiry). A decline of one that no longer stands is refused
 with `stale_invitation` of `DeclineInvitationRefusal` and changes nothing. A standing decline ends
 the invitation at once, as its expiry does and without raising the epoch: the app takes the
-invitation from the agent's standing, signals the standing, and the row is offered again.
+invitation from the agent's standing, signals the standing, and the row shows its outcome (CALLING-31), then is offered again.
 
 **CALLING-31.** A standing decline ends the call without a seat: the inviter's row shows the
 outcome busy (CALLING-14), mapped from the decline's reason (CALLING-22), and no refusal. A declined
