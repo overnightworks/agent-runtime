@@ -108,18 +108,31 @@ name pass through `heard` and are kept nowhere, and no call logs. Proved by
 `test_no_call_writes_a_log_record` and
 `test_the_record_keeps_neither_an_utterance_nor_its_line_once_the_caller_lets_go`.
 
-## An agent's spoken sentences
+## An agent's sentences
 
-**HEARING-14 (A).** An agent's sentence at a place starts when the duration of its previous
-sentence at that place has run out. The first sentence starts at once.
+**HEARING-14 (A).** An agent's sentences at a place take their turns in the order of their `speak`
+calls. A sentence's turn comes when the sentence before it has ended; the first one's comes at
+once. A voiced sentence ends when its duration has run out or when it is cut (HEARING-16); a
+written one ends as it enters.
 
-**HEARING-15 (A).** The app's `speak` answers at the start of the sentence, not before.
+**HEARING-15 (A).** The app's `speak` answers at the sentence's turn, not before: `Spoken` when the
+sentence starts to play, `Written` when it enters as a written line (HEARING-25). An argument
+refusal (`too_long`, `language_unavailable`, `style_unavailable`) and a standing refusal
+(`not_active`) answer at once. `stopped` answers when the stop drops the sentence. The other
+`unavailable` refusals, a social reason or a limit of the app, answer when the app knows, at the
+latest at the sentence's turn; a failed voice at a place without a chat answers `unavailable` at
+the sentence's turn, where `Written` would otherwise have answered.
 
-**HEARING-16 (A).** At its start the sentence enters every window at the place as a spoken chat
-line.
+**HEARING-16 (A).** An agent's sentence enters the windows at the place once it has been said, as a
+person's line does (HEARING-6): when it ends, as a spoken line in every window at the place, `own`
+in the member's own. A sentence cut before its end, by a stop, by the member's end at the place or
+by a voice failure after it started to play, enters with `cut` and only the text heard up to the
+cut, or the whole sentence while the app cannot tell how far it played; never a guess from the time
+it played. A line is never changed once appended. A sentence that never started, refused or dropped
+from the queue, enters no window, and no person's line is ever cut.
 
-**HEARING-17 (A).** The app's server keeps the queue of an agent's sentences. The library orders no
-sentences.
+**HEARING-17 (A).** The app's server keeps the queue of an agent's sentences, the written ones
+included. The library orders no sentences.
 
 **HEARING-20 (A).** An agent names the language of its sentence; the app never guesses it from the
 text. Without one the app speaks the sentence in its page's language. A language the app's voice
@@ -135,7 +148,9 @@ whose `text` may still be empty. The `id` is the app's, never repeats within the
 speaking meanwhile adds a partial under the same `id`, and `speech` keeps the order in which they
 started. A runner takes at most one decision per `id`. The app updates the partials as the words
 come and `playing` as the agent's sentences end and start: `playing` returns to true when a new
-sentence of the member starts while the record stands, and the `id` stays the same. It signals each
+sentence of the member starts while the record stands, and the `id` stays the same. The sentence
+that plays is not in the window yet: its line enters in the same window change in which `playing`
+turns false, or stays true when the member's next sentence starts at once. It signals each
 update per HEARING-11. A person's finished line replaces that person's partial in the same window
 change, so one read never shows both. A person's partial goes when that person's turn ends, also a turn that heard no words, when a
 switch-off stops the agent hearing that person (and does not return for that utterance) and when
@@ -149,12 +164,38 @@ drops its whole queue there, and answers `StoppedSpeaking(cut)` with the text of
 Each dropped queued `speak` answers `stopped`, so no call hangs. With nothing playing it answers
 `nothing_playing`, and when the member left, was removed or is paused it answers `not_active`;
 either way nothing is cut or dropped. A stop is not a mute: the agent speaks again at its
-next `speak`. The cut sentence's line stays as it was appended.
+next `speak`. The cut sentence's line enters per HEARING-16 no later than `stop_speaking` answers,
+and `cut` is that line's text; the dropped sentences enter no window.
 
 **HEARING-23 (A).** `speak` may carry a `style`, free text that the app passes on unchanged to its
 speech service. The app neither bounds nor checks it: the speech service owns its length bound and
 its check. Every refusal of the style by the voice (a voice that takes no style, a style too long,
 or one the voice does not support) reaches the agent as `style_unavailable`, with no second code.
+
+## When the voice fails
+
+**HEARING-24 (A).** The app sets the window's `voice_state` for the member at that place:
+`unavailable` while the app's own voice has failed there, so that a `speak` would not be voiced for
+that reason, and `available` while it works; it signals each change per HEARING-11, and a runner
+then starts a written turn instead of a spoken one. A social reason (speaking switched off, a
+missing consent) or a limit of the app never changes it: there `speak` still refuses `unavailable`,
+and a runner never writes on its behalf. The app sets `available` again as soon as the voice works;
+how it learns that is its own. An absent `voice_state` states nothing, and a runner then behaves
+as without the field.
+
+**HEARING-25 (A).** When the app cannot voice a sentence for a failure of its voice before the
+sentence starts to play and the place has a chat, it posts the sentence there at its turn as the
+member's written line, which enters every window with `spoken` false, and `speak` answers
+`Written`. Without a chat it refuses with `unavailable`. No other refusal is ever written: not
+`not_active` or `stopped`, not a refusal of the sentence's own arguments (`too_long`,
+`language_unavailable`, `style_unavailable`), and not a social reason, such as speaking switched off
+at the place or a missing consent, which answers `unavailable`. A failure after `Spoken` was
+answered is a cut sentence (HEARING-16), never a written line.
+
+**HEARING-26 (A).** The app logs one line when the member's voice at a place turns `unavailable`
+for a failure, once per outage for that member at that place, the first fallback included: a closed
+reason code and the place, never the sentence, a token or the voice's name. It logs nothing more
+while the voice stays `unavailable`; the next turn to `unavailable` after `available` logs again.
 
 ## What an app supplies
 
@@ -166,7 +207,8 @@ app supplies:
 - the sound, the speech client, and the verified identity of the speaker;
 - the switch and the ear mark, from the shared design kit, with the mark showing `sensing`;
 - the window, its `seq`, its append and the signal (HEARING-11);
-- the queue of an agent's own spoken sentences (HEARING-14 to HEARING-17);
+- the queue of an agent's sentences, the voice state, the written fallback and its log line
+  (HEARING-14 to HEARING-17 and HEARING-24 to HEARING-26);
 - the talked-over record with the partials, the stop and the style (HEARING-21 to
   HEARING-23); and
 - its privacy text, which states what is heard and its legal basis.
