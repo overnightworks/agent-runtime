@@ -1,0 +1,8 @@
+claim_id = "0d380e5351914e81ac366861be09faf0"
+agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
+role = "builder"
+base = "dc9898cd5d480f0aedaabbd86f913fcad687751b"
+branch = "claude/issue-882-a-standing-names-the-place-it-was-opened"
+scope = ["docs/ARCHITECTURE.md", "docs/calling.md", "docs/connector.md", "src/agents/member.py", "tests/test_member.py"]
+opened_commit = "6e99a4674495b40e27b0c53b04fcf5938d09c120"
+whole_reason = "One optional field on two records of one module, with its rules in the two documents that own the member contract and its tests."
