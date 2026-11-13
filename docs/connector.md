@@ -538,7 +538,7 @@ reading it gets a validation error and decides itself. Proved by `tests/test_mem
 place, invitation id and epoch as an accept, and the required `reason`, a `DeclineInvitationReason`
 whose only value is `busy` (the runner is at its own limit of how many places it is in at once).
 It needs no lease, as a decline seats nothing. A standing decline answers a result without
-`is_error` whose content no record pins, as an accept does. A refusal is an `is_error` result whose
+`is_error` whose content no record pins. A refusal is an `is_error` result whose
 content is `DeclineInvitationRefused(refused)` as JSON with the one `DeclineInvitationRefusal` code
 `stale_invitation` (the invitation is not that member's, no longer stands, has expired, or its id or
 epoch no longer matches). A decline's `busy` is not an accept's `busy`: the first says the runner
