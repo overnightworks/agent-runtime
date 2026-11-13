@@ -15,6 +15,7 @@ from typing import Annotated, Final, Self
 from urllib.parse import quote, unquote, urlsplit
 
 from pydantic import (
+    AnyHttpUrl,
     AwareDatetime,
     Field,
     StringConstraints,
@@ -39,6 +40,7 @@ __all__ = [
     "FigureRef",
     "Invitation",
     "MemberStanding",
+    "ParentPlace",
     "PlaceEntry",
     "PlaceRef",
     "PlaceView",
@@ -98,8 +100,21 @@ class Invitation(StrictModel):
     expires_at: AwareDatetime
 
 
+class ParentPlace(StrictModel):
+    """The place a standing's place lies inside: ``app`` is the parent app's MCP resource URL and
+    ``place`` the place there. A runner compares both with a place it holds, ``app`` as a parsed
+    URL, so equal addresses in another spelling match; the record grants nothing."""
+
+    app: AnyHttpUrl
+    place: PlaceRef
+
+
 def _is_false(value: bool) -> bool:
     return not value
+
+
+def _is_none(value: object) -> bool:
+    return value is None
 
 
 class Standing(StrictModel):
@@ -111,6 +126,9 @@ class Standing(StrictModel):
     serves_view: bool = Field(default=False, exclude_if=_is_false)
     """Whether the app serves this place's ``PlaceView``; its URI is then listed among the
     member's current resources."""
+    parent: ParentPlace | None = Field(default=None, exclude_if=_is_none)
+    """The place this place lies inside, if another app's place holds it; the app sets it from
+    the invitation on and keeps it while the member holds the place."""
 
     @model_validator(mode="after")
     def _invitation_exactly_when_invited(self) -> Self:
@@ -167,10 +185,6 @@ VoiceName = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._-]{1,64}$")]
 """The name of the voice an agent speaks with: 1 to 64 ASCII letters of either case, digits, ``.``,
 ``_`` or ``-``. The name is passed through unchanged; the app's speech service decides whether it
 offers that voice."""
-
-
-def _is_none(value: object) -> bool:
-    return value is None
 
 
 class AcceptInvitationArguments(StrictModel):

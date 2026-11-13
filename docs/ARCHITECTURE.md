@@ -152,6 +152,10 @@ malformed value fails loud.
 - *The person front trusts the host's gate.* It carries no credential check of its own; a
   front reached without the gate's admission is a host defect, and it withholds any answer
   that carries the request's own bearer.
+- *A standing's parent place is an input to a runner's busy rule and grants nothing.* Its `place`
+  comes from the page of the inviter, so it is untrusted. Forged, it needs an inviter in the
+  adder group, the owner present and the opaque id of a call the agent really holds, and at most
+  makes that agent accept an unrelated place; it yields no data and no right.
 
 **Proof strategy.** Behaviour is proven through the real entry points: `GatewayBackend.run`
 against `FakeGateway`'s scripted transport, `load_agent` against files, and the person front

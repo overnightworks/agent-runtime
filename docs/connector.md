@@ -467,7 +467,7 @@ the tool and the exception's class
 ## The member module
 
 `agents.member` owns what an app and an agent say to each other about a member:
-`PlaceRef`, `StandingState`, `Invitation` and `Standing`, `MemberStanding(standings)` (what
+`PlaceRef`, `StandingState`, `Invitation`, `Standing` and its `ParentPlace(app, place)`, `MemberStanding(standings)` (what
 `STANDING_URI`, `member://standing`, answers with), `PlaceWindow(generation, starts_at, entries)`
 of `PlaceEntry(seq, kind, name, text, own, spoken)`, `LEASE_SECONDS` (120),
 `INVITATION_SECONDS` (120), `LISTEN_BOUND_SECONDS` (50),
@@ -515,6 +515,13 @@ A `Standing` is a `PlaceRef(kind, id)`, opaque to all but the app, a `StandingSt
 other combination is refused at construction. `epoch` is the place's removal epoch, so the app
 refuses an accept after a removal. A paused place is listed and a place the member left is
 absent, so a pause is told from a removal.
+
+A `Standing` carries `parent` as `ParentPlace(app, place)`, absent from its JSON unless set. It
+names the place this one lies inside: `app` is the parent app's MCP resource URL, parsed as an
+absolute http or https URL, never fetched, so two spellings of one address compare equal as parsed
+URLs; `place` is a `PlaceRef`. A malformed parent fails the parse of the standing. An app sets it
+from the invitation on ([calling.md](calling.md), CALLING-27 and CALLING-28), and a runner that
+predates the field refuses a standing carrying it. Proved by `tests/test_member.py`.
 
 An `accept_invitation` refusal is an `is_error` result whose content is
 `AcceptInvitationRefused(refused)` as JSON, in `speak`'s shape (`SpeakRefused`), with one

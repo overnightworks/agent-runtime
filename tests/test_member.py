@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from pydantic import ValidationError
+from pydantic import AnyHttpUrl, ValidationError
 
 from agents.member import (
     LEASE_SECONDS,
@@ -20,6 +20,7 @@ from agents.member import (
     FigureRef,
     Invitation,
     MemberStanding,
+    ParentPlace,
     PlaceEntry,
     PlaceRef,
     PlaceView,
@@ -678,3 +679,89 @@ def test_a_standing_that_serves_a_view_reads_back_from_its_json() -> None:
 def test_a_standing_whose_serves_view_is_no_boolean_is_refused(serves_view: object) -> None:
     with pytest.raises(ValidationError):
         Standing(place=PLACE, state=StandingState.ACTIVE, serves_view=serves_view)  # type: ignore[arg-type]
+
+
+PARENT_JSON = {"app": "https://calls.example/mcp", "place": {"kind": "call", "id": "c-9"}}
+
+
+def standing_json(state: str, **fields: Any) -> str:
+    return json.dumps(
+        {"place": {"kind": "room", "id": "r-1"}, "state": state, "invitation": None} | fields
+    )
+
+
+@pytest.mark.parametrize(
+    "state",
+    [StandingState.INVITED, StandingState.ACTIVE, StandingState.PAUSED],
+)
+@pytest.mark.parametrize("app", ["https://calls.example/mcp", "http://calls.example/mcp"])
+def test_a_standing_with_a_parent_place_reads_back_from_its_json_in_every_state(
+    state: StandingState, app: str
+) -> None:
+    parent = ParentPlace(app=AnyHttpUrl(app), place=PlaceRef(kind="call", id="c-9"))
+    standing = Standing(
+        place=PLACE,
+        state=state,
+        invitation=INVITATION if state is StandingState.INVITED else None,
+        parent=parent,
+    )
+
+    dumped = standing.model_dump_json()
+
+    assert json.loads(dumped)["parent"]["place"] == {"kind": "call", "id": "c-9"}
+    assert Standing.model_validate_json(dumped) == standing
+
+
+def test_a_standing_without_a_parent_place_dumps_without_the_key() -> None:
+    standing = Standing.model_validate_json(standing_json("active"))
+
+    assert standing.parent is None
+    assert "parent" not in json.loads(standing.model_dump_json())
+    assert "parent" not in standing.model_dump()
+
+
+@pytest.mark.parametrize(
+    "parent",
+    [
+        {"app": "/mcp", "place": PARENT_JSON["place"]},
+        {"app": "calls.example/mcp", "place": PARENT_JSON["place"]},
+        {"app": "ftp://calls.example/mcp", "place": PARENT_JSON["place"]},
+        {"app": PARENT_JSON["app"], "place": {"kind": "", "id": "c-9"}},
+        {"app": PARENT_JSON["app"], "place": {"kind": "call", "id": ""}},
+        {**PARENT_JSON, "extra": 1},
+        {"app": PARENT_JSON["app"]},
+        {"place": PARENT_JSON["place"]},
+    ],
+    ids=[
+        "relative-url",
+        "no-scheme",
+        "other-scheme",
+        "empty-kind",
+        "empty-id",
+        "unknown-key",
+        "no-place",
+        "no-app",
+    ],
+)
+def test_a_standing_whose_parent_place_is_malformed_is_refused(parent: dict[str, Any]) -> None:
+    wire_text = standing_json("active", parent=parent)
+
+    with pytest.raises(ValidationError):
+        Standing.model_validate_json(wire_text)
+
+
+def test_a_parent_app_equals_the_same_address_written_in_another_normal_form() -> None:
+    plain = Standing.model_validate_json(standing_json("active", parent=PARENT_JSON))
+    spelled = Standing.model_validate_json(
+        standing_json("active", parent=PARENT_JSON | {"app": "https://CALLS.example:443/mcp"})
+    )
+
+    assert plain.parent is not None
+    assert spelled.parent is not None
+    assert plain.parent.app == spelled.parent.app
+
+
+def test_the_parent_place_record_is_exported() -> None:
+    import agents.member
+
+    assert "ParentPlace" in agents.member.__all__
