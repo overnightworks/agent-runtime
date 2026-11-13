@@ -612,6 +612,23 @@ def test_the_sdk_client_gets_an_image_alone_when_its_text_is_blank(
     assert base64.b64decode(image_block.data, validate=True) == image.content
 
 
+@pytest.mark.parametrize("blank", ["", "  \n\t "], ids=["empty", "whitespace only"])
+@pytest.mark.parametrize("is_error", [False, True])
+def test_the_sdk_client_gets_the_blank_text_block_when_there_is_no_image(
+    front: McpPersonFront, person: Person, blank: str, is_error: bool
+) -> None:
+    person.outcome = ToolOutcome(blank, is_error=is_error)
+
+    async def called() -> Any:
+        async with sdk_client(front) as client:
+            return await client.call_tool("read_note", {})
+
+    result = asyncio.run(called())
+
+    (text_block,) = result.content
+    assert (result.is_error, text_block.type, text_block.text) == (is_error, "text", blank)
+
+
 @pytest.mark.parametrize(
     ("image_bytes", "text_bytes", "reaches_the_client"),
     [
