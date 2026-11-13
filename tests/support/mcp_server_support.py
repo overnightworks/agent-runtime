@@ -148,6 +148,29 @@ class MemberApp:
         return self.readable.get(principal, {}).get(uri)
 
 
+@dataclass
+class ToolOffer:
+    """The host's offered-tools port: per member, the names offered now.
+
+    ``asked`` records every principal it was asked about; ``failure`` is raised and ``unusable``
+    is answered instead of the names when set, a port that breaks its contract.
+    """
+
+    offered: dict[Principal, Collection[str]] = field(default_factory=dict)
+    failure: Exception | None = None
+    unusable: Any = None
+    asked: list[Principal] = field(default_factory=list)
+
+    async def __call__(self, principal: Principal) -> Collection[str]:
+        await asyncio.sleep(0)
+        self.asked.append(principal)
+        if self.failure is not None:
+            raise self.failure
+        if self.unusable is not None:
+            return self.unusable
+        return self.offered.get(principal, ())
+
+
 def with_envelope(params: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """``params`` with the per-request ``_meta`` every revision 2026-07-28 request carries."""
     meta = {PROTOCOL_VERSION_META_KEY: PROTOCOL_VERSION, CLIENT_CAPABILITIES_META_KEY: {}}

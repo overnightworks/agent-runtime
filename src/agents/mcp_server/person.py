@@ -10,14 +10,15 @@ A thin ASGI shell stands before the official SDK and serves revision ``2026-07-2
 refuses every request that is not explicitly that revision, because the SDK's stateless mode
 still routes an absent or older version to its legacy path. No answer the front writes, refusals
 included, carries the request's bearer. Rights are the route's, so ``tools/list`` offers every
-tool. With a ``MemberResources`` port it also serves ``resources/list`` and ``resources/read``
-per verified principal, and with ``ResourceChanges`` beside it, ``subscriptions/listen``.
+tool, or with an ``OfferedTools`` port the tools the app offers that principal now. With a
+``MemberResources`` port it also serves ``resources/list`` and ``resources/read`` per verified
+principal, and with ``ResourceChanges`` beside it, ``subscriptions/listen``.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Callable, Collection, Mapping, Sequence
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -32,6 +33,7 @@ from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp_types import (
+    INTERNAL_ERROR,
     INVALID_PARAMS,
     PARSE_ERROR,
     UNSUPPORTED_PROTOCOL_VERSION,
@@ -97,11 +99,14 @@ from agents.turn import (
 )
 
 type ResolvePerson = Callable[[Scope], Principal]
+type OfferedTools = Callable[[Principal], Awaitable[Collection[str]]]
 
 _LOG: Final = logging.getLogger(LOGGER_NAME)
 _HANDLER_FAILED_TEXT: Final = "the tool failed"
 _RESULT_TOO_LARGE_TEXT: Final = "the tool result was too large"
 _UNKNOWN_TOOL_TEXT: Final = "Unknown tool"
+_NOT_OFFERED_TEXT: Final = "the tool is not offered now"
+_OFFER_FAILED_TEXT: Final = "the tool offer failed"
 _INVALID_ARGUMENTS_TEXT: Final = "Invalid tool arguments"
 _BEARER_SCHEME: Final = "bearer"
 _SERVER_NAME: Final = "overnightworks-agents"
@@ -145,6 +150,10 @@ def _listed(declaration: ToolDeclaration) -> Tool:
         input_schema=declaration.parameters,
         annotations=ToolAnnotations(read_only_hint=True) if read_only else None,
     )
+
+
+class _UnusableOfferError(Exception):
+    """The app's offer is no collection of declared tool names; the message names none."""
 
 
 class _WritableOutcome(StrictModel):
@@ -258,20 +267,27 @@ class McpPersonFront:
         resolve_person: ResolvePerson,
         resources: MemberResources | None = None,
         changes: ResourceChanges | None = None,
+        offered_tools: OfferedTools | None = None,
     ) -> None:
         if changes is not None and resources is None:
             raise ValueError("changes need the resources port they are read from")
+        if offered_tools is not None and changes is None:
+            raise ValueError("offered tools need the changes that announce them")
+        announces_tools = offered_tools is not None
         self._tools = {tool.declaration.name: tool for tool in tools}
         if len(self._tools) != len(tools):
             raise ValueError("a tool name is declared more than once")
-        self._listing = ListToolsResult(
-            tools=[_listed(tool.declaration) for tool in self._tools.values()]
-        )
+        self._tool_listings = {
+            name: _listed(tool.declaration) for name, tool in self._tools.items()
+        }
+        self._listing = ListToolsResult(tools=list(self._tool_listings.values()))
+        self._offered_tools = offered_tools
         self._resolve_person = resolve_person
         self._server: Server[Any] = Server(
             _SERVER_NAME,
             version=_SERVER_VERSION,
-            on_list_tools=self._list_tools,
+            get_tool_input_schema=self._input_schema,
+            on_list_tools=_raising_error_data(self._list_tools),
             on_call_tool=_raising_error_data(self._call_tool),
             on_list_resources=(
                 None
@@ -286,11 +302,15 @@ class McpPersonFront:
             on_subscriptions_listen=(
                 None
                 if changes is None or resources is None
-                else _raising_error_data(partial(_listen, resources, changes))
+                else _raising_error_data(partial(_listen, resources, changes, announces_tools))
             ),
         )
         if changes is not None:
-            self._server.add_request_handler(DISCOVER_METHOD, RequestParams, _discover_with_listen)
+            self._server.add_request_handler(
+                DISCOVER_METHOD,
+                RequestParams,
+                partial(_discover_with_listen, announces_tools=announces_tools),
+            )
         self._manager: StreamableHTTPSessionManager | None = None
 
     @asynccontextmanager
@@ -384,11 +404,25 @@ class McpPersonFront:
         await manager.handle_request(scope, _replayed(body, receive), capture)
         return _answer_of(sent), document
 
+    def _input_schema(self, name: str) -> Mapping[str, Any] | None:
+        """The SDK's header check reads the declared schema, so it never asks the offer."""
+        tool = self._tools.get(name)
+        return None if tool is None else tool.declaration.parameters
+
     async def _list_tools(
         self, _context: ServerRequestContext[Any], _params: PaginatedRequestParams | None
-    ) -> ListToolsResult:
+    ) -> ListToolsResult | ErrorData:
         await anyio.lowlevel.checkpoint()
-        return self._listing
+        if self._offered_tools is None:
+            return self._listing
+        offer = await _offer(self._offered_tools, self._tools, "tools/list")
+        if isinstance(offer, ErrorData):
+            return offer
+        return ListToolsResult(
+            tools=[tool for name, tool in self._tool_listings.items() if name in offer],
+            ttl_ms=0,
+            cache_scope="private",
+        )
 
     async def _call_tool(
         self, _context: ServerRequestContext[Any], params: CallToolRequestParams
@@ -396,6 +430,12 @@ class McpPersonFront:
         tool = self._tools.get(params.name)
         if tool is None:
             return ErrorData(code=INVALID_PARAMS, message=_UNKNOWN_TOOL_TEXT)
+        if self._offered_tools is not None:
+            offer = await _offer(self._offered_tools, self._tools, "tools/call")
+            if isinstance(offer, ErrorData):
+                return offer
+            if params.name not in offer:
+                return _written(ToolOutcome(_NOT_OFFERED_TEXT, is_error=True))
         try:
             arguments = _TOOL_ARGUMENTS.validate_python(params.arguments or {})
         except ValidationError:
@@ -417,6 +457,27 @@ class McpPersonFront:
             result = _written(outcome)
         _LOG.info("a tool was called: %s is_error=%s", name, outcome.is_error)
         return result
+
+
+async def _offer(
+    offered_tools: OfferedTools, declared: Collection[str], method: str
+) -> frozenset[str] | ErrorData:
+    """The declared tool names the app offers the request's principal now, read afresh.
+
+    Anything but a collection of declared names answers one fixed text; only the exception's
+    type is logged, since the app's message may carry what it must not echo.
+    """
+    try:
+        names = await offered_tools(_CURRENT_REQUEST.get().principal)
+        if isinstance(names, str | bytes):
+            raise _UnusableOfferError("the offer is a text, not a collection of names")
+        offer = frozenset(names)
+        if not offer.issubset(declared):
+            raise _UnusableOfferError("the offer names an undeclared tool")
+    except Exception as failure:
+        _LOG.error("the tool offer failed: %s raised %s", method, type(failure).__name__)
+        return ErrorData(code=INTERNAL_ERROR, message=_OFFER_FAILED_TEXT)
+    return offer
 
 
 def _raising_error_data[Context, Params, Result](
@@ -452,22 +513,26 @@ async def _read_resource(
 async def _listen(
     resources: MemberResources,
     changes: ResourceChanges,
+    announces_tools: bool,
     context: ServerRequestContext[Any],
     params: SubscriptionsListenRequestParams,
 ) -> SubscriptionsListenResult | ErrorData:
     principal = _CURRENT_REQUEST.get().principal
-    return await on_subscriptions_listen(resources, changes, principal, context, params)
+    return await on_subscriptions_listen(
+        resources, changes, principal, context, params, announces_tools=announces_tools
+    )
 
 
 async def _discover_with_listen(
-    _context: ServerRequestContext[Any], _params: RequestParams | None
+    _context: ServerRequestContext[Any], _params: RequestParams | None, *, announces_tools: bool
 ) -> DiscoverResult:
-    """The SDK says every ``listChanged`` is true once listen is served; this front sends none."""
+    """The SDK says every ``listChanged`` is true once listen is served; this front says so of the
+    tool list alone, and only when it announces its offer."""
     await anyio.lowlevel.checkpoint()
     return DiscoverResult(
         supported_versions=[PROTOCOL_VERSION],
         capabilities=ServerCapabilities(
-            tools=ToolsCapability(list_changed=False),
+            tools=ToolsCapability(list_changed=announces_tools),
             resources=ResourcesCapability(subscribe=True, list_changed=False),
         ),
     )
