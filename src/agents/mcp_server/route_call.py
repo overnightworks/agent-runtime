@@ -81,7 +81,7 @@ def _query_text(value: object) -> str | None:
 
 
 def _path_values(target: RouteTarget, arguments: JsonObject) -> dict[str, str] | None:
-    values = {}
+    values: dict[str, str] = {}
     for name in target.path:
         value = arguments.get(name)
         if not isinstance(value, str) or value in _UNSAFE_SEGMENTS or "/" in value:
@@ -91,7 +91,7 @@ def _path_values(target: RouteTarget, arguments: JsonObject) -> dict[str, str] |
 
 
 def _query_pairs(target: RouteTarget, arguments: JsonObject) -> list[tuple[str, str]] | None:
-    pairs = []
+    pairs: list[tuple[str, str]] = []
     for name in target.query:
         if arguments.get(name) is None:
             continue
@@ -148,7 +148,7 @@ class _Response:
     status: int | None = None
     complete: bool = False
     overflowed: bool = False
-    chunks: list[bytes] = field(default_factory=list)
+    chunks: list[bytes] = field(default_factory=list[bytes])
     size: int = 0
 
     def take(self, message: Message) -> None:

@@ -81,3 +81,4 @@ class TurnStopped(Exception):
 class AgentBackend(Protocol):
     def run(self, request: TurnRequest, person: TurnPerson) -> AsyncGenerator[TurnEvent, None]:
         """Stream the turn's events; raise ``TurnStopped`` when it ends short of its answer."""
+        ...

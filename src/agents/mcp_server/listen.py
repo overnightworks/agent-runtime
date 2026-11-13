@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable, Collection, Iterator, Sequence
+from collections.abc import Callable, Collection, Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Final
@@ -36,7 +36,7 @@ from mcp_types import (
 )
 
 from agents.mcp_server.asgi import LISTEN_METHOD, LOGGER_NAME
-from agents.mcp_server.resources import MemberResources, _failure
+from agents.mcp_server.resources import MemberResources, failure_answer
 from agents.member import (
     LISTEN_ALLOWANCE_SECONDS,
     LISTEN_BOUND_SECONDS,
@@ -115,7 +115,7 @@ class ResourceChanges:
         return any(uri in stream.honored for stream in self._streams.get(principal, ()))
 
     @contextmanager
-    def opened(self, recipient: Principal) -> Iterator[_ListenStream]:
+    def opened(self, recipient: Principal) -> Generator[_ListenStream, None, None]:
         """One stream for as long as it is open; one that honored a URI counts on for the
         allowance after it ends."""
         stream = _ListenStream()
@@ -189,7 +189,7 @@ class _Stream:
         await self._send(
             SubscriptionsAcknowledgedNotification(
                 params=SubscriptionsAcknowledgedNotificationParams(
-                    notifications=SubscriptionFilter(resource_subscriptions=honored or None),
+                    notifications=SubscriptionFilter(resource_subscriptions=list(honored) or None),
                     _meta=self._meta,
                 )
             )
@@ -227,7 +227,7 @@ async def _deliver(
         try:
             still_readable = uri in await resources.current(principal)
         except Exception as failure:
-            _failure(LISTEN_METHOD, failure)
+            failure_answer(LISTEN_METHOD, failure)
             return
         if still_readable:
             await stream.updated(uri)
@@ -249,7 +249,7 @@ async def on_subscriptions_listen(
         try:
             readable = frozenset(await resources.current(principal))
         except Exception as failure:
-            return _failure(LISTEN_METHOD, failure)
+            return failure_answer(LISTEN_METHOD, failure)
         honored = _honored(params.notifications.resource_subscriptions or (), readable)
         await stream.acknowledge(honored)
         changes.acknowledged(principal, open_stream, honored)

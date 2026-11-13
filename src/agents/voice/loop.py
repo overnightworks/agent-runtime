@@ -6,7 +6,6 @@ import asyncio
 import contextlib
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
-from typing import Final
 
 from agents.agent_file import AgentDefinition, TurnRequest
 from agents.backend import AgentBackend, TurnPerson, TurnStopped
@@ -27,8 +26,6 @@ from agents.voice import (
 from agents.voice.conversation import Conversation
 from agents.voice.echo import is_echo
 from agents.voice.reply import PROTOCOL_TEXT, SILENT_REPLY, ReplyReader
-
-_SENTENCES_END: Final = None
 
 
 async def run_voice_loop[Audio](
@@ -84,9 +81,11 @@ async def run_voice_loop[Audio](
 class _Answer:
     """What one decision played and how its reply read."""
 
-    played: list[str] = field(default_factory=list)
+    played: list[str] = field(default_factory=list[str])
     playing: str | None = None
-    openings: list[StayedSilent | ReplyUnreadable] = field(default_factory=list)
+    openings: list[StayedSilent | ReplyUnreadable] = field(
+        default_factory=list[StayedSilent | ReplyUnreadable]
+    )
     ended_short: bool = False
 
     def started(self) -> list[str]:
@@ -186,7 +185,7 @@ class _VoiceLoop[Audio]:
         except TurnStopped as stopped:
             answer.ended_short = True
             self._report(DecisionFailed(stopped.kind, stopped.code, stopped.detail))
-        sentences.put_nowait(_SENTENCES_END)
+        sentences.put_nowait(None)
 
     async def _play(self, sentences: asyncio.Queue[str | None], answer: _Answer) -> None:
         """Play the sentences in written order; the next one renders while one plays."""
@@ -210,7 +209,7 @@ class _VoiceLoop[Audio]:
         self, sentences: asyncio.Queue[str | None]
     ) -> tuple[str, Audio] | SentenceRefused | None:
         """The next sentence and its sound, the refusal of its render, or ``None`` at the end."""
-        if (sentence := await sentences.get()) is _SENTENCES_END:
+        if (sentence := await sentences.get()) is None:
             return None
         try:
             return sentence, await self._voice.render(sentence)

@@ -22,6 +22,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    JsonValue,
     PositiveInt,
     StrictInt,
     StrictStr,
@@ -104,7 +105,7 @@ class _FrontMatter(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _refuse_keys_without_a_value(cls, data: object) -> object:
+    def _refuse_keys_without_a_value(cls, data: JsonValue) -> JsonValue:
         if isinstance(data, dict):
             for key, value in data.items():
                 if value is None:
@@ -323,7 +324,8 @@ def _without_surrounding_blank_lines(lines: list[str]) -> str:
 
 def _parse_front_matter(file_name: str, text: str) -> _FrontMatter:
     try:
-        parsed = _YAML.load(io.StringIO(text))
+        # ruamel's ``load`` leaves its stream parameter untyped, so its type is partly unknown.
+        parsed = _YAML.load(io.StringIO(text))  # pyright: ignore[reportUnknownMemberType]
     except YAMLError as error:
         raise AgentFileError(f"{file_name}: {_yaml_problem(error)}") from None
     if not isinstance(parsed, dict):

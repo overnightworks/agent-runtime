@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Final
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from agents.turn import JsonObject, Principal
 
@@ -117,7 +117,7 @@ def not_an_agent_tool(*, reason: str) -> dict[str, object]:
     return {AGENT_TOOL_EXTENSION: {_EXCLUDED_KEY: reason}}
 
 
-def read_decision(extension: object) -> ToolMark | ToolExclusion | None:
+def read_decision(extension: JsonValue) -> ToolMark | ToolExclusion | None:
     """The decision an ``x-agent-tool`` value holds, or ``None`` when it is neither shape.
 
     Raises ``ValueError`` for an exclusion whose reason is not a non-blank string.

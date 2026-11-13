@@ -13,6 +13,8 @@ import json
 import math
 from typing import Any, Final
 
+from pydantic import JsonValue
+
 from agents.errors import raise_without_chain
 from agents.turn import refuse_non_json_constant
 
@@ -36,7 +38,7 @@ def _finite_number(literal: str) -> float:
     return number
 
 
-def read_strict_json(body: bytes) -> Any:
+def read_strict_json(body: bytes) -> JsonValue:
     """The one strict JSON reader: no repeated member, no ``NaN``, no number that overflows.
 
     The only exception that leaves is ``ValueError``; nesting past the recursion limit is

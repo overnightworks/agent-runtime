@@ -56,7 +56,7 @@ async def list_answer(
             cache_scope="private",
         )
     except Exception as failure:
-        return _failure("resources/list", failure)
+        return failure_answer("resources/list", failure)
 
 
 async def read_answer(
@@ -72,10 +72,10 @@ async def read_answer(
         )
         return ReadResourceResult(contents=[contents], ttl_ms=0, cache_scope="private")
     except Exception as failure:
-        return _failure("resources/read", failure)
+        return failure_answer("resources/read", failure)
 
 
-def _failure(method: str, failure: Exception) -> ErrorData:
+def failure_answer(method: str, failure: Exception) -> ErrorData:
     """The fixed answer of a failed port; only the exception's type is logged."""
     _LOG.error("a resource method failed: %s raised %s", method, type(failure).__name__)
     return ErrorData(code=INTERNAL_ERROR, message=_RESOURCE_FAILED_TEXT)
