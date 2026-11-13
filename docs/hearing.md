@@ -107,9 +107,22 @@ name pass through `heard` and are kept nowhere, and no call logs. Proved by
 `test_no_call_writes_a_log_record` and
 `test_the_record_keeps_neither_an_utterance_nor_its_line_once_the_caller_lets_go`.
 
+## An agent's spoken sentences
+
+**HEARING-14 (A).** An agent's sentence at a place starts when the duration of its previous
+sentence at that place has run out. The first sentence starts at once.
+
+**HEARING-15 (A).** The app's `speak` answers at the start of the sentence, not before.
+
+**HEARING-16 (A).** At its start the sentence enters every window at the place as a spoken chat
+line.
+
+**HEARING-17 (A).** The app's server keeps the queue of an agent's sentences. The library orders no
+sentences.
+
 ## What an app supplies
 
-**HEARING-14 (A).** The library owns no sound, no speech client, no token, no switch and no mark. An
+**HEARING-18 (A).** The library owns no sound, no speech client, no token, no switch and no mark. An
 app supplies:
 
 - its rule for who may hear whom, and every `allow` and end that follows from it;
@@ -117,12 +130,12 @@ app supplies:
 - the sound, the speech client, and the verified identity of the speaker;
 - the switch and the ear mark, from the shared design kit, with the mark showing `sensing`;
 - the window, its `seq`, its append and the signal (HEARING-11);
-- the order of an agent's own spoken sentences; and
+- the queue of an agent's own spoken sentences (HEARING-14 to HEARING-17); and
 - its privacy text, which states what is heard and its legal basis.
 
 ## Owners
 
-**HEARING-15 (A).** Every app the standard covers follows these rules, so that who may hear whom
+**HEARING-19 (A).** Every app the standard covers follows these rules, so that who may hear whom
 works the same in each. This file owns the rules; the shared design kit holds the switch and the
 mark. The standard covers every fleet app that lets an agent with an account of its own hear
 people at a place; an app that does adopts it with the release of this library's part. Seeing is
