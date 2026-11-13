@@ -160,8 +160,8 @@ with no line after it, and a runner treats a partial as provisional. A person's 
 before the agent's sentence starts creates no record.
 
 **HEARING-22 (A).** `stop_speaking(place)` cuts the agent's playing sentence in every seat and
-drops its whole queue there, and answers `StoppedSpeaking(cut)` with the text of the sentence cut.
-Each dropped queued `speak` answers `stopped`, so no call hangs. With nothing playing it answers
+drops its whole queue there, and answers `StoppedSpeaking(cut)` with the text of the cut sentence's
+line. Each dropped queued `speak` answers `stopped`, so no call hangs. With nothing playing it answers
 `nothing_playing`, and when the member left, was removed or is paused it answers `not_active`;
 either way nothing is cut or dropped. A stop is not a mute: the agent speaks again at its
 next `speak`. The cut sentence's line enters per HEARING-16 no later than `stop_speaking` answers,

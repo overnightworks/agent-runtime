@@ -6,8 +6,8 @@ place (``PlaceView``), the arguments of accepting and declining an invitation an
 stopping in a place, what accepting and declining answer when they refuse, what speaking and
 stopping answer (a sentence voiced, or written as a line when the voice failed), and what the
 window says when people talk over the member (``TalkedOver``) and whether the member's voice at the
-place has failed (``VoiceState``). The
-URIs name the resources that serve them; a URI is no credential, so a guessed one yields nothing.
+place has failed (``VoiceState``). The URIs name the resources that serve them; a URI is no
+credential, so a guessed one yields nothing.
 This module is base, so a runner parses all of it without the ``mcp-server`` extra.
 """
 
