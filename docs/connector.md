@@ -675,10 +675,10 @@ seat, and answers `StoppedSpeaking(cut)` as JSON, the text of the sentence cut. 
 removed or is paused) or `nothing_playing` (nothing was cut and nothing dropped)
 ([HEARING-23](hearing.md)).
 
-Proved by `tests/test_member.py`, among them
-`test_speak_arguments_with_a_malformed_language_are_refused`,
-`test_a_malformed_talked_over_record_is_refused` and
-`test_stopped_speaking_names_the_sentence_it_cut`.
+Proved by `tests/test_member.py` (among them
+`test_speak_arguments_with_a_malformed_language_are_refused`) and `tests/test_member_speaking.py`
+(among them `test_a_malformed_talked_over_record_is_refused` and
+`test_stopped_speaking_names_the_sentence_it_cut`).
 
 **What each app that hears and speaks owns**, besides what [hearing.md](hearing.md) gives it:
 
