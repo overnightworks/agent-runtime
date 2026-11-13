@@ -205,8 +205,10 @@ def test_a_speak_answer_reads_spoken_and_written_each_as_its_own_record(
     ids=["both", "neither"],
 )
 def test_a_speak_answer_that_is_both_or_neither_is_refused(wire: dict[str, Any]) -> None:
+    text = json.dumps(wire)
+
     with pytest.raises(ValidationError):
-        TypeAdapter(SpeakAnswer).validate_json(json.dumps(wire))
+        TypeAdapter(SpeakAnswer).validate_json(text)
 
 
 @pytest.mark.parametrize("state", [VoiceState.AVAILABLE, VoiceState.UNAVAILABLE])
@@ -227,8 +229,10 @@ def test_a_window_without_a_voice_state_dumps_without_the_key() -> None:
 
 @pytest.mark.parametrize("state", ["down", True, ""], ids=["unknown-word", "bool", "empty"])
 def test_a_window_with_a_malformed_voice_state_is_refused(state: object) -> None:
+    wire = talked_window_wire(voice_state=state)
+
     with pytest.raises(ValidationError):
-        window_from(talked_window_wire(voice_state=state))
+        window_from(wire)
 
 
 def test_a_cut_spoken_line_reads_back_from_its_json_with_its_mark() -> None:
@@ -248,11 +252,15 @@ def test_a_line_that_is_not_cut_dumps_without_the_mark_and_reads_it_as_absent() 
 
 
 def test_a_cut_mark_on_a_written_line_is_refused() -> None:
+    wire = talked_window_wire(entries=[entry(1, spoken=False, cut=True)])
+
     with pytest.raises(ValidationError):
-        window_from(talked_window_wire(entries=[entry(1, spoken=False, cut=True)]))
+        window_from(wire)
 
 
 @pytest.mark.parametrize("cut", ["yes", 1], ids=["text", "number"])
 def test_an_entry_with_a_malformed_cut_mark_is_refused(cut: object) -> None:
+    wire = talked_window_wire(entries=[entry(1, spoken=True, cut=cut)])
+
     with pytest.raises(ValidationError):
-        window_from(talked_window_wire(entries=[entry(1, spoken=True, cut=cut)]))
+        window_from(wire)
