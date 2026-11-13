@@ -744,8 +744,10 @@ def test_a_standing_without_a_parent_place_dumps_without_the_key() -> None:
     ],
 )
 def test_a_standing_whose_parent_place_is_malformed_is_refused(parent: dict[str, Any]) -> None:
+    wire_text = standing_json("active", parent=parent)
+
     with pytest.raises(ValidationError):
-        Standing.model_validate_json(standing_json("active", parent=parent))
+        Standing.model_validate_json(wire_text)
 
 
 def test_a_parent_app_equals_the_same_address_written_in_another_normal_form() -> None:
