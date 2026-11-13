@@ -14,15 +14,16 @@ import json
 import logging
 import re
 import ssl
-from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Iterable
+from collections.abc import AsyncGenerator, Awaitable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
+from http import HTTPStatus
 from pathlib import Path
 from types import TracebackType
 from typing import Final, NotRequired, Required, TypedDict
 
 import httpx2
-from pydantic import TypeAdapter, ValidationError
+from pydantic import JsonValue, TypeAdapter, ValidationError
 
 from agents.agent_file import AgentDefinition, TurnRequest
 from agents.backend import (
@@ -62,6 +63,7 @@ from agents.turn import (
     RunFile,
     TurnUsage,
     base64_length,
+    loaded_json,
     model_kind_of,
     person_fingerprint,
 )
@@ -180,12 +182,10 @@ class GatewayBackend(AgentBackend):
                 body = _bounded(_body(request, messages, user))
                 opened = self._post(_COMPLETIONS_PATH, body, key)
                 async with contextlib.aclosing(_streamed_round(opened, offered, deadline)) as parts:
-                    async for part in parts:
-                        if isinstance(part, str):
-                            yield AssistantTextEvent(text=part)
-                            _refuse_after(deadline)
-                            continue
-                        reply = part
+                    while isinstance(part := await anext(parts), str):
+                        yield AssistantTextEvent(text=part)
+                        _refuse_after(deadline)
+                    reply = part
                 usages.append(reply.usage)
                 if reply.message is None:
                     yield FinalEvent(text=reply.text, usage=_summed(usages))
@@ -296,7 +296,7 @@ async def _opened(
     key: str,
     *,
     content: str | None = None,
-) -> AsyncIterator[httpx2.Response]:
+) -> AsyncGenerator[httpx2.Response, None]:
     """The gateway's 200 response, open while it is read; a connection lost meanwhile is raised."""
     headers = {"Authorization": f"Bearer {key}"}
     if content is not None:
@@ -392,7 +392,7 @@ class _Progress:
     max_tool_calls: int
     calls: int = 0
     wrote: bool = False
-    call_ids: set[str] = field(default_factory=set)
+    call_ids: set[str] = field(default_factory=set[str])
 
     def admit(self, calls: tuple[_Call, ...]) -> None:
         ids = {call.id for call in calls}
@@ -406,8 +406,9 @@ class _Progress:
 
 async def _before[Result](deadline: float, step: Awaitable[Result]) -> Result:
     """Await a step of the turn; the turn's one deadline cancels it."""
+    scope = asyncio.timeout_at(deadline)
     try:
-        async with asyncio.timeout_at(deadline) as scope:
+        async with scope:
             return await step
     except TimeoutError:
         if not scope.expired():
@@ -465,7 +466,8 @@ def _failed_event(call: _Call, text: str) -> ToolResultEvent:
 def _opening_messages(request: TurnRequest) -> list[_Message]:
     messages: list[_Message] = [{"role": "system", "content": request.turn.system}]
     messages += [
-        {"role": message.role.value, "content": message.text} for message in request.turn.messages
+        _Message(role=message.role.value, content=message.text)
+        for message in request.turn.messages
     ]
     return messages
 
@@ -555,8 +557,8 @@ def _plain(stopped: TurnStopped) -> TurnStopped:
 
 def _beyond_this_module(trace: TracebackType | None) -> TracebackType | None:
     """The traceback without this module's frames: they hold the key and the reply."""
-    kept = None
-    outside = []
+    kept: TracebackType | None = None
+    outside: list[TracebackType] = []
     while trace is not None:
         if trace.tb_frame.f_globals is not globals():
             outside.append(trace)
@@ -573,29 +575,30 @@ def _unavailable(detail: GatewayDetail) -> TurnStopped:
 async def _raise_unless_ok(response: httpx2.Response) -> None:
     """A 200 passes; any other status ends the turn or the list as the status table says."""
     status = response.status_code
-    if status == httpx2.codes.OK:
+    if status == HTTPStatus.OK:
         return
-    if status == httpx2.codes.TOO_MANY_REQUESTS:
+    if status == HTTPStatus.TOO_MANY_REQUESTS:
         wait = _wait_seconds(response.headers.get("Retry-After"))
         raise _GatewayStop(TurnStopKind.REFUSED, RejectionCode.BUSY, retry_after_s=wait)
     error = await _error_of(response)
     _LOGGER.warning("the gateway answered with status %d, %s", status, error_kind_of(error))
-    if status == httpx2.codes.UNPROCESSABLE_CONTENT and _is_spent_budget(error):
+    if status == HTTPStatus.UNPROCESSABLE_CONTENT and _is_spent_budget(error):
         raise _GatewayStop(TurnStopKind.REFUSED, RejectionCode.BUDGET_SPENT)
-    is_refusal = httpx2.codes.BAD_REQUEST <= status < httpx2.codes.INTERNAL_SERVER_ERROR
+    is_refusal = HTTPStatus.BAD_REQUEST <= status < HTTPStatus.INTERNAL_SERVER_ERROR
     detail = GatewayDetail.GATEWAY_REFUSED if is_refusal else GatewayDetail.GATEWAY_FAILED
     raise _unavailable(detail)
 
 
-def _is_spent_budget(error: object) -> bool:
+def _is_spent_budget(error: JsonValue) -> bool:
     checked = checked_error_of(error)
     return checked is not None and checked.error_type == _BUDGET_EXCEEDED
 
 
-async def _error_of(response: httpx2.Response) -> object:
+async def _error_of(response: httpx2.Response) -> JsonValue:
     """The reply's ``error`` member, or none when the body is unreadable."""
     try:
-        return json.loads(await _read_body(response, MAX_EVENT_BYTES))["error"]
+        document = loaded_json(await _read_body(response, MAX_EVENT_BYTES))
+        return document["error"] if isinstance(document, dict) else None
     except (TurnStopped, *_UNREADABLE_REPLY):
         return None
 
@@ -616,24 +619,23 @@ async def _streamed_round(
     opened: contextlib.AbstractAsyncContextManager[httpx2.Response],
     offered: frozenset[str],
     deadline: float,
-) -> AsyncIterator[str | _Round]:
+) -> AsyncGenerator[str | _Round, None]:
     """Each text piece of a round as it streams, then the round, judged whole.
 
     Opening the request and each read run under the deadline, and no timeout spans a yield. A
     failure is raised after its handler ends.
     """
     failure: TurnStopped | None = None
+    completed: list[StreamedRound] = []
     async with contextlib.AsyncExitStack() as stack:
         response = await _before(deadline, stack.enter_async_context(opened))
         chunks = await stack.enter_async_context(contextlib.aclosing(_chunks(response, deadline)))
         reading = read_round(chunks, round_limit_bytes=_MAX_REQUEST_BYTES)
         try:
             async with contextlib.aclosing(reading) as parts:
-                async for part in parts:
-                    if isinstance(part, StreamedRound):
-                        streamed = part
-                    else:
-                        yield part
+                while not isinstance(part := await anext(parts), StreamedRound):
+                    yield part
+                completed.append(part)
         except httpx2.DecodingError, MalformedRound:
             failure = _malformed_reply()
         except RoundErrorEvent as event:
@@ -641,10 +643,10 @@ async def _streamed_round(
             failure = _unavailable(GatewayDetail.GATEWAY_FAILED)
         if failure is not None:
             raise failure
-    yield _judged(streamed, offered)
+    yield _judged(completed[0], offered)
 
 
-async def _chunks(response: httpx2.Response, deadline: float) -> AsyncIterator[bytes]:
+async def _chunks(response: httpx2.Response, deadline: float) -> AsyncGenerator[bytes, None]:
     """The response's byte chunks, each read under the turn's deadline."""
     async with contextlib.aclosing(response.aiter_bytes()) as chunks:
         while (chunk := await _before(deadline, anext(chunks, None))) is not None:
@@ -666,13 +668,15 @@ async def _models_of(response: httpx2.Response) -> GatewayModels:
     """The ``data`` ids that are gateway model names, by kind; any other id is not offered."""
     body = await _read_body(response, MAX_EVENT_BYTES)
     try:
-        entries = json.loads(body)["data"]
+        document = loaded_json(body)
+        entries = document["data"] if isinstance(document, dict) else None
         if not isinstance(entries, list):
             raise _malformed_reply()
-        ids = [entry["id"] for entry in entries]
+        members = [entry["id"] if isinstance(entry, dict) else None for entry in entries]
     except _UNREADABLE_REPLY:
         raise _malformed_reply() from None
-    if not all(isinstance(model_id, str) for model_id in ids):
+    ids = [member for member in members if isinstance(member, str)]
+    if len(ids) != len(members):
         raise _malformed_reply()
     names = [model_id for model_id in ids if _is_model_name(model_id)]
     return GatewayModels(
@@ -693,11 +697,15 @@ async def _picture_of(response: httpx2.Response) -> RunFile:
     """Exactly one entry: a canonical, non-empty ``b64_json`` picture within its bound; no URL."""
     body = await _read_body(response, _MAX_PICTURE_BODY_BYTES)
     try:
-        entries = json.loads(body)["data"]
-        if not isinstance(entries, list) or len(entries) != 1 or entries[0].get("url") is not None:
+        document = loaded_json(body)
+        entries = document["data"] if isinstance(document, dict) else None
+        if not isinstance(entries, list) or len(entries) != 1:
+            raise _malformed_reply()
+        entry = entries[0]
+        if not isinstance(entry, dict) or entry.get("url") is not None:
             raise _malformed_reply()
         file = RunFile.model_validate(
-            {"name": _PICTURE_FILE_NAME, "content": entries[0]["b64_json"]}, strict=True
+            {"name": _PICTURE_FILE_NAME, "content": entry["b64_json"]}, strict=True
         )
     except _UNREADABLE_REPLY:
         raise _malformed_reply() from None
@@ -706,8 +714,8 @@ async def _picture_of(response: httpx2.Response) -> RunFile:
     return file
 
 
-def _answer_of(text: str, usage: TurnUsage | None) -> _Round:
-    if not text.strip():
+def _answer_of(text: str | None, usage: TurnUsage | None) -> _Round:
+    if text is None or not text.strip():
         raise _malformed_reply()
     return _Round(text=text, calls=(), message=None, usage=usage)
 

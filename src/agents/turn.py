@@ -152,6 +152,12 @@ JsonObject = Annotated[dict[str, JsonValue], AfterValidator(_refuse_non_json_obj
 """The one decider of a JSON object on the wire: one that survives a round trip unchanged."""
 
 
+def loaded_json(text: str | bytes) -> JsonValue:
+    """``json.loads`` of a wire document, typed so a reader narrows it with ``isinstance``."""
+    document: JsonValue = json.loads(text)
+    return document
+
+
 def _refuse_non_unicode_text(text: str) -> str:
     _refuse_lone_surrogates(text)
     return text
@@ -190,7 +196,7 @@ def _refuse_non_agent_roles(roles: list[AgentRole]) -> list[AgentRole]:
     return roles
 
 
-def _require_list(roles: object) -> object:
+def _require_list(roles: JsonValue) -> JsonValue:
     if not isinstance(roles, list):
         raise ValueError("must be a list")
     return roles
