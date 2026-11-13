@@ -245,7 +245,27 @@ def test_two_lines_heard_while_deciding_of_which_one_wakes_get_exactly_one_more_
     ]
 
 
-def test_lines_heard_while_deciding_that_do_not_wake_start_nothing_and_lead_the_next(place):
+@pytest.mark.parametrize(
+    ("heard", "led_by"),
+    [
+        pytest.param(
+            [a_line(2, "Ach so.", name="Ben"), a_line(3, "Na gut.", name="Ben")],
+            ["Ach so.", "Na gut."],
+            id="lines the rule does not wake",
+        ),
+        pytest.param(
+            [
+                a_line(2, "Ach so.", name="Ben"),
+                a_line(3, "Ben legt ab.", name="Ben", kind="move", spoken=False, act=True),
+            ],
+            ["Ach so.", "Ben legt ab."],
+            id="an act line the rule would wake",
+        ),
+    ],
+)
+def test_lines_heard_while_deciding_that_do_not_wake_start_nothing_and_lead_the_next(
+    place, heard, led_by
+):
     trace = place.trace
     gateway = PacedGateway(
         trace,
@@ -256,20 +276,18 @@ def test_lines_heard_while_deciding_that_do_not_wake_start_nothing_and_lead_the_
     async def hearing(trace):
         yield a_line(1, "Frage eins?")
         await trace.until(lambda: Woke() in trace.events)
-        yield a_line(2, "Ach so.", name="Ben")
-        yield a_line(3, "Na gut.", name="Ben")
+        for line in heard:
+            yield line
         await trace.settled()
         assert len(gateway.requests) == 1
         yield a_line(4, "Frage zwei?")
         await trace.settled()
 
-    assert place.run(hearing, gateway, waking={"Frage eins?", "Frage zwei?"}) == RETURNED
+    waking = {"Frage eins?", "Frage zwei?", "Ben legt ab."}
+    assert place.run(hearing, gateway, waking=waking) == RETURNED
 
     assert len(gateway.requests) == 2
-    assert conversation_of(gateway.requests[1])[-1] == (
-        "user",
-        ["Ach so.", "Na gut.", "Frage zwei?"],
-    )
+    assert conversation_of(gateway.requests[1])[-1] == ("user", [*led_by, "Frage zwei?"])
 
 
 def test_a_waking_line_heard_while_an_answer_plays_is_decided_after_it_plays_uncut(place):

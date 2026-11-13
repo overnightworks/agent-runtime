@@ -248,6 +248,21 @@ def test_a_failing_port_answers_the_fixed_text_and_no_marker_reaches_any_log(
     )
 
 
+def test_a_view_listed_without_its_window_fails_the_listing_and_names_no_uri(
+    front: McpPersonFront, app: MemberApp, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO, logger=LOGGER)
+    alice = a_member("alice")
+    del app.readable[alice][window_uri("p1")]
+
+    reply = answered(front, alice, "resources/list")
+
+    logged = " ".join(record.getMessage() for record in caplog.records)
+    assert (reply["error"]["code"], reply["error"]["message"]) == (-32603, _FAILED)
+    assert "ViewWithoutWindowError" in logged
+    assert view_uri("p1") not in logged
+
+
 @pytest.mark.parametrize(
     ("method", "params"),
     [("resources/list", {}), ("resources/read", {"uri": STANDING_URI})],

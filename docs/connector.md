@@ -493,7 +493,7 @@ the tool and the exception's class
 `agents.member` owns what an app and an agent say to each other about a member:
 `PlaceRef`, `StandingState`, `Invitation`, `Standing` and its `ParentPlace(app, place)`, `MemberStanding(standings)` (what
 `STANDING_URI`, `member://standing`, answers with), `PlaceWindow(generation, starts_at, entries, talked_over, voice_state)`
-of `PlaceEntry(seq, kind, name, text, own, spoken, cut)`, `LEASE_SECONDS` (120),
+of `PlaceEntry(seq, kind, name, text, own, spoken, cut, act)`, `LEASE_SECONDS` (120),
 `INVITATION_SECONDS` (120), `LISTEN_BOUND_SECONDS` (50),
 `LISTEN_ALLOWANCE_SECONDS` (5), `AcceptInvitationArguments(place, invitation, epoch, figure, voice)` for the tool
 `ACCEPT_INVITATION_TOOL`, `DeclineInvitationArguments(place, invitation, epoch, reason)` for
@@ -501,28 +501,53 @@ of `PlaceEntry(seq, kind, name, text, own, spoken, cut)`, `LEASE_SECONDS` (120),
 and of being talked over ([hearing and speaking](#hearing-and-speaking)). `spoken` is true for a line said aloud and
 heard, false for a written one; every dumped entry carries it, and an entry without it reads as
 written. `cut` is true only on a spoken line whose sentence was cut before its end, and a line that
-is not cut dumps without the key. A window's `seq` ascends strictly and may skip; a non-empty window starts at its first
-`seq`; an empty window is valid and its `starts_at` is the `seq` the next line gets. A place's
-window is the resource `place_window_uri(place)`, `member://standing/places/{kind}/{id}` with each
-segment percent-encoded, so `/` in an opaque `kind` or `id` stays inside its segment;
+is not cut dumps without the key. `act` is true only on a written line that says what someone did
+rather than what someone said, and a line that is no act dumps without the key; a spoken line is
+refused with `act`, so a cut line is too. A runner that predates the field refuses a window
+carrying `act`, as it refuses a standing carrying `parent`. An act line is told and never calls the
+member to act. At a place with a view, `awaits_you` calls the member to act. Whether a line that is
+no act wakes the member stays the runner's wake rule. A window's `seq` ascends strictly and may
+skip; a non-empty window starts at its first `seq`; an empty window is valid and its `starts_at`
+is the `seq` the next line gets. A place's window is the resource `place_window_uri(place)`,
+`member://standing/places/{kind}/{id}` with each segment percent-encoded, so `/` in an opaque
+`kind` or `id` stays inside its segment;
 `place_ref_from_window_uri(uri)` returns the `PlaceRef` for that canonical spelling only and
 `None` for anything else. A URI is no credential.
 
-**A place's view.** A place whose state is no conversation serves the member a
-`PlaceView(revision, awaits_you, state)` instead of a window: `state` is the app's JSON object,
-carried untouched and never read by the library (a value that is no JSON value is refused);
-`revision`, an integer from 0, changes whenever the place moves on for this member, that is
-whenever what the member may do or must act on changes, while parts of `state` that say only who
-is present may change without it; `awaits_you` says the place waits for this member to act, and
-the app decides it from the state at that revision, so one revision has one `awaits_you`. The
-view is the resource `place_view_uri(place)`, the place's window URI with the segment `view`
-after it; `place_ref_from_view_uri(uri)` returns the `PlaceRef` for that canonical spelling only
-and `None` for anything else. A `Standing` carries `serves_view`, false unless set and then left
-out of its JSON, so a standing that does not set it dumps without the key. The listing rule: an
-app that sets `serves_view` on a standing lists that place's view URI among the member's current
-resources; otherwise no pulse for the view is delivered. A place that serves both a window and a
-view is not specified. Proved by `tests/test_member.py`, `tests/test_mcp_server_resources.py` and
-`tests/test_mcp_server_listen_view.py`.
+**A place's view.** Every place serves the member a window. A place whose state is no
+conversation also serves a `PlaceView(revision, awaits_you, state)` beside it: the window carries
+what happened there, in lines, and the view the place's newest state. `state` is the app's JSON
+object, carried untouched and never read by the library (a value that is no JSON value is
+refused); `revision`, an integer from 0, changes whenever the place moves on for this member, that
+is whenever what the member may do or must act on changes, while parts of `state` that say only who
+is present may change without it; `awaits_you` says the place waits for this member to act, and the
+app decides it from the state at that revision, so one revision has one `awaits_you`. The view is
+the resource `place_view_uri(place)`, the place's window URI with the segment `view` after it;
+`place_ref_from_view_uri(uri)` returns the `PlaceRef` for that canonical spelling only and `None`
+for anything else. A `Standing` carries `serves_view`, false unless set and then left out of its
+JSON, so a standing that does not set it dumps without the key. The listing rule: an app that sets
+`serves_view` on a standing lists that place's view URI beside its window URI among the member's
+current resources; otherwise no pulse for the view is delivered. A view listed without its
+place's window is a host defect: the front answers that listing as it answers a port that raised,
+at `resources/list` and at a listen's acknowledgement alike, and ends an open stream at the pulse
+that finds it, logging only the type of its private exception.
+
+**What happened.** An app with a view says in its window what happened at the place: each act
+that moves the place on, by a person, by the member or by the app itself, becomes a line. A line
+that says what someone did rather than what someone said is written (`spoken` false) and carries
+`act`: its `name` is the one who acted, or the place when nobody did, its `text` the act in the
+app's words, its `kind` the app's word for that sort of act, and `own` marks the member's own act.
+A line shows the member no more than its view may show it. A change's lines are readable no later
+than the revision they lead to; a change that adds lines and moves the revision signals both URIs,
+a change of the revision alone signals the view, and a line alone the window. A runner reads the
+view, then the window, so the window may already hold lines past the view's revision. It tells each
+line with its `kind` and `act`, and the per-line sentence of [the member module](#the-member-module)
+holds. No app writes act lines at a place until its runner has the field. Proved by
+`test_an_act_line_survives_the_wire_with_its_marker`,
+`test_a_line_that_is_no_act_dumps_without_the_key` and
+`test_a_spoken_line_is_refused_with_act` in `tests/test_member_act.py`, and by
+`tests/test_mcp_server_resources.py`, `tests/test_mcp_server_listen_view.py` and
+`tests/test_voice_loop.py`.
 
 An accept may name the agent's 3D figure, `figure` as `FigureRef(url, sha256)`, and the `voice` it
 speaks with; both are optional, and an accept without them dumps without their keys. The record
@@ -577,8 +602,9 @@ How a person calls an agent to a place and sends it away is the same in every ap
 ## The standard path
 
 An agent learns what changes through the standard's resources and subscriptions, never by
-polling a tool: the app serves `member://standing` and one window or view per place, and tells the
-agent when one changed. This section is what a host wires and what a runner may rely on.
+polling a tool: the app serves `member://standing`, one window per place and, beside it, the view
+of a place that has one, and tells the agent when one changed. This section is what a host wires
+and what a runner may rely on.
 
 **The host** passes `resources=` and `changes=` to `McpPersonFront` and enters
 `async with front.running():` in its lifespan (see above). `resources` is one port,
@@ -592,7 +618,8 @@ change is visible to a read, on the front's event loop or through `anyio.from_th
 call for a principal with no open stream does nothing. `server/discover` advertises `resources`
 with the port and `resources.subscribe` true with `changes`, and no `listChanged`.
 
-**The answers.** `resources/list` answers exactly `current`, sorted, each entry with the URI as its
+**The answers.** `resources/list` answers exactly `current`, sorted (a view only beside its
+window, see [a place's view](#the-member-module)), each entry with the URI as its
 `name` and `application/json`. `resources/read` answers one text content with the requested URI,
 `application/json` and the record's JSON. A `None` answers `-32602` with one fixed text that does
 not echo the URI, so an unknown, a foreign and a non-canonical URI look alike. A port that raises
@@ -872,9 +899,9 @@ await run_voice_loop(
   renders the next, never more than one ahead, so `render` may run while `play` does, and a
   render taking no longer than the sentence playing before it adds no pause between the two.
 - `wakes` is the app's `WakeRule(line, *, first_after_answer)`, asked for every line that is
-  neither the agent's own nor an echo. `first_after_answer` is true for the first such line heard
-  after a decision that played at least one sentence ended, while no decision is in flight, and
-  false for every other line, one heard while an answer plays included.
+  neither the agent's own, nor an echo, nor an act. `first_after_answer` is true for the first such
+  line heard after a decision that played at least one sentence ended, while no decision is in
+  flight, and false for every other line, one heard while an answer plays included.
 - `report` receives each `VoiceEvent`: `Woke`, `StayedSilent`, `ReplyUnreadable`,
   `SentenceStarted(text)`, `SentenceRefused(text)`, `DecisionFailed(kind, code, detail)`, whose
   `outcome` is the stop's `StopOutcome`, and `EchoDropped(text)`.
@@ -940,9 +967,12 @@ Proved by `tests/test_voice_echo.py`:
 `tests/test_voice_render_ahead.py`.
 
 **The conversation.** Every line enters one running conversation, but an echo and the agent's
-own spoken line: the loop records what it played itself. Within the window below, a decision
+own spoken line: the loop records what it played itself. An act line enters, is never asked of
+`wakes` and leaves `first_after_answer` to the next line, so a person's short reply after an
+answer and an act is still the first line after it. Within the window below, a decision
 sends the pairs decided so far and one user message with every line since the last decision, one
-JSON object per line with `name`, `kind`, `own`, `spoken` and `text`, and `missed_before`, the
+JSON object per line with `name`, `kind`, `own`, `spoken` and `text`, `act` only on an act line,
+and `missed_before`, the
 number of `seq` values skipped, after a gap. The assistant message is what played, or
 `[silent]`. The conversation lives in memory while the loop runs and is stored nowhere. Proved by
 `test_a_line_that_does_not_wake_sends_nothing_and_leads_the_next_decisions_message`,

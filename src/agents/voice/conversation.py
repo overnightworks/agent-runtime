@@ -117,6 +117,8 @@ def _written(line: PlaceEntry, missed: int) -> str:
         "spoken": line.spoken,
         "text": line.text,
     }
+    if line.act:
+        fields["act"] = True
     if missed:
         fields["missed_before"] = missed
     return json.dumps(fields, ensure_ascii=False)
