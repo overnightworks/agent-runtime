@@ -692,8 +692,8 @@ calls `changes.tools_changed(recipient)`, after the new offer is visible to the 
 same terms as `changed`. Every open stream of that principal that honored `toolsListChanged` then
 receives one `notifications/tools/list_changed`, repeated changes before the notice is handed to
 the stream arriving once; a change after that handoff may send one more notice, which a runner
-answers by listing again. A front with `offered_tools` honors `toolsListChanged` when asked, and no front honors
-`promptsListChanged` or `resourcesListChanged`. A runner that relies on the notice lists tools
+answers by listing again. A front with `offered_tools` honors `toolsListChanged` when asked, and no
+front honors `promptsListChanged` or `resourcesListChanged`. A runner that relies on the notice lists tools
 only after such a stream's acknowledgement, as it reads resources, so a change between streams is
 never lost; a runner that lists at every turn start needs no notice. The offer is not a right: the
 marks and the host's gate stay the boundary, and a route refuses an act its moment does not
