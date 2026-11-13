@@ -36,7 +36,7 @@ from mcp_types import (
 )
 
 from agents.mcp_server.asgi import LISTEN_METHOD, LOGGER_NAME
-from agents.mcp_server.resources import MemberResources, failure_answer
+from agents.mcp_server.resources import MemberResources, failure_answer, served_uris
 from agents.member import (
     LISTEN_ALLOWANCE_SECONDS,
     LISTEN_BOUND_SECONDS,
@@ -225,7 +225,7 @@ async def _deliver(
         if not _wanted(uri, open_stream.honored):
             continue
         try:
-            still_readable = uri in await resources.current(principal)
+            still_readable = uri in await served_uris(resources, principal)
         except Exception as failure:
             failure_answer(LISTEN_METHOD, failure)
             return
@@ -247,7 +247,7 @@ async def on_subscriptions_listen(
     stream = _Stream(context)
     with changes.opened(principal) as open_stream, anyio.move_on_after(LISTEN_BOUND_SECONDS):
         try:
-            readable = frozenset(await resources.current(principal))
+            readable = await served_uris(resources, principal)
         except Exception as failure:
             return failure_answer(LISTEN_METHOD, failure)
         honored = _honored(params.notifications.resource_subscriptions or (), readable)

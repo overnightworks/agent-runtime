@@ -150,8 +150,8 @@ class Standing(StrictModel):
     state: Annotated[StandingState, Field(strict=False)]
     invitation: Invitation | None = None
     serves_view: bool = Field(default=False, exclude_if=_is_false)
-    """Whether the app serves this place's ``PlaceView``; its URI is then listed among the
-    member's current resources."""
+    """Whether the app serves this place's ``PlaceView`` beside its window; both URIs are then
+    listed among the member's current resources."""
     parent: ParentPlace | None = Field(default=None, exclude_if=_is_none)
     """The place this place lies inside, if another app's place holds it; the app sets it from
     the invitation on and keeps it while the member holds the place."""
@@ -405,7 +405,8 @@ class PlaceEntry(StrictModel):
     ``spoken`` a line said aloud and heard, one finished utterance, rather than written. A line
     enters once its sentence has ended and is never changed; ``cut`` marks a spoken sentence cut
     before its end, whose ``text`` is the part heard up to the cut, or the whole sentence when the
-    app cannot tell how far it played."""
+    app cannot tell how far it played. ``act`` marks a written line that says what someone did
+    rather than said: it is told and never calls the member to act."""
 
     seq: int = Field(ge=1)
     kind: NonEmptyUnicodeText
@@ -414,11 +415,18 @@ class PlaceEntry(StrictModel):
     own: bool
     spoken: bool = False
     cut: bool = Field(default=False, exclude_if=_is_false)
+    act: bool = Field(default=False, exclude_if=_is_false)
 
     @model_validator(mode="after")
     def _only_a_spoken_line_is_cut(self) -> Self:
         if self.cut and not self.spoken:
             raise ValueError("only a spoken line is cut")
+        return self
+
+    @model_validator(mode="after")
+    def _a_spoken_line_is_no_act(self) -> Self:
+        if self.act and self.spoken:
+            raise ValueError("a spoken line is no act")
         return self
 
 

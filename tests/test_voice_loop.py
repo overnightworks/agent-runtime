@@ -245,7 +245,27 @@ def test_two_lines_heard_while_deciding_of_which_one_wakes_get_exactly_one_more_
     ]
 
 
-def test_lines_heard_while_deciding_that_do_not_wake_start_nothing_and_lead_the_next(place):
+@pytest.mark.parametrize(
+    ("heard", "led_by"),
+    [
+        pytest.param(
+            [a_line(2, "Ach so.", name="Ben"), a_line(3, "Na gut.", name="Ben")],
+            ["Ach so.", "Na gut."],
+            id="lines the rule does not wake",
+        ),
+        pytest.param(
+            [
+                a_line(2, "Ach so.", name="Ben"),
+                a_line(3, "Ben legt ab.", name="Ben", kind="move", spoken=False, act=True),
+            ],
+            ["Ach so.", "Ben legt ab."],
+            id="an act line the rule would wake",
+        ),
+    ],
+)
+def test_lines_heard_while_deciding_that_do_not_wake_start_nothing_and_lead_the_next(
+    place, heard, led_by
+):
     trace = place.trace
     gateway = PacedGateway(
         trace,
@@ -256,20 +276,18 @@ def test_lines_heard_while_deciding_that_do_not_wake_start_nothing_and_lead_the_
     async def hearing(trace):
         yield a_line(1, "Frage eins?")
         await trace.until(lambda: Woke() in trace.events)
-        yield a_line(2, "Ach so.", name="Ben")
-        yield a_line(3, "Na gut.", name="Ben")
+        for line in heard:
+            yield line
         await trace.settled()
         assert len(gateway.requests) == 1
         yield a_line(4, "Frage zwei?")
         await trace.settled()
 
-    assert place.run(hearing, gateway, waking={"Frage eins?", "Frage zwei?"}) == RETURNED
+    waking = {"Frage eins?", "Frage zwei?", "Ben legt ab."}
+    assert place.run(hearing, gateway, waking=waking) == RETURNED
 
     assert len(gateway.requests) == 2
-    assert conversation_of(gateway.requests[1])[-1] == (
-        "user",
-        ["Ach so.", "Na gut.", "Frage zwei?"],
-    )
+    assert conversation_of(gateway.requests[1])[-1] == ("user", [*led_by, "Frage zwei?"])
 
 
 def test_a_waking_line_heard_while_an_answer_plays_is_decided_after_it_plays_uncut(place):
@@ -341,6 +359,45 @@ def test_the_first_line_after_an_answer_that_played_is_the_one_marked_first_afte
         ("Danke.", True),
         ("Weiter im Text.", False),
     ]
+
+
+def test_an_act_line_never_wakes_even_when_it_names_the_agent_and_reaches_the_model_marked(place):
+    gateway = FakeGateway(completion("Gern."))
+
+    async def hearing(trace):
+        yield a_line(1, "listener legt ab.", name="Ben", kind="move", spoken=False, act=True)
+        await trace.settled()
+        assert gateway.requests == []
+        yield a_line(2, "Danke.")
+        await trace.settled()
+
+    assert place.run(hearing, gateway) == RETURNED
+
+    assert place.trace.asked == [("Danke.", False)]
+    [message] = messages_of(gateway.requests[0])[1:]
+    assert [(row["text"], row.get("act")) for row in rows_of(message)] == [
+        ("listener legt ab.", True),
+        ("Danke.", None),
+    ]
+
+
+def test_an_act_line_after_an_answer_leaves_the_following_short_reply_the_first_line_after(place):
+    gateway = FakeGateway(completion("Eins."), completion("Gern."))
+
+    async def hearing(trace):
+        yield a_line(1, "Frage?")
+        await trace.settled()
+        yield a_line(2, "Ben legt ab.", name="Ben", kind="move", spoken=False, act=True)
+        yield a_line(3, "Ja.", name="Ben")
+        await trace.settled()
+
+    def wakes(line, *, first_after_answer):
+        return first_after_answer or line.text == "Frage?"
+
+    assert place.run(hearing, gateway, wakes=wakes) == RETURNED
+
+    assert place.trace.asked == [("Frage?", False), ("Ja.", True)]
+    assert conversation_of(gateway.requests[1])[-1] == ("user", ["Ben legt ab.", "Ja."])
 
 
 @pytest.mark.parametrize(

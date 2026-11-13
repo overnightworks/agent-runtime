@@ -52,11 +52,12 @@ class VoiceOut[Audio](Protocol):
 
 
 class WakeRule(Protocol):
-    """Whether a line that is neither the agent's own nor an echo starts a decision.
+    """Whether a line that is neither the agent's own, nor an echo, nor an act starts a decision.
 
-    ``first_after_answer`` is true for the first such line heard after a decision that played
-    at least one sentence ended, while no decision is in flight; it is false for every other
-    line, a line heard while an answer plays included.
+    An act line is never asked and does not count for ``first_after_answer``, which is true for
+    the first asked line heard after a decision that played at least one sentence ended, while
+    no decision is in flight; it is false for every other line, a line heard while an answer
+    plays included.
     """
 
     def __call__(self, line: PlaceEntry, *, first_after_answer: bool) -> bool: ...
