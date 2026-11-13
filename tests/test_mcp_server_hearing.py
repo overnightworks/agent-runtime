@@ -454,3 +454,39 @@ def test_the_record_keeps_neither_an_utterance_nor_its_line_once_the_caller_lets
     gc.collect()
 
     assert not set(spoken.values()) & reachable_strings(hearing)
+
+
+def test_a_seeing_switch_is_its_own_and_lets_no_member_hear(
+    hearing: MemberHearing, clock: Clock
+) -> None:
+    hearing.allow(room, "seat-1", alice, Sense.SEEING, True)
+    allow_at(hearing, clock, 1.0, member=bob)
+
+    assert who_hears(hearing, 2.0) == {bob}
+    assert hearing.sensing(room, "seat-1", Sense.SEEING) == {alice}
+    assert hearing.sensing(room, "seat-1", Sense.HEARING) == {bob}
+    assert not hearing.allows(room, "seat-1", bob, Sense.SEEING)
+    assert not hearing.allows(room, "seat-1", alice, Sense.HEARING)
+
+
+@ENDS
+def test_an_end_ends_seeing_as_it_ends_hearing(hearing: MemberHearing, end: EndOfHearing) -> None:
+    hearing.allow(room, "seat-1", alice, Sense.SEEING, True)
+
+    end(hearing, alice, "seat-1")
+
+    assert not hearing.allows(room, "seat-1", alice, Sense.SEEING)
+
+
+def test_nobody_is_seen_before_a_seeing_allow_and_again_after_an_end_and_a_rejoin(
+    hearing: MemberHearing, clock: Clock
+) -> None:
+    allow_at(hearing, clock, 1.0)
+    assert not hearing.allows(room, "seat-1", alice, Sense.SEEING)
+
+    hearing.allow(room, "seat-1", alice, Sense.SEEING, True)
+    assert hearing.allows(room, "seat-1", alice, Sense.SEEING)
+    hearing.member_ended(room, alice)
+    allow_at(hearing, clock, 5.0)
+
+    assert not hearing.allows(room, "seat-1", alice, Sense.SEEING)
