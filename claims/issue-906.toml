@@ -1,8 +1,0 @@
-claim_id = "0adfac817ef84b079957819306298ee4"
-agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
-role = "builder"
-base = "d8fa93e030e07e75b0b8a2c2364139c46de4b0ca"
-branch = "claude/issue-906-every-place-serves-numbered-lines-of-wha"
-scope = ["docs/connector.md", "src/agents/mcp_server", "src/agents/member.py", "src/agents/voice", "tests"]
-opened_commit = "0cd213fb0ac649e85bed69973f75f01a347bf0fa"
-whole_reason = "The rule that every place serves a window and its record and serving land together, or a place with a view is half specified."
