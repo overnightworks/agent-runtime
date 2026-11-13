@@ -6,7 +6,7 @@ import asyncio
 import json
 import socket
 from collections.abc import AsyncIterator, Callable, Collection, Mapping, Sequence
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -270,6 +270,13 @@ async def post(
     return await drive(front, member_scope(member, body), body, sent)
 
 
+async def exchange(front: McpPersonFront, member: Principal, method: str, **params: Any) -> Any:
+    """The whole JSON-RPC message the front answered, through real scopes."""
+    async with front.running():
+        sent = await post(front, member, rpc_body(method, params))
+    return json.loads(b"".join(message.get("body", b"") for message in sent))
+
+
 def served_app(front: McpPersonFront) -> Starlette:
     """A host's own application: the front on its exact route, entered in the host's lifespan."""
     return Starlette(routes=[Route(MCP_ENDPOINT_PATH, front)], lifespan=lambda _: front.running())
@@ -390,6 +397,15 @@ async def open_stream(connection: ListenConnection) -> AsyncIterator[ListenConne
         await settled()
         yield connection
         connection.disconnect()
+
+
+@asynccontextmanager
+async def open_streams(*connections: ListenConnection) -> AsyncIterator[None]:
+    """Every connection running until the block ends."""
+    async with AsyncExitStack() as stack:
+        for connection in connections:
+            await stack.enter_async_context(open_stream(connection))
+        yield
 
 
 @asynccontextmanager

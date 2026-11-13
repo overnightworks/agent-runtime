@@ -26,13 +26,13 @@ from tests.support.mcp_server_support import (
     MemberApp,
     ToolOffer,
     call_params,
+    exchange,
     listen_connection,
     loopback_client,
     loopback_server,
     open_stream,
-    post,
+    open_streams,
     resolve_member,
-    rpc_body,
     settled,
 )
 
@@ -72,19 +72,12 @@ def front(
     )
 
 
-async def answer(front: McpPersonFront, member: Principal, body: bytes) -> dict[str, Any]:
-    """The JSON-RPC message the front answers ``body`` with."""
-    async with front.running():
-        sent = await post(front, member, body)
-    return json.loads(b"".join(message.get("body", b"") for message in sent))
-
-
 async def listed(front: McpPersonFront, member: Principal) -> dict[str, Any]:
-    return (await answer(front, member, rpc_body("tools/list")))["result"]
+    return (await exchange(front, member, "tools/list"))["result"]
 
 
 async def called(front: McpPersonFront, member: Principal, name: str, **arguments: Any) -> Any:
-    return await answer(front, member, rpc_body("tools/call", call_params(name, **arguments)))
+    return await exchange(front, member, "tools/call", **call_params(name, **arguments))
 
 
 def names_of(result: dict[str, Any]) -> list[str]:
@@ -183,9 +176,9 @@ def test_a_broken_offer_answers_one_fixed_failure_and_logs_only_the_exception_ty
     caplog.set_level(logging.DEBUG, logger=LOGGER)
     for field_name, value in breakage.items():
         setattr(offer, field_name, value)
-    params = call_params("bid") if method == "tools/call" else None
+    params = call_params("bid") if method == "tools/call" else {}
 
-    reply = served(answer(front, alice, rpc_body(method, params)))
+    reply = served(exchange(front, alice, method, **params))
 
     assert (reply["error"]["code"], reply["error"]["message"]) == (-32603, _OFFER_FAILED_TEXT)
     assert person.calls == []
@@ -205,7 +198,7 @@ def test_offered_tools_without_changes_are_refused_at_construction(
 
 
 async def discovered_capabilities(front: McpPersonFront, member: Principal) -> dict[str, Any]:
-    return (await answer(front, member, rpc_body("server/discover", {})))["result"]["capabilities"]
+    return (await exchange(front, member, "server/discover"))["result"]["capabilities"]
 
 
 def test_discovery_declares_tools_list_changed_with_the_offer_and_no_resources_list_changed(
@@ -260,12 +253,7 @@ def test_a_tools_change_reaches_each_stream_of_its_member_that_honored_it_and_no
     }
 
     async def scenario() -> None:
-        async with (
-            front.running(),
-            open_stream(streams["alice tools"]),
-            open_stream(streams["alice uris only"]),
-            open_stream(streams["bob tools"]),
-        ):
+        async with front.running(), open_streams(*streams.values()):
             changes.tools_changed(alice)
             await settled()
 
@@ -293,19 +281,15 @@ def test_a_tools_change_around_the_acknowledgement_arrives_after_it(
 ) -> None:
     connection = listen_connection(front, alice, [STANDING_URI], flags={"toolsListChanged": True})
 
-    def signal_once() -> None:
-        app.before_current = lambda: None
-        changes.tools_changed(alice)
-
-    async def scenario() -> None:
-        if signal_moment == "while the port answers":
-            app.before_current = signal_once
-        async with front.running(), open_stream(connection):
-            if signal_moment != "while the port answers":
-                signal_once()
-            await settled()
-
-    served(scenario())
+    served(
+        listen_support.signalled_around_acknowledgement(
+            front,
+            app,
+            connection,
+            lambda: changes.tools_changed(alice),
+            while_the_port_answers=signal_moment == "while the port answers",
+        )
+    )
 
     assert [frame.get("method") for frame in connection.frames] == [_ACKNOWLEDGED, _TOOLS_CHANGED]
 
