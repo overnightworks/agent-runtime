@@ -1,8 +1,0 @@
-claim_id = "795fc4db9126453598565bf9fa9e59c2"
-agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
-role = "builder"
-base = "d8fa93e030e07e75b0b8a2c2364139c46de4b0ca"
-branch = "claude/issue-903-an-agent-sees-one-still-picture-an-app-h"
-scope = [".importlinter", "AGENTS.md", "docs/ARCHITECTURE.md", "docs/VISION.md", "docs/connector.md", "docs/hearing.md", "src/agents/backend", "src/agents/mcp_server/hearing.py", "src/agents/mcp_server/person.py", "src/agents/tools.py", "src/agents/turn.py", "src/agents/turn_events.py", "tests"]
-opened_commit = "c40af0de8751ec8357f88149e62480b046166193"
-whole_reason = "One image block is defined, carried and sent together, or no app can rely on it."
