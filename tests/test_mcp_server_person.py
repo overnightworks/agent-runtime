@@ -6,6 +6,7 @@ Every refusal case also asserts that no handler ran.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 from collections.abc import Callable, Iterator
@@ -26,7 +27,7 @@ from agents.mcp_server import McpPersonFront, PersonRequest, PersonTool
 from agents.mcp_server.asgi import LOGGER_NAME as LOGGER
 from agents.mcp_wire import MCP_ENDPOINT_PATH, PROTOCOL_VERSION
 from agents.tools import Principal, ToolEffect, ToolOutcome
-from agents.turn import MAX_EVENT_BYTES, MAX_TOOL_INPUT_DEPTH, JsonObject
+from agents.turn import MAX_EVENT_BYTES, MAX_TOOL_INPUT_DEPTH, TOOL_IMAGE_MEDIA_TYPE, JsonObject
 from tests.support.mcp_server_support import (
     Headers,
     call_params,
@@ -38,6 +39,7 @@ from tests.support.mcp_server_support import (
     sdk_client,
     served_app,
 )
+from tests.support.tool_images import a_tool_image
 
 _MARKER = "credential-marker-7f3a"
 
@@ -571,6 +573,24 @@ def test_the_sdk_client_lists_and_calls_a_tool(front: McpPersonFront, person: Pe
     assert [tool.name for tool in listed.tools] == ["read_note", "edit_note"]
     assert (called.is_error, called.content[0].text) == (False, "done")
     assert [arguments for _, _, arguments in person.calls] == [{"note": "n1"}]
+
+
+def test_the_sdk_client_gets_an_image_result_as_an_image_block_after_its_text(
+    front: McpPersonFront, person: Person
+) -> None:
+    image = a_tool_image()
+    person.outcome = ToolOutcome("a doorway", is_error=False, image=image)
+
+    async def called() -> Any:
+        async with sdk_client(front) as client:
+            return await client.call_tool("read_note", {})
+
+    result = asyncio.run(called())
+
+    text_block, image_block = result.content
+    assert (result.is_error, text_block.text) == (False, "a doorway")
+    assert image_block.mime_type == TOOL_IMAGE_MEDIA_TYPE
+    assert base64.b64decode(image_block.data, validate=True) == image.content
 
 
 def test_a_failing_tool_gets_the_fixed_text_through_the_sdk_client(

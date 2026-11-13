@@ -85,7 +85,15 @@ from agents.mcp_wire import (
 )
 from agents.member import LISTEN_BOUND_SECONDS
 from agents.tools import ToolDeclaration, ToolEffect, ToolOutcome
-from agents.turn import JsonObject, Principal, StrictModel, UnicodeText
+from agents.turn import (
+    TOOL_IMAGE_MEDIA_TYPE,
+    JsonObject,
+    Principal,
+    StrictModel,
+    ToolImage,
+    UnicodeText,
+    written_base64,
+)
 
 type ResolvePerson = Callable[[Scope], Principal]
 
@@ -142,15 +150,18 @@ class _WritableOutcome(StrictModel):
 
     content: UnicodeText
     is_error: bool
+    image: ToolImage | None
 
 
 def _written(outcome: ToolOutcome) -> CallToolResult:
     writable = _WritableOutcome.model_validate(
-        {"content": outcome.content, "is_error": outcome.is_error}
+        {"content": outcome.content, "is_error": outcome.is_error, "image": outcome.image}
     )
-    return CallToolResult.model_validate(
-        {"content": [{"type": "text", "text": writable.content}], "isError": writable.is_error}
-    )
+    blocks: list[JsonObject] = [{"type": "text", "text": writable.content}]
+    if writable.image is not None:
+        data = written_base64(writable.image.content)
+        blocks.append({"type": "image", "data": data, "mimeType": TOOL_IMAGE_MEDIA_TYPE})
+    return CallToolResult.model_validate({"content": blocks, "isError": writable.is_error})
 
 
 def _refusal(scope: Scope) -> HttpAnswer | None:
