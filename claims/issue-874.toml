@@ -1,0 +1,7 @@
+claim_id = "355b9b00748645aa9dae61731a1636a5"
+agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
+role = "builder"
+base = "7ecb6af6b909d73360660603383da04c04be5f4c"
+branch = "claude/issue-874-an-agent-s-spoken-sentences-come-in-orde"
+scope = ["docs/hearing.md"]
+opened_commit = "a99e81e97841f614826d0ed7f901f1273cef367f"
