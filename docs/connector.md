@@ -516,6 +516,13 @@ other combination is refused at construction. `epoch` is the place's removal epo
 refuses an accept after a removal. A paused place is listed and a place the member left is
 absent, so a pause is told from a removal.
 
+A `Standing` carries `parent` as `ParentPlace(app, place)`, absent from its JSON unless set. It
+names the place this one lies inside: `app` is the parent app's MCP resource URL, parsed as an
+absolute http or https URL, never fetched, so two spellings of one address compare equal as parsed
+URLs; `place` is a `PlaceRef`. A malformed parent fails the parse of the standing. An app sets it
+from the invitation on ([calling.md](calling.md), CALLING-27 and CALLING-28), and a runner that
+predates the field refuses a standing carrying it. Proved by `tests/test_member.py`.
+
 An `accept_invitation` refusal is an `is_error` result whose content is
 `AcceptInvitationRefused(refused)` as JSON, in `speak`'s shape (`SpeakRefused`), with one
 `AcceptInvitationRefusal` code: `stale_invitation` (the invitation is no longer standing, has

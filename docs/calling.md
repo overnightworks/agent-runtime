@@ -64,7 +64,17 @@ What pausing and resuming mean there is the app's.
 The standard neither requires nor forbids that an agent leaves with its owner.
 
 **CALLING-26.** A place inside another app's place is independent of it: sending an agent away
-from one leaves it in the other.
+from one leaves it in the other. Its standing names the other place as its `parent`
+(CALLING-27).
+
+**CALLING-27.** An app whose place lies inside another app's place sets `parent` on the standing
+of its place, from the invitation on, and keeps it unchanged while the member holds the place, so
+a runner can read it before it accepts.
+
+**CALLING-28.** `parent.app` is the parent app's MCP resource URL, taken from the app's own
+setting, and `parent.place` is the `PlaceRef` the parent app uses, taken from the page that called
+the agent. A runner matches a parent by equality of the normalised URL and of the `PlaceRef`
+against a place it holds, and a parent that matches none counts as none. A parent grants no right.
 
 ## What the person sees
 
@@ -114,8 +124,9 @@ streams. The standard adds no store, directory or list.
   call or send away an agent;
 - the shared control and the AI mark, with a stable, opaque key of its own minting for each row,
   the same across the row's states;
-- the mapping of its refusal codes, many to one, onto the control's reasons; and
-- its channel to its page.
+- the mapping of its refusal codes, many to one, onto the control's reasons;
+- its channel to its page; and
+- when its place lies inside another app's place, the `parent` of its standing (CALLING-27).
 
 ## The steps
 
@@ -125,7 +136,7 @@ streams. The standard adds no store, directory or list.
    it, and lists agents per CALLING-1 to CALLING-5.
 3. **Call.** The person taps an available row. The page posts to the app's person route. The app
    reads the person's groups fresh, opens an invitation (CALLING-6), adds it to the agent's
-   standing and signals it.
+   standing, with its `parent` where CALLING-27 applies, and signals it.
 4. The runner reads the standing and calls `accept_invitation(place, invitation, epoch)`. The app
    checks it (CALLING-7) and makes the place active or refuses.
 5. The row moves: inviting, then here for those who may send away, or available again after the
