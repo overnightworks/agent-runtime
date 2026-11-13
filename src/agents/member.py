@@ -54,6 +54,7 @@ __all__ = [
     "SpeakRefusal",
     "SpeakRefused",
     "Spoken",
+    "SpokenLanguage",
     "Standing",
     "StandingState",
     "VoiceName",
@@ -256,11 +257,19 @@ class DeclineInvitationRefused(StrictModel):
     refused: Annotated[DeclineInvitationRefusal, Field(strict=False)]
 
 
+SpokenLanguage = Annotated[str, StringConstraints(pattern=r"^[a-z]{2}$")]
+"""The language of a spoken sentence: a lowercase ISO 639-1 code of two letters, such as ``de`` or
+``en``. The record checks the form only; whether the app's voice speaks the language is the app's
+decision."""
+
+
 class SpeakArguments(StrictModel):
-    """The arguments of ``speak``: the place and one sentence, whose length the app bounds."""
+    """The arguments of ``speak``: the place and one sentence, whose length the app bounds, and
+    optionally the ``language`` of that sentence; an absent one means the app's own default."""
 
     place: PlaceRef
     text: NonEmptyUnicodeText
+    language: SpokenLanguage | None = Field(default=None, exclude_if=_is_none)
 
 
 class Spoken(StrictModel):
@@ -270,10 +279,12 @@ class Spoken(StrictModel):
 
 
 class SpeakRefusal(StrEnum):
-    """Why the app does not speak a sentence."""
+    """Why the app does not speak a sentence: ``language_unavailable`` when the app's voice does
+    not speak the language the sentence names."""
 
     NOT_ACTIVE = "not_active"
     TOO_LONG = "too_long"
+    LANGUAGE_UNAVAILABLE = "language_unavailable"
     UNAVAILABLE = "unavailable"
 
 
