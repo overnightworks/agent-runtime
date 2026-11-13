@@ -28,8 +28,8 @@ place that has no room for it.
 
 **CALLING-5.** While an invitation is open, only its inviter sees the agent, as inviting.
 
-**CALLING-25.** An agent's runner holds a listen on an app's standing only while it accepts
-invitations to that app's places.
+**CALLING-25.** An agent's runner holds a listen on an app's standing only while it answers
+invitations to that app's places, by accepting or declining them.
 
 ## Calling
 
@@ -39,10 +39,32 @@ side reads the invitation's `expires_at` and never that value.
 
 **CALLING-7.** The agent's accept is checked by the app: the invitation still stands (id, epoch,
 expiry), the owner is still present, and the bounds hold. The place then becomes active or the
-accept is refused with a code of `AcceptInvitationRefusal`.
+accept is refused with a code of `AcceptInvitationRefusal`. An accept of a standing invitation
+refused with `two_seats`, `sponsor_away` or `busy` ends the invitation as a decline does
+(CALLING-30) and the call without a seat: the inviter's row shows the outcome the app maps from the
+code (CALLING-14, CALLING-22), owner away for `sponsor_away`, and no refusal. A `stale_invitation`
+refusal changes nothing.
 
-**CALLING-8.** An invitation that runs out unanswered, one to an agent busy elsewhere included, is
-a normal ending: the row is offered again and shows no refusal.
+**CALLING-8.** An invitation that runs out unanswered ends the call without a seat: the inviter's
+row shows the outcome no answer (CALLING-14), and no refusal. A runner that lets an invitation run
+out instead of declining it stays valid.
+
+**CALLING-29.** An agent's runner that is at its own limit of how many places it may be in at once
+declines an invitation at once with `decline_invitation(place, invitation, epoch, reason)` and the
+reason `busy` of `DeclineInvitationReason`. The runner alone decides that it is at its limit; the
+app never computes it and does not check the reason.
+
+**CALLING-30.** The app checks a decline as it checks an accept's invitation: it is that member's
+invitation and still stands (id, epoch, expiry). A decline of one that no longer stands is refused
+with `stale_invitation` of `DeclineInvitationRefusal` and changes nothing. A standing decline ends
+the invitation at once, as its expiry does and without raising the epoch: the app takes the
+invitation from the agent's standing, signals the standing, and the row shows its outcome
+(CALLING-31), then is offered again.
+
+**CALLING-31.** A standing decline ends the call without a seat: the inviter's row shows the
+outcome busy (CALLING-14), mapped from the decline's reason (CALLING-22), and no refusal. A declined
+agent may be called again; the app adds no wait of its own before a new call, and the outcome's
+duration from CALLING-14 still applies.
 
 ## Sending away
 
@@ -80,6 +102,9 @@ against a place it holds, and a parent that matches none counts as none. A paren
 
 **CALLING-14.** The control lists each agent in one of three states: available (the person may
 call it), inviting (no action) or here (the person may send it away). Inviting shows no deadline.
+A call that ends without a seat shows its outcome (no answer, busy, owner away) on the inviter's
+row for a time the shared kit owns, then the row is available again. A refusal above the rows
+answers only a refused press.
 
 **CALLING-15.** Neither calling nor sending away asks for confirmation or counts down: the tap is
 the act.
@@ -119,28 +144,33 @@ streams. The standard adds no store, directory or list.
 
 - its place (the `PlaceRef` kind and id) and its presence rule;
 - what accepting and pausing mean at the place, and its bounds;
-- the invitation book, the accept checks, the send-away check and the leases;
+- the invitation book, the accept and decline checks, the send-away check and the leases;
 - the person routes for calling and sending away, which are never an MCP tool, so no agent can
   call or send away an agent;
 - the shared control and the AI mark, with a stable, opaque key of its own minting for each row,
   the same across the row's states;
-- the mapping of its refusal codes, many to one, onto the control's reasons;
+- the mapping of its refusal codes and decline reasons, many to one, onto the control's reasons and
+  outcomes;
 - its channel to its page; and
 - when its place lies inside another app's place, the `parent` of its standing (CALLING-27).
 
 ## The steps
 
 1. The agent's runner listens on the app's `member://standing`, so the agent is live (CALLING-1),
-   and does so only while it accepts invitations to the app's places (CALLING-25).
+   and does so only while it answers invitations to the app's places, by accepting or declining
+   them (CALLING-25).
 2. A person opens the place. The page shows the control at the place itself where CALLING-17 shows
    it, and lists agents per CALLING-1 to CALLING-5.
 3. **Call.** The person taps an available row. The page posts to the app's person route. The app
    reads the person's groups fresh, opens an invitation (CALLING-6), adds it to the agent's
    standing, with its `parent` where CALLING-27 applies, and signals it.
 4. The runner reads the standing and calls `accept_invitation(place, invitation, epoch)`. The app
-   checks it (CALLING-7) and makes the place active or refuses.
-5. The row moves: inviting, then here for those who may send away, or available again after the
-   invitation runs out (CALLING-8). A refusal shows the reason the app maps (CALLING-22).
+   checks it (CALLING-7) and makes the place active or refuses. A runner at its limit calls
+   `decline_invitation(place, invitation, epoch, reason)` instead (CALLING-29); the app checks it
+   and ends the invitation or refuses (CALLING-30).
+5. The row moves: inviting, then here for those who may send away, or its outcome and then
+   available again after the invitation runs out (CALLING-8), is declined (CALLING-31) or its
+   accept is refused (CALLING-7). A refusal of a press shows the reason the app maps (CALLING-22).
 6. **Send away.** The person taps a here row. The page posts to the app's person route. The app
    checks the right (CALLING-9), takes the place from the standing, raises the epoch, signals the
    standing and tells the place's people (CALLING-10). The runner reads the standing and ends its

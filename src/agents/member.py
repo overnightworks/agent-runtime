@@ -2,10 +2,10 @@
 
 An app writes these records and an agent's runner reads them: where the member stands in every
 place (``Standing``), the window of lines one place shows (``PlaceWindow``), the state of one
-place (``PlaceView``), the arguments of accepting an invitation and of speaking in a place, what
-accepting answers when it refuses, and what speaking answers. The URIs name the resources that
-serve them; a URI is no credential, so a guessed one yields nothing. This module is base, so a
-runner parses all of it without the ``mcp-server`` extra.
+place (``PlaceView``), the arguments of accepting and declining an invitation and of speaking in a
+place, what accepting and declining answer when they refuse, and what speaking answers. The URIs
+name the resources that serve them; a URI is no credential, so a guessed one yields nothing. This
+module is base, so a runner parses all of it without the ``mcp-server`` extra.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from agents.turn import JsonObject, NonEmptyUnicodeText, StrictModel
 
 __all__ = [
     "ACCEPT_INVITATION_TOOL",
+    "DECLINE_INVITATION_TOOL",
     "INVITATION_SECONDS",
     "LEASE_SECONDS",
     "LISTEN_ALLOWANCE_SECONDS",
@@ -37,6 +38,10 @@ __all__ = [
     "AcceptInvitationArguments",
     "AcceptInvitationRefusal",
     "AcceptInvitationRefused",
+    "DeclineInvitationArguments",
+    "DeclineInvitationReason",
+    "DeclineInvitationRefusal",
+    "DeclineInvitationRefused",
     "FigureRef",
     "Invitation",
     "MemberStanding",
@@ -70,6 +75,8 @@ connection and one call of the port (a few milliseconds plus the port's latency)
 never turns no between two listens; far below ``LEASE_SECONDS``."""
 ACCEPT_INVITATION_TOOL: Final = "accept_invitation"
 """The name of the tool that accepts an open invitation."""
+DECLINE_INVITATION_TOOL: Final = "decline_invitation"
+"""The name of the tool that declines an open invitation."""
 SPEAK_TOOL: Final = "speak"
 """The name of the tool that says one sentence aloud in a place."""
 STANDING_URI: Final = "member://standing"
@@ -217,6 +224,37 @@ class AcceptInvitationRefused(StrictModel):
     """What ``accept_invitation`` answers on a refusal, as JSON in an ``is_error`` result."""
 
     refused: Annotated[AcceptInvitationRefusal, Field(strict=False)]
+
+
+class DeclineInvitationReason(StrEnum):
+    """Why the runner declines an invitation: ``busy`` when the runner is at its own limit of how
+    many places it is in at once; not ``AcceptInvitationRefusal.BUSY``, which is the app's full
+    place."""
+
+    BUSY = "busy"
+
+
+class DeclineInvitationArguments(StrictModel):
+    """The arguments of ``decline_invitation``: the place, the invitation's id and epoch, and the
+    reason; a decline needs no lease, as it seats nothing."""
+
+    place: PlaceRef
+    invitation: NonEmptyUnicodeText
+    epoch: int = Field(ge=0)
+    reason: Annotated[DeclineInvitationReason, Field(strict=False)]
+
+
+class DeclineInvitationRefusal(StrEnum):
+    """Why the app does not take a decline: ``stale_invitation`` when the invitation is not that
+    member's, no longer stands, has expired, or its id or epoch no longer matches."""
+
+    STALE_INVITATION = "stale_invitation"
+
+
+class DeclineInvitationRefused(StrictModel):
+    """What ``decline_invitation`` answers on a refusal, as JSON in an ``is_error`` result."""
+
+    refused: Annotated[DeclineInvitationRefusal, Field(strict=False)]
 
 
 class SpeakArguments(StrictModel):

@@ -472,7 +472,8 @@ the tool and the exception's class
 of `PlaceEntry(seq, kind, name, text, own, spoken)`, `LEASE_SECONDS` (120),
 `INVITATION_SECONDS` (120), `LISTEN_BOUND_SECONDS` (50),
 `LISTEN_ALLOWANCE_SECONDS` (5), `AcceptInvitationArguments(place, invitation, epoch, figure, voice)` for the tool
-`ACCEPT_INVITATION_TOOL`, and the records of the tool `SPEAK_TOOL`
+`ACCEPT_INVITATION_TOOL`, `DeclineInvitationArguments(place, invitation, epoch, reason)` for
+`DECLINE_INVITATION_TOOL`, and the records of the tool `SPEAK_TOOL`
 ([hearing and speaking](#hearing-and-speaking)). `spoken` is true for a line said aloud and
 heard, false for a written one; every dumped entry carries it, and an entry without it reads as
 written. A window's `seq` ascends strictly and may skip; a non-empty window starts at its first
@@ -532,6 +533,18 @@ inviting one), `sponsor_away` (that person's seat lost its connection and waits 
 (the place or the app already holds as many members as it takes, or that person already brings
 another). A code the app adds for every tool alike is its own and not part of the record; a runner
 reading it gets a validation error and decides itself. Proved by `tests/test_member.py`.
+
+`decline_invitation` takes `DeclineInvitationArguments(place, invitation, epoch, reason)`: the same
+place, invitation id and epoch as an accept, and the required `reason`, a `DeclineInvitationReason`
+whose only value is `busy` (the runner is at its own limit of how many places it is in at once).
+It needs no lease, as a decline seats nothing. A standing decline answers a result without
+`is_error` whose content no record pins. A refusal is an `is_error` result whose
+content is `DeclineInvitationRefused(refused)` as JSON with the one `DeclineInvitationRefusal` code
+`stale_invitation` (the invitation is not that member's, no longer stands, has expired, or its id or
+epoch no longer matches). A decline's `busy` is not an accept's `busy`: the first says the runner
+is at its limit, the second that the place is full. An app that does not serve the tool answers an
+unknown tool, and the runner lets the invitation run out ([calling.md](calling.md), CALLING-8); the
+app's part is CALLING-29 to CALLING-31. Proved by `tests/test_member.py`.
 
 How a person calls an agent to a place and sends it away is the same in every app:
 [calling.md](calling.md).
