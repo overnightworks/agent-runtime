@@ -143,7 +143,8 @@ streams. The standard adds no store, directory or list.
   call or send away an agent;
 - the shared control and the AI mark, with a stable, opaque key of its own minting for each row,
   the same across the row's states;
-- the mapping of its refusal codes and decline reasons, many to one, onto the control's reasons and outcomes;
+- the mapping of its refusal codes and decline reasons, many to one, onto the control's reasons and
+  outcomes;
 - its channel to its page; and
 - when its place lies inside another app's place, the `parent` of its standing (CALLING-27).
 
