@@ -1,8 +1,0 @@
-claim_id = "08a823e369264896a5ff29fb2579c3c9"
-agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
-role = "builder"
-base = "954818916872db2235754cac5e2b73d85101909f"
-branch = "claude/issue-913-one-call-per-reply"
-scope = ["docs/connector.md", "src/agents/agent_file.py", "src/agents/backend/gateway.py", "tests"]
-opened_commit = "7b83694a289a4bb683c7af1227bb51ffa98c7c52"
-whole_reason = "The setting, the body field and the held reply are one promise; one without the others makes the host's sentence false."
