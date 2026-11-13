@@ -202,8 +202,9 @@ stop the gateway path raises leaves `run` as a fresh exception, raised from a fr
 neither, with no underlying error in its `__context__` or `__cause__`
 (`test_a_stopped_turn_holds_neither_the_key_nor_the_reply_in_any_frame_or_chained_error`). A stop
 the host raises, from a handler or the groups lookup, stays the same exception, with the gateway
-path's frames cut from its traceback
-(`test_a_handlers_stop_after_a_tool_round_comes_back_the_same_and_holds_neither_key_nor_reply`).
+path's frames (the gateway's own and the tool call's, which holds the model's arguments) cut from its
+traceback
+(`test_a_handlers_stop_after_a_tool_round_comes_back_the_same_and_holds_no_key_reply_or_arguments`).
 
 **The deadline.** `request.max_duration_seconds` is one deadline around the whole turn, every
 round and handler included; past it the turn `failed: limit_exceeded` and a running handler is

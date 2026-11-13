@@ -138,7 +138,7 @@ class GatewayBackend(AgentBackend):
 
         A stop the gateway path raised is replaced by a plain one, with nothing of the frames or
         errors it passed through; a stop the host raised is the same exception, its traceback
-        cut of this module's frames, which hold the key and the reply.
+        cut of the gateway path's frames, which hold the key, the reply and the call arguments.
         """
         try:
             async with contextlib.aclosing(self._turn(request, person)) as events:
@@ -152,7 +152,7 @@ class GatewayBackend(AgentBackend):
         except _GatewayStop as stopped:
             closed = _plain(stopped)
         except TurnStopped as stopped:
-            raise stopped.with_traceback(_beyond_this_module(stopped.__traceback__))
+            raise stopped.with_traceback(_beyond_the_gateway_path(stopped.__traceback__))
         else:
             return
         raise closed
@@ -531,12 +531,16 @@ def _plain(stopped: TurnStopped) -> TurnStopped:
     )
 
 
-def _beyond_this_module(trace: TracebackType | None) -> TracebackType | None:
-    """The traceback without this module's frames: they hold the key and the reply."""
+def _beyond_the_gateway_path(trace: TracebackType | None) -> TracebackType | None:
+    """The traceback without the gateway path's frames: they hold the key, the reply and the calls.
+
+    The path is this module and ``tool_result``, whose ``serve`` frame holds the call's arguments.
+    """
+    path = (globals(), serve.__globals__)
     kept: TracebackType | None = None
     outside: list[TracebackType] = []
     while trace is not None:
-        if trace.tb_frame.f_globals is not globals():
+        if all(trace.tb_frame.f_globals is not owned for owned in path):
             outside.append(trace)
         trace = trace.tb_next
     for entry in reversed(outside):
