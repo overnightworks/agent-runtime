@@ -154,8 +154,9 @@ Each dropped queued `speak` answers `stopped`, so no call hangs. With nothing pl
 next `speak`. The cut sentence's line stays as it was appended.
 
 **HEARING-24 (A).** `speak` may carry a `style`, free text that the app passes on unchanged to its
-speech service. The app bounds its length and refuses a longer one with `too_long`, as for the
-text. A voice that takes no style is refused at once with `style_unavailable`.
+speech service. The app neither bounds nor checks it: the speech service owns its length bound and
+its check. Every refusal of the style by the voice (a voice that takes no style, a style too long,
+or one the voice does not support) reaches the agent as `style_unavailable`, with no second code.
 
 ## What an app supplies
 

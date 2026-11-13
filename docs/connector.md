@@ -643,9 +643,10 @@ line a heard utterance becomes, is `MemberHearing`; the rules are in [hearing.md
 **Speaking** is the side-effecting tool `SPEAK_TOOL`, `speak`. Its arguments are
 `SpeakArguments(place, text, language, style)`: the `PlaceRef`, as for `accept_invitation`, one
 sentence and optionally its `language`, a lowercase ISO 639-1 code of two letters such as `de` or
-`en`, and its `style`, free text such as `louder and angrier` that the app passes on unchanged; a
-speak without either dumps without the key. The record checks only their form; the app decides
-the rest ([HEARING-20](hearing.md), [HEARING-24](hearing.md)). On success it answers `Spoken(duration_ms)` as JSON, the
+`en`, and its `style`, free text such as `louder and angrier` that the app passes on unchanged and
+neither bounds nor checks; a speak without either dumps without the key. The record checks only
+their form; the app decides the rest ([HEARING-20](hearing.md)), and the speech service owns the
+style's bound and check ([HEARING-24](hearing.md)). On success it answers `Spoken(duration_ms)` as JSON, the
 sound's length in milliseconds, at least 1.
 A refusal is an `is_error` result whose content is `SpeakRefused(refused)` as JSON, such as
 `{"refused": "too_long"}`, with one `SpeakRefusal` code:
@@ -654,7 +655,8 @@ A refusal is an `is_error` result whose content is `SpeakRefused(refused)` as JS
 - `too_long`: the sentence is longer than the app speaks at once;
 - `unavailable`: the app cannot speak now;
 - `language_unavailable`: the app's voice does not speak the named language;
-- `style_unavailable`: the app's voice takes no style;
+- `style_unavailable`: the voice refused the style: it takes no style, or the style is too long or
+  not supported;
 - `stopped`: a `stop_speaking` dropped this queued sentence.
 
 **Being talked over.** While people talk over the member, its window carries

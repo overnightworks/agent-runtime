@@ -270,8 +270,8 @@ class DeclineInvitationRefused(StrictModel):
 
 VoiceStyle = NonEmptyUnicodeText
 """How a sentence should sound: free text, such as ``louder and angrier``. The text is passed
-through unchanged; the app bounds its length and its speech service decides whether it takes a
-style."""
+through unchanged; the app neither bounds nor checks it, and its speech service owns the bound
+and the check."""
 
 SpokenLanguage = Annotated[str, StringConstraints(pattern=r"^[a-z]{2}$")]
 """The language of a spoken sentence: a lowercase ISO 639-1 code of two letters, such as ``de`` or
@@ -281,8 +281,8 @@ decision."""
 
 class SpeakArguments(StrictModel):
     """The arguments of ``speak``: the place and one sentence, whose length the app bounds, and
-    optionally the ``language`` of that sentence and the ``style`` it should sound in; an absent
-    one means the app's own default."""
+    optionally the ``language`` of that sentence and the ``style`` it should sound in, which the app
+    passes on unchanged; an absent one means the app's own default."""
 
     place: PlaceRef
     text: NonEmptyUnicodeText
@@ -298,7 +298,8 @@ class Spoken(StrictModel):
 
 class SpeakRefusal(StrEnum):
     """Why the app does not speak a sentence: ``language_unavailable`` when the app's voice does
-    not speak the language the sentence names, ``style_unavailable`` when it takes no style, and
+    not speak the language the sentence names, ``style_unavailable`` for every refusal of the
+    ``style`` by the voice (it takes none, it is too long or it is not supported), and
     ``stopped`` for a queued sentence that a ``stop_speaking`` dropped."""
 
     NOT_ACTIVE = "not_active"
