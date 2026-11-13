@@ -466,8 +466,7 @@ def _failed_event(call: _Call, text: str) -> ToolResultEvent:
 def _opening_messages(request: TurnRequest) -> list[_Message]:
     messages: list[_Message] = [{"role": "system", "content": request.turn.system}]
     messages += [
-        _Message(role=message.role.value, content=message.text)
-        for message in request.turn.messages
+        _Message(role=message.role.value, content=message.text) for message in request.turn.messages
     ]
     return messages
 
