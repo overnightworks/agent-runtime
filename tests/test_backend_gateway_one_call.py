@@ -7,7 +7,7 @@ import pytest
 from agents.backend.fake_gateway import completion, tool_call, tool_round
 from agents.turn_events import ToolCallEvent, ToolResultEvent
 from tests.support import gateway_turn_support
-from tests.support.gateway_turn_support import a_tool_request, sent
+from tests.support.gateway_turn_support import sent
 
 shop = gateway_turn_support.shop
 
@@ -22,7 +22,7 @@ def test_the_body_forbids_parallel_calls_when_tools_and_the_setting_are_on(shop)
     assert sent(gateway, 0)["parallel_tool_calls"] is False
 
 
-@pytest.mark.parametrize("with_tools", [True, False], ids=["setting-off", "no-tools"])
+@pytest.mark.parametrize("with_tools", [True, False], ids=["tools-setting-off", "no-tools-setting-on"])
 def test_the_body_carries_no_parallel_setting_without_tools_or_the_setting(shop, with_tools):
     if with_tools:
         shop.add_tool("lookup")
@@ -90,9 +90,3 @@ def test_with_the_setting_off_every_call_of_a_reply_is_served(shop):
 
     assert stopped is None
     assert len(shop.seen) == 2
-
-
-def test_the_request_defaults_to_serving_every_call(shop):
-    shop.add_tool("lookup")
-
-    assert a_tool_request(shop.tools, 1).one_call_per_reply is False

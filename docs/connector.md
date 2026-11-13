@@ -27,7 +27,8 @@ asks for one tool call per model reply; it has two effects, described under the 
 the tool loop, and none for an agent without tools. Every further act then takes one more model
 round.
 Proved by `tests/test_agent_file.py`: `test_request_carries_the_files_prompt_model_roles_and_tools`,
-`test_request_model_is_the_override_when_given`, `test_request_is_frozen`; the appended text by
+`test_request_model_is_the_override_when_given`, `test_request_is_frozen`,
+`test_request_carries_one_call_per_reply_only_when_asked`; the appended text by
 `tests/test_voice_loop.py`: `test_a_spoken_line_that_wakes_sends_one_request_with_prompt_protocol_context_and_the_line`.
 
 `person` is a `TurnPerson` (frozen, always a person): `principal` (the verified `(iss, sub)`),
