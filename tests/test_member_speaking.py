@@ -29,18 +29,26 @@ from tests.support.member_wire import (
 PLACE = PlaceRef(kind="room", id="r-1")
 
 
-def test_speak_arguments_name_the_style_of_the_sentence_when_given() -> None:
-    arguments = SpeakArguments(place=PLACE, text="Shall we start?", style="louder and angrier")
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("language", "en"), ("style", "louder and angrier")],
+    ids=["language", "style"],
+)
+def test_speak_arguments_name_the_optional_field_of_the_sentence_when_given(
+    field: str, value: str
+) -> None:
+    arguments = SpeakArguments(place=PLACE, text="Shall we start?", **{field: value})
 
-    assert json.loads(arguments.model_dump_json()) == speak_wire(style="louder and angrier")
+    assert json.loads(arguments.model_dump_json()) == speak_wire(**{field: value})
     assert SpeakArguments.model_validate_json(arguments.model_dump_json()) == arguments
 
 
-def test_speak_arguments_without_a_style_dump_without_its_key() -> None:
+@pytest.mark.parametrize("field", ["language", "style"])
+def test_speak_arguments_without_an_optional_field_dump_without_its_key(field: str) -> None:
     arguments = SpeakArguments.model_validate_json(json.dumps(speak_wire()))
 
-    assert arguments.style is None
-    assert "style" not in json.loads(arguments.model_dump_json())
+    assert getattr(arguments, field) is None
+    assert field not in json.loads(arguments.model_dump_json())
 
 
 @pytest.mark.parametrize("style", ["", 1, ["calm"]], ids=["empty", "number", "list"])
