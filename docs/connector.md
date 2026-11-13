@@ -468,13 +468,13 @@ the tool and the exception's class
 
 `agents.member` owns what an app and an agent say to each other about a member:
 `PlaceRef`, `StandingState`, `Invitation`, `Standing` and its `ParentPlace(app, place)`, `MemberStanding(standings)` (what
-`STANDING_URI`, `member://standing`, answers with), `PlaceWindow(generation, starts_at, entries)`
+`STANDING_URI`, `member://standing`, answers with), `PlaceWindow(generation, starts_at, entries, talked_over)`
 of `PlaceEntry(seq, kind, name, text, own, spoken)`, `LEASE_SECONDS` (120),
 `INVITATION_SECONDS` (120), `LISTEN_BOUND_SECONDS` (50),
 `LISTEN_ALLOWANCE_SECONDS` (5), `AcceptInvitationArguments(place, invitation, epoch, figure, voice)` for the tool
 `ACCEPT_INVITATION_TOOL`, `DeclineInvitationArguments(place, invitation, epoch, reason)` for
-`DECLINE_INVITATION_TOOL`, and the records of the tool `SPEAK_TOOL`
-([hearing and speaking](#hearing-and-speaking)). `spoken` is true for a line said aloud and
+`DECLINE_INVITATION_TOOL`, and the records of the tools `SPEAK_TOOL` and `STOP_SPEAKING_TOOL`
+and of being talked over ([hearing and speaking](#hearing-and-speaking)). `spoken` is true for a line said aloud and
 heard, false for a written one; every dumped entry carries it, and an entry without it reads as
 written. A window's `seq` ascends strictly and may skip; a non-empty window starts at its first
 `seq`; an empty window is valid and its `starts_at` is the `seq` the next line gets. A place's
@@ -641,10 +641,12 @@ utterance and its `name` the speaker's shown name. Which member hears which spea
 line a heard utterance becomes, is `MemberHearing`; the rules are in [hearing.md](hearing.md).
 
 **Speaking** is the side-effecting tool `SPEAK_TOOL`, `speak`. Its arguments are
-`SpeakArguments(place, text, language)`: the `PlaceRef`, as for `accept_invitation`, one
+`SpeakArguments(place, text, language, style)`: the `PlaceRef`, as for `accept_invitation`, one
 sentence and optionally its `language`, a lowercase ISO 639-1 code of two letters such as `de` or
-`en`; a speak without one dumps without the key. The record checks only that form; the app decides
-the rest ([HEARING-20](hearing.md)). On success it answers `Spoken(duration_ms)` as JSON, the
+`en`, and its `style`, free text such as `louder and angrier` that the app passes on unchanged and
+neither bounds nor checks; a speak without either dumps without the key. The record checks only
+their form; the app decides the rest ([HEARING-20](hearing.md)), and the speech service owns the
+style's bound and check ([HEARING-23](hearing.md)). On success it answers `Spoken(duration_ms)` as JSON, the
 sound's length in milliseconds, at least 1.
 A refusal is an `is_error` result whose content is `SpeakRefused(refused)` as JSON, such as
 `{"refused": "too_long"}`, with one `SpeakRefusal` code:
@@ -652,10 +654,31 @@ A refusal is an `is_error` result whose content is `SpeakRefused(refused)` as JS
 - `not_active`: the member left, was removed or is paused;
 - `too_long`: the sentence is longer than the app speaks at once;
 - `unavailable`: the app cannot speak now;
-- `language_unavailable`: the app's voice does not speak the named language.
+- `language_unavailable`: the app's voice does not speak the named language;
+- `style_unavailable`: the voice refused the style: it takes no style, or the style is too long or
+  not supported;
+- `stopped`: a `stop_speaking` dropped this queued sentence.
 
-Proved by `tests/test_member.py`, among them
-`test_speak_arguments_with_a_malformed_language_are_refused`.
+**Being talked over.** While people talk over the member, its window carries `talked_over`:
+`TalkedOver(id, playing, speech)` with one `PartialSpeech(name, text)` per person speaking, in the
+order they started. `id` stays fixed from the record's appearance to its removal and is new for the
+next one, so a runner takes one decision per `id`; `playing` says a sentence of the member plays
+now. A partial is provisional text, no `PlaceEntry`, so the `seq` rules hold beside it; a person's
+partial goes with that person's turn, with or without a finished line after it, and the record goes
+with its last partial. The window dumps without the key when nobody talks over the member
+([HEARING-21](hearing.md)).
+
+**Stopping** is the side-effecting tool `STOP_SPEAKING_TOOL`, `stop_speaking`, with
+`StopSpeakingArguments(place)`. It cuts the member's playing sentence and drops its queue in every
+seat, and answers `StoppedSpeaking(cut)` as JSON, the text of the sentence cut. A refusal is an
+`is_error` result with `StopSpeakingRefused(refused)` as JSON: `not_active` (the member left, was
+removed or is paused) or `nothing_playing` (nothing was cut and nothing dropped)
+([HEARING-22](hearing.md)).
+
+Proved by `tests/test_member.py` (among them
+`test_speak_arguments_with_a_malformed_language_are_refused`) and `tests/test_member_speaking.py`
+(among them `test_a_malformed_talked_over_record_is_refused` and
+`test_stopped_speaking_names_the_sentence_it_cut`).
 
 **What each app that hears and speaks owns**, besides what [hearing.md](hearing.md) gives it:
 
@@ -812,6 +835,8 @@ await run_voice_loop(
 - `report` receives each `VoiceEvent`: `Woke`, `StayedSilent`, `ReplyUnreadable`,
   `SentenceStarted(text)`, `SentenceRefused(text)`, `DecisionFailed(kind, code, detail)`, whose
   `outcome` is the stop's `StopOutcome`, and `EchoDropped(text)`.
+
+The loop does not take being talked over or a stop; only the member wire carries them ([hearing and speaking](#hearing-and-speaking)).
 
 Proved by `tests/test_voice_loop.py`:
 `test_a_spoken_line_that_wakes_sends_one_request_with_prompt_protocol_context_and_the_line`,

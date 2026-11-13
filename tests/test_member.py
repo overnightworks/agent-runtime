@@ -31,11 +31,14 @@ from agents.member import (
     Spoken,
     Standing,
     StandingState,
+    StopSpeakingRefusal,
+    StopSpeakingRefused,
     place_ref_from_view_uri,
     place_ref_from_window_uri,
     place_view_uri,
     place_window_uri,
 )
+from tests.support.member_wire import entry, speak_wire, window_from
 
 PLACE = PlaceRef(kind="room", id="r-1")
 INVITATION = Invitation(id="i-1", epoch=3, expires_at=datetime(2026, 11, 8, 12, tzinfo=UTC))
@@ -46,18 +49,6 @@ HOSTILE_PLACES = [
     PlaceRef(kind="Straße", id="日本語"),
     PlaceRef(kind="?#&=", id="..\\"),
 ]
-
-
-def window_from(wire: dict[str, Any]) -> PlaceWindow:
-    return PlaceWindow.model_validate_json(json.dumps(wire))
-
-
-def entry(seq: int, **fields: Any) -> dict[str, Any]:
-    return {"seq": seq, "kind": "said", "name": "ada", "text": "hello", "own": False} | fields
-
-
-def speak_wire(**fields: Any) -> dict[str, Any]:
-    return {"place": {"kind": "room", "id": "r-1"}, "text": "Shall we start?"} | fields
 
 
 @pytest.mark.parametrize(
@@ -286,20 +277,6 @@ def test_speak_arguments_carry_the_place_and_one_sentence_on_the_wire() -> None:
     assert SpeakArguments.model_validate_json(arguments.model_dump_json()) == arguments
 
 
-def test_speak_arguments_name_the_language_of_the_sentence_when_given() -> None:
-    arguments = SpeakArguments(place=PLACE, text="Shall we start?", language="en")
-
-    assert json.loads(arguments.model_dump_json()) == speak_wire(language="en")
-    assert SpeakArguments.model_validate_json(arguments.model_dump_json()) == arguments
-
-
-def test_speak_arguments_without_a_language_dump_without_its_key() -> None:
-    arguments = SpeakArguments.model_validate_json(json.dumps(speak_wire()))
-
-    assert arguments.language is None
-    assert "language" not in json.loads(arguments.model_dump_json())
-
-
 @pytest.mark.parametrize(
     "language",
     ["DE", "deu", "de-DE", "d", "d1", "", " de", 1, ["de"]],
@@ -362,8 +339,21 @@ REFUSALS = [
     pytest.param(
         SpeakRefused,
         SpeakRefusal,
-        ("not_active", "too_long", "unavailable", "language_unavailable"),
+        (
+            "not_active",
+            "too_long",
+            "unavailable",
+            "language_unavailable",
+            "style_unavailable",
+            "stopped",
+        ),
         id="speak",
+    ),
+    pytest.param(
+        StopSpeakingRefused,
+        StopSpeakingRefusal,
+        ("not_active", "nothing_playing"),
+        id="stop-speaking",
     ),
     pytest.param(
         AcceptInvitationRefused,

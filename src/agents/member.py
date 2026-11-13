@@ -2,10 +2,11 @@
 
 An app writes these records and an agent's runner reads them: where the member stands in every
 place (``Standing``), the window of lines one place shows (``PlaceWindow``), the state of one
-place (``PlaceView``), the arguments of accepting and declining an invitation and of speaking in a
-place, what accepting and declining answer when they refuse, and what speaking answers. The URIs
-name the resources that serve them; a URI is no credential, so a guessed one yields nothing. This
-module is base, so a runner parses all of it without the ``mcp-server`` extra.
+place (``PlaceView``), the arguments of accepting and declining an invitation and of speaking and
+stopping in a place, what accepting and declining answer when they refuse, what speaking and
+stopping answer, and what the window says when people talk over the member (``TalkedOver``). The
+URIs name the resources that serve them; a URI is no credential, so a guessed one yields nothing.
+This module is base, so a runner parses all of it without the ``mcp-server`` extra.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from pydantic import (
     model_validator,
 )
 
-from agents.turn import JsonObject, NonEmptyUnicodeText, StrictModel
+from agents.turn import JsonObject, NonEmptyUnicodeText, StrictModel, UnicodeText
 
 __all__ = [
     "ACCEPT_INVITATION_TOOL",
@@ -35,6 +36,7 @@ __all__ = [
     "LISTEN_BOUND_SECONDS",
     "SPEAK_TOOL",
     "STANDING_URI",
+    "STOP_SPEAKING_TOOL",
     "AcceptInvitationArguments",
     "AcceptInvitationRefusal",
     "AcceptInvitationRefused",
@@ -46,6 +48,7 @@ __all__ = [
     "Invitation",
     "MemberStanding",
     "ParentPlace",
+    "PartialSpeech",
     "PlaceEntry",
     "PlaceRef",
     "PlaceView",
@@ -57,7 +60,13 @@ __all__ = [
     "SpokenLanguage",
     "Standing",
     "StandingState",
+    "StopSpeakingArguments",
+    "StopSpeakingRefusal",
+    "StopSpeakingRefused",
+    "StoppedSpeaking",
+    "TalkedOver",
     "VoiceName",
+    "VoiceStyle",
     "place_ref_from_view_uri",
     "place_ref_from_window_uri",
     "place_view_uri",
@@ -80,6 +89,8 @@ DECLINE_INVITATION_TOOL: Final = "decline_invitation"
 """The name of the tool that declines an open invitation."""
 SPEAK_TOOL: Final = "speak"
 """The name of the tool that says one sentence aloud in a place."""
+STOP_SPEAKING_TOOL: Final = "stop_speaking"
+"""The name of the tool that cuts the member's current sentence and its queue."""
 STANDING_URI: Final = "member://standing"
 """The resource that answers with the member's ``MemberStanding``."""
 _PLACE_WINDOW_URI_PREFIX: Final = f"{STANDING_URI}/places/"
@@ -257,6 +268,11 @@ class DeclineInvitationRefused(StrictModel):
     refused: Annotated[DeclineInvitationRefusal, Field(strict=False)]
 
 
+VoiceStyle = NonEmptyUnicodeText
+"""How a sentence should sound: free text, such as ``louder and angrier``. The text is passed
+through unchanged; the app neither bounds nor checks it, and its speech service owns the bound
+and the check."""
+
 SpokenLanguage = Annotated[str, StringConstraints(pattern=r"^[a-z]{2}$")]
 """The language of a spoken sentence: a lowercase ISO 639-1 code of two letters, such as ``de`` or
 ``en``. The record checks the form only; whether the app's voice speaks the language is the app's
@@ -265,11 +281,13 @@ decision."""
 
 class SpeakArguments(StrictModel):
     """The arguments of ``speak``: the place and one sentence, whose length the app bounds, and
-    optionally the ``language`` of that sentence; an absent one means the app's own default."""
+    optionally the ``language`` of that sentence and the ``style`` it should sound in, which the app
+    passes on unchanged; an absent one means the app's own default."""
 
     place: PlaceRef
     text: NonEmptyUnicodeText
     language: SpokenLanguage | None = Field(default=None, exclude_if=_is_none)
+    style: VoiceStyle | None = Field(default=None, exclude_if=_is_none)
 
 
 class Spoken(StrictModel):
@@ -280,11 +298,15 @@ class Spoken(StrictModel):
 
 class SpeakRefusal(StrEnum):
     """Why the app does not speak a sentence: ``language_unavailable`` when the app's voice does
-    not speak the language the sentence names."""
+    not speak the language the sentence names, ``style_unavailable`` for every refusal of the
+    ``style`` by the voice (it takes none, it is too long or it is not supported), and
+    ``stopped`` for a queued sentence that a ``stop_speaking`` dropped."""
 
     NOT_ACTIVE = "not_active"
     TOO_LONG = "too_long"
     LANGUAGE_UNAVAILABLE = "language_unavailable"
+    STYLE_UNAVAILABLE = "style_unavailable"
+    STOPPED = "stopped"
     UNAVAILABLE = "unavailable"
 
 
@@ -292,6 +314,53 @@ class SpeakRefused(StrictModel):
     """What ``speak`` answers on a refusal, as JSON in an ``is_error`` result."""
 
     refused: Annotated[SpeakRefusal, Field(strict=False)]
+
+
+class StopSpeakingArguments(StrictModel):
+    """The arguments of ``stop_speaking``: the place whose sentence and queue of the member are
+    cut."""
+
+    place: PlaceRef
+
+
+class StoppedSpeaking(StrictModel):
+    """What ``stop_speaking`` answers on success, as JSON: the text of the sentence it cut."""
+
+    cut: NonEmptyUnicodeText
+
+
+class StopSpeakingRefusal(StrEnum):
+    """Why the app does not stop: ``not_active`` when the member left, was removed or is paused;
+    ``nothing_playing`` when no sentence of the member plays, so nothing was cut or dropped."""
+
+    NOT_ACTIVE = "not_active"
+    NOTHING_PLAYING = "nothing_playing"
+
+
+class StopSpeakingRefused(StrictModel):
+    """What ``stop_speaking`` answers on a refusal, as JSON in an ``is_error`` result."""
+
+    refused: Annotated[StopSpeakingRefusal, Field(strict=False)]
+
+
+class PartialSpeech(StrictModel):
+    """What one person has said so far in an utterance that is not finished; provisional, never a
+    line. ``text`` is empty while the person has started and said no words yet."""
+
+    name: NonEmptyUnicodeText
+    text: UnicodeText
+
+
+class TalkedOver(StrictModel):
+    """People talk over the member. ``id`` is the app's, never repeats within the window's
+    ``generation`` and stays fixed from the record's appearance to its removal, so a runner takes
+    one decision per ``id``; a second person who starts speaking adds a ``PartialSpeech`` under
+    the same ``id``. ``playing`` says some sentence of the member plays at the place now. ``speech``
+    lists the people in the order they started speaking."""
+
+    id: NonEmptyUnicodeText
+    playing: bool
+    speech: tuple[PartialSpeech, ...] = Field(min_length=1)
 
 
 class PlaceEntry(StrictModel):
@@ -310,12 +379,15 @@ class PlaceWindow(StrictModel):
     """The lines of one place from ``starts_at`` on, in ascending ``seq``; ``seq`` may skip.
 
     ``generation`` names the run of ``seq`` numbers the window belongs to. An empty window is
-    valid, and its ``starts_at`` is the ``seq`` the next line will get.
+    valid, and its ``starts_at`` is the ``seq`` the next line will get. ``talked_over`` is set
+    only while people talk over the member; a person's partial and finished line are never both
+    in one read.
     """
 
     generation: NonEmptyUnicodeText
     starts_at: int = Field(ge=1)
     entries: tuple[PlaceEntry, ...]
+    talked_over: TalkedOver | None = Field(default=None, exclude_if=_is_none)
 
     @model_validator(mode="after")
     def _entries_ascend_from_the_start(self) -> Self:
