@@ -58,7 +58,8 @@ app never computes it and does not check the reason.
 invitation and still stands (id, epoch, expiry). A decline of one that no longer stands is refused
 with `stale_invitation` of `DeclineInvitationRefusal` and changes nothing. A standing decline ends
 the invitation at once, as its expiry does and without raising the epoch: the app takes the
-invitation from the agent's standing, signals the standing, and the row shows its outcome (CALLING-31), then is offered again.
+invitation from the agent's standing, signals the standing, and the row shows its outcome
+(CALLING-31), then is offered again.
 
 **CALLING-31.** A standing decline ends the call without a seat: the inviter's row shows the
 outcome busy (CALLING-14), mapped from the decline's reason (CALLING-22), and no refusal. A declined
