@@ -116,7 +116,8 @@ class _FrontMatter(BaseModel):
 class TurnRequest(BaseModel):
     """What a backend runs: the agent, its turn, its tools and the model, time and call bounds.
 
-    ``max_tool_calls`` is ``None`` exactly when the agent has no tools.
+    ``max_tool_calls`` is ``None`` exactly when the agent has no tools. ``one_call_per_reply``
+    asks a backend to serve one tool call per model reply; without tools it holds nothing.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -129,6 +130,7 @@ class TurnRequest(BaseModel):
     max_duration_seconds: PositiveInt
     max_tool_calls: PositiveInt | None
     picture_size: PictureSize | None = None
+    one_call_per_reply: bool = False
 
     @model_validator(mode="after")
     def _pair_tools_with_their_call_bound(self) -> Self:
@@ -193,12 +195,14 @@ class AgentDefinition(BaseModel):
         *,
         model: GatewayModelName | None = None,
         appended_system: str | None = None,
+        one_call_per_reply: bool = False,
     ) -> TurnRequest:
         """The request that starts a run of this agent over these messages.
 
         ``model`` overrides the file's model for this run; it must be of the agent's kind
         (``image/…`` for a picture agent), else ``ValueError``. ``appended_system`` follows the
-        file's prompt in the system text, after a blank line.
+        file's prompt in the system text, after a blank line. ``one_call_per_reply`` is carried
+        into the request unchanged.
         """
         system = self.prompt if appended_system is None else f"{self.prompt}\n\n{appended_system}"
         request = TurnRequest(
@@ -210,6 +214,7 @@ class AgentDefinition(BaseModel):
             max_duration_seconds=self.max_duration_seconds,
             max_tool_calls=self.max_tool_calls,
             picture_size=self.picture_size,
+            one_call_per_reply=one_call_per_reply,
         )
         if model_kind_of(request.model) is not self.model_kind:
             raise ValueError(f"model: must start with {self.model_kind}/")
