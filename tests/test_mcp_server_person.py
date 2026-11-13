@@ -623,6 +623,8 @@ def test_an_image_result_over_the_event_bound_is_replaced_by_a_fixed_error(
         ["text", "image"] if reaches_the_client else ["text"]
     )
     assert result["isError"] is (not reaches_the_client)
+    if not reaches_the_client:
+        assert result["content"][0]["text"] == "the tool result was too large"
 
 
 def test_a_failing_tool_gets_the_fixed_text_through_the_sdk_client(
