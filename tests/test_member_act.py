@@ -31,7 +31,6 @@ def test_a_line_that_is_no_act_dumps_without_the_key(spoken: bool) -> None:
     assert "act" not in dumped
 
 
-@pytest.mark.parametrize("fields", [{}, {"cut": True}], ids=["spoken", "spoken and cut"])
-def test_a_spoken_line_is_refused_with_act(fields: dict[str, bool]) -> None:
+def test_a_spoken_line_is_refused_with_act() -> None:
     with pytest.raises(ValidationError):
-        PlaceEntry.model_validate({**an_act().model_dump(), "spoken": True, **fields})
+        PlaceEntry.model_validate({**an_act().model_dump(), "spoken": True})

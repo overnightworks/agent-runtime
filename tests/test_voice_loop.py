@@ -361,7 +361,7 @@ def test_the_first_line_after_an_answer_that_played_is_the_one_marked_first_afte
     ]
 
 
-def test_an_act_line_never_wakes_even_when_it_names_the_agent_and_reaches_the_model_marked(place):
+def test_an_act_line_the_rule_would_wake_is_never_asked_and_reaches_the_model_marked(place):
     gateway = FakeGateway(completion("Gern."))
 
     async def hearing(trace):

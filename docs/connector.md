@@ -482,8 +482,8 @@ rather than what someone said, and a line that is no act dumps without the key; 
 refused with `act`, so a cut line is too. A runner that predates the field refuses a window
 carrying `act`, as it refuses a standing carrying `parent`. An act line is told and never calls the
 member to act. At a place with a view, `awaits_you` calls the member to act. Whether a line that is
-no act wakes the member stays the runner's wake rule. A window's `seq` ascends strictly and may skip; a non-empty window starts at its first
-`seq`; an empty window is valid and its `starts_at` is the `seq` the next line gets. A place's
+no act wakes the member stays the runner's wake rule. A window's `seq` ascends strictly and may
+skip; a non-empty window starts at its first `seq`; an empty window is valid and its `starts_at` is the `seq` the next line gets. A place's
 window is the resource `place_window_uri(place)`, `member://standing/places/{kind}/{id}` with each
 segment percent-encoded, so `/` in an opaque `kind` or `id` stays inside its segment;
 `place_ref_from_window_uri(uri)` returns the `PlaceRef` for that canonical spelling only and
@@ -517,9 +517,9 @@ than the revision they lead to; a change that adds lines and moves the revision 
 a change of the revision alone signals the view, and a line alone the window. A runner reads the
 view, then the window, so the window may already hold lines past the view's revision. It tells each
 line with its `kind` and `act`, and the per-line sentence of [the member module](#the-member-module)
-holds. No app writes act lines at a place until its runner has the field. Proved by `tests/test_member.py`, `tests/test_member_act.py`,
-`tests/test_mcp_server_resources.py`, `tests/test_mcp_server_listen_view.py` and
-`tests/test_voice_loop.py`.
+holds. No app writes act lines at a place until its runner has the field. Proved by
+`tests/test_member.py`, `tests/test_member_act.py`, `tests/test_mcp_server_resources.py`,
+`tests/test_mcp_server_listen_view.py` and `tests/test_voice_loop.py`.
 
 An accept may name the agent's 3D figure, `figure` as `FigureRef(url, sha256)`, and the `voice` it
 speaks with; both are optional, and an accept without them dumps without their keys. The record
@@ -574,8 +574,9 @@ How a person calls an agent to a place and sends it away is the same in every ap
 ## The standard path
 
 An agent learns what changes through the standard's resources and subscriptions, never by
-polling a tool: the app serves `member://standing`, one window per place and, beside it, the view of a place
-that has one, and tells the agent when one changed. This section is what a host wires and what a runner may rely on.
+polling a tool: the app serves `member://standing`, one window per place and, beside it, the view
+of a place that has one, and tells the agent when one changed. This section is what a host wires
+and what a runner may rely on.
 
 **The host** passes `resources=` and `changes=` to `McpPersonFront` and enters
 `async with front.running():` in its lifespan (see above). `resources` is one port,
@@ -589,7 +590,8 @@ change is visible to a read, on the front's event loop or through `anyio.from_th
 call for a principal with no open stream does nothing. `server/discover` advertises `resources`
 with the port and `resources.subscribe` true with `changes`, and no `listChanged`.
 
-**The answers.** `resources/list` answers exactly `current`, sorted (a view only beside its window, see [a place's view](#the-member-module)), each entry with the URI as its
+**The answers.** `resources/list` answers exactly `current`, sorted (a view only beside its
+window, see [a place's view](#the-member-module)), each entry with the URI as its
 `name` and `application/json`. `resources/read` answers one text content with the requested URI,
 `application/json` and the record's JSON. A `None` answers `-32602` with one fixed text that does
 not echo the URI, so an unknown, a foreign and a non-canonical URI look alike. A port that raises
@@ -869,8 +871,8 @@ await run_voice_loop(
   render taking no longer than the sentence playing before it adds no pause between the two.
 - `wakes` is the app's `WakeRule(line, *, first_after_answer)`, asked for every line that is
   neither the agent's own, nor an echo, nor an act. `first_after_answer` is true for the first such
-  line heard after a decision that played at least one sentence ended, while no decision is in flight, and
-  false for every other line, one heard while an answer plays included.
+  line heard after a decision that played at least one sentence ended, while no decision is in
+  flight, and false for every other line, one heard while an answer plays included.
 - `report` receives each `VoiceEvent`: `Woke`, `StayedSilent`, `ReplyUnreadable`,
   `SentenceStarted(text)`, `SentenceRefused(text)`, `DecisionFailed(kind, code, detail)`, whose
   `outcome` is the stop's `StopOutcome`, and `EchoDropped(text)`.
