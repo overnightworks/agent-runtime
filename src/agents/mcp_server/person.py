@@ -92,6 +92,7 @@ from agents.turn import (
     StrictModel,
     ToolImage,
     UnicodeText,
+    is_within_event_bound,
     written_base64,
 )
 
@@ -99,6 +100,7 @@ type ResolvePerson = Callable[[Scope], Principal]
 
 _LOG: Final = logging.getLogger(LOGGER_NAME)
 _HANDLER_FAILED_TEXT: Final = "the tool failed"
+_RESULT_TOO_LARGE_TEXT: Final = "the tool result was too large"
 _UNKNOWN_TOOL_TEXT: Final = "Unknown tool"
 _INVALID_ARGUMENTS_TEXT: Final = "Invalid tool arguments"
 _BEARER_SCHEME: Final = "bearer"
@@ -404,6 +406,8 @@ class McpPersonFront:
         name = tool.declaration.name
         try:
             outcome = await tool.handler(_CURRENT_REQUEST.get(), arguments)
+            if not is_within_event_bound(outcome.content, outcome.image):
+                outcome = ToolOutcome(_RESULT_TOO_LARGE_TEXT, is_error=True)
             result = _written(outcome)
         except Exception as failure:
             _LOG.error("a tool failed: %s raised %s", name, type(failure).__name__)

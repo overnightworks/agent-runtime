@@ -446,8 +446,11 @@ which holds the bearer, `Host` and client address a handler replays. A name give
 `test_concurrent_calls_each_get_the_person_and_the_scope_of_their_own_request` and
 `test_two_tools_of_one_name_are_refused_at_construction`. An outcome answers one `text` content
 block with its `content` and, with an `image`, an `image` content block after it, `mimeType`
-`image/jpeg` and the image as base64 `data`. Proved by
-`test_the_sdk_client_gets_an_image_result_as_an_image_block_after_its_text`.
+`image/jpeg` and the image as base64 `data`. A result whose text's UTF-8 bytes and image's bytes
+together pass `MAX_EVENT_BYTES` answers the one `isError` text block `the tool result was too
+large`, as the gateway backend does. Proved by
+`test_the_sdk_client_gets_an_image_result_as_an_image_block_after_its_text` and
+`test_an_image_result_over_the_event_bound_is_replaced_by_a_fixed_error`.
 
 Resources and subscriptions, the standard's way for an agent to learn what changed, are one
 more port and one more object on the front: see [the standard path](#the-standard-path).

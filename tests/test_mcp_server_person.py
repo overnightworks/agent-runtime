@@ -593,6 +593,38 @@ def test_the_sdk_client_gets_an_image_result_as_an_image_block_after_its_text(
     assert base64.b64decode(image_block.data, validate=True) == image.content
 
 
+@pytest.mark.parametrize(
+    ("image_bytes", "text_bytes", "reaches_the_client"),
+    [
+        (MAX_EVENT_BYTES - 10, 10, True),
+        (MAX_EVENT_BYTES - 10, 11, False),
+        (MAX_EVENT_BYTES, 0, True),
+        (MAX_EVENT_BYTES + 1, 0, False),
+    ],
+    ids=[
+        "text and image at the bound",
+        "text and image one over",
+        "an image alone at the bound",
+        "an image alone one over",
+    ],
+)
+def test_an_image_result_over_the_event_bound_is_replaced_by_a_fixed_error(
+    front: McpPersonFront,
+    person: Person,
+    image_bytes: int,
+    text_bytes: int,
+    reaches_the_client: bool,
+) -> None:
+    person.outcome = ToolOutcome("a" * text_bytes, is_error=False, image=a_tool_image(image_bytes))
+
+    result = post(front, rpc_body("tools/call", call_params("read_note"))).json()["result"]
+
+    assert [block["type"] for block in result["content"]] == (
+        ["text", "image"] if reaches_the_client else ["text"]
+    )
+    assert result["isError"] is (not reaches_the_client)
+
+
 def test_a_failing_tool_gets_the_fixed_text_through_the_sdk_client(
     front: McpPersonFront, person: Person
 ) -> None:

@@ -271,6 +271,12 @@ class ToolImage(StrictModel):
     content: Annotated[Base64Content, AfterValidator(_refuse_non_jpeg)]
 
 
+def is_within_event_bound(text: str, image: ToolImage | None) -> bool:
+    """Whether a tool result's UTF-8 text and its image's bytes together fit ``MAX_EVENT_BYTES``."""
+    image_bytes = 0 if image is None else len(image.content)
+    return len(text.encode("utf-8")) + image_bytes <= MAX_EVENT_BYTES
+
+
 class TurnRole(StrEnum):
     USER = "user"
     ASSISTANT = "assistant"

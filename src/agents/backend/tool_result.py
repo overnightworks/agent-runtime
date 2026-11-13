@@ -13,7 +13,7 @@ from typing import Final
 
 from agents.backend import TurnPerson, TurnStopped
 from agents.tools import HandToolHandler, JsonObject, ToolOutcome
-from agents.turn import MAX_EVENT_BYTES
+from agents.turn import is_within_event_bound
 from agents.turn_events import ToolResultEvent
 
 __all__ = ["RequestedCall", "serve"]
@@ -65,8 +65,7 @@ def _result_event(call: RequestedCall, outcome: ToolOutcome) -> ToolResultEvent:
         },
         strict=True,
     )
-    image_bytes = 0 if event.image is None else len(event.image.content)
-    if len(event.content.encode("utf-8")) + image_bytes > MAX_EVENT_BYTES:
+    if not is_within_event_bound(event.content, event.image):
         return _failed_event(call, _RESULT_TOO_LARGE_TEXT)
     return event
 
