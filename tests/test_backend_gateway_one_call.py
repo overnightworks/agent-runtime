@@ -22,7 +22,9 @@ def test_the_body_forbids_parallel_calls_when_tools_and_the_setting_are_on(shop)
     assert sent(gateway, 0)["parallel_tool_calls"] is False
 
 
-@pytest.mark.parametrize("with_tools", [True, False], ids=["tools-setting-off", "no-tools-setting-on"])
+@pytest.mark.parametrize(
+    "with_tools", [True, False], ids=["tools-setting-off", "no-tools-setting-on"]
+)
 def test_the_body_carries_no_parallel_setting_without_tools_or_the_setting(shop, with_tools):
     if with_tools:
         shop.add_tool("lookup")
