@@ -1,0 +1,8 @@
+claim_id = "1d788fb09a9c46eda48377756b0d89a4"
+agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
+role = "builder"
+base = "ffb0b3967fa0b056caa3e4175947047641ff7b68"
+branch = "claude/issue-896-an-agent-s-sentence-the-app-cannot-voice"
+scope = ["docs/connector.md", "docs/hearing.md", "src/agents/member.py", "tests"]
+opened_commit = "3e440d774e29b9280f343c44e89416b158821cd8"
+whole_reason = "One speaking contract: the speak answer, the voice state and when a line enters the window are served and read together by every app and runner."
