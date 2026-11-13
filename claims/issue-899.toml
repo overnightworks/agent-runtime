@@ -1,0 +1,8 @@
+claim_id = "68ebe2015c8d41db827d7d3b6903273a"
+agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
+role = "builder"
+base = "37e43f7592fe586b8589fe570270308b85080ca4"
+branch = "claude/issue-899-an-app-offers-a-member-only-the-tools-it"
+scope = ["docs/connector.md", "src/agents/mcp_server/__init__.py", "src/agents/mcp_server/listen.py", "src/agents/mcp_server/person.py", "tests"]
+opened_commit = "8816cbde523a899a5997a4e9efd528a5710b3c0f"
+whole_reason = "One front capability, the filtered list and its change announcement, which only work together."
