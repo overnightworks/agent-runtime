@@ -128,7 +128,7 @@ forbidden_modules =
     httpx
     agents.backend.gateway
 
-# Sound stays with the app and the speech service: the client sees only text.
+# Sound stays with the app and the speech service: the client carries no sound.
 [importlinter:contract:client-imports-no-speech-library]
 name = agents imports no speech library
 type = forbidden

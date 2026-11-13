@@ -1,13 +1,15 @@
 # Hearing an agent
 
-The rules by which an app lets an agent hear the people at a place, the same in every app. Read
-it when you build or change an app's way to let an agent hear, or write a test for it: a test
+The rules by which an app lets an agent hear, and see, the people at a place, the same in every
+app. Read it when you build or change an app's way to let an agent hear or see, or write a test for
+it: a test
 cites a rule by its ID, such as `HEARING-4`. The records the rules ride on (the place window, the
 `spoken` entry) are in [connector.md](connector.md#hearing-and-speaking).
 
-A **place** is where an app seats an agent as a member; a **speaker** is a person whose sound the
-app captures at a place; a **member** is an agent that may hear. The library carries text only:
-the app turns speech into text, and a finished utterance reaches the library as a record.
+A **place** is where an app seats an agent as a member; a **speaker** is a person whose sound or
+picture the app captures at a place; a **member** is an agent that may hear or see. The library
+carries no sound: the app turns speech into text, and a finished utterance reaches the library as a
+record. A picture reaches an agent only as a tool result (HEARING-19).
 
 ## The mental model
 
@@ -30,10 +32,12 @@ member of a person speaker only while that person allows it, and false when the 
 it.
 
 **HEARING-2 (L).** The record is keyed by place, the app's opaque speaker key, member and `Sense`;
-only `Sense.HEARING` is defined. The speaker key is the app's own, not a `Principal`, so a seat
+`Sense.HEARING` and `Sense.SEEING` (HEARING-19) are defined, each with its own entries, and `heard`
+reads hearing alone. The speaker key is the app's own, not a `Principal`, so a seat
 can end while the account goes on; the same key at two places names two speakers. Proved by
 `test_one_speaker_key_at_two_places_is_two_speakers` and
-`test_a_switch_on_for_one_speaker_is_not_one_for_another_speaker`.
+`test_a_switch_on_for_one_speaker_is_not_one_for_another_speaker` and
+`test_a_seeing_switch_is_its_own_and_lets_no_member_hear`.
 
 **HEARING-3 (L).** Nobody is heard before an `allow` is recorded. Proved by
 `test_nobody_hears_before_an_allow_is_recorded`.
@@ -199,7 +203,7 @@ while the voice stays `unavailable`; the next turn to `unavailable` after `avail
 
 ## What an app supplies
 
-**HEARING-18 (A).** The library owns no sound, no speech client, no token, no switch and no mark. An
+**HEARING-18 (A).** The library owns no sound, no camera, no speech client, no token, no switch and no mark. An
 app supplies:
 
 - its rule for who may hear whom, and every `allow` and end that follows from it;
@@ -210,13 +214,28 @@ app supplies:
 - the queue of an agent's sentences, the voice state, the written fallback and its log line
   (HEARING-14 to HEARING-17 and HEARING-24 to HEARING-26);
 - the talked-over record with the partials, the stop and the style (HEARING-21 to
-  HEARING-23); and
-- its privacy text, which states what is heard and its legal basis.
+  HEARING-23);
+- what seeing needs of it (HEARING-19); and
+- its privacy text, which states what is heard and seen and its legal basis.
 
 ## Owners
 
-**HEARING-19 (A).** Every app the standard covers follows these rules, so that who may hear whom
-works the same in each. This file owns the rules; the shared design kit holds the switch and the
-mark. The standard covers every fleet app that lets an agent with an account of its own hear
-people at a place; an app that does adopts it with the release of this library's part. Seeing is
-not defined.
+**HEARING-19 (L+A).** Every app the standard covers follows these rules, so that who may hear or
+see whom works the same in each. This file owns the rules; the shared design kit holds the
+switches and the marks. The standard covers every fleet app that lets an agent with an account of
+its own hear or see people at a place; an app that does adopts it with the release of this
+library's part. Seeing is the second sense: an agent sees a person only as one still picture it
+asks for through a tool of the app, which returns the picture as the `image` of its `ToolOutcome`
+for the agent's own model to read in that turn
+([connector.md](connector.md#the-tool-contract)). The app records the person's see switch with
+`allow` and `Sense.SEEING`, apart from hearing: one switch never moves the other, and every end of
+HEARING-7 ends both. Nobody is seen before a seeing `allow` is recorded, and the app records none
+when a member joins, so the switch starts off for every member, the person's own agent included,
+each time it joins a place; a look the switch does not allow answers a refusal and no picture. The
+app owns the rest: its look tool, the capture and what it captures, its bound on looks, the mark at
+each look and how long it holds a picture. The library keeps a picture only in the turn that reads
+it and writes it to no log record. Proved by
+`test_a_seeing_switch_is_its_own_and_lets_no_member_hear`,
+`test_nobody_is_seen_before_a_seeing_allow_and_again_after_an_end_and_a_rejoin`,
+`test_an_end_ends_seeing_as_it_ends_hearing` and
+`test_each_call_logs_its_name_id_and_error_flag_never_arguments_or_content`.

@@ -164,9 +164,13 @@ to side-effecting, because a tool nobody classified must be assumed to change st
 `tests/test_backend_gateway_tools.py`.
 
 `HandTool` is a declaration with the async handler `(Principal, JsonObject) -> ToolOutcome` that
-serves it in the app's own process; `ToolOutcome` is `content` and `is_error`. The module
-exports `Principal` and `JsonObject` too, so an app's `agent/tools.py` imports only
-`agents.tools`. `JsonObject` is a `dict[str, JsonValue]` (pydantic's `JsonValue`), so a handler
+serves it in the app's own process; `ToolOutcome` is `content`, `is_error` and `image`, which is
+`None` unless the tool lets the agent see. A `ToolImage` (`agents.turn`, exported by
+`agents.tools`) is one JPEG still picture: its bytes, written as canonical standard base64 in JSON,
+refused when empty or when they do not start with the JPEG start-of-image marker. JPEG is the one
+media type a tool sends, and an outcome without an image is sent as before. Proved by
+`tests/test_tool_image.py`. The module exports `Principal` and `JsonObject` too, so an app's
+`agent/tools.py` imports only `agents.tools`. `JsonObject` is a `dict[str, JsonValue]` (pydantic's `JsonValue`), so a handler
 narrows a nested value with `isinstance` before it reads it. The module imports neither `mcp_wire`
 nor anything of the MCP extra (`.importlinter` proves it).
 
@@ -306,19 +310,31 @@ that started may have written, and a cancelled `asyncio.to_thread` write may sti
 nothing implies it was undone. A blocking tool stays the app's: its handler uses
 `asyncio.to_thread`.
 
-A tool's `content` reaches the model, and so the gateway and the provider the model names: a
-tool returns only what that may see.
+A result with an `image` reaches the model in its own role-`tool` message, whose `content` is then
+a list: an `image_url` part whose URL is `data:image/jpeg;base64,` followed by the image, then a
+`text` part with the text (after `Error: ` for an error) unless the text is blank. Every later
+round of the turn sends that message again, image included, so the model can read the picture after
+its first answer too; each such round's `input_tokens` count it, since the gateway reports no
+separate count. The `ToolResultEvent` carries the same `image`. Proved by
+`test_an_image_result_reaches_the_model_as_an_image_part_inside_its_tool_message`,
+`test_an_image_with_no_text_is_sent_as_the_image_part_alone`,
+`test_an_error_outcome_with_an_image_sends_the_error_text_beside_it` and
+`test_every_later_round_of_the_turn_resends_the_image`.
+
+A tool's `content` and `image` reach the model, and so the gateway and the provider the model
+names: a tool returns only what that may see.
 
 | Bound | Value | Over it |
 | --- | --- | --- |
-| One tool result | `MAX_EVENT_BYTES` | the model gets a fixed `is_error` sentence instead of the content; the side effect stands; the turn continues |
-| One request of a turn, serialised | 4 × `MAX_EVENT_BYTES` | no request is sent; `failed: limit_exceeded` |
+| One tool result, its text's UTF-8 bytes and its image's bytes together | `MAX_EVENT_BYTES` | the model gets a fixed `is_error` sentence instead of the content and the image; the side effect stands; the turn continues |
+| One request of a turn, serialised, images as base64 | 4 × `MAX_EVENT_BYTES` | no request is sent; `failed: limit_exceeded` |
 | One line, one event's data | 6 × `MAX_EVENT_BYTES` + 64 KiB | `failed: provider_error` |
 | One round's text | `MAX_EVENT_BYTES`, judged per piece | `failed: provider_error`; the crossing piece is not shown |
 | One assembled round | the request bound | `failed: provider_error`; no handler runs |
 
 Proved by `test_a_tool_result_over_the_event_bound_is_replaced_and_the_side_effect_stands`,
 `test_repeated_large_results_stop_the_turn_before_a_request_over_the_bound`,
+`test_two_full_size_images_and_a_third_stop_the_turn_before_a_request_over_the_bound`,
 `test_a_line_that_never_ends_is_cut_at_the_bound_as_provider_error` and
 `test_a_round_past_the_request_bound_runs_no_handler`; the crossing piece by
 `test_a_round_that_streams_text_then_fails_leaves_the_text_shown_and_runs_nothing`; the reader's
@@ -427,7 +443,10 @@ A tool is `PersonTool(declaration, handler)`; the handler is
 which holds the bearer, `Host` and client address a handler replays. A name given twice raises
 `ValueError` at construction. Proved by `test_a_call_hands_the_handler_the_resolved_person_and_the_request_scope`,
 `test_concurrent_calls_each_get_the_person_and_the_scope_of_their_own_request` and
-`test_two_tools_of_one_name_are_refused_at_construction`.
+`test_two_tools_of_one_name_are_refused_at_construction`. An outcome answers one `text` content
+block with its `content` and, with an `image`, an `image` content block after it, `mimeType`
+`image/jpeg` and the image as base64 `data`. Proved by
+`test_the_sdk_client_gets_an_image_result_as_an_image_block_after_its_text`.
 
 Resources and subscriptions, the standard's way for an agent to learn what changed, are one
 more port and one more object on the front: see [the standard path](#the-standard-path).
@@ -634,8 +653,9 @@ decisions, and enforcing the lease, removing a member whose lease ran out.
 ## Hearing and speaking
 
 A member that hears a conversation and speaks in it does both through the member module's
-records, the same way in every app. The library carries text only: the app turns speech into text
-and a sentence into sound.
+records, the same way in every app. The library carries no sound: the app turns speech into text
+and a sentence into sound, and an agent sees only through a tool result's image
+([HEARING-19](hearing.md)).
 
 **Hearing.** Heard speech is a window entry with `spoken` true: its `text` is one finished
 utterance and its `name` the speaker's shown name. Which member hears which speaker, and the
@@ -810,7 +830,7 @@ route reading lifespan state from `scope["state"]` fails visibly
 waits until the response is complete and answers `http.disconnect`
 (`test_receive_gives_the_body_once_then_blocks_until_the_response_is_complete`).
 
-**Outcomes.** A 2xx gives the body text and a 4xx a failed result with the route's body. A 3xx, a
+**Outcomes.** A 2xx gives the body text, never an image, and a 4xx a failed result with the route's body. A 3xx, a
 5xx, a body over `MAX_EVENT_BYTES` (no byte past it is kept), a body that is not UTF-8 and an app
 that returns before its response is complete give a failed result with one fixed text; only the
 status is logged. An exception the app raises propagates to the front, which answers its own

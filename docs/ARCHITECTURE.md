@@ -230,8 +230,8 @@ over the whole suite.
 - Gateway replies are parsed with plain `json.loads`, while MCP request bodies go through the
   strict reader that refuses `NaN`, `Infinity` and duplicate keys. A gateway is trusted more
   than a person's agent, but the two paths do not share one rule.
-- A tool's result travels to the gateway and the provider as conversation text; the client
-  bounds its size but cannot know what it holds.
+- A tool's result travels to the gateway and the provider as conversation text, and a picture when
+  the tool returns one; the client bounds its size but cannot know what it holds.
 - An app that stops pulling without closing holds the response open: the deadline is checked at
   its next pull.
 - The echo rule is a stopgap that judges text alone: it misses an echo mixed with more words of a

@@ -7,7 +7,8 @@ tools once, in the same way as every other app. It runs their turns, for text, f
 for a conversation by voice, against its own model gateway, and it can hand the same tools to a
 signed-in person's own agent. An app that hears and speaks offers both to an agent the same way:
 heard text with its speaker in the place's window, spoken text through one standard tool. The
-sound stays with the app and the speech service; this library sees only text.
+sound stays with the app and the speech service; this library carries text, and the one still
+picture an app's tool hands an agent to see.
 
 ## What it does
 
