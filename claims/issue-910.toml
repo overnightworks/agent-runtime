@@ -1,0 +1,7 @@
+claim_id = "cb6ab6256695481786bbe66801beb19f"
+agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
+role = "builder"
+base = "f27769e26f8839afbde0fc1d67b09f2f1f855791"
+branch = "claude/issue-910-the-mcp-person-front-answers-a-picture-w"
+scope = ["docs/connector.md", "src/agents/mcp_server/person.py", "tests/test_mcp_server_person.py"]
+opened_commit = "e0341530e170d3fb93002dd9794737347de5c743"
