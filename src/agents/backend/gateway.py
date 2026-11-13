@@ -101,6 +101,7 @@ _ARGUMENTS: Final = TypeAdapter(JsonObject)
 _MODEL_NAME: Final = TypeAdapter(GatewayModelName)
 # The chat format has no error flag on a tool message, so the text carries it to the model.
 _ERROR_PREFIX: Final = "Error: "
+_NOT_RUN_CONTENT: Final = "not run: one call per reply"
 
 
 class GatewayDetail(StrEnum):
@@ -189,9 +190,10 @@ class GatewayBackend(AgentBackend):
                 if reply.message is None:
                     yield FinalEvent(text=reply.text, usage=_summed(usages))
                     return
-                progress.admit(reply.calls)
+                served = reply.calls[:1] if request.one_call_per_reply else reply.calls
+                progress.admit(reply.calls, served)
                 messages.append(reply.message)
-                for call in reply.calls:
+                for call in served:
                     yield ToolCallEvent(tool_use_id=call.id, name=call.name, input=call.arguments)
                     _refuse_after(deadline)
                     progress.wrote |= tools[call.name].effect is ToolEffect.SIDE_EFFECTING
@@ -199,6 +201,7 @@ class GatewayBackend(AgentBackend):
                     result = await _before(deadline, serve(handler, person, call))
                     messages.append(_result_message(result))
                     yield result
+                messages += [_result_message(_not_run(call)) for call in reply.calls[len(served) :]]
         except TurnStopped as stopped:
             stopped.after_side_effect = stopped.after_side_effect or progress.wrote
             raise
@@ -379,6 +382,7 @@ class _Body(TypedDict):
     stream: bool
     stream_options: _StreamOptions
     tools: NotRequired[list[_FunctionTool]]
+    parallel_tool_calls: NotRequired[bool]
 
 
 @dataclass(frozen=True)
@@ -400,13 +404,13 @@ class _Progress:
     wrote: bool = False
     call_ids: set[str] = field(default_factory=set[str])
 
-    def admit(self, calls: tuple[RequestedCall, ...]) -> None:
+    def admit(self, calls: tuple[RequestedCall, ...], served: tuple[RequestedCall, ...]) -> None:
         ids = {call.id for call in calls}
         if len(ids) != len(calls) or not ids.isdisjoint(self.call_ids):
             raise _malformed_reply()
-        if self.calls + len(calls) > self.max_tool_calls:
+        if self.calls + len(served) > self.max_tool_calls:
             raise _limit_exceeded()
-        self.calls += len(calls)
+        self.calls += len(served)
         self.call_ids |= ids
 
 
@@ -439,6 +443,10 @@ def _opening_messages(request: TurnRequest) -> list[_Message]:
         for message in request.turn.messages
     ]
     return messages
+
+
+def _not_run(call: RequestedCall) -> ToolResultEvent:
+    return ToolResultEvent(tool_use_id=call.id, content=_NOT_RUN_CONTENT, is_error=True)
 
 
 def _result_message(result: ToolResultEvent) -> _Message:
@@ -474,6 +482,8 @@ def _body(request: TurnRequest, messages: list[_Message], user: str) -> str:
             }
             for tool in request.tools
         ]
+        if request.one_call_per_reply:
+            body["parallel_tool_calls"] = False
     return json.dumps(body)
 
 

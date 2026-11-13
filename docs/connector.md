@@ -19,11 +19,16 @@ library; the one implementation, `backend.gateway.GatewayBackend`, needs the `ba
 `request` is a `TurnRequest` (`agents.agent_file`, frozen): `agent`, `turn`, `roles`,
 `tools` (the agent's selected `ToolDeclaration`s), `model`, `max_duration_seconds`,
 `max_tool_calls` (`None` exactly when `tools` is empty) and `picture_size` (`None` for a text
-agent). `AgentDefinition.request(messages, *, model=None, appended_system=None)` builds it;
-`model` overrides the file's model for that run, with a model of the agent's kind, and
-`appended_system` follows the file's prompt in the system text, after a blank line.
+agent). `AgentDefinition.request(messages, *, model=None, appended_system=None,
+one_call_per_reply=False)` builds it; `model` overrides the file's model for that run, with a
+model of the agent's kind, and `appended_system` follows the file's prompt in the system text,
+after a blank line. `one_call_per_reply` (`TurnRequest.one_call_per_reply`, default `False`)
+asks for one tool call per model reply; it has two effects, described under the gateway body and
+the tool loop, and none for an agent without tools. Every further act then takes one more model
+round.
 Proved by `tests/test_agent_file.py`: `test_request_carries_the_files_prompt_model_roles_and_tools`,
-`test_request_model_is_the_override_when_given`, `test_request_is_frozen`; the appended text by
+`test_request_model_is_the_override_when_given`, `test_request_is_frozen`,
+`test_request_carries_one_call_per_reply_only_when_asked`; the appended text by
 `tests/test_voice_loop.py`: `test_a_spoken_line_that_wakes_sends_one_request_with_prompt_protocol_context_and_the_line`.
 
 `person` is a `TurnPerson` (frozen, always a person): `principal` (the verified `(iss, sub)`),
@@ -222,7 +227,7 @@ What the client sends for a text turn, and nothing else:
 | --- | --- |
 | Request | `POST <origin>/v1/chat/completions`, no redirect followed, no cookie kept, no proxy variable read; HTTPS trusts `ca_file` alone |
 | Headers | `Authorization: Bearer <key>`, `Content-Type: application/json`, and the transport's own defaults; no `x-litellm-*` or `anthropic-*` header |
-| Body | exactly `model` (the request's `text/<model>` name), `messages` (the system prompt, then the turn's messages, then the round's calls and results), `user`, `stream` (`true`), `stream_options` (`{"include_usage": true}`, on every round) and, when the agent has tools, `tools` (OpenAI function tools of each declaration's `name`, `description` and `parameters`); no `max_tokens`, `metadata`, `tags`, `fallbacks`, `num_retries`, `mock_response`, `api_key` or cache marker |
+| Body | exactly `model` (the request's `text/<model>` name), `messages` (the system prompt, then the turn's messages, then the round's calls and results), `user`, `stream` (`true`), `stream_options` (`{"include_usage": true}`, on every round) and, when the agent has tools, `tools` (OpenAI function tools of each declaration's `name`, `description` and `parameters`) and, when the agent has tools and `one_call_per_reply` is on, `parallel_tool_calls` (`false`); no `max_tokens`, `metadata`, `tags`, `fallbacks`, `num_retries`, `mock_response`, `api_key` or cache marker |
 | `user` | `"fp-" + sha256(json.dumps([iss, sub], ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()`, 67 characters |
 
 Proved by `tests/test_backend_gateway.py`: `test_the_request_is_one_post_with_the_system_prompt_and_the_messages`,
@@ -285,6 +290,13 @@ not a JSON object, an empty round or a call id used twice in the turn refuses th
 `test_a_call_to_a_tool_the_agent_did_not_select_is_refused`,
 `test_a_call_id_reused_in_a_later_round_refuses_that_round_and_keeps_the_side_effect_state` and
 `test_crossing_max_tool_calls_fails_with_limit_exceeded`.
+
+With `one_call_per_reply` on, a reply that still carries several calls keeps all of them in its
+message (ids are checked for doubles across all of them) and serves only the first. Each other
+call gets an error result, `not run: one call per reply`, in the model's messages only, after
+the served call's result and in reply order; the host sees no event for it and it does not count
+against `max_tool_calls`. The model decides again and the turn goes on. Proved by
+`tests/test_backend_gateway_one_call.py`.
 
 For each call, in order: `ToolCallEvent`; the side-effect state set from the declaration's
 `ToolEffect`, before the handler runs; `await handler(principal, arguments)`; `ToolResultEvent`.

@@ -361,10 +361,11 @@ class Shop:
         max_tool_calls: int = 5,
         selected: tuple[str, ...] | None = None,
         late_after: type | None = None,
+        one_call_per_reply: bool = False,
     ) -> tuple[list, TurnStopped | None, FakeGateway]:
         gateway = FakeGateway(*replies)
         chosen = [t for t in self.tools if selected is None or t.declaration.name in selected]
-        request = a_tool_request(chosen, max_tool_calls)
+        request = a_tool_request(chosen, max_tool_calls, one_call_per_reply=one_call_per_reply)
         backend = GatewayBackend(self.config(), tools=self.tools, transport=gateway)
         with asyncio.Runner(loop_factory=VirtualTimeLoop) as runner:
             events, stopped = runner.run(shop_turn(backend, request, late_after))
@@ -378,7 +379,9 @@ async def _noted() -> ToolOutcome:
     return ToolOutcome("noted", is_error=False)
 
 
-def a_tool_request(tools: list[HandTool], max_tool_calls: int) -> TurnRequest:
+def a_tool_request(
+    tools: list[HandTool], max_tool_calls: int, *, one_call_per_reply: bool = False
+) -> TurnRequest:
     return TurnRequest(
         agent="helper",
         turn=Turn(system="Answer briefly.", messages=[TurnMessage(role=TurnRole.USER, text="Hi")]),
@@ -387,6 +390,7 @@ def a_tool_request(tools: list[HandTool], max_tool_calls: int) -> TurnRequest:
         model="text/standin",
         max_duration_seconds=TURN_BUDGET_SECONDS,
         max_tool_calls=max_tool_calls if tools else None,
+        one_call_per_reply=one_call_per_reply,
     )
 
 

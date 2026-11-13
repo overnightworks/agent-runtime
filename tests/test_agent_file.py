@@ -552,6 +552,14 @@ def test_request_model_is_the_override_when_given(tmp_path: Path) -> None:
     assert request.model == "text/haiku"
 
 
+def test_request_carries_one_call_per_reply_only_when_asked(tmp_path: Path) -> None:
+    agent = load(tmp_path, agent_text())
+    messages = [TurnMessage(role=TurnRole.USER, text="hi")]
+
+    assert not agent.request(messages).one_call_per_reply
+    assert agent.request(messages, one_call_per_reply=True).one_call_per_reply
+
+
 PICTURE = "picture: {size: 1024x1024}"
 
 
