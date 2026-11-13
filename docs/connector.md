@@ -169,7 +169,7 @@ serves it in the app's own process; `ToolOutcome` is `content`, `is_error` and `
 `agents.tools`) is one JPEG still picture: its bytes, written as canonical standard base64 in JSON,
 refused when empty or when they do not start with the JPEG start-of-image marker. JPEG is the one
 media type a tool sends, and an outcome without an image is sent as before. Proved by
-`tests/test_tool_image.py`. The module exports `Principal` and `JsonObject` too, so an app's
+`tests/test_turn_tool_image.py`. The module exports `Principal` and `JsonObject` too, so an app's
 `agent/tools.py` imports only `agents.tools`. `JsonObject` is a `dict[str, JsonValue]` (pydantic's `JsonValue`), so a handler
 narrows a nested value with `isinstance` before it reads it. The module imports neither `mcp_wire`
 nor anything of the MCP extra (`.importlinter` proves it).
