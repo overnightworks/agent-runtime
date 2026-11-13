@@ -1,0 +1,7 @@
+claim_id = "0eefae11c0434c4bb06463904e9837a3"
+agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
+role = "builder"
+base = "4f5b0d7277ba1f892725b6a5a37713415dc63fef"
+branch = "fix/opentelemetry-api-advisory"
+scope = ["uv.lock"]
+opened_commit = "5255b2f885dd89f873e3492cf1ed7e4fb54e618d"
