@@ -1,4 +1,4 @@
-"""The words an app uses for a turn: its conversation, files and failure codes.
+"""The words an app uses for a turn: its conversation, files, tool images and failure codes.
 
 This module is the one owner of the turn's vocabulary, shared by the backend, the tool contract
 and the MCP person front. It imports neither ``tools`` nor ``mcp_wire``.
@@ -239,15 +239,35 @@ def _write_base64(content: bytes) -> str:
     return base64.b64encode(content).decode("ascii")
 
 
+Base64Content = Annotated[
+    bytes,
+    BeforeValidator(_read_canonical_base64),
+    PlainSerializer(_write_base64, return_type=str, when_used="json"),
+]
+
+
 class RunFile(StrictModel):
     """One file a run returns: its name and its bytes, with no media type."""
 
     name: Annotated[str, AfterValidator(_refuse_non_file_name)]
-    content: Annotated[
-        bytes,
-        BeforeValidator(_read_canonical_base64),
-        PlainSerializer(_write_base64, return_type=str, when_used="json"),
-    ]
+    content: Base64Content
+
+
+TOOL_IMAGE_MEDIA_TYPE: Final = "image/jpeg"
+_JPEG_START: Final = b"\xff\xd8\xff"
+
+
+def _refuse_non_jpeg(content: bytes) -> bytes:
+    # the start-of-image marker is what the media type promises the model
+    if not content.startswith(_JPEG_START):
+        raise ValueError("must be a JPEG: empty, or without its start-of-image marker")
+    return content
+
+
+class ToolImage(StrictModel):
+    """One JPEG still picture a tool hands the agent's own model, as its bytes."""
+
+    content: Annotated[Base64Content, AfterValidator(_refuse_non_jpeg)]
 
 
 class TurnRole(StrEnum):

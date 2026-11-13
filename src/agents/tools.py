@@ -2,8 +2,8 @@
 
 This module is the one owner of ``ToolDeclaration`` and its ``ToolEffect``. ``HandTool`` is a
 declaration with the handler an app serves it with, for the person a turn acts for;
-``ToolOutcome`` is what a handler answers. ``Principal`` and ``JsonObject`` are re-exported so an
-app's tools import only this module.
+``ToolOutcome`` is what a handler answers. ``Principal``, ``JsonObject`` and ``ToolImage`` are
+re-exported so an app's tools import only this module.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
-from agents.turn import JsonObject, Principal
+from agents.turn import JsonObject, Principal, ToolImage
 
 __all__ = [
     "HandTool",
@@ -24,6 +24,7 @@ __all__ = [
     "Principal",
     "ToolDeclaration",
     "ToolEffect",
+    "ToolImage",
     "ToolOutcome",
     "agent_tool",
     "not_an_agent_tool",
@@ -62,10 +63,13 @@ class ToolDeclaration(BaseModel):
 
 @dataclass(frozen=True)
 class ToolOutcome:
-    """What a tool answers: the text a model is shown and whether the call failed."""
+    """What a tool answers: the text a model is shown, whether the call failed and, for a tool that
+    lets the agent see, the one picture the model reads next to the text.
+    """
 
     content: str
     is_error: bool
+    image: ToolImage | None = None
 
 
 type HandToolHandler = Callable[[Principal, JsonObject], Awaitable[ToolOutcome]]
