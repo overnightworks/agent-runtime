@@ -1,6 +1,6 @@
 [project]
 name = "overnightworks-agents"
-version = "0.38.0"
+version = "0.39.0"
 description = "Light client for apps that run agents: the agent file, the tool contract an app declares and the gateway backend"
 authors = [{ name = "Flex0r (Felix Hummert)", email = "felix.hummert@gmail.com" }]
 license = { text = "MIT" }
