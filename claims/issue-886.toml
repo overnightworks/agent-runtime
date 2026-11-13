@@ -1,8 +1,0 @@
-claim_id = "72284c87a2584787833fec09e30ee5f3"
-agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
-role = "builder"
-base = "41a7659481a74dbb3c32326b2c939c204fa13269"
-branch = "claude/issue-886-an-agent-at-its-limit-declines-an-invita"
-scope = ["docs/calling.md", "docs/connector.md", "src/agents/member.py", "tests"]
-opened_commit = "09ddb320db967939473eadd5d84945061630d4ce"
-whole_reason = "One new member tool with its typed arguments and refusal, its CALLING rules, its connector paragraph and its tests."
