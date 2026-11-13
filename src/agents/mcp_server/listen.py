@@ -1,10 +1,10 @@
 """The person front's ``subscriptions/listen``: changes per verified principal, a level trigger.
 
-A notification only says that something changed: the client reads the resource afterwards, so a
-lost, repeated or late one leaves no stale state. An app calls ``ResourceChanges.changed`` only
-after the change is visible to a read. Every open stream keeps its own pending URIs, coalesced
-and in arrival order, which is why several streams of one principal each receive a change and
-no overflow policy exists.
+A notification only says that something changed: the client reads the resource or the tool list
+afterwards, so a lost, repeated or late one leaves no stale state. An app calls
+``ResourceChanges.changed`` or ``tools_changed`` only after the change is visible to a read. Every
+open stream keeps its own pending pulses, coalesced and in arrival order, which is why several
+streams of one principal each receive a change and no overflow policy exists.
 
 The SDK's ``ListenHandler`` checks no principal, so this module owns the handler. It registers
 its stream first, so a change while the acknowledgement is being built is kept, and it checks
@@ -23,11 +23,15 @@ from typing import Any, Final
 
 import anyio
 from mcp.server.context import ServerRequestContext
-from mcp.shared.subscriptions import SUBSCRIPTION_ID_META_KEY
+from mcp.shared.subscriptions import (
+    SUBSCRIPTION_ID_META_KEY,
+    ResourceUpdated,
+    ToolsListChanged,
+    event_to_notification,
+)
 from mcp_types import (
     ErrorData,
-    ResourceUpdatedNotification,
-    ResourceUpdatedNotificationParams,
+    ServerNotification,
     SubscriptionFilter,
     SubscriptionsAcknowledgedNotification,
     SubscriptionsAcknowledgedNotificationParams,
@@ -48,38 +52,47 @@ from agents.turn import Principal
 
 _LOG: Final = logging.getLogger(LOGGER_NAME)
 
+type _Pulse = ResourceUpdated | ToolsListChanged
+
 
 class _ListenStream:
-    """One listen stream: its pending URIs, a repeated one staying once at its first arrival, and
-    the URIs it honors from its acknowledgement on."""
+    """One listen stream: its pending pulses, a repeated one staying once at its first arrival,
+    and what it honors from its acknowledgement on: URIs, and whether the tool list."""
 
     def __init__(self) -> None:
-        self._uris: dict[str, None] = {}
+        self._pulses: dict[_Pulse, None] = {}
         self._arrived = anyio.Event()
         self._honored: dict[str, None] = {}
+        self._honors_tools = False
 
-    def add(self, uri: str) -> None:
-        self._uris[uri] = None
+    def add(self, pulse: _Pulse) -> None:
+        self._pulses[pulse] = None
         self._arrived.set()
 
-    async def next(self) -> str:
-        while not self._uris:
+    async def next(self) -> _Pulse:
+        while not self._pulses:
             await self._arrived.wait()
             self._arrived = anyio.Event()
-        uri = next(iter(self._uris))
-        del self._uris[uri]
-        return uri
+        pulse = next(iter(self._pulses))
+        del self._pulses[pulse]
+        return pulse
 
     @property
     def honored(self) -> Collection[str]:
         return self._honored.keys()
 
-    def honor(self, uris: Collection[str]) -> None:
+    @property
+    def honors_tools(self) -> bool:
+        return self._honors_tools
+
+    def honor(self, uris: Collection[str], *, tools: bool) -> None:
         self._honored = dict.fromkeys(uris)
+        self._honors_tools = tools
 
 
 class ResourceChanges:
-    """How an app says that a member's resource changed; no argument of a request reaches it.
+    """How an app says that a member's resource or tool offer changed; no argument of a request
+    reaches it.
 
     ``listening_changed`` is called with the principal, the URI and the new answer of
     ``listens_to`` whenever that answer changes: to yes on the request task that wrote the first
@@ -102,15 +115,26 @@ class ResourceChanges:
         the change is visible to the read.
         """
         for pending in self._streams.get(recipient, ()):
-            pending.add(uri)
+            pending.add(ResourceUpdated(uri))
+
+    def tools_changed(self, recipient: Principal) -> None:
+        """Signal every registered stream of the recipient that the tools offered to it changed;
+        only a stream that honored ``toolsListChanged`` writes it.
+
+        Runs on the front's event loop or through ``anyio.from_thread.run_sync``, and only after
+        the new offer is visible to ``offered_tools``.
+        """
+        for pending in self._streams.get(recipient, ()):
+            pending.add(ToolsListChanged())
 
     def listens_to(self, principal: Principal, uri: str) -> bool:
         """Whether a stream of the principal honored the URI and is open or ended not yet
         ``LISTEN_ALLOWANCE_SECONDS`` ago.
 
         A stream not yet acknowledged and one honoring only other URIs do not count; the URI
-        asked is compared as it is, so a place window is not the standing. Runs on the front's
-        event loop, as ``changed`` does.
+        asked is compared as it is, so a place window is not the standing, and a stream that honored
+        only the tool list counts for no URI. Runs on the front's event loop, as ``changed``
+        does.
         """
         return any(uri in stream.honored for stream in self._streams.get(principal, ()))
 
@@ -131,11 +155,17 @@ class ResourceChanges:
                 self._forget(recipient, stream)
 
     def acknowledged(
-        self, recipient: Principal, stream: _ListenStream, honored: Collection[str]
+        self,
+        recipient: Principal,
+        stream: _ListenStream,
+        honored: Collection[str],
+        *,
+        tools: bool,
     ) -> None:
-        """The stream's acknowledgement was written: it honors the URIs from now on."""
+        """The stream's acknowledgement was written: it honors the URIs, and the tool list when
+        ``tools``, from now on."""
         newly_listened = [uri for uri in honored if not self.listens_to(recipient, uri)]
-        stream.honor(honored)
+        stream.honor(honored, tools=tools)
         for uri in newly_listened:
             self._signal(recipient, uri, listens=True)
 
@@ -185,28 +215,27 @@ class _Stream:
     def _meta(self) -> dict[str, Any]:
         return {SUBSCRIPTION_ID_META_KEY: self.context.request_id}
 
-    async def acknowledge(self, honored: Sequence[str]) -> None:
+    async def acknowledge(self, honored: Sequence[str], *, tools: bool) -> None:
         await self._send(
             SubscriptionsAcknowledgedNotification(
                 params=SubscriptionsAcknowledgedNotificationParams(
-                    notifications=SubscriptionFilter(resource_subscriptions=list(honored) or None),
+                    notifications=SubscriptionFilter(
+                        tools_list_changed=True if tools else None,
+                        resource_subscriptions=list(honored) or None,
+                    ),
                     _meta=self._meta,
                 )
             )
         )
 
-    async def updated(self, uri: str) -> None:
-        await self._send(
-            ResourceUpdatedNotification(
-                params=ResourceUpdatedNotificationParams(uri=uri, _meta=self._meta)
-            )
-        )
+    async def pulse(self, pulse: _Pulse) -> None:
+        await self._send(event_to_notification(pulse, self._meta))
 
     def completed(self) -> SubscriptionsListenResult:
         return SubscriptionsListenResult(_meta=self._meta)
 
     async def _send(
-        self, notification: ResourceUpdatedNotification | SubscriptionsAcknowledgedNotification
+        self, notification: ServerNotification | SubscriptionsAcknowledgedNotification
     ) -> None:
         await self.context.session.send_notification(
             notification, related_request_id=self.context.request_id
@@ -219,18 +248,23 @@ async def _deliver(
     open_stream: _ListenStream,
     stream: _Stream,
 ) -> None:
-    """Writes each wanted pulse the principal may still read, until a port failure ends it."""
+    """Writes each wanted pulse, a resource's only while the principal may still read it, until a
+    port failure ends it."""
     while True:
-        uri = await open_stream.next()
-        if not _wanted(uri, open_stream.honored):
+        pulse = await open_stream.next()
+        if isinstance(pulse, ToolsListChanged):
+            if open_stream.honors_tools:
+                await stream.pulse(pulse)
+            continue
+        if not _wanted(pulse.uri, open_stream.honored):
             continue
         try:
-            still_readable = uri in await served_uris(resources, principal)
+            still_readable = pulse.uri in await served_uris(resources, principal)
         except Exception as failure:
             failure_answer(LISTEN_METHOD, failure)
             return
         if still_readable:
-            await stream.updated(uri)
+            await stream.pulse(pulse)
 
 
 async def on_subscriptions_listen(
@@ -239,10 +273,13 @@ async def on_subscriptions_listen(
     principal: Principal,
     context: ServerRequestContext[Any],
     params: SubscriptionsListenRequestParams,
+    *,
+    announces_tools: bool,
 ) -> SubscriptionsListenResult | ErrorData:
     """One stream for the verified principal; it ends at ``LISTEN_BOUND_SECONDS``.
 
-    No exception of the port reaches the SDK; a cancellation propagates.
+    ``toolsListChanged`` is honored when asked and ``announces_tools``; no other list-changed
+    flag is. No exception of the port reaches the SDK; a cancellation propagates.
     """
     stream = _Stream(context)
     with changes.opened(principal) as open_stream, anyio.move_on_after(LISTEN_BOUND_SECONDS):
@@ -251,7 +288,8 @@ async def on_subscriptions_listen(
         except Exception as failure:
             return failure_answer(LISTEN_METHOD, failure)
         honored = _honored(params.notifications.resource_subscriptions or (), readable)
-        await stream.acknowledge(honored)
-        changes.acknowledged(principal, open_stream, honored)
+        tools = announces_tools and params.notifications.tools_list_changed is True
+        await stream.acknowledge(honored, tools=tools)
+        changes.acknowledged(principal, open_stream, honored, tools=tools)
         await _deliver(resources, principal, open_stream, stream)
     return stream.completed()

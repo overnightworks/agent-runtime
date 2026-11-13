@@ -469,8 +469,11 @@ included, gets `-32022` naming the served version. Proved by
 `test_a_body_one_byte_over_the_bound_is_too_large_and_runs_nothing`,
 `test_a_body_with_a_repeated_member_or_a_non_json_number_is_refused_before_dispatch` and
 `test_anything_but_a_request_at_the_served_revision_is_refused_naming_it`. `tools/list` offers every
-tool, because rights are the route's, with `annotations.readOnlyHint` true for a `READ_ONLY` tool
-and absent otherwise (`test_tools_list_shows_every_tool_with_the_read_only_hint_only_on_a_read_only_one`).
+tool, or with `offered_tools` only the tools of the moment ([the tools of the
+moment](#the-standard-path)), in declaration order, because rights are the route's, each with
+`annotations.readOnlyHint` true for a `READ_ONLY` tool and absent otherwise
+(`test_tools_list_shows_every_tool_with_the_read_only_hint_only_on_a_read_only_one` and
+`test_tools_list_answers_only_the_offered_tools_in_declaration_order_per_member`).
 The SDK answers the rest of the protocol (`Mcp-Method` mismatch `-32020`, missing `_meta` `-32602`,
 unknown method 404): `test_the_sdk_ladder_answers_a_malformed_request_with_its_standard_error`.
 
@@ -618,7 +621,8 @@ is always the request's verified one and no argument names a recipient. `changes
 the host calls `changes.changed(recipient, uri)` for the recipient's `Principal` only after the
 change is visible to a read, on the front's event loop or through `anyio.from_thread.run_sync`; a
 call for a principal with no open stream does nothing. `server/discover` advertises `resources`
-with the port and `resources.subscribe` true with `changes`, and no `listChanged`.
+with the port, `resources.subscribe` true with `changes`, and `tools.listChanged` true only with
+`offered_tools`; `resources.listChanged` is always false.
 
 **The answers.** `resources/list` answers exactly `current`, sorted (a view only beside its
 window, see [a place's view](#the-member-module)), each entry with the URI as its
@@ -673,6 +677,28 @@ from it), and an exception from it is logged by type and never reaches a listen.
 for every URI the acknowledgement honored, so a host picks the ones it offers on. The read and the
 call come from one rule, so they never disagree. Proved by
 `tests/test_mcp_server_listen_liveness.py`.
+
+**The tools of the moment.** A host that offers a member only the tools it can use now passes
+`offered_tools=`, an `OfferedTools` (exported by `agents.mcp_server`): `(principal) ->
+Awaitable[Collection[str]]`, the names of the declared tools that principal may use now. It needs
+`changes`, else `ValueError`. The front reads it once per `tools/list` and once per `tools/call` of
+a declared tool, never caches it, and never passes it a request argument, so it must be cheap.
+`tools/list` answers the offered tools in declaration order with `ttlMs: 0` and `cacheScope:
+"private"`. A call to a declared tool outside the offer runs nothing and answers a failed result
+with the one text `the tool is not offered now`; a name never declared stays `-32602`. A port that
+raises, names an undeclared tool or answers no collection of names (a bare text is none) answers
+`-32603` with one fixed text and logs only the exception's type. When the offer changes, the host
+calls `changes.tools_changed(recipient)`, after the new offer is visible to the port and on the
+same terms as `changed`. Every open stream of that principal that honored `toolsListChanged` then
+receives one `notifications/tools/list_changed`, repeated changes before the notice is handed to
+the stream arriving once; a change after that handoff may send one more notice, which a runner
+answers by listing again. A front with `offered_tools` honors `toolsListChanged` when asked, and no
+front honors `promptsListChanged` or `resourcesListChanged`. A runner that relies on the notice lists tools
+only after such a stream's acknowledgement, as it reads resources, so a change between streams is
+never lost; a runner that lists at every turn start needs no notice. The offer is not a right: the
+marks and the host's gate stay the boundary, and a route refuses an act its moment does not
+allow. A stream that honored only `toolsListChanged` counts for no URI in `listens_to`. Proved by
+`tests/test_mcp_server_offered_tools.py`.
 
 **The lease.** Every call a member makes is an admitted call, each opening of a stream included,
 and the app renews the member's lease on each. A runner that calls again within `LEASE_SECONDS`
@@ -772,6 +798,10 @@ holds only one. The client imports no FastAPI.
 
 **The rule.** Every operation of the document is decided: marked, or excluded with its reason. A
 route becomes a tool only through its own mark; an exclusion yields no tool and no mark.
+Marks are static: `route_tools` runs once at start, and a host that offers a route's tool only at
+some moments narrows the offer with `offered_tools` ([the tools of the
+moment](#the-standard-path)), never the marks; the route still refuses an act its moment does not
+allow.
 `route_tools` decides first, over the whole document: when any operation carries neither, it
 raises one `RouteProfileError` naming every undecided operation in document order, before a tool
 is built or `mark_route` runs. Only then is each operation judged: an exclusion whose reason is

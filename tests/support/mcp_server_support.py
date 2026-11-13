@@ -6,7 +6,7 @@ import asyncio
 import json
 import socket
 from collections.abc import AsyncIterator, Callable, Collection, Mapping, Sequence
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -148,6 +148,29 @@ class MemberApp:
         return self.readable.get(principal, {}).get(uri)
 
 
+@dataclass
+class ToolOffer:
+    """The host's offered-tools port: per member, the names offered now.
+
+    ``asked`` records every principal it was asked about; ``failure`` is raised and ``unusable``
+    is answered instead of the names when set, a port that breaks its contract.
+    """
+
+    offered: dict[Principal, Collection[str]] = field(default_factory=dict)
+    failure: Exception | None = None
+    unusable: Any = None
+    asked: list[Principal] = field(default_factory=list)
+
+    async def __call__(self, principal: Principal) -> Collection[str]:
+        await asyncio.sleep(0)
+        self.asked.append(principal)
+        if self.failure is not None:
+            raise self.failure
+        if self.unusable is not None:
+            return self.unusable
+        return self.offered.get(principal, ())
+
+
 def with_envelope(params: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """``params`` with the per-request ``_meta`` every revision 2026-07-28 request carries."""
     meta = {PROTOCOL_VERSION_META_KEY: PROTOCOL_VERSION, CLIENT_CAPABILITIES_META_KEY: {}}
@@ -245,6 +268,13 @@ async def post(
     sent: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     return await drive(front, member_scope(member, body), body, sent)
+
+
+async def exchange(front: McpPersonFront, member: Principal, method: str, **params: Any) -> Any:
+    """The whole JSON-RPC message the front answered, through real scopes."""
+    async with front.running():
+        sent = await post(front, member, rpc_body(method, params))
+    return json.loads(b"".join(message.get("body", b"") for message in sent))
 
 
 def served_app(front: McpPersonFront) -> Starlette:
@@ -367,6 +397,15 @@ async def open_stream(connection: ListenConnection) -> AsyncIterator[ListenConne
         await settled()
         yield connection
         connection.disconnect()
+
+
+@asynccontextmanager
+async def open_streams(*connections: ListenConnection) -> AsyncIterator[None]:
+    """Every connection running until the block ends."""
+    async with AsyncExitStack() as stack:
+        for connection in connections:
+            await stack.enter_async_context(open_stream(connection))
+        yield
 
 
 @asynccontextmanager

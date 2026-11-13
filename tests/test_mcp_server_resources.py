@@ -29,8 +29,8 @@ from tests.support.mcp_server_support import (
     a_standing,
     a_view,
     drive,
+    exchange,
     member_scope,
-    post,
     resolve_member,
     rpc_body,
     sdk_client,
@@ -72,13 +72,6 @@ def app() -> MemberApp:
 @pytest.fixture
 def front(app: MemberApp) -> McpPersonFront:
     return McpPersonFront([], resolve_person=resolve_member, resources=app)
-
-
-async def exchange(front: McpPersonFront, member: Principal, method: str, **params: Any) -> Any:
-    """The whole JSON-RPC message the front answered, through real scopes."""
-    async with front.running():
-        sent = await post(front, member, rpc_body(method, params))
-    return json.loads(b"".join(message.get("body", b"") for message in sent))
 
 
 def answered(front: McpPersonFront, member: Principal, method: str, **params: Any) -> Any:

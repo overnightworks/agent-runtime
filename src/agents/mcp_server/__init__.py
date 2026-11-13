@@ -8,6 +8,7 @@ from agents.mcp_server.hearing import Heard, MemberHearing, Sense, SpokenLine, U
 from agents.mcp_server.listen import ResourceChanges
 from agents.mcp_server.person import (
     McpPersonFront,
+    OfferedTools,
     PersonRequest,
     PersonTool,
     PersonToolHandler,
@@ -21,6 +22,7 @@ __all__ = [
     "McpPersonFront",
     "MemberHearing",
     "MemberResources",
+    "OfferedTools",
     "PersonRequest",
     "PersonTool",
     "PersonToolHandler",

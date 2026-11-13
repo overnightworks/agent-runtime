@@ -145,19 +145,15 @@ def test_a_change_around_the_acknowledgement_arrives_after_it(
 ) -> None:
     connection = listen_connection(front, alice, [STANDING_URI])
 
-    def signal_once() -> None:
-        app.before_current = lambda: None
-        changes.changed(alice, STANDING_URI)
-
-    async def scenario() -> None:
-        if signal_moment == "while the port answers":
-            app.before_current = signal_once
-        async with front.running(), open_stream(connection):
-            if signal_moment != "while the port answers":
-                signal_once()
-            await settled()
-
-    served(scenario())
+    served(
+        listen_support.signalled_around_acknowledgement(
+            front,
+            app,
+            connection,
+            lambda: changes.changed(alice, STANDING_URI),
+            while_the_port_answers=signal_moment == "while the port answers",
+        )
+    )
 
     assert [frame.get("method") for frame in connection.frames] == [
         _ACKNOWLEDGED,
