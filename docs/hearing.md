@@ -116,24 +116,30 @@ name pass through `heard` and are kept nowhere, and no call logs. Proved by
 
 **HEARING-14 (A).** An agent's sentences at a place take their turns in the order of their `speak`
 calls. A sentence's turn comes when the sentence before it has ended; the first one's comes at
-once. A voiced sentence ends when its duration has run out or when it is cut (HEARING-16); a
-written one ends as it enters.
+once. A voiced sentence ends where the app measures the end of its sound, or when it is cut
+(HEARING-16); a written one ends as it enters.
 
 **HEARING-15 (A).** The app's `speak` answers at the sentence's turn, not before: `Spoken` when the
-sentence starts to play, `Written` when it enters as a written line (HEARING-25). An argument
-refusal (`too_long`, `language_unavailable`, `style_unavailable`) and a standing refusal
-(`not_active`) answer at once. `stopped` answers when the stop drops the sentence. The other
+sentence starts to play, with no length, or `Written` when it enters as a written line (HEARING-25).
+The end of a voiced sentence reaches the member as its own line (HEARING-16), never as a length.
+An argument refusal (`too_long`, `language_unavailable`, `style_unavailable`) and a standing
+refusal (`not_active`) answer at once. `stopped` answers when the stop drops the sentence. The other
 `unavailable` refusals, a social reason or a limit of the app, answer when the app knows, at the
 latest at the sentence's turn; a failed voice at a place without a chat answers `unavailable` at
-the sentence's turn, where `Written` would otherwise have answered.
+the sentence's turn, where `Written` would otherwise have answered. The shape of the answers is
+proved by `test_a_speak_answer_reads_back_from_its_json_as_the_marker_alone`,
+`test_a_speak_answer_whose_marker_is_not_exactly_true_is_refused` and
+`test_a_speak_answer_with_an_unknown_or_missing_field_is_refused`.
 
 **HEARING-16 (A).** An agent's sentence enters the windows at the place once it has been said, as a
 person's line does (HEARING-6): when it ends, as a spoken line in every window at the place, `own`
 in the member's own. A sentence cut before its end, by a stop, by the member's end at the place or
 by a voice failure after it started to play, enters with `cut` and only the text heard up to the
 cut, or the whole sentence while the app cannot tell how far it played; never a guess from the time
-it played. A line is never changed once appended. A sentence that never started, refused or dropped
-from the queue, enters no window, and no person's line is ever cut.
+it played. A line is never changed once appended. Every sentence answered `Spoken` yields exactly
+one own line in the speaker's window, whole or `cut`, also after a voice failure that follows the
+start; a sentence dropped by a stop answers `stopped` and yields none. A sentence that never started,
+refused or dropped from the queue, enters no window, and no person's line is ever cut.
 
 **HEARING-17 (A).** The app's server keeps the queue of an agent's sentences, the written ones
 included. The library orders no sentences.

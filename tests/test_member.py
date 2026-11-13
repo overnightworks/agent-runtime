@@ -28,7 +28,6 @@ from agents.member import (
     SpeakArguments,
     SpeakRefusal,
     SpeakRefused,
-    Spoken,
     Standing,
     StandingState,
     StopSpeakingRefusal,
@@ -315,24 +314,6 @@ def test_speak_arguments_with_a_malformed_field_are_refused(fields: dict[str, An
 
     with pytest.raises(ValidationError):
         SpeakArguments.model_validate_json(wire_text)
-
-
-def test_spoken_reads_the_sound_length_in_milliseconds_from_its_json() -> None:
-    spoken = Spoken.model_validate_json(json.dumps({"duration_ms": 1}))
-
-    assert spoken.duration_ms == 1
-
-
-@pytest.mark.parametrize(
-    "fields",
-    [{"duration_ms": 0}, {"duration_ms": 1.0}, {"extra": 1}],
-    ids=["zero-duration", "fractional-duration", "unknown-member"],
-)
-def test_spoken_with_a_malformed_field_is_refused(fields: dict[str, Any]) -> None:
-    wire_text = json.dumps({"duration_ms": 1} | fields)
-
-    with pytest.raises(ValidationError):
-        Spoken.model_validate_json(wire_text)
 
 
 REFUSALS = [

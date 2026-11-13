@@ -33,6 +33,10 @@ def talked_window_wire(**fields: Any) -> dict[str, Any]:
     } | fields
 
 
+def spoken_wire(**fields: Any) -> dict[str, Any]:
+    return {"spoken": True} | fields
+
+
 def written_wire(**fields: Any) -> dict[str, Any]:
     return {"written": True} | fields
 
