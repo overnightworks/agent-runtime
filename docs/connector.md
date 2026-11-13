@@ -170,9 +170,9 @@ serves it in the app's own process; `ToolOutcome` is `content`, `is_error` and `
 refused when empty or when they do not start with the JPEG start-of-image marker. JPEG is the one
 media type a tool sends, and an outcome without an image is sent as before. Proved by
 `tests/test_turn_tool_image.py`. The module exports `Principal` and `JsonObject` too, so an app's
-`agent/tools.py` imports only `agents.tools`. `JsonObject` is a `dict[str, JsonValue]` (pydantic's `JsonValue`), so a handler
-narrows a nested value with `isinstance` before it reads it. The module imports neither `mcp_wire`
-nor anything of the MCP extra (`.importlinter` proves it).
+`agent/tools.py` imports only `agents.tools`. `JsonObject` is a `dict[str, JsonValue]` (pydantic's
+`JsonValue`), so a handler narrows a nested value with `isinstance` before it reads it. The module
+imports neither `mcp_wire` nor anything of the MCP extra (`.importlinter` proves it).
 
 ## The gateway backend
 
@@ -335,6 +335,7 @@ names: a tool returns only what that may see.
 
 Proved by `test_a_tool_result_over_the_event_bound_is_replaced_and_the_side_effect_stands`,
 `test_repeated_large_results_stop_the_turn_before_a_request_over_the_bound`,
+`test_an_image_result_over_the_event_bound_is_replaced_and_the_side_effect_stands`,
 `test_two_full_size_images_and_a_third_stop_the_turn_before_a_request_over_the_bound`,
 `test_a_line_that_never_ends_is_cut_at_the_bound_as_provider_error` and
 `test_a_round_past_the_request_bound_runs_no_handler`; the crossing piece by
