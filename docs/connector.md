@@ -739,10 +739,12 @@ sentence and optionally its `language`, a lowercase ISO 639-1 code of two letter
 `en`, and its `style`, free text such as `louder and angrier` that the app passes on unchanged and
 neither bounds nor checks; a speak without either dumps without the key. The record checks only
 their form; the app decides the rest ([HEARING-20](hearing.md)), and the speech service owns the
-style's bound and check ([HEARING-23](hearing.md)). On success it answers `Spoken(duration_ms)` as JSON, the
-sound's length in milliseconds, at least 1, or `Written(written)`, `{"written": true}`, when the app
-could not voice the sentence and posted it as the member's written line; both are a result without
-`is_error`, and `SpeakAnswer` reads either. A refusal is an `is_error` result whose content is `SpeakRefused(refused)` as JSON, such as
+style's bound and check ([HEARING-23](hearing.md)). On success it answers `Spoken(spoken)`,
+`{"spoken": true}`, when the sentence starts to play, with no length, or `Written(written)`,
+`{"written": true}`, when the app could not voice the sentence and posted it as the member's written
+line. The end of a spoken sentence reaches the member as its own line in the window, whole or cut
+([HEARING-16](hearing.md)). Both answers are a result without `is_error`, and `SpeakAnswer` reads
+either. A refusal is an `is_error` result whose content is `SpeakRefused(refused)` as JSON, such as
 `{"refused": "too_long"}`, with one `SpeakRefusal` code:
 
 - `not_active`: the member left, was removed or is paused;
@@ -794,7 +796,7 @@ Proved by `tests/test_member.py` (among them
   keeps `voice_state` true to its voice, and logs a voice going down once per outage
   ([HEARING-24 to HEARING-26](hearing.md)).
 - It plays one member's sentences in order, each behind that member's previous sentence, and
-  answers each at its turn with the sound's length or `Written`.
+  answers each at its turn with `Spoken` when it starts to play or `Written`.
 - It bounds a sentence's length, refuses with these codes, and drops the queued sentences of a
   removed or paused member at once.
 - It bounds its window as it does without speech.

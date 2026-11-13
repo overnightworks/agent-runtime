@@ -297,16 +297,22 @@ class SpeakArguments(StrictModel):
     style: VoiceStyle | None = Field(default=None, exclude_if=_is_none)
 
 
-class Spoken(StrictModel):
-    """What ``speak`` answers on success, as JSON: how long the sentence plays."""
-
-    duration_ms: int = Field(ge=1)
-
-
 def _refuse_false(value: bool) -> bool:
     if not value:
         raise ValueError("must be true")
     return value
+
+
+MarkerTrue = Annotated[StrictBool, AfterValidator(_refuse_false)]
+"""A marker field of an answer: exactly the JSON ``true``, so two answers stay distinct as JSON."""
+
+
+class Spoken(StrictModel):
+    """What ``speak`` answers, as JSON and without ``is_error``, when the sentence starts to play;
+    the field is exactly the JSON ``true``. It carries no length: the sentence's end reaches the
+    member as its own line in the window."""
+
+    spoken: MarkerTrue
 
 
 class Written(StrictModel):
@@ -314,11 +320,11 @@ class Written(StrictModel):
     sentence for a failure of its voice and posted it at the place as the member's written line
     instead; the field is exactly the JSON ``true``."""
 
-    written: Annotated[StrictBool, AfterValidator(_refuse_false)]
+    written: MarkerTrue
 
 
 SpeakAnswer = Spoken | Written
-"""What a ``speak`` that is not refused answers: the sentence plays, or it was written."""
+"""What a ``speak`` that is not refused answers: the sentence started to play, or it was written."""
 
 
 class SpeakRefusal(StrEnum):
