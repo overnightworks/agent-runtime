@@ -321,6 +321,30 @@ def test_repeated_tools_changes_are_written_once_beside_resource_changes_in_arri
     ]
 
 
+def test_tools_changes_while_a_notice_is_blocked_in_the_write_arrive_as_one_further_notice(
+    front: McpPersonFront, alice: Principal, changes: ResourceChanges
+) -> None:
+    connection = listen_connection(
+        front, alice, [STANDING_URI], flags={"toolsListChanged": True}, stall_at=1
+    )
+
+    async def scenario() -> None:
+        async with front.running(), open_stream(connection):
+            for _ in range(3):
+                changes.tools_changed(alice)
+                await settled()
+            connection.release()
+            await settled()
+
+    served(scenario())
+
+    assert [frame.get("method") for frame in connection.frames] == [
+        _ACKNOWLEDGED,
+        _TOOLS_CHANGED,
+        _TOOLS_CHANGED,
+    ]
+
+
 def test_a_stream_honoring_only_tools_counts_for_no_uri_and_signals_no_listening(
     app: MemberApp, person: Person, offer: ToolOffer, alice: Principal
 ) -> None:

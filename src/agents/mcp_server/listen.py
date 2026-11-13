@@ -64,10 +64,22 @@ class _ListenStream:
         self._arrived = anyio.Event()
         self._honored: dict[str, None] = {}
         self._honors_tools = False
+        self._being_written: _Pulse | None = None
 
     def add(self, pulse: _Pulse) -> None:
+        if pulse == self._being_written:
+            return
         self._pulses[pulse] = None
         self._arrived.set()
+
+    @contextmanager
+    def written(self, pulse: _Pulse) -> Generator[None]:
+        """While the pulse is being written, the same pulse arriving again is that write."""
+        self._being_written = pulse
+        try:
+            yield
+        finally:
+            self._being_written = None
 
     async def next(self) -> _Pulse:
         while not self._pulses:
@@ -254,7 +266,8 @@ async def _deliver(
         pulse = await open_stream.next()
         if isinstance(pulse, ToolsListChanged):
             if open_stream.honors_tools:
-                await stream.pulse(pulse)
+                with open_stream.written(pulse):
+                    await stream.pulse(pulse)
             continue
         if not _wanted(pulse.uri, open_stream.honored):
             continue
