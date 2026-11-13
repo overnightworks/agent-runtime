@@ -467,7 +467,7 @@ the tool and the exception's class
 ## The member module
 
 `agents.member` owns what an app and an agent say to each other about a member:
-`PlaceRef`, `StandingState`, `Invitation` and `Standing`, `MemberStanding(standings)` (what
+`PlaceRef`, `StandingState`, `Invitation`, `Standing` and its `ParentPlace(app, place)`, `MemberStanding(standings)` (what
 `STANDING_URI`, `member://standing`, answers with), `PlaceWindow(generation, starts_at, entries)`
 of `PlaceEntry(seq, kind, name, text, own, spoken)`, `LEASE_SECONDS` (120),
 `INVITATION_SECONDS` (120), `LISTEN_BOUND_SECONDS` (50),

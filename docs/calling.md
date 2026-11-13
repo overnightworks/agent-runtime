@@ -73,7 +73,7 @@ a runner can read it before it accepts.
 
 **CALLING-28.** `parent.app` is the parent app's MCP resource URL, taken from the app's own
 setting, and `parent.place` is the `PlaceRef` the parent app uses, taken from the page that called
-the agent. A runner matches a parent by equality of the normalised URL and of the `PlaceRef`
+the agent, so untrusted. A runner matches a parent by equality of the normalised URL and of the `PlaceRef`
 against a place it holds, and a parent that matches none counts as none. A parent grants no right.
 
 ## What the person sees

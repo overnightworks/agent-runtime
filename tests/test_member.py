@@ -694,12 +694,11 @@ def standing_json(state: str, **fields: Any) -> str:
     "state",
     [StandingState.INVITED, StandingState.ACTIVE, StandingState.PAUSED],
 )
+@pytest.mark.parametrize("app", ["https://calls.example/mcp", "http://calls.example/mcp"])
 def test_a_standing_with_a_parent_place_reads_back_from_its_json_in_every_state(
-    state: StandingState,
+    state: StandingState, app: str
 ) -> None:
-    parent = ParentPlace(
-        app=AnyHttpUrl("https://calls.example/mcp"), place=PlaceRef(kind="call", id="c-9")
-    )
+    parent = ParentPlace(app=AnyHttpUrl(app), place=PlaceRef(kind="call", id="c-9"))
     standing = Standing(
         place=PLACE,
         state=state,
