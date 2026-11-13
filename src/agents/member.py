@@ -211,8 +211,7 @@ class AcceptInvitationRefusal(StrEnum):
     longer standing, has expired, or its id or epoch no longer matches, or the member holds no
     lease; ``two_seats`` when the person who brought the member does not hold exactly
     one seat in the place, the inviting one; ``sponsor_away`` when that person's seat lost its
-    connection and waits to resume; ``busy`` when the place or the app already holds as many members
-    as it takes, or that person already brings another."""
+    connection and waits to resume; ``busy`` when the place has no free seat."""
 
     STALE_INVITATION = "stale_invitation"
     TWO_SEATS = "two_seats"

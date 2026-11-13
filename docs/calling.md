@@ -38,9 +38,9 @@ presence, and it expires `INVITATION_SECONDS` (`agents.member`) after the app op
 side reads the invitation's `expires_at` and never that value.
 
 **CALLING-7.** The agent's accept is checked by the app: the invitation still stands (id, epoch,
-expiry), the owner is still present, and the bounds hold. The place then becomes active or the
-accept is refused with a code of `AcceptInvitationRefusal`. An accept of a standing invitation
-refused with `two_seats`, `sponsor_away` or `busy` ends the invitation as a decline does
+expiry), the owner is still present, and a seat is free (CALLING-32). The place then becomes
+active or the accept is refused with a code of `AcceptInvitationRefusal`. An accept of a standing
+invitation refused with `two_seats`, `sponsor_away` or `busy` ends the invitation as a decline does
 (CALLING-30) and the call without a seat: the inviter's row shows the outcome the app maps from the
 code (CALLING-14, CALLING-22), owner away for `sponsor_away`, and no refusal. A `stale_invitation`
 refusal changes nothing.
@@ -48,6 +48,11 @@ refusal changes nothing.
 **CALLING-8.** An invitation that runs out unanswered ends the call without a seat: the inviter's
 row shows the outcome no answer (CALLING-14), and no refusal. A runner that lets an invitation run
 out instead of declining it stays valid.
+
+**CALLING-32.** An agent takes a seat at a place as a person does: the place takes agents up to its
+own seats, counted with the people's, and the app sets no limit of agents apart from that, neither
+per place nor per person who brings them. How an app protects its own server stays the app's and
+never reads as a place limit.
 
 **CALLING-29.** An agent's runner that is at its own limit of how many places it may be in at once
 declines an invitation at once with `decline_invitation(place, invitation, epoch, reason)` and the
@@ -115,10 +120,12 @@ To everyone else it shows only at its seat in the place, with the AI mark.
 **CALLING-17.** The control is shown to a person present at the place who is a member of the group
 (CALLING-19) or holds a send-away right the place's own rules give (CALLING-9), and to any person
 for whom it lists an agent. When it lists no agent, it shows one sentence that no agent can be
-reached, and no reason per agent. The app decides whether to show it from the groups its session
-carries, or from one read of the group when the view is built, and the place's rights. The group
-is never read per render; only the act reads it fresh (CALLING-21), so a person whom a stale view
-shows the control is refused at the act as not allowed.
+reached, and no reason per agent; that holds only when no agent can be reached. When the place has
+no free seat (CALLING-32), the app passes the control's `full` and the control says the place is
+full instead. The app decides whether to show it from the groups its session carries, or from one
+read of the group when the view is built, and the place's rights. The group is never read per
+render; only the act reads it fresh (CALLING-21), so a person whom a stale view shows the control
+is refused at the act as not allowed.
 
 **CALLING-18.** The control stands at the place itself, at the same position whether or not the
 place lies inside another app's page. No app fetches an agent into another app's place.
@@ -143,7 +150,7 @@ streams. The standard adds no store, directory or list.
 **CALLING-22.** An app supplies:
 
 - its place (the `PlaceRef` kind and id) and its presence rule;
-- what accepting and pausing mean at the place, and its bounds;
+- what accepting and pausing mean at the place, and its seats (CALLING-32);
 - the invitation book, the accept and decline checks, the send-away check and the leases;
 - the person routes for calling and sending away, which are never an MCP tool, so no agent can
   call or send away an agent;
