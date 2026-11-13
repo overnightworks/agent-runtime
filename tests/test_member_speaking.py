@@ -6,16 +6,20 @@ import json
 from typing import Any
 
 import pytest
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from agents.member import (
     STOP_SPEAKING_TOOL,
     PlaceRef,
     PlaceWindow,
+    SpeakAnswer,
     SpeakArguments,
+    Spoken,
     StoppedSpeaking,
     StopSpeakingArguments,
     TalkedOver,
+    VoiceState,
+    Written,
 )
 from tests.support.member_wire import (
     entry,
@@ -23,6 +27,7 @@ from tests.support.member_wire import (
     talked_over_wire,
     talked_window_wire,
     window_from,
+    written_wire,
 )
 
 PLACE = PlaceRef(kind="room", id="r-1")
@@ -162,3 +167,92 @@ def test_a_partial_is_no_entry_and_the_seq_rules_hold_beside_it() -> None:
     out_of_order = talked_window_wire(entries=[entry(2), entry(1)], starts_at=2)
     with pytest.raises(ValidationError):
         window_from(out_of_order)
+
+
+def test_written_reads_back_from_its_json_as_the_answer_of_a_sentence_posted_as_a_line() -> None:
+    written = Written.model_validate_json(json.dumps(written_wire()))
+
+    assert written.written is True
+    assert json.loads(written.model_dump_json()) == written_wire()
+
+
+@pytest.mark.parametrize(
+    "wire",
+    [{"written": False}, {"written": "yes"}, {"written": 1}, {"written": True, "extra": 1}],
+    ids=["false", "text", "number", "unknown-member"],
+)
+def test_a_malformed_written_answer_is_refused(wire: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError):
+        Written.model_validate_json(json.dumps(wire))
+
+
+@pytest.mark.parametrize(
+    ("wire", "record"),
+    [({"duration_ms": 1200}, Spoken), (written_wire(), Written)],
+    ids=["spoken", "written"],
+)
+def test_a_speak_answer_reads_spoken_and_written_each_as_its_own_record(
+    wire: dict[str, Any], record: type[Spoken | Written]
+) -> None:
+    answer = TypeAdapter(SpeakAnswer).validate_json(json.dumps(wire))
+
+    assert type(answer) is record
+
+
+@pytest.mark.parametrize(
+    "wire",
+    [{"duration_ms": 1, "written": True}, {}],
+    ids=["both", "neither"],
+)
+def test_a_speak_answer_that_is_both_or_neither_is_refused(wire: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError):
+        TypeAdapter(SpeakAnswer).validate_json(json.dumps(wire))
+
+
+@pytest.mark.parametrize("state", [VoiceState.AVAILABLE, VoiceState.UNAVAILABLE])
+def test_a_window_reads_its_voice_state_as_sent(state: VoiceState) -> None:
+    window = window_from(talked_window_wire(voice_state=state.value))
+
+    assert window.voice_state is state
+    assert json.loads(window.model_dump_json())["voice_state"] == state.value
+    assert PlaceWindow.model_validate_json(window.model_dump_json()) == window
+
+
+def test_a_window_without_a_voice_state_dumps_without_the_key() -> None:
+    window = PlaceWindow(generation="g", starts_at=1, entries=())
+
+    assert window.voice_state is None
+    assert "voice_state" not in json.loads(window.model_dump_json())
+
+
+@pytest.mark.parametrize("state", ["down", True, ""], ids=["unknown-word", "bool", "empty"])
+def test_a_window_with_a_malformed_voice_state_is_refused(state: object) -> None:
+    with pytest.raises(ValidationError):
+        window_from(talked_window_wire(voice_state=state))
+
+
+def test_a_cut_spoken_line_reads_back_from_its_json_with_its_mark() -> None:
+    window = window_from(
+        talked_window_wire(entries=[entry(1, own=True, spoken=True, cut=True, text="Shall we")])
+    )
+
+    assert window.entries[0].cut is True
+    assert PlaceWindow.model_validate_json(window.model_dump_json()) == window
+
+
+def test_a_line_that_is_not_cut_dumps_without_the_mark_and_reads_it_as_absent() -> None:
+    window = window_from(talked_window_wire(entries=[entry(1, spoken=True)]))
+
+    assert window.entries[0].cut is False
+    assert "cut" not in json.loads(window.model_dump_json())["entries"][0]
+
+
+def test_a_cut_mark_on_a_written_line_is_refused() -> None:
+    with pytest.raises(ValidationError):
+        window_from(talked_window_wire(entries=[entry(1, spoken=False, cut=True)]))
+
+
+@pytest.mark.parametrize("cut", ["yes", 1], ids=["text", "number"])
+def test_an_entry_with_a_malformed_cut_mark_is_refused(cut: object) -> None:
+    with pytest.raises(ValidationError):
+        window_from(talked_window_wire(entries=[entry(1, spoken=True, cut=cut)]))

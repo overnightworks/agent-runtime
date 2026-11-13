@@ -33,5 +33,9 @@ def talked_window_wire(**fields: Any) -> dict[str, Any]:
     } | fields
 
 
+def written_wire(**fields: Any) -> dict[str, Any]:
+    return {"written": True} | fields
+
+
 def speak_wire(**fields: Any) -> dict[str, Any]:
     return {"place": {"kind": "room", "id": "r-1"}, "text": "Shall we start?"} | fields
