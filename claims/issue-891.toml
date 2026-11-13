@@ -1,8 +1,0 @@
-claim_id = "6d6e55addfdc472cbe250be9a2ab1661"
-agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
-role = "builder"
-base = "c0ed07c6d5873827652234d4502112f6a72e420a"
-branch = "claude/issue-891-an-agent-names-the-language-of-a-sentenc"
-scope = ["docs/connector.md", "docs/hearing.md", "src/agents/member.py", "tests"]
-opened_commit = "093d4c57851c6e32cb7b68e022b5e66264dfd771"
-whole_reason = "One optional argument of one tool with its refusal, its HEARING line, its connector paragraph and its tests."
