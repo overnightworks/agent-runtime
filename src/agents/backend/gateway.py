@@ -44,14 +44,13 @@ from agents.backend.streamed_round import (
     error_kind_of,
     read_round,
 )
+from agents.backend.tool_result import RequestedCall, serve
 from agents.config import AgentConfig, ChatGateway
 from agents.tools import (
     HandTool,
-    HandToolHandler,
     JsonObject,
     ToolDeclaration,
     ToolEffect,
-    ToolOutcome,
 )
 from agents.turn import (
     MAX_EVENT_BYTES,
@@ -98,8 +97,6 @@ _UNREADABLE_REPLY: Final = (
 )
 _ARGUMENTS: Final = TypeAdapter(JsonObject)
 _MODEL_NAME: Final = TypeAdapter(GatewayModelName)
-_HANDLER_FAILED_TEXT: Final = "The tool failed."
-_RESULT_TOO_LARGE_TEXT: Final = "The tool result was too large to return."
 # The chat format has no error flag on a tool message, so the text carries it to the model.
 _ERROR_PREFIX: Final = "Error: "
 
@@ -197,7 +194,7 @@ class GatewayBackend(AgentBackend):
                     _refuse_after(deadline)
                     progress.wrote |= tools[call.name].effect is ToolEffect.SIDE_EFFECTING
                     handler = self._tools[call.name].handler
-                    result = await _before(deadline, _serve(handler, person, call))
+                    result = await _before(deadline, serve(handler, person, call))
                     messages.append(_result_message(result))
                     yield result
         except TurnStopped as stopped:
@@ -369,18 +366,11 @@ class _Body(TypedDict):
 
 
 @dataclass(frozen=True)
-class _Call:
-    id: str
-    name: str
-    arguments: JsonObject
-
-
-@dataclass(frozen=True)
 class _Round:
     """One judged reply: the answer when the model stopped, else the calls it asked for."""
 
     text: str
-    calls: tuple[_Call, ...]
+    calls: tuple[RequestedCall, ...]
     message: _Message | None
     usage: TurnUsage | None = None
 
@@ -394,7 +384,7 @@ class _Progress:
     wrote: bool = False
     call_ids: set[str] = field(default_factory=set[str])
 
-    def admit(self, calls: tuple[_Call, ...]) -> None:
+    def admit(self, calls: tuple[RequestedCall, ...]) -> None:
         ids = {call.id for call in calls}
         if len(ids) != len(calls) or not ids.isdisjoint(self.call_ids):
             raise _malformed_reply()
@@ -424,43 +414,6 @@ def _refuse_after(deadline: float) -> None:
 
 def _limit_exceeded() -> TurnStopped:
     return _GatewayStop(TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
-
-
-async def _serve(handler: HandToolHandler, person: TurnPerson, call: _Call) -> ToolResultEvent:
-    """Run one handler; an outcome that is no valid result event is a host defect like a raise.
-
-    The one raise that is no defect is ``TurnStopped``: the handler ends the turn, so it passes.
-    """
-    # unset for a call the deadline, a cancellation or a handler's TurnStopped cut off
-    is_error: bool | None = None
-    try:
-        event = _result_event(call, await handler(person.principal, call.arguments))
-    except TurnStopped:
-        raise
-    except Exception as error:  # a handler is the app's code; its failure is a host defect
-        _LOGGER.error("tool %s raised %s", call.name, type(error).__qualname__)
-        event = _failed_event(call, _HANDLER_FAILED_TEXT)
-        is_error = True
-        return event
-    else:
-        is_error = event.is_error
-        return event
-    finally:
-        _LOGGER.info("tool %s call %r ended, is_error=%s", call.name, call.id, is_error)
-
-
-def _result_event(call: _Call, outcome: ToolOutcome) -> ToolResultEvent:
-    event = ToolResultEvent.model_validate(
-        {"tool_use_id": call.id, "content": outcome.content, "is_error": outcome.is_error},
-        strict=True,
-    )
-    if len(event.content.encode("utf-8")) > MAX_EVENT_BYTES:
-        return _failed_event(call, _RESULT_TOO_LARGE_TEXT)
-    return event
-
-
-def _failed_event(call: _Call, text: str) -> ToolResultEvent:
-    return ToolResultEvent(tool_use_id=call.id, content=text, is_error=True)
 
 
 def _opening_messages(request: TurnRequest) -> list[_Message]:
@@ -727,14 +680,14 @@ def _calls_of(
     raw_calls = message["tool_calls"]
     if not raw_calls:
         raise _malformed_reply()
-    calls: list[_Call] = []
+    calls: list[RequestedCall] = []
     for raw in raw_calls:
         function = raw["function"]
         name, call_id = function["name"], raw["id"]
         if name not in offered or not call_id:
             raise _malformed_reply()
         arguments = _ARGUMENTS.validate_json(function["arguments"])
-        calls.append(_Call(id=call_id, name=name, arguments=arguments))
+        calls.append(RequestedCall(id=call_id, name=name, arguments=arguments))
     reply: _Message = {
         "role": "assistant",
         "content": message["content"],

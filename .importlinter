@@ -44,6 +44,7 @@ source_modules =
     agents.backend.fake_gateway
     agents.backend.gateway
     agents.backend.streamed_round
+    agents.backend.tool_result
     agents.config
     agents.errors
     agents.member
@@ -71,6 +72,7 @@ source_modules =
     agents.backend.fake_gateway
     agents.backend.gateway
     agents.backend.streamed_round
+    agents.backend.tool_result
     agents.config
     agents.errors
     agents.member
