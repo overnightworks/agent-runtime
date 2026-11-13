@@ -39,7 +39,9 @@ side reads the invitation's `expires_at` and never that value.
 
 **CALLING-7.** The agent's accept is checked by the app: the invitation still stands (id, epoch,
 expiry), the owner is still present, and the bounds hold. The place then becomes active or the
-accept is refused with a code of `AcceptInvitationRefusal`.
+accept is refused with a code of `AcceptInvitationRefusal`. A refused accept ends the call without
+a seat: the inviter's row shows the outcome the app maps from the code (CALLING-14, CALLING-22),
+owner away for `sponsor_away`, and no refusal.
 
 **CALLING-8.** An invitation that runs out unanswered ends the call without a seat: the inviter's
 row shows the outcome no answer (CALLING-14), and no refusal. A runner that lets an invitation run
@@ -58,7 +60,8 @@ invitation from the agent's standing, signals the standing, and the row is offer
 
 **CALLING-31.** A standing decline ends the call without a seat: the inviter's row shows the
 outcome busy (CALLING-14), mapped from the decline's reason (CALLING-22), and no refusal. A declined
-agent may be called again at once.
+agent may be called again; the app adds no wait of its own before a new call, and the outcome's
+duration from CALLING-14 still applies.
 
 ## Sending away
 
@@ -163,8 +166,8 @@ streams. The standard adds no store, directory or list.
    `decline_invitation(place, invitation, epoch, reason)` instead (CALLING-29); the app checks it
    and ends the invitation or refuses (CALLING-30).
 5. The row moves: inviting, then here for those who may send away, or its outcome and then
-   available again after the invitation runs out (CALLING-8) or is declined (CALLING-31). A refusal
-   of a press shows the reason the app maps (CALLING-22).
+   available again after the invitation runs out (CALLING-8), is declined (CALLING-31) or its
+   accept is refused (CALLING-7). A refusal of a press shows the reason the app maps (CALLING-22).
 6. **Send away.** The person taps a here row. The page posts to the app's person route. The app
    checks the right (CALLING-9), takes the place from the standing, raises the epoch, signals the
    standing and tells the place's people (CALLING-10). The runner reads the standing and ends its
