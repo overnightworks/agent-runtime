@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from agents.turn import JsonObject, RunFile, TurnUsage
+from agents.turn import JsonObject, RunFile, ToolImage, TurnUsage
 
 
 class StreamEvent(BaseModel):
@@ -42,6 +42,7 @@ class ToolResultEvent(StreamEvent):
     tool_use_id: str
     content: str
     is_error: bool = False
+    image: ToolImage | None = None
 
 
 class FinalEvent(StreamEvent):

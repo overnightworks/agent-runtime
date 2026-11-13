@@ -20,7 +20,7 @@ from enum import StrEnum
 from http import HTTPStatus
 from pathlib import Path
 from types import TracebackType
-from typing import Final, NotRequired, Required, TypedDict
+from typing import Final, Literal, NotRequired, Required, TypedDict
 
 import httpx2
 from pydantic import JsonValue, TypeAdapter, ValidationError
@@ -44,18 +44,18 @@ from agents.backend.streamed_round import (
     error_kind_of,
     read_round,
 )
+from agents.backend.tool_result import RequestedCall, serve
 from agents.config import AgentConfig, ChatGateway
 from agents.tools import (
     HandTool,
-    HandToolHandler,
     JsonObject,
     ToolDeclaration,
     ToolEffect,
-    ToolOutcome,
 )
 from agents.turn import (
     MAX_EVENT_BYTES,
     MAX_RUN_FILES_BYTES,
+    TOOL_IMAGE_MEDIA_TYPE,
     FailureCode,
     GatewayModelName,
     ModelKind,
@@ -66,6 +66,7 @@ from agents.turn import (
     loaded_json,
     model_kind_of,
     person_fingerprint,
+    written_base64,
 )
 from agents.turn_events import (
     AssistantTextEvent,
@@ -98,8 +99,6 @@ _UNREADABLE_REPLY: Final = (
 )
 _ARGUMENTS: Final = TypeAdapter(JsonObject)
 _MODEL_NAME: Final = TypeAdapter(GatewayModelName)
-_HANDLER_FAILED_TEXT: Final = "The tool failed."
-_RESULT_TOO_LARGE_TEXT: Final = "The tool result was too large to return."
 # The chat format has no error flag on a tool message, so the text carries it to the model.
 _ERROR_PREFIX: Final = "Error: "
 
@@ -139,7 +138,7 @@ class GatewayBackend(AgentBackend):
 
         A stop the gateway path raised is replaced by a plain one, with nothing of the frames or
         errors it passed through; a stop the host raised is the same exception, its traceback
-        cut of this module's frames, which hold the key and the reply.
+        cut of the gateway path's frames, which hold the key, the reply and the call arguments.
         """
         try:
             async with contextlib.aclosing(self._turn(request, person)) as events:
@@ -153,7 +152,7 @@ class GatewayBackend(AgentBackend):
         except _GatewayStop as stopped:
             closed = _plain(stopped)
         except TurnStopped as stopped:
-            raise stopped.with_traceback(_beyond_this_module(stopped.__traceback__))
+            raise stopped.with_traceback(_beyond_the_gateway_path(stopped.__traceback__))
         else:
             return
         raise closed
@@ -197,7 +196,7 @@ class GatewayBackend(AgentBackend):
                     _refuse_after(deadline)
                     progress.wrote |= tools[call.name].effect is ToolEffect.SIDE_EFFECTING
                     handler = self._tools[call.name].handler
-                    result = await _before(deadline, _serve(handler, person, call))
+                    result = await _before(deadline, serve(handler, person, call))
                     messages.append(_result_message(result))
                     yield result
         except TurnStopped as stopped:
@@ -330,9 +329,23 @@ def _client(
     )
 
 
+class _TextPart(TypedDict):
+    type: Literal["text"]
+    text: str
+
+
+class _ImageUrl(TypedDict):
+    url: str
+
+
+class _ImagePart(TypedDict):
+    type: Literal["image_url"]
+    image_url: _ImageUrl
+
+
 class _Message(TypedDict):
     role: Required[str]
-    content: NotRequired[str | None]
+    content: NotRequired[str | list[_ImagePart | _TextPart] | None]
     tool_call_id: NotRequired[str]
     tool_calls: NotRequired[list[AssembledToolCall]]
 
@@ -369,18 +382,11 @@ class _Body(TypedDict):
 
 
 @dataclass(frozen=True)
-class _Call:
-    id: str
-    name: str
-    arguments: JsonObject
-
-
-@dataclass(frozen=True)
 class _Round:
     """One judged reply: the answer when the model stopped, else the calls it asked for."""
 
     text: str
-    calls: tuple[_Call, ...]
+    calls: tuple[RequestedCall, ...]
     message: _Message | None
     usage: TurnUsage | None = None
 
@@ -394,7 +400,7 @@ class _Progress:
     wrote: bool = False
     call_ids: set[str] = field(default_factory=set[str])
 
-    def admit(self, calls: tuple[_Call, ...]) -> None:
+    def admit(self, calls: tuple[RequestedCall, ...]) -> None:
         ids = {call.id for call in calls}
         if len(ids) != len(calls) or not ids.isdisjoint(self.call_ids):
             raise _malformed_reply()
@@ -426,43 +432,6 @@ def _limit_exceeded() -> TurnStopped:
     return _GatewayStop(TurnStopKind.FAILED, FailureCode.LIMIT_EXCEEDED)
 
 
-async def _serve(handler: HandToolHandler, person: TurnPerson, call: _Call) -> ToolResultEvent:
-    """Run one handler; an outcome that is no valid result event is a host defect like a raise.
-
-    The one raise that is no defect is ``TurnStopped``: the handler ends the turn, so it passes.
-    """
-    # unset for a call the deadline, a cancellation or a handler's TurnStopped cut off
-    is_error: bool | None = None
-    try:
-        event = _result_event(call, await handler(person.principal, call.arguments))
-    except TurnStopped:
-        raise
-    except Exception as error:  # a handler is the app's code; its failure is a host defect
-        _LOGGER.error("tool %s raised %s", call.name, type(error).__qualname__)
-        event = _failed_event(call, _HANDLER_FAILED_TEXT)
-        is_error = True
-        return event
-    else:
-        is_error = event.is_error
-        return event
-    finally:
-        _LOGGER.info("tool %s call %r ended, is_error=%s", call.name, call.id, is_error)
-
-
-def _result_event(call: _Call, outcome: ToolOutcome) -> ToolResultEvent:
-    event = ToolResultEvent.model_validate(
-        {"tool_use_id": call.id, "content": outcome.content, "is_error": outcome.is_error},
-        strict=True,
-    )
-    if len(event.content.encode("utf-8")) > MAX_EVENT_BYTES:
-        return _failed_event(call, _RESULT_TOO_LARGE_TEXT)
-    return event
-
-
-def _failed_event(call: _Call, text: str) -> ToolResultEvent:
-    return ToolResultEvent(tool_use_id=call.id, content=text, is_error=True)
-
-
 def _opening_messages(request: TurnRequest) -> list[_Message]:
     messages: list[_Message] = [{"role": "system", "content": request.turn.system}]
     messages += [
@@ -473,8 +442,15 @@ def _opening_messages(request: TurnRequest) -> list[_Message]:
 
 
 def _result_message(result: ToolResultEvent) -> _Message:
-    content = _ERROR_PREFIX + result.content if result.is_error else result.content
-    return {"role": "tool", "tool_call_id": result.tool_use_id, "content": content}
+    text = _ERROR_PREFIX + result.content if result.is_error else result.content
+    if result.image is None:
+        return {"role": "tool", "tool_call_id": result.tool_use_id, "content": text}
+    # a text part the provider would refuse as blank is left out; the image goes first
+    url = f"data:{TOOL_IMAGE_MEDIA_TYPE};base64,{written_base64(result.image.content)}"
+    parts: list[_ImagePart | _TextPart] = [{"type": "image_url", "image_url": {"url": url}}]
+    if text.strip():
+        parts.append({"type": "text", "text": text})
+    return {"role": "tool", "tool_call_id": result.tool_use_id, "content": parts}
 
 
 def _body(request: TurnRequest, messages: list[_Message], user: str) -> str:
@@ -555,12 +531,16 @@ def _plain(stopped: TurnStopped) -> TurnStopped:
     )
 
 
-def _beyond_this_module(trace: TracebackType | None) -> TracebackType | None:
-    """The traceback without this module's frames: they hold the key and the reply."""
+def _beyond_the_gateway_path(trace: TracebackType | None) -> TracebackType | None:
+    """The traceback without the gateway path's frames: they hold the key, the reply and the calls.
+
+    The path is this module and ``tool_result``, whose ``serve`` frame holds the call's arguments.
+    """
+    path = (globals(), serve.__globals__)
     kept: TracebackType | None = None
     outside: list[TracebackType] = []
     while trace is not None:
-        if trace.tb_frame.f_globals is not globals():
+        if all(trace.tb_frame.f_globals is not owned for owned in path):
             outside.append(trace)
         trace = trace.tb_next
     for entry in reversed(outside):
@@ -727,14 +707,14 @@ def _calls_of(
     raw_calls = message["tool_calls"]
     if not raw_calls:
         raise _malformed_reply()
-    calls: list[_Call] = []
+    calls: list[RequestedCall] = []
     for raw in raw_calls:
         function = raw["function"]
         name, call_id = function["name"], raw["id"]
         if name not in offered or not call_id:
             raise _malformed_reply()
         arguments = _ARGUMENTS.validate_json(function["arguments"])
-        calls.append(_Call(id=call_id, name=name, arguments=arguments))
+        calls.append(RequestedCall(id=call_id, name=name, arguments=arguments))
     reply: _Message = {
         "role": "assistant",
         "content": message["content"],
