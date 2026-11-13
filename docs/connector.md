@@ -659,13 +659,13 @@ A refusal is an `is_error` result whose content is `SpeakRefused(refused)` as JS
   not supported;
 - `stopped`: a `stop_speaking` dropped this queued sentence.
 
-**Being talked over.** While people talk over the member, its window carries
-`talked_over`: `TalkedOver(id, playing, speech)` with one `PartialSpeech(name, text)` per person
-speaking, in the order they started. `id` stays fixed from the record's appearance to its removal
-and is new for the next one, so a runner takes one decision per `id`; `playing` says a sentence of
-the member plays now. A partial is provisional text, no `PlaceEntry`, so the `seq` rules hold
-beside it; it goes with the person's turn, with or without a finished line after it. The window
-dumps without the key when nobody talks over the member
+**Being talked over.** While people talk over the member, its window carries `talked_over`:
+`TalkedOver(id, playing, speech)` with one `PartialSpeech(name, text)` per person speaking, in the
+order they started. `id` stays fixed from the record's appearance to its removal and is new for the
+next one, so a runner takes one decision per `id`; `playing` says a sentence of the member plays
+now. A partial is provisional text, no `PlaceEntry`, so the `seq` rules hold beside it; a person's
+partial goes with that person's turn, with or without a finished line after it, and the record goes
+with its last partial. The window dumps without the key when nobody talks over the member
 ([HEARING-21](hearing.md), [HEARING-22](hearing.md) for the duck).
 
 **Stopping** is the side-effecting tool `STOP_SPEAKING_TOOL`, `stop_speaking`, with

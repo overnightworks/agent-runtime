@@ -131,21 +131,22 @@ does not speak is refused at once with `language_unavailable`, as `too_long` is.
 that person at that moment, and a sentence of the agent plays then, the app sets the window's
 `talked_over` record: its `id`, `playing` true and a `PartialSpeech(name, text)` for that person,
 whose `text` may still be empty. The `id` is the app's, never repeats within the window's
-`generation` and stays fixed from the record's appearance to its removal; a second person who
-starts speaking meanwhile adds a partial under the same `id`, and `speech` keeps the order in which
-they started. A runner takes at most one decision per `id`. The app updates the partials as the
-words come and `playing` as the agent's sentences end, and signals each update per HEARING-11. A
-person's finished line replaces that person's partial in the same window change, so one read never
-shows both. The record goes when the person's turn ends, also a turn that heard no words, at a
-switch-off (and does not return for that utterance) and when the speaker, the member or the place
-ends. A partial can therefore go with no line after it, and a runner treats a partial as
-provisional. A person's turn that began before the agent's sentence starts creates no record and
-no duck.
+`generation` and stays fixed from the record's appearance to its removal; a second person who starts
+speaking meanwhile adds a partial under the same `id`, and `speech` keeps the order in which they
+started. A runner takes at most one decision per `id`. The app updates the partials as the words
+come and `playing` as the agent's sentences end, and signals each update per HEARING-11. A person's
+finished line replaces that person's partial in the same window change, so one read never shows
+both. A person's partial goes when that person's turn ends, also a turn that heard no words, when a
+switch-off stops the agent hearing that person (and does not return for that utterance) and when
+that speaker ends; the other speakers' partials stay. The record goes with its last partial, and at
+once when the member or the place ends; the next record has a new `id`. A partial can therefore go
+with no line after it, and a runner treats a partial as provisional. A person's turn that began
+before the agent's sentence starts creates no record and no duck.
 
-**HEARING-22 (A).** At the moment the record appears, every seat lowers the agent's player at
-once. A sentence that starts while the record stands also plays lowered. The volume returns when
-the record goes, at the end of the person's turn, also a turn that heard no words. A sentence that
-ends by itself while lowered brings nothing back.
+**HEARING-22 (A).** At the moment the record appears, every seat lowers the agent's player at once.
+A sentence that starts while the record stands also plays lowered. The volume returns when the
+record goes, with its last partial: it stays lowered while any person still talks over the agent. A
+sentence that ends by itself while lowered brings nothing back.
 
 **HEARING-23 (A).** `stop_speaking(place)` cuts the agent's playing sentence in every seat and
 drops its whole queue there, and answers `StoppedSpeaking(cut)` with the text of the sentence cut.
