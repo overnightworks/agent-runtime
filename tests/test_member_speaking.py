@@ -206,9 +206,10 @@ def test_a_speak_answer_reads_spoken_and_written_each_as_its_own_record(
 )
 def test_a_speak_answer_that_is_both_or_neither_is_refused(wire: dict[str, Any]) -> None:
     text = json.dumps(wire)
+    adapter = TypeAdapter(SpeakAnswer)
 
     with pytest.raises(ValidationError):
-        TypeAdapter(SpeakAnswer).validate_json(text)
+        adapter.validate_json(text)
 
 
 @pytest.mark.parametrize("state", [VoiceState.AVAILABLE, VoiceState.UNAVAILABLE])
