@@ -191,10 +191,10 @@ def test_a_broken_offer_answers_one_fixed_failure_and_logs_only_the_exception_ty
 def test_offered_tools_without_changes_are_refused_at_construction(
     person: Person, app: MemberApp, offer: ToolOffer
 ) -> None:
+    tools = [person.tool("bid")]
+
     with pytest.raises(ValueError, match="changes"):
-        McpPersonFront(
-            [person.tool("bid")], resolve_person=resolve_member, resources=app, offered_tools=offer
-        )
+        McpPersonFront(tools, resolve_person=resolve_member, resources=app, offered_tools=offer)
 
 
 async def discovered_capabilities(front: McpPersonFront, member: Principal) -> dict[str, Any]:
