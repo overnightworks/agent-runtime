@@ -321,7 +321,7 @@ def test_repeated_tools_changes_are_written_once_beside_resource_changes_in_arri
     ]
 
 
-def test_tools_changes_while_a_notice_is_blocked_in_the_write_arrive_as_one_further_notice(
+def test_tools_changes_while_a_notice_is_blocked_in_the_write_arrive_as_that_one_notice(
     front: McpPersonFront, alice: Principal, changes: ResourceChanges
 ) -> None:
     connection = listen_connection(
@@ -340,7 +340,6 @@ def test_tools_changes_while_a_notice_is_blocked_in_the_write_arrive_as_one_furt
 
     assert [frame.get("method") for frame in connection.frames] == [
         _ACKNOWLEDGED,
-        _TOOLS_CHANGED,
         _TOOLS_CHANGED,
     ]
 

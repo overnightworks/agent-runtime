@@ -70,6 +70,7 @@ from agents.mcp_server.asgi import (
     Receive,
     Scope,
     Send,
+    WrittenFrames,
     field_values,
     protocol_version,
     read_body,
@@ -139,6 +140,7 @@ class PersonTool:
 
 
 _CURRENT_REQUEST: Final[ContextVar[PersonRequest]] = ContextVar("agents_person_request")
+_LISTEN_FRAMES: Final[ContextVar[WrittenFrames]] = ContextVar("agents_person_listen_frames")
 
 
 def _listed(declaration: ToolDeclaration) -> Tool:
@@ -389,9 +391,18 @@ class McpPersonFront:
         label = request_label(document, self._tools)
         if label == LISTEN_METHOD:
             respond = partial(manager.handle_request, scope, _replayed(body, receive))
-            cut = await write_stream(
-                respond, send, bearers, seconds=LISTEN_BOUND_SECONDS + _FINAL_FRAME_SECONDS
-            )
+            frames = WrittenFrames()
+            listening = _LISTEN_FRAMES.set(frames)
+            try:
+                cut = await write_stream(
+                    respond,
+                    send,
+                    bearers,
+                    frames,
+                    seconds=LISTEN_BOUND_SECONDS + _FINAL_FRAME_SECONDS,
+                )
+            finally:
+                _LISTEN_FRAMES.reset(listening)
             if cut:
                 _LOG.warning("a stream was cut: %s", label)
             return None, document
@@ -519,7 +530,13 @@ async def _listen(
 ) -> SubscriptionsListenResult | ErrorData:
     principal = _CURRENT_REQUEST.get().principal
     return await on_subscriptions_listen(
-        resources, changes, principal, context, params, announces_tools=announces_tools
+        resources,
+        changes,
+        principal,
+        context,
+        params,
+        _LISTEN_FRAMES.get(),
+        announces_tools=announces_tools,
     )
 
 
