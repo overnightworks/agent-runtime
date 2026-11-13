@@ -24,7 +24,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import partial
 from http import HTTPStatus
-from typing import Any, Final
+from typing import Any, Final, cast
 
 import anyio.lowlevel
 from mcp import MCPError
@@ -468,10 +468,10 @@ async def _offer(
     type is logged, since the app's message may carry what it must not echo.
     """
     try:
-        names = await offered_tools(_CURRENT_REQUEST.get().principal)
-        if isinstance(names, str | bytes):
-            raise _UnusableOfferError("the offer is a text, not a collection of names")
-        offer = frozenset(names)
+        names = cast("object", await offered_tools(_CURRENT_REQUEST.get().principal))
+        if isinstance(names, str | bytes) or not isinstance(names, Collection):
+            raise _UnusableOfferError("the offer is not a collection of names")
+        offer = frozenset(cast("Collection[str]", names))
         if not offer.issubset(declared):
             raise _UnusableOfferError("the offer names an undeclared tool")
     except Exception as failure:

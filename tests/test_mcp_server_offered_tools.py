@@ -159,6 +159,8 @@ def test_a_call_with_arguments_asks_the_offer_exactly_once(
         pytest.param({"unusable": "bid"}, id="bare text"),
         pytest.param({"unusable": b"bid"}, id="bare bytes"),
         pytest.param({"unusable": 7}, id="no collection"),
+        pytest.param({"unusable": iter(["bid"])}, id="iterator"),
+        pytest.param({"unusable": (name for name in ["bid"])}, id="generator"),
         pytest.param({"unusable": ("bid", 7)}, id="non-text item"),
         pytest.param({"unusable": ([],)}, id="unhashable item"),
     ],
