@@ -286,6 +286,42 @@ def test_speak_arguments_carry_the_place_and_one_sentence_on_the_wire() -> None:
     assert SpeakArguments.model_validate_json(arguments.model_dump_json()) == arguments
 
 
+def test_speak_arguments_name_the_language_of_the_sentence_when_given() -> None:
+    arguments = SpeakArguments(place=PLACE, text="Shall we start?", language="en")
+
+    assert json.loads(arguments.model_dump_json()) == speak_wire(language="en")
+    assert SpeakArguments.model_validate_json(arguments.model_dump_json()) == arguments
+
+
+def test_speak_arguments_without_a_language_dump_without_its_key() -> None:
+    arguments = SpeakArguments.model_validate_json(json.dumps(speak_wire()))
+
+    assert arguments.language is None
+    assert "language" not in json.loads(arguments.model_dump_json())
+
+
+@pytest.mark.parametrize(
+    "language",
+    ["DE", "deu", "de-DE", "d", "d1", "", " de", 1, ["de"]],
+    ids=[
+        "uppercase",
+        "three-letters",
+        "region-tag",
+        "one-letter",
+        "digit",
+        "empty",
+        "padded",
+        "number",
+        "list",
+    ],
+)
+def test_speak_arguments_with_a_malformed_language_are_refused(language: object) -> None:
+    wire_text = json.dumps(speak_wire(language=language))
+
+    with pytest.raises(ValidationError):
+        SpeakArguments.model_validate_json(wire_text)
+
+
 @pytest.mark.parametrize(
     "fields",
     [
@@ -323,7 +359,12 @@ def test_spoken_with_a_malformed_field_is_refused(fields: dict[str, Any]) -> Non
 
 
 REFUSALS = [
-    pytest.param(SpeakRefused, SpeakRefusal, ("not_active", "too_long", "unavailable"), id="speak"),
+    pytest.param(
+        SpeakRefused,
+        SpeakRefusal,
+        ("not_active", "too_long", "unavailable", "language_unavailable"),
+        id="speak",
+    ),
     pytest.param(
         AcceptInvitationRefused,
         AcceptInvitationRefusal,

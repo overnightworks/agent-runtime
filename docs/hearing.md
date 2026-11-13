@@ -120,6 +120,10 @@ line.
 **HEARING-17 (A).** The app's server keeps the queue of an agent's sentences. The library orders no
 sentences.
 
+**HEARING-20 (A).** An agent names the language of its sentence; the app never guesses it from the
+text. Without one the app speaks the sentence in its page's language. A language the app's voice
+does not speak is refused at once with `language_unavailable`, as `too_long` is.
+
 ## What an app supplies
 
 **HEARING-18 (A).** The library owns no sound, no speech client, no token, no switch and no mark. An

@@ -641,16 +641,21 @@ utterance and its `name` the speaker's shown name. Which member hears which spea
 line a heard utterance becomes, is `MemberHearing`; the rules are in [hearing.md](hearing.md).
 
 **Speaking** is the side-effecting tool `SPEAK_TOOL`, `speak`. Its arguments are
-`SpeakArguments(place, text)`: the `PlaceRef`, as for `accept_invitation`, and one sentence. On
-success it answers `Spoken(duration_ms)` as JSON, the sound's length in milliseconds, at least 1.
+`SpeakArguments(place, text, language)`: the `PlaceRef`, as for `accept_invitation`, one
+sentence and optionally its `language`, a lowercase ISO 639-1 code of two letters such as `de` or
+`en`; a speak without one dumps without the key. The record checks only that form; the app decides
+the rest ([HEARING-20](hearing.md)). On success it answers `Spoken(duration_ms)` as JSON, the
+sound's length in milliseconds, at least 1.
 A refusal is an `is_error` result whose content is `SpeakRefused(refused)` as JSON, such as
 `{"refused": "too_long"}`, with one `SpeakRefusal` code:
 
 - `not_active`: the member left, was removed or is paused;
 - `too_long`: the sentence is longer than the app speaks at once;
-- `unavailable`: the app cannot speak now.
+- `unavailable`: the app cannot speak now;
+- `language_unavailable`: the app's voice does not speak the named language.
 
-Proved by `tests/test_member.py`.
+Proved by `tests/test_member.py`, among them
+`test_speak_arguments_with_a_malformed_language_are_refused`.
 
 **What each app that hears and speaks owns**, besides what [hearing.md](hearing.md) gives it:
 
