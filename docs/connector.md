@@ -530,9 +530,9 @@ An `accept_invitation` refusal is an `is_error` result whose content is
 expired, or its id or epoch no longer matches, or the member holds no lease),
 `two_seats` (the person who brought the member does not hold exactly one seat in the place, the
 inviting one), `sponsor_away` (that person's seat lost its connection and waits to resume) or `busy`
-(the place or the app already holds as many members as it takes, or that person already brings
-another). A code the app adds for every tool alike is its own and not part of the record; a runner
-reading it gets a validation error and decides itself. Proved by `tests/test_member.py`.
+(the place has no free seat). A code the app adds for every tool alike is its own and not part of
+the record; a runner reading it gets a validation error and decides itself. Proved by
+`tests/test_member.py`.
 
 `decline_invitation` takes `DeclineInvitationArguments(place, invitation, epoch, reason)`: the same
 place, invitation id and epoch as an accept, and the required `reason`, a `DeclineInvitationReason`
