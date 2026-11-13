@@ -18,7 +18,13 @@ from mcp_types import (
 
 from agents.mcp_server.asgi import LOGGER_NAME
 from agents.mcp_wire import JSON_MEDIA_TYPE
-from agents.member import MemberStanding, PlaceView, PlaceWindow
+from agents.member import (
+    MemberStanding,
+    PlaceView,
+    PlaceWindow,
+    place_ref_from_view_uri,
+    place_window_uri,
+)
 from agents.turn import Principal
 
 _LOG: Final = logging.getLogger(LOGGER_NAME)
@@ -44,12 +50,30 @@ class MemberResources(Protocol):
         ...
 
 
+class _ViewWithoutWindowError(Exception):
+    """The app listed a place's view without that place's window."""
+
+
+async def served_uris(resources: MemberResources, principal: Principal) -> frozenset[str]:
+    """What the port lists for the principal, each listed view beside its place's window.
+
+    Raises ``_ViewWithoutWindowError`` for a listed view whose window is not listed; the message
+    names no URI.
+    """
+    uris = frozenset(await resources.current(principal))
+    for uri in uris:
+        place = place_ref_from_view_uri(uri)
+        if place is not None and place_window_uri(place) not in uris:
+            raise _ViewWithoutWindowError("a listed view has no listed window")
+    return uris
+
+
 async def list_answer(
     resources: MemberResources, principal: Principal
 ) -> ListResourcesResult | ErrorData:
     """Exactly the URIs the port lists for the principal, sorted."""
     try:
-        uris = sorted(await resources.current(principal))
+        uris = sorted(await served_uris(resources, principal))
         return ListResourcesResult(
             resources=[Resource(uri=uri, name=uri, mime_type=JSON_MEDIA_TYPE) for uri in uris],
             ttl_ms=0,

@@ -33,7 +33,8 @@ PROTOCOL_TEXT: Final = (
     "You take part in a conversation by voice. Each user message holds what was heard or "
     'written since your last reply, one JSON object per line: "name" is who it comes from, '
     '"kind" is what kind of line it is in the app\'s words, "own" marks your own line, '
-    '"spoken" marks a line said aloud rather than written, "text" is the line itself, and '
+    '"spoken" marks a line said aloud rather than written, "act" marks a line that says what '
+    'someone did rather than what someone said, "text" is the line itself, and '
     '"missed_before" counts the lines that were not passed to you before it.\n'
     f"Once the conversation grows long, the first user message opens with {WINDOW_NOTE}; "
     "nobody said that line.\n"

@@ -43,13 +43,15 @@ async def run_voice_loop[Audio](
 
     Every line enters one running conversation, but the agent's own spoken line and an echo: a
     spoken line that repeats the agent's latest answer (``voice.echo.is_echo``) is reported as
-    ``EchoDropped`` and never asked of ``wakes``. Any other line that is not the agent's own
-    and that ``wakes`` accepts starts a decision; at most one is in flight and one answer plays,
-    and a line that wakes meanwhile gets exactly one decision after it, over every line since
-    the last one. The system text is the agent's prompt, the protocol text and ``context``. A
-    decision sends at most the agent's voice window of the conversation; only the newest line
-    goes beyond it, alone and behind the window note once anything went. An agent without a
-    voice section raises ``ValueError`` before ``hearing`` is read.
+    ``EchoDropped`` and never asked of ``wakes``. An act line enters the conversation and is
+    never asked of ``wakes`` either; it does not count for ``first_after_answer``. Any other
+    line that is not the agent's own and that ``wakes`` accepts starts a decision; at most one
+    is in flight and one answer plays, and a line that wakes meanwhile gets exactly one decision
+    after it, over every line since the last one. The system text is the agent's prompt, the
+    protocol text and ``context``. A decision sends at most the agent's voice window of the
+    conversation; only the newest line goes beyond it, alone and behind the window note once
+    anything went. An agent without a voice section raises ``ValueError`` before ``hearing`` is
+    read.
 
     Each decision's turn is read to its end in its own task while its sentences play. They play
     in written order, and the next one renders while one plays, never more than one ahead. A
@@ -133,7 +135,7 @@ class _VoiceLoop[Audio]:
             self._report(EchoDropped(line.text))
             return
         self._conversation.hear(line)
-        if line.own:
+        if line.own or line.act:
             return
         first_after_answer, self._first_after_answer = self._first_after_answer, False
         if self._wakes(line, first_after_answer=first_after_answer):

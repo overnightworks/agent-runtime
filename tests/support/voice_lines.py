@@ -8,9 +8,16 @@ from agents.member import PlaceEntry
 
 
 def a_line(
-    seq: int, text: str, *, name: str = "Ada", kind: str = "person", own=False, spoken=True
+    seq: int,
+    text: str,
+    *,
+    name: str = "Ada",
+    kind: str = "person",
+    own=False,
+    spoken=True,
+    act=False,
 ) -> PlaceEntry:
-    return PlaceEntry(seq=seq, kind=kind, name=name, text=text, own=own, spoken=spoken)
+    return PlaceEntry(seq=seq, kind=kind, name=name, text=text, own=own, spoken=spoken, act=act)
 
 
 STREAMED_ANSWERS = [
