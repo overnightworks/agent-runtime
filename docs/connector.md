@@ -468,15 +468,16 @@ the tool and the exception's class
 
 `agents.member` owns what an app and an agent say to each other about a member:
 `PlaceRef`, `StandingState`, `Invitation`, `Standing` and its `ParentPlace(app, place)`, `MemberStanding(standings)` (what
-`STANDING_URI`, `member://standing`, answers with), `PlaceWindow(generation, starts_at, entries, talked_over)`
-of `PlaceEntry(seq, kind, name, text, own, spoken)`, `LEASE_SECONDS` (120),
+`STANDING_URI`, `member://standing`, answers with), `PlaceWindow(generation, starts_at, entries, talked_over, voice_state)`
+of `PlaceEntry(seq, kind, name, text, own, spoken, cut)`, `LEASE_SECONDS` (120),
 `INVITATION_SECONDS` (120), `LISTEN_BOUND_SECONDS` (50),
 `LISTEN_ALLOWANCE_SECONDS` (5), `AcceptInvitationArguments(place, invitation, epoch, figure, voice)` for the tool
 `ACCEPT_INVITATION_TOOL`, `DeclineInvitationArguments(place, invitation, epoch, reason)` for
 `DECLINE_INVITATION_TOOL`, and the records of the tools `SPEAK_TOOL` and `STOP_SPEAKING_TOOL`
 and of being talked over ([hearing and speaking](#hearing-and-speaking)). `spoken` is true for a line said aloud and
 heard, false for a written one; every dumped entry carries it, and an entry without it reads as
-written. A window's `seq` ascends strictly and may skip; a non-empty window starts at its first
+written. `cut` is true only on a spoken line whose sentence was cut before its end, and a line that
+is not cut dumps without the key. A window's `seq` ascends strictly and may skip; a non-empty window starts at its first
 `seq`; an empty window is valid and its `starts_at` is the `seq` the next line gets. A place's
 window is the resource `place_window_uri(place)`, `member://standing/places/{kind}/{id}` with each
 segment percent-encoded, so `/` in an opaque `kind` or `id` stays inside its segment;
@@ -647,17 +648,27 @@ sentence and optionally its `language`, a lowercase ISO 639-1 code of two letter
 neither bounds nor checks; a speak without either dumps without the key. The record checks only
 their form; the app decides the rest ([HEARING-20](hearing.md)), and the speech service owns the
 style's bound and check ([HEARING-23](hearing.md)). On success it answers `Spoken(duration_ms)` as JSON, the
-sound's length in milliseconds, at least 1.
-A refusal is an `is_error` result whose content is `SpeakRefused(refused)` as JSON, such as
+sound's length in milliseconds, at least 1, or `Written(written)`, `{"written": true}`, when the app
+could not voice the sentence and posted it as the member's written line; both are a result without
+`is_error`, and `SpeakAnswer` reads either. A refusal is an `is_error` result whose content is `SpeakRefused(refused)` as JSON, such as
 `{"refused": "too_long"}`, with one `SpeakRefusal` code:
 
 - `not_active`: the member left, was removed or is paused;
 - `too_long`: the sentence is longer than the app speaks at once;
-- `unavailable`: the app cannot speak now;
+- `unavailable`: the app neither voices nor writes the sentence now: a social reason, a limit of
+  its own, or a failed voice at a place without a chat;
 - `language_unavailable`: the app's voice does not speak the named language;
 - `style_unavailable`: the voice refused the style: it takes no style, or the style is too long or
   not supported;
 - `stopped`: a `stop_speaking` dropped this queued sentence.
+
+No refusal is ever written as a line ([HEARING-25](hearing.md)).
+
+**The voice state.** The window carries `voice_state`, a `VoiceState` (`available` or
+`unavailable`), when the app states one: `unavailable` means the app's own voice has failed for
+that member at that place, so a runner starts a written turn; a social reason or a limit of the
+app never sets it. It is absent when the app states none, and the window then dumps without the
+key ([HEARING-24](hearing.md)).
 
 **Being talked over.** While people talk over the member, its window carries `talked_over`:
 `TalkedOver(id, playing, speech)` with one `PartialSpeech(name, text)` per person speaking, in the
@@ -670,21 +681,28 @@ with its last partial. The window dumps without the key when nobody talks over t
 
 **Stopping** is the side-effecting tool `STOP_SPEAKING_TOOL`, `stop_speaking`, with
 `StopSpeakingArguments(place)`. It cuts the member's playing sentence and drops its queue in every
-seat, and answers `StoppedSpeaking(cut)` as JSON, the text of the sentence cut. A refusal is an
+seat, and answers `StoppedSpeaking(cut)` as JSON, the text of the cut sentence's line. A refusal is an
 `is_error` result with `StopSpeakingRefused(refused)` as JSON: `not_active` (the member left, was
 removed or is paused) or `nothing_playing` (nothing was cut and nothing dropped)
 ([HEARING-22](hearing.md)).
 
 Proved by `tests/test_member.py` (among them
 `test_speak_arguments_with_a_malformed_language_are_refused`) and `tests/test_member_speaking.py`
-(among them `test_a_malformed_talked_over_record_is_refused` and
-`test_stopped_speaking_names_the_sentence_it_cut`).
+(among them `test_a_malformed_talked_over_record_is_refused`,
+`test_stopped_speaking_names_the_sentence_it_cut`,
+`test_a_speak_answer_reads_spoken_and_written_each_as_its_own_record`,
+`test_a_window_reads_its_voice_state_as_sent` and
+`test_a_cut_mark_on_a_written_line_is_refused`).
 
 **What each app that hears and speaks owns**, besides what [hearing.md](hearing.md) gives it:
 
-- It appends the member's own sentences as `own` and `spoken` when they start playing.
+- It appends the member's own sentences as `own` and `spoken` when they end, a sentence cut before
+  its end with `cut` ([HEARING-16](hearing.md)).
+- It writes a sentence its voice fails on as the member's written line where the place has a chat,
+  keeps `voice_state` true to its voice, and logs a voice going down once per outage
+  ([HEARING-24 to HEARING-26](hearing.md)).
 - It plays one member's sentences in order, each behind that member's previous sentence, and
-  answers each with the sound's length.
+  answers each at its turn with the sound's length or `Written`.
 - It bounds a sentence's length, refuses with these codes, and drops the queued sentences of a
   removed or paused member at once.
 - It bounds its window as it does without speech.

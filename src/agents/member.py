@@ -4,8 +4,10 @@ An app writes these records and an agent's runner reads them: where the member s
 place (``Standing``), the window of lines one place shows (``PlaceWindow``), the state of one
 place (``PlaceView``), the arguments of accepting and declining an invitation and of speaking and
 stopping in a place, what accepting and declining answer when they refuse, what speaking and
-stopping answer, and what the window says when people talk over the member (``TalkedOver``). The
-URIs name the resources that serve them; a URI is no credential, so a guessed one yields nothing.
+stopping answer (a sentence voiced, or written as a line when the voice failed), and what the
+window says when people talk over the member (``TalkedOver``) and whether the member's voice at the
+place has failed (``VoiceState``). The URIs name the resources that serve them; a URI is no
+credential, so a guessed one yields nothing.
 This module is base, so a runner parses all of it without the ``mcp-server`` extra.
 """
 
@@ -16,9 +18,11 @@ from typing import Annotated, Final, Self
 from urllib.parse import quote, unquote, urlsplit
 
 from pydantic import (
+    AfterValidator,
     AnyHttpUrl,
     AwareDatetime,
     Field,
+    StrictBool,
     StringConstraints,
     ValidationError,
     field_validator,
@@ -53,6 +57,7 @@ __all__ = [
     "PlaceRef",
     "PlaceView",
     "PlaceWindow",
+    "SpeakAnswer",
     "SpeakArguments",
     "SpeakRefusal",
     "SpeakRefused",
@@ -66,7 +71,9 @@ __all__ = [
     "StoppedSpeaking",
     "TalkedOver",
     "VoiceName",
+    "VoiceState",
     "VoiceStyle",
+    "Written",
     "place_ref_from_view_uri",
     "place_ref_from_window_uri",
     "place_view_uri",
@@ -296,11 +303,31 @@ class Spoken(StrictModel):
     duration_ms: int = Field(ge=1)
 
 
+def _refuse_false(value: bool) -> bool:
+    if not value:
+        raise ValueError("must be true")
+    return value
+
+
+class Written(StrictModel):
+    """What ``speak`` answers, as JSON and without ``is_error``, when the app could not voice the
+    sentence for a failure of its voice and posted it at the place as the member's written line
+    instead; the field is exactly the JSON ``true``."""
+
+    written: Annotated[StrictBool, AfterValidator(_refuse_false)]
+
+
+SpeakAnswer = Spoken | Written
+"""What a ``speak`` that is not refused answers: the sentence plays, or it was written."""
+
+
 class SpeakRefusal(StrEnum):
     """Why the app does not speak a sentence: ``language_unavailable`` when the app's voice does
     not speak the language the sentence names, ``style_unavailable`` for every refusal of the
-    ``style`` by the voice (it takes none, it is too long or it is not supported), and
-    ``stopped`` for a queued sentence that a ``stop_speaking`` dropped."""
+    ``style`` by the voice (it takes none, it is too long or it is not supported), ``stopped``
+    for a queued sentence that a ``stop_speaking`` dropped, and ``unavailable`` when the app
+    neither voices nor writes the sentence now: a social reason, a limit of its own or a failed
+    voice at a place without a chat. No refusal is ever turned into a written line."""
 
     NOT_ACTIVE = "not_active"
     TOO_LONG = "too_long"
@@ -324,7 +351,8 @@ class StopSpeakingArguments(StrictModel):
 
 
 class StoppedSpeaking(StrictModel):
-    """What ``stop_speaking`` answers on success, as JSON: the text of the sentence it cut."""
+    """What ``stop_speaking`` answers on success, as JSON: the text of the cut sentence's line,
+    the heard part when the app knows it, else the whole sentence."""
 
     cut: NonEmptyUnicodeText
 
@@ -363,9 +391,21 @@ class TalkedOver(StrictModel):
     speech: tuple[PartialSpeech, ...] = Field(min_length=1)
 
 
+class VoiceState(StrEnum):
+    """Whether the member's voice at the place has failed for that member there: ``available``
+    while the app's voice works, ``unavailable`` while it has failed, so a ``speak`` would not be
+    voiced for that reason. A social reason or a limit of the app never changes it."""
+
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+
+
 class PlaceEntry(StrictModel):
     """One line of a place; ``kind`` is the app's own text, ``own`` marks the member's line and
-    ``spoken`` a line said aloud and heard, one finished utterance, rather than written."""
+    ``spoken`` a line said aloud and heard, one finished utterance, rather than written. A line
+    enters once its sentence has ended and is never changed; ``cut`` marks a spoken sentence cut
+    before its end, whose ``text`` is the part heard up to the cut, or the whole sentence when the
+    app cannot tell how far it played."""
 
     seq: int = Field(ge=1)
     kind: NonEmptyUnicodeText
@@ -373,6 +413,13 @@ class PlaceEntry(StrictModel):
     text: NonEmptyUnicodeText
     own: bool
     spoken: bool = False
+    cut: bool = Field(default=False, exclude_if=_is_false)
+
+    @model_validator(mode="after")
+    def _only_a_spoken_line_is_cut(self) -> Self:
+        if self.cut and not self.spoken:
+            raise ValueError("only a spoken line is cut")
+        return self
 
 
 class PlaceWindow(StrictModel):
@@ -381,13 +428,17 @@ class PlaceWindow(StrictModel):
     ``generation`` names the run of ``seq`` numbers the window belongs to. An empty window is
     valid, and its ``starts_at`` is the ``seq`` the next line will get. ``talked_over`` is set
     only while people talk over the member; a person's partial and finished line are never both
-    in one read.
+    in one read. ``voice_state`` states a failure of the member's voice at the place, for that
+    member there; absent, the app states nothing.
     """
 
     generation: NonEmptyUnicodeText
     starts_at: int = Field(ge=1)
     entries: tuple[PlaceEntry, ...]
     talked_over: TalkedOver | None = Field(default=None, exclude_if=_is_none)
+    voice_state: Annotated[VoiceState, Field(strict=False)] | None = Field(
+        default=None, exclude_if=_is_none
+    )
 
     @model_validator(mode="after")
     def _entries_ascend_from_the_start(self) -> Self:
