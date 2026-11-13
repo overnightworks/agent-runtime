@@ -361,11 +361,14 @@ def test_the_first_line_after_an_answer_that_played_is_the_one_marked_first_afte
     ]
 
 
-def test_an_act_line_the_rule_would_wake_is_never_asked_and_reaches_the_model_marked(place):
+@pytest.mark.parametrize("own", [False, True], ids=["an act of another", "an own act"])
+def test_an_act_line_the_rule_would_wake_is_never_asked_and_reaches_the_model_marked(place, own):
     gateway = FakeGateway(completion("Gern."))
 
     async def hearing(trace):
-        yield a_line(1, "listener legt ab.", name="Ben", kind="move", spoken=False, act=True)
+        yield a_line(
+            1, "listener legt ab.", name="Ben", kind="move", spoken=False, act=True, own=own
+        )
         await trace.settled()
         assert gateway.requests == []
         yield a_line(2, "Danke.")

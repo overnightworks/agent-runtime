@@ -543,8 +543,11 @@ a change of the revision alone signals the view, and a line alone the window. A 
 view, then the window, so the window may already hold lines past the view's revision. It tells each
 line with its `kind` and `act`, and the per-line sentence of [the member module](#the-member-module)
 holds. No app writes act lines at a place until its runner has the field. Proved by
-`tests/test_member.py`, `tests/test_member_act.py`, `tests/test_mcp_server_resources.py`,
-`tests/test_mcp_server_listen_view.py` and `tests/test_voice_loop.py`.
+`test_an_act_line_survives_the_wire_with_its_marker`,
+`test_a_line_that_is_no_act_dumps_without_the_key` and
+`test_a_spoken_line_is_refused_with_act` in `tests/test_member_act.py`, and by
+`tests/test_mcp_server_resources.py`, `tests/test_mcp_server_listen_view.py` and
+`tests/test_voice_loop.py`.
 
 An accept may name the agent's 3D figure, `figure` as `FigureRef(url, sha256)`, and the `voice` it
 speaks with; both are optional, and an accept without them dumps without their keys. The record

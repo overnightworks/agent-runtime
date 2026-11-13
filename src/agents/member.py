@@ -406,7 +406,7 @@ class PlaceEntry(StrictModel):
     enters once its sentence has ended and is never changed; ``cut`` marks a spoken sentence cut
     before its end, whose ``text`` is the part heard up to the cut, or the whole sentence when the
     app cannot tell how far it played. ``act`` marks a written line that says what someone did
-    rather than said: it is told and never calls the member to act."""
+    rather than what someone said: it is told and never calls the member to act."""
 
     seq: int = Field(ge=1)
     kind: NonEmptyUnicodeText
