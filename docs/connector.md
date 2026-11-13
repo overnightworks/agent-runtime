@@ -507,9 +507,10 @@ refused with `act`, so a cut line is too. A runner that predates the field refus
 carrying `act`, as it refuses a standing carrying `parent`. An act line is told and never calls the
 member to act. At a place with a view, `awaits_you` calls the member to act. Whether a line that is
 no act wakes the member stays the runner's wake rule. A window's `seq` ascends strictly and may
-skip; a non-empty window starts at its first `seq`; an empty window is valid and its `starts_at` is the `seq` the next line gets. A place's
-window is the resource `place_window_uri(place)`, `member://standing/places/{kind}/{id}` with each
-segment percent-encoded, so `/` in an opaque `kind` or `id` stays inside its segment;
+skip; a non-empty window starts at its first `seq`; an empty window is valid and its `starts_at`
+is the `seq` the next line gets. A place's window is the resource `place_window_uri(place)`,
+`member://standing/places/{kind}/{id}` with each segment percent-encoded, so `/` in an opaque
+`kind` or `id` stays inside its segment;
 `place_ref_from_window_uri(uri)` returns the `PlaceRef` for that canonical spelling only and
 `None` for anything else. A URI is no credential.
 
