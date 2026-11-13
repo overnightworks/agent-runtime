@@ -24,6 +24,7 @@ voice = [
 ]
 dev = [
     "overnightworks-agents[backend,mcp-server,voice]",
+    "pyright==1.1.414",
     "pytest>=9.1,<10",
     "pytest-cov>=7.1,<8",
     "pytest-xdist>=3.8,<4",
@@ -54,6 +55,11 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
+
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "strict"
+pythonVersion = "3.14"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

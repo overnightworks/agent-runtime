@@ -47,6 +47,9 @@ jobs:
       - name: Ruff
         run: uv run --locked --no-sync ruff check src tests
 
+      - name: Pyright
+        run: uv run --locked --no-sync pyright
+
       - name: Tests
         run: uv run --locked --no-sync pytest -q -n auto --cov=src --cov-report=xml:coverage.xml
 

@@ -5,6 +5,7 @@
 - `uv sync --locked --extra dev`: install the environment; run it before any other command.
 - `uv run pytest -q -n auto`: the suite; needs no live provider.
 - `uv run ruff check src tests`: lint `src` and `tests`.
+- `uv run pyright`: type-check `src` in strict mode.
 - `uvx --from "git+https://github.com/overnightworks/quality@<sha>" quality check`: the gate's local check; `<sha>` is the one `.github/workflows/ci.yml` pins for quality's gate.
 - `uv build`: build the wheel; run it after `uv sync`.
 - `gh workflow run release.yml -f version=X.Y.Z`: dispatch a release; the pull request before it raises `version` in `pyproject.toml`.
