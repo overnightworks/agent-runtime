@@ -134,27 +134,24 @@ whose `text` may still be empty. The `id` is the app's, never repeats within the
 `generation` and stays fixed from the record's appearance to its removal; a second person who starts
 speaking meanwhile adds a partial under the same `id`, and `speech` keeps the order in which they
 started. A runner takes at most one decision per `id`. The app updates the partials as the words
-come and `playing` as the agent's sentences end, and signals each update per HEARING-11. A person's
-finished line replaces that person's partial in the same window change, so one read never shows
-both. A person's partial goes when that person's turn ends, also a turn that heard no words, when a
+come and `playing` as the agent's sentences end and start: `playing` returns to true when a new
+sentence of the member starts while the record stands, and the `id` stays the same. It signals each
+update per HEARING-11. A person's finished line replaces that person's partial in the same window
+change, so one read never shows both. A person's partial goes when that person's turn ends, also a turn that heard no words, when a
 switch-off stops the agent hearing that person (and does not return for that utterance) and when
 that speaker ends; the other speakers' partials stay. The record goes with its last partial, and at
 once when the member or the place ends; the next record has a new `id`. A partial can therefore go
 with no line after it, and a runner treats a partial as provisional. A person's turn that began
-before the agent's sentence starts creates no record and no duck.
+before the agent's sentence starts creates no record.
 
-**HEARING-22 (A).** At the moment the record appears, every seat lowers the agent's player at once.
-A sentence that starts while the record stands also plays lowered. The volume returns when the
-record goes, with its last partial: it stays lowered while any person still talks over the agent. A
-sentence that ends by itself while lowered brings nothing back.
-
-**HEARING-23 (A).** `stop_speaking(place)` cuts the agent's playing sentence in every seat and
+**HEARING-22 (A).** `stop_speaking(place)` cuts the agent's playing sentence in every seat and
 drops its whole queue there, and answers `StoppedSpeaking(cut)` with the text of the sentence cut.
 Each dropped queued `speak` answers `stopped`, so no call hangs. With nothing playing it answers
-`nothing_playing` and cut and dropped nothing. A stop is not a mute: the agent speaks again at its
+`nothing_playing`, and when the member left, was removed or is paused it answers `not_active`;
+either way nothing is cut or dropped. A stop is not a mute: the agent speaks again at its
 next `speak`. The cut sentence's line stays as it was appended.
 
-**HEARING-24 (A).** `speak` may carry a `style`, free text that the app passes on unchanged to its
+**HEARING-23 (A).** `speak` may carry a `style`, free text that the app passes on unchanged to its
 speech service. The app neither bounds nor checks it: the speech service owns its length bound and
 its check. Every refusal of the style by the voice (a voice that takes no style, a style too long,
 or one the voice does not support) reaches the agent as `style_unavailable`, with no second code.
@@ -170,8 +167,8 @@ app supplies:
 - the switch and the ear mark, from the shared design kit, with the mark showing `sensing`;
 - the window, its `seq`, its append and the signal (HEARING-11);
 - the queue of an agent's own spoken sentences (HEARING-14 to HEARING-17);
-- the talked-over record with the partials, the duck, the stop and the style (HEARING-21 to
-  HEARING-24); and
+- the talked-over record with the partials, the stop and the style (HEARING-21 to
+  HEARING-23); and
 - its privacy text, which states what is heard and its legal basis.
 
 ## Owners

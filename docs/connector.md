@@ -646,7 +646,7 @@ sentence and optionally its `language`, a lowercase ISO 639-1 code of two letter
 `en`, and its `style`, free text such as `louder and angrier` that the app passes on unchanged and
 neither bounds nor checks; a speak without either dumps without the key. The record checks only
 their form; the app decides the rest ([HEARING-20](hearing.md)), and the speech service owns the
-style's bound and check ([HEARING-24](hearing.md)). On success it answers `Spoken(duration_ms)` as JSON, the
+style's bound and check ([HEARING-23](hearing.md)). On success it answers `Spoken(duration_ms)` as JSON, the
 sound's length in milliseconds, at least 1.
 A refusal is an `is_error` result whose content is `SpeakRefused(refused)` as JSON, such as
 `{"refused": "too_long"}`, with one `SpeakRefusal` code:
@@ -666,14 +666,14 @@ next one, so a runner takes one decision per `id`; `playing` says a sentence of 
 now. A partial is provisional text, no `PlaceEntry`, so the `seq` rules hold beside it; a person's
 partial goes with that person's turn, with or without a finished line after it, and the record goes
 with its last partial. The window dumps without the key when nobody talks over the member
-([HEARING-21](hearing.md), [HEARING-22](hearing.md) for the duck).
+([HEARING-21](hearing.md)).
 
 **Stopping** is the side-effecting tool `STOP_SPEAKING_TOOL`, `stop_speaking`, with
 `StopSpeakingArguments(place)`. It cuts the member's playing sentence and drops its queue in every
 seat, and answers `StoppedSpeaking(cut)` as JSON, the text of the sentence cut. A refusal is an
 `is_error` result with `StopSpeakingRefused(refused)` as JSON: `not_active` (the member left, was
 removed or is paused) or `nothing_playing` (nothing was cut and nothing dropped)
-([HEARING-23](hearing.md)).
+([HEARING-22](hearing.md)).
 
 Proved by `tests/test_member.py` (among them
 `test_speak_arguments_with_a_malformed_language_are_refused`) and `tests/test_member_speaking.py`

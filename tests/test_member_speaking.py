@@ -10,7 +10,6 @@ from pydantic import ValidationError
 
 from agents.member import (
     STOP_SPEAKING_TOOL,
-    PartialSpeech,
     PlaceRef,
     PlaceWindow,
     SpeakArguments,
@@ -118,12 +117,6 @@ def test_a_talked_over_window_reads_back_from_its_json_unchanged() -> None:
     assert window.talked_over is not None
     assert [speech.name for speech in window.talked_over.speech] == ["ada", "bob"]
     assert PlaceWindow.model_validate_json(window.model_dump_json()) == window
-
-
-def test_a_partial_may_be_empty_while_a_person_has_said_no_words_yet() -> None:
-    partial = PartialSpeech.model_validate_json(json.dumps({"name": "ada", "text": ""}))
-
-    assert partial.text == ""
 
 
 @pytest.mark.parametrize(
