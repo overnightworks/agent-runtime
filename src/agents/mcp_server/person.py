@@ -85,12 +85,22 @@ from agents.mcp_wire import (
 )
 from agents.member import LISTEN_BOUND_SECONDS
 from agents.tools import ToolDeclaration, ToolEffect, ToolOutcome
-from agents.turn import JsonObject, Principal, StrictModel, UnicodeText
+from agents.turn import (
+    TOOL_IMAGE_MEDIA_TYPE,
+    JsonObject,
+    Principal,
+    StrictModel,
+    ToolImage,
+    UnicodeText,
+    is_within_event_bound,
+    written_base64,
+)
 
 type ResolvePerson = Callable[[Scope], Principal]
 
 _LOG: Final = logging.getLogger(LOGGER_NAME)
 _HANDLER_FAILED_TEXT: Final = "the tool failed"
+_RESULT_TOO_LARGE_TEXT: Final = "the tool result was too large"
 _UNKNOWN_TOOL_TEXT: Final = "Unknown tool"
 _INVALID_ARGUMENTS_TEXT: Final = "Invalid tool arguments"
 _BEARER_SCHEME: Final = "bearer"
@@ -142,15 +152,18 @@ class _WritableOutcome(StrictModel):
 
     content: UnicodeText
     is_error: bool
+    image: ToolImage | None
 
 
 def _written(outcome: ToolOutcome) -> CallToolResult:
     writable = _WritableOutcome.model_validate(
-        {"content": outcome.content, "is_error": outcome.is_error}
+        {"content": outcome.content, "is_error": outcome.is_error, "image": outcome.image}
     )
-    return CallToolResult.model_validate(
-        {"content": [{"type": "text", "text": writable.content}], "isError": writable.is_error}
-    )
+    blocks: list[JsonObject] = [{"type": "text", "text": writable.content}]
+    if writable.image is not None:
+        data = written_base64(writable.image.content)
+        blocks.append({"type": "image", "data": data, "mimeType": TOOL_IMAGE_MEDIA_TYPE})
+    return CallToolResult.model_validate({"content": blocks, "isError": writable.is_error})
 
 
 def _refusal(scope: Scope) -> HttpAnswer | None:
@@ -393,6 +406,8 @@ class McpPersonFront:
         name = tool.declaration.name
         try:
             outcome = await tool.handler(_CURRENT_REQUEST.get(), arguments)
+            if not is_within_event_bound(outcome.content, outcome.image):
+                outcome = ToolOutcome(_RESULT_TOO_LARGE_TEXT, is_error=True)
             result = _written(outcome)
         except Exception as failure:
             _LOG.error("a tool failed: %s raised %s", name, type(failure).__name__)

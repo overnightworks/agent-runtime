@@ -698,6 +698,7 @@ def test_a_fake_gateway_without_replies_is_refused():
 
 
 REPLY_CANARY = "reply-canary-7f3a"
+ARGUMENTS_CANARY = "arguments-canary-5c1e"
 A_PIECE = an_event_stream(a_chunk(REPLY_CANARY), done=False)
 
 
@@ -726,7 +727,8 @@ def _held_texts(error: BaseException) -> list[str]:
 
 
 def _leaks(error: BaseException, key: str) -> list[str]:
-    return [text for text in _held_texts(error) if key in text or REPLY_CANARY in text]
+    secrets = (key, REPLY_CANARY, ARGUMENTS_CANARY)
+    return [text for text in _held_texts(error) if any(secret in text for secret in secrets)]
 
 
 TURN_STOPS = {
@@ -775,14 +777,15 @@ def test_a_stopped_turn_holds_neither_the_key_nor_the_reply_in_any_frame_or_chai
 @pytest.mark.parametrize(
     "handler_raising", [a_handler_raising, a_handler_raising_from_a_nameless_namespace]
 )
-def test_a_handlers_stop_after_a_tool_round_comes_back_the_same_and_holds_neither_key_nor_reply(
+def test_a_handlers_stop_after_a_tool_round_comes_back_the_same_and_holds_no_key_reply_or_arguments(
     scenario, handler_raising
 ):
     refusal = TurnStopped(TurnStopKind.REFUSED, RejectionCode.BUSY)
     declaration = ToolDeclaration(
         name="lookup", description="Use lookup.", parameters={}, effect=ToolEffect.READ_ONLY
     )
-    gateway = FakeGateway(tool_round(tool_call("c1", "lookup", {}), content=REPLY_CANARY))
+    call = tool_call("c1", "lookup", {"note": ARGUMENTS_CANARY})
+    gateway = FakeGateway(tool_round(call, content=REPLY_CANARY))
     handler = HandTool(declaration, handler_raising(refusal))
     backend = GatewayBackend(scenario.config(), tools=[handler], transport=gateway)
     request = a_request(tools=(declaration,), max_tool_calls=5)

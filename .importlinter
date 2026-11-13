@@ -44,6 +44,7 @@ source_modules =
     agents.backend.fake_gateway
     agents.backend.gateway
     agents.backend.streamed_round
+    agents.backend.tool_result
     agents.config
     agents.errors
     agents.member
@@ -71,6 +72,7 @@ source_modules =
     agents.backend.fake_gateway
     agents.backend.gateway
     agents.backend.streamed_round
+    agents.backend.tool_result
     agents.config
     agents.errors
     agents.member
@@ -126,7 +128,7 @@ forbidden_modules =
     httpx
     agents.backend.gateway
 
-# Sound stays with the app and the speech service: the client sees only text.
+# Sound stays with the app and the speech service: the client carries no sound.
 [importlinter:contract:client-imports-no-speech-library]
 name = agents imports no speech library
 type = forbidden

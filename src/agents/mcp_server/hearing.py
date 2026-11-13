@@ -1,11 +1,12 @@
-"""Which member hears which speaker, and the one line a heard utterance becomes.
+"""Which member hears or sees which speaker, and the one line a heard utterance becomes.
 
-An app that lets an agent hear people at a place records its own rule's decisions with
-``MemberHearing.allow``; the standard is ``docs/hearing.md``. ``heard`` answers which members
-hear a finished utterance and returns the line to append; the app adds ``seq``, appends the line
-to those members' windows and signals the change. The record lives in memory, in one process, and
-is called on the front's event loop or through ``anyio.from_thread.run_sync``, as
-``ResourceChanges`` is.
+An app that lets an agent hear or see people at a place records its own rule's decisions with
+``MemberHearing.allow``, one entry per sense; the standard is ``docs/hearing.md``. ``heard``
+answers which members hear a finished utterance and returns the line to append; the app adds
+``seq``, appends the line to those members' windows and signals the change. Seeing is read with
+``allows`` and ``sensing``, and an end deletes its entries as it deletes hearing's. The record
+lives in memory, in one process, and is called on the front's event loop or through
+``anyio.from_thread.run_sync``, as ``ResourceChanges`` is.
 
 A member hears an utterance only if the member's entry exists when ``heard`` runs and was switched
 on no later than the utterance began. An end deletes entries, so no utterance finishing after it
@@ -36,9 +37,11 @@ SpokenText = Annotated[NonEmptyUnicodeText, AfterValidator(_refuse_blank)]
 
 
 class Sense(StrEnum):
-    """What a member may sense of a speaker; only hearing is defined."""
+    """What a member may sense of a speaker: hearing, and seeing as the one still picture a tool
+    of the app returns."""
 
     HEARING = "hearing"
+    SEEING = "seeing"
 
 
 class Utterance(StrictModel):
@@ -75,9 +78,9 @@ def _loop_time() -> float:
 
 
 class MemberHearing:
-    """The record of who may hear whom. ``now`` is the clock of the app's ``began_at`` values; by
-    default the running loop's time, read when ``allow`` runs, so the record can be built before
-    the loop runs."""
+    """The record of who may hear or see whom. ``now`` is the clock of the app's ``began_at``
+    values; by default the running loop's time, read when ``allow`` runs, so the record can be
+    built before the loop runs."""
 
     def __init__(self, now: Callable[[], float] | None = None) -> None:
         self._now = _loop_time if now is None else now
