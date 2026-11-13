@@ -3,5 +3,6 @@ agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
 role = "builder"
 base = "f27769e26f8839afbde0fc1d67b09f2f1f855791"
 branch = "claude/issue-910-the-mcp-person-front-answers-a-picture-w"
-scope = ["docs/connector.md", "src/agents/mcp_server/person.py", "tests/test_mcp_server_person.py"]
+scope = ["docs/connector.md", "src/agents/mcp_server/person.py", "tests/support/mcp_person_support.py", "tests/test_mcp_server_person.py", "tests/test_mcp_server_person_results.py"]
 opened_commit = "e0341530e170d3fb93002dd9794737347de5c743"
+whole_reason = "One front rule with its docs and tests; the person-front tests split in two only to stay below the file-size debt line."
