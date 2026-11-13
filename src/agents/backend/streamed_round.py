@@ -6,16 +6,15 @@ the stream completed. It imports no HTTP library, and its exceptions hold no tex
 
 from __future__ import annotations
 
-import json
 import re
-from collections.abc import AsyncIterable, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterable
 from contextlib import aclosing
 from dataclasses import dataclass, field
 from typing import Final, Literal, NamedTuple, TypedDict
 
-from pydantic import ValidationError
+from pydantic import JsonValue, ValidationError
 
-from agents.turn import MAX_EVENT_BYTES, JsonObject, TurnUsage
+from agents.turn import MAX_EVENT_BYTES, JsonObject, TurnUsage, loaded_json
 
 # JSON writes one byte of text as up to six (a \u00XX escape); the rest is the envelope.
 _JSON_ESCAPE_FACTOR: Final = 6
@@ -24,7 +23,6 @@ _MAX_DATA_BYTES: Final = _JSON_ESCAPE_FACTOR * MAX_EVENT_BYTES + _ENVELOPE_ALLOW
 _ERROR_TYPE: Final = re.compile(r"[a-z0-9_]{1,64}")
 _ERROR_CODE: Final = re.compile(r"\d{3}", re.ASCII)
 _DONE: Final = "[DONE]"
-_UNPARSEABLE: Final = object()
 
 
 class MalformedRound(Exception):
@@ -76,7 +74,7 @@ class StreamedRound:
 class _Call:
     id: str
     name: str
-    arguments: list[str] = field(default_factory=list)
+    arguments: list[str] = field(default_factory=list[str])
 
 
 @dataclass
@@ -84,9 +82,9 @@ class _Assembly:
     """The round so far; every piece is checked as it is added."""
 
     round_limit_bytes: int
-    text: list[str] = field(default_factory=list)
+    text: list[str] = field(default_factory=list[str])
     text_bytes: int = 0
-    calls: list[_Call] = field(default_factory=list)
+    calls: list[_Call] = field(default_factory=list[_Call])
     held_bytes: int = 0
     finish_reason: str | None = None
     usage: TurnUsage | None = None
@@ -99,7 +97,7 @@ class _Assembly:
         self._hold(size)
         self.text.append(piece)
 
-    def add_fragment(self, fragment: object) -> None:
+    def add_fragment(self, fragment: JsonValue) -> None:
         if not isinstance(fragment, dict):
             raise MalformedRound
         index = fragment.get("index")
@@ -158,7 +156,7 @@ class CheckedError(NamedTuple):
     code: str
 
 
-def checked_error_of(error: object) -> CheckedError | None:
+def checked_error_of(error: JsonValue) -> CheckedError | None:
     """The error's ``type`` and ``code`` when both are well formed; never its other fields."""
     if isinstance(error, dict):
         error_type, code = error.get("type"), error.get("code")
@@ -172,7 +170,7 @@ def checked_error_of(error: object) -> CheckedError | None:
     return None
 
 
-def error_kind_of(error: object) -> str:
+def error_kind_of(error: JsonValue) -> str:
     """The text a log gives for the error's checked ``type`` and ``code``."""
     checked = checked_error_of(error)
     if checked is None:
@@ -182,7 +180,7 @@ def error_kind_of(error: object) -> str:
 
 async def read_round(
     chunks: AsyncIterable[bytes], *, round_limit_bytes: int
-) -> AsyncIterator[str | StreamedRound]:
+) -> AsyncGenerator[str | StreamedRound, None]:
     """Each non-empty text piece as its event is added, then the round it completes.
 
     The round is complete at ``[DONE]`` after a finish reason; anything else is a failure.
@@ -198,7 +196,7 @@ async def read_round(
     raise MalformedRound
 
 
-async def _events(chunks: AsyncIterable[bytes]) -> AsyncIterator[str]:
+async def _events(chunks: AsyncIterable[bytes]) -> AsyncGenerator[str, None]:
     """The data of each event, framed by the HTML standard's rules for an event stream.
 
     Only LF ends a line (a trailing CR is stripped): a lone CR as a line end, the standard's one
@@ -219,7 +217,7 @@ async def _events(chunks: AsyncIterable[bytes]) -> AsyncIterator[str]:
                 data.append(value)
 
 
-async def _lines(chunks: AsyncIterable[bytes]) -> AsyncIterator[str]:
+async def _lines(chunks: AsyncIterable[bytes]) -> AsyncGenerator[str, None]:
     """Each complete line decoded, its trailing CR and the stream's one leading BOM dropped."""
     pending = bytearray()
     is_first_line = True
@@ -259,7 +257,7 @@ def _take(assembly: _Assembly, data: str) -> str | None:
     return _add_choice(assembly, choices[0]) if choices else None
 
 
-def _usage_of(usage: object) -> TurnUsage | None:
+def _usage_of(usage: JsonValue) -> TurnUsage | None:
     """The turn's words for a chunk's usage; ``None`` when a count is missing or not a count."""
     if not isinstance(usage, dict):
         return None
@@ -283,22 +281,22 @@ def _usage_of(usage: object) -> TurnUsage | None:
         return None
 
 
-def _first_sent(*counts: object) -> object:
+def _first_sent(*counts: JsonValue) -> JsonValue:
     """The first count that was sent (a null is not sent), else zero."""
     return next((count for count in counts if count is not None), 0)
 
 
 def _parsed(data: str) -> JsonObject:
     try:
-        event = json.loads(data)
+        event = loaded_json(data)
     except ValueError, RecursionError:
-        event = _UNPARSEABLE
+        event = None
     if not isinstance(event, dict):
         raise MalformedRound
     return event
 
 
-def _add_choice(assembly: _Assembly, choice: object) -> str | None:
+def _add_choice(assembly: _Assembly, choice: JsonValue) -> str | None:
     if not isinstance(choice, dict):
         raise MalformedRound
     delta = choice.get("delta", {})

@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 from typing import Final
 
-from syntok import segmenter
+# syntok ships no type stubs, so the checker can read neither its import nor its signatures.
+from syntok import segmenter  # pyright: ignore[reportMissingTypeStubs]
 
 _ENDS_IN_ORDINAL: Final = re.compile(r"\d\.$")
 
@@ -33,6 +34,6 @@ def split_sentences(text: str) -> tuple[str, ...]:
 def _segmented(text: str) -> tuple[str, ...]:
     return tuple(
         "".join(token.spacing + token.value for token in sentence).strip()
-        for paragraph in segmenter.analyze(text)
+        for paragraph in segmenter.analyze(text)  # pyright: ignore[reportUnknownMemberType]
         for sentence in paragraph
     )

@@ -9,6 +9,7 @@ from http import HTTPStatus
 from typing import Any, Final
 
 import anyio.lowlevel
+from pydantic import JsonValue
 
 from agents.mcp_wire import PROTOCOL_VERSION_HEADER, carries_signature_of
 from agents.turn import MAX_EVENT_BYTES
@@ -124,9 +125,11 @@ async def write_stream(
     return cut
 
 
-def request_label(document: object, offered_tools: Container[str]) -> str:
+def request_label(document: JsonValue, offered_tools: Container[str]) -> str:
     """Only closed words: a served method and an offered tool name, else a fixed stand-in."""
-    method = document.get("method") if isinstance(document, dict) else None
+    if not isinstance(document, dict):
+        return _UNKNOWN_METHOD
+    method = document.get("method")
     if not isinstance(method, str) or method not in _SERVED_METHODS:
         return _UNKNOWN_METHOD
     if method != _TOOLS_CALL:

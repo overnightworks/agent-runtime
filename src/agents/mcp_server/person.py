@@ -17,7 +17,7 @@ per verified principal, and with ``ResourceChanges`` beside it, ``subscriptions/
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -26,6 +26,7 @@ from http import HTTPStatus
 from typing import Any, Final
 
 import anyio.lowlevel
+from mcp import MCPError
 from mcp.server.context import ServerRequestContext
 from mcp.server.lowlevel import Server
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
@@ -54,7 +55,7 @@ from mcp_types import (
     ToolsCapability,
     UnsupportedProtocolVersionErrorData,
 )
-from pydantic import StrictInt, TypeAdapter, ValidationError
+from pydantic import JsonValue, StrictInt, TypeAdapter, ValidationError
 
 from agents.mcp_server.asgi import (
     DISCOVER_METHOD,
@@ -166,7 +167,7 @@ def _bearers_of(scope: Scope) -> list[str]:
 
     Reads only; whether the request is admitted is the gate's decision, never this front's.
     """
-    credentials = []
+    credentials: list[str] = []
     for value in field_values(scope, b"authorization"):
         parts = value.decode(HEADER_ENCODING).split()
         if len(parts) == 2 and parts[0].casefold() == _BEARER_SCHEME:
@@ -174,7 +175,7 @@ def _bearers_of(scope: Scope) -> list[str]:
     return credentials
 
 
-def _request_id(document: object) -> int | str | None:
+def _request_id(document: JsonValue) -> int | str | None:
     """The id a refusal can echo; a boolean or a non-Unicode string answers as no id at all."""
     identifier = document.get("id") if isinstance(document, dict) else None
     try:
@@ -190,7 +191,7 @@ def _error_answer(request_id: int | str | None, error: ErrorData) -> HttpAnswer:
     )
 
 
-def _revision_refusal(requested: str | None, document: object) -> HttpAnswer | None:
+def _revision_refusal(requested: str | None, document: JsonValue) -> HttpAnswer | None:
     """The refusal of a request outside the served revision, or ``None``.
 
     ``initialize`` belongs to the handshake a modern server never holds, so it is refused even
@@ -256,11 +257,21 @@ class McpPersonFront:
             _SERVER_NAME,
             version=_SERVER_VERSION,
             on_list_tools=self._list_tools,
-            on_call_tool=self._call_tool,
-            on_list_resources=None if resources is None else partial(_list_resources, resources),
-            on_read_resource=None if resources is None else partial(_read_resource, resources),
+            on_call_tool=_raising_error_data(self._call_tool),
+            on_list_resources=(
+                None
+                if resources is None
+                else _raising_error_data(partial(_list_resources, resources))
+            ),
+            on_read_resource=(
+                None
+                if resources is None
+                else _raising_error_data(partial(_read_resource, resources))
+            ),
             on_subscriptions_listen=(
-                None if changes is None else partial(_listen, resources, changes)
+                None
+                if changes is None or resources is None
+                else _raising_error_data(partial(_listen, resources, changes))
             ),
         )
         if changes is not None:
@@ -268,7 +279,7 @@ class McpPersonFront:
         self._manager: StreamableHTTPSessionManager | None = None
 
     @asynccontextmanager
-    async def running(self) -> AsyncIterator[None]:
+    async def running(self) -> AsyncGenerator[None, None]:
         """The SDK's manager for the host's lifespan; a request outside it fails loud.
 
         The SDK logs request methods and handler failures with their content, so each of its
@@ -296,7 +307,8 @@ class McpPersonFront:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         principal = self._resolve_person(scope)
-        if not isinstance(principal, Principal):
+        # A host without a type checker can return anything from its callback.
+        if not isinstance(principal, Principal):  # pyright: ignore[reportUnnecessaryIsInstance]
             raise TypeError(f"resolve_person returned {type(principal).__name__}, not a Principal")
         manager = self._manager
         if manager is None:
@@ -321,7 +333,7 @@ class McpPersonFront:
         receive: Receive,
         send: Send,
         bearers: Sequence[str],
-    ) -> tuple[HttpAnswer | None, object]:
+    ) -> tuple[HttpAnswer | None, JsonValue]:
         """The answer, ``None`` once a stream wrote its own, and the request document it answers.
 
         The document is ``None`` when none was read.
@@ -388,6 +400,20 @@ class McpPersonFront:
             result = _written(outcome)
         _LOG.info("a tool was called: %s is_error=%s", name, outcome.is_error)
         return result
+
+
+def _raising_error_data[Context, Params, Result](
+    handler: Callable[[Context, Params], Awaitable[Result | ErrorData]],
+) -> Callable[[Context, Params], Awaitable[Result]]:
+    """The handler as the SDK types it: the ``ErrorData`` it answers is raised, as the SDK does."""
+
+    async def serve(context: Context, params: Params) -> Result:
+        answer = await handler(context, params)
+        if isinstance(answer, ErrorData):
+            raise MCPError.from_error_data(answer)
+        return answer
+
+    return serve
 
 
 async def _list_resources(

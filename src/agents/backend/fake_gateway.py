@@ -20,7 +20,7 @@ from agents.tools import JsonObject
 @dataclass(frozen=True)
 class Reply:
     status: int = 200
-    headers: Mapping[str, str] = field(default_factory=dict)
+    headers: Mapping[str, str] = field(default_factory=dict[str, str])
     body: bytes = b""
 
 

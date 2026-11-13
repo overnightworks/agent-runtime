@@ -270,7 +270,7 @@ def place_window_uri(place: PlaceRef) -> str:
     return _PLACE_WINDOW_URI_PREFIX + f"{quote(place.kind, safe='')}/{quote(place.id, safe='')}"
 
 
-def place_ref_from_window_uri(uri: str) -> PlaceRef | None:
+def place_ref_from_window_uri(uri: object) -> PlaceRef | None:
     """The place a window URI names, or ``None`` for anything but its canonical spelling."""
     if not isinstance(uri, str) or not uri.startswith(_PLACE_WINDOW_URI_PREFIX):
         return None
@@ -305,7 +305,7 @@ def place_view_uri(place: PlaceRef) -> str:
     return place_window_uri(place) + _VIEW_SEGMENT
 
 
-def place_ref_from_view_uri(uri: str) -> PlaceRef | None:
+def place_ref_from_view_uri(uri: object) -> PlaceRef | None:
     """The place a view URI names, or ``None`` for anything but its canonical spelling."""
     if not isinstance(uri, str) or not uri.endswith(_VIEW_SEGMENT):
         return None

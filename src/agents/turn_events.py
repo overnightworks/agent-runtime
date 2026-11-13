@@ -10,13 +10,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from agents.turn import RunFile, TurnUsage
+from agents.turn import JsonObject, RunFile, TurnUsage
 
 
 class StreamEvent(BaseModel):
-    """Base class for every event a provider turn streams."""
-
-    type: str
+    """Base class for every event a provider turn streams; each event names its own ``type``."""
 
 
 class AssistantTextEvent(StreamEvent):
@@ -36,7 +34,7 @@ class ToolCallEvent(StreamEvent):
     type: Literal["tool_call"] = "tool_call"
     tool_use_id: str
     name: str
-    input: dict = Field(default_factory=dict)
+    input: JsonObject = Field(default_factory=dict)
 
 
 class ToolResultEvent(StreamEvent):
