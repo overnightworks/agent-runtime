@@ -1,0 +1,8 @@
+claim_id = "f619d8f21137486e8522dc5b99bef0ec"
+agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
+role = "builder"
+base = "c8df65583140cc17122c7533e891d82a4d34cf6a"
+branch = "claude/issue-862-a-type-checker-in-ci-proves-the-library"
+scope = [".github/workflows/ci.yml", "AGENTS.md", "pyproject.toml", "src/agents", "uv.lock"]
+opened_commit = "10eac412f8e525e0c441dec634c2f763a9ef4dc8"
+whole_reason = "One checker turned on as a hard gate: its step stays red until every src file it names is clean, so the config, the CI step and the fixes land together."
