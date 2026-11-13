@@ -110,6 +110,7 @@ def test_the_protocol_text_names_every_key_a_written_line_carries():
     conversation = Conversation(window_bytes=4096)
     conversation.hear(a_line(1, "Eins."))
     conversation.hear(a_line(3, "Drei."))
+    conversation.hear(a_line(5, "Ada legt ab.", kind="move", spoken=False, act=True))
 
     written = conversation.open_decision()[-1].text.splitlines()
 
