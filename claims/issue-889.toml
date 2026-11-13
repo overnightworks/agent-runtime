@@ -1,7 +1,0 @@
-claim_id = "67f14835b41540118189a33b6b8c7b85"
-agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
-role = "builder"
-base = "91ca8e990eb4561fd1bea070902852c996d12736"
-branch = "claude/issue-889-a-full-place-says-it-is-full-not-that-no"
-scope = ["docs/calling.md", "docs/connector.md", "src/agents/member.py"]
-opened_commit = "22dd5ef3c3d4c81cbd0c73cdf1286fc1cce54355"
