@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import logging
 from collections import UserString
@@ -26,6 +27,7 @@ from agents.tools import (
 from agents.turn import (
     MAX_EVENT_BYTES,
     MAX_TOOL_INPUT_DEPTH,
+    TOOL_IMAGE_MEDIA_TYPE,
     FailureCode,
     RejectionCode,
 )
@@ -44,6 +46,7 @@ from tests.support.gateway_turn_support import (
     sent,
     shop_turn,
 )
+from tests.support.tool_images import a_tool_image
 
 shop = gateway_turn_support.shop
 
@@ -54,6 +57,23 @@ BUSY = (TurnStopKind.REFUSED, RejectionCode.BUSY)
 
 def call_records(caplog) -> list[logging.LogRecord]:
     return [r for r in caplog.records if r.levelno == logging.INFO and "lookup" in r.getMessage()]
+
+
+def a_look(text: str, image, *, is_error: bool = False):
+    """The answer of a tool that lets the agent see."""
+
+    async def answer() -> ToolOutcome:
+        return ToolOutcome(text, is_error=is_error, image=image)
+
+    return answer
+
+
+def read_data_url(url: str) -> tuple[str, bytes]:
+    """The media type and the bytes a ``data:`` URL carries."""
+    head, payload = url.removeprefix("data:").split(",", 1)
+    media_type, encoding = head.split(";")
+    assert encoding == "base64"
+    return media_type, base64.b64decode(payload, validate=True)
 
 
 def logged_flag(caplog) -> str:
@@ -324,11 +344,9 @@ def test_a_handler_that_stops_the_turn_leaves_after_side_effect_as_the_connector
     assert stopped.after_side_effect is expected
 
 
-def test_each_call_logs_its_name_id_and_error_flag_never_arguments_or_content(shop, caplog):
-    async def answer() -> ToolOutcome:
-        return ToolOutcome("content-canary", is_error=True)
-
-    shop.add_tool("lookup", answer=answer)
+@pytest.mark.parametrize("image", [None, a_tool_image()], ids=["text", "image"])
+def test_each_call_logs_its_name_id_and_error_flag_never_arguments_or_content(shop, caplog, image):
+    shop.add_tool("lookup", answer=a_look("content-canary", image, is_error=True))
     caplog.set_level(logging.DEBUG)
 
     shop.run(tool_round(tool_call("c1", "lookup", {"k": "argument-canary"})), completion("ok"))
@@ -339,6 +357,9 @@ def test_each_call_logs_its_name_id_and_error_flag_never_arguments_or_content(sh
     assert "True" in calls[0].getMessage()
     assert "argument-canary" not in caplog.text
     assert "content-canary" not in caplog.text
+    if image is not None:
+        assert base64.b64encode(image.content).decode("ascii") not in caplog.text
+        assert repr(image.content) not in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -552,6 +573,119 @@ def test_repeated_large_results_stop_the_turn_before_a_request_over_the_bound(sh
     assert max(len(request.content) for request in gateway.requests) <= 4 * MAX_EVENT_BYTES
     assert len(gateway.requests) == len(shop.seen)
     assert len(events) == 2 * len(shop.seen)
+
+
+def tool_messages_of(gateway, request_index: int) -> list[dict]:
+    return [m for m in sent(gateway, request_index)["messages"] if m["role"] == "tool"]
+
+
+def tool_message_of(gateway, request_index: int) -> dict:
+    (message,) = tool_messages_of(gateway, request_index)
+    return message
+
+
+def test_an_image_result_reaches_the_model_as_an_image_part_inside_its_tool_message(shop):
+    image = a_tool_image()
+    shop.add_tool("look", answer=a_look("a doorway", image))
+
+    events, stopped, gateway = shop.run(
+        tool_round(tool_call("c1", "look", {})), completion("A doorway.")
+    )
+
+    assert stopped is None
+    assert events[1] == ToolResultEvent(tool_use_id="c1", content="a doorway", image=image)
+    message = tool_message_of(gateway, 1)
+    assert (message["role"], message["tool_call_id"]) == ("tool", "c1")
+    image_part, text_part = message["content"]
+    assert (image_part["type"], text_part) == ("image_url", {"type": "text", "text": "a doorway"})
+    assert read_data_url(image_part["image_url"]["url"]) == (TOOL_IMAGE_MEDIA_TYPE, image.content)
+
+
+@pytest.mark.parametrize("text", ["", " \n\t"], ids=["empty", "blank"])
+def test_an_image_with_no_text_is_sent_as_the_image_part_alone(shop, text):
+    image = a_tool_image()
+    shop.add_tool("look", answer=a_look(text, image))
+
+    _, stopped, gateway = shop.run(tool_round(tool_call("c1", "look", {})), completion("ok"))
+
+    assert stopped is None
+    (image_part,) = tool_message_of(gateway, 1)["content"]
+    assert image_part["type"] == "image_url"
+    assert read_data_url(image_part["image_url"]["url"])[1] == image.content
+
+
+def test_an_error_outcome_with_an_image_sends_the_error_text_beside_it(shop):
+    shop.add_tool("look", answer=a_look("no light", a_tool_image(), is_error=True))
+
+    _, _, gateway = shop.run(tool_round(tool_call("c1", "look", {})), completion("ok"))
+
+    image_part, text_part = tool_message_of(gateway, 1)["content"]
+    assert image_part["type"] == "image_url"
+    assert text_part == {"type": "text", "text": "Error: no light"}
+
+
+def test_every_later_round_of_the_turn_resends_the_image(shop):
+    shop.add_tool("look", answer=a_look("a doorway", a_tool_image()))
+    shop.add_tool("note")
+
+    _, stopped, gateway = shop.run(
+        tool_round(tool_call("c1", "look", {})),
+        tool_round(tool_call("c2", "note", {})),
+        completion("ok"),
+    )
+
+    assert stopped is None
+    look, later_note = tool_messages_of(gateway, 2)
+    assert look == tool_message_of(gateway, 1)
+    assert look["content"][0]["type"] == "image_url"
+    assert later_note["content"] == "noted"
+
+
+@pytest.mark.parametrize(
+    ("image_bytes", "text_bytes", "reaches_the_model"),
+    [
+        (MAX_EVENT_BYTES - 10, 10, True),
+        (MAX_EVENT_BYTES - 10, 11, False),
+        (MAX_EVENT_BYTES, 0, True),
+    ],
+    ids=["text and image at the bound", "text and image one over", "an image alone at the bound"],
+)
+def test_an_image_result_over_the_event_bound_is_replaced_and_the_side_effect_stands(
+    shop, image_bytes, text_bytes, reaches_the_model
+):
+    image = a_tool_image(image_bytes)
+    shop.add_tool(
+        "look",
+        effect=ToolEffect.SIDE_EFFECTING,
+        answer=a_look("a" * text_bytes, image),
+    )
+
+    events, stopped, gateway = shop.run(
+        tool_round(tool_call("c1", "look", {})), Reply(429), max_tool_calls=3
+    )
+
+    result = events[1]
+    assert (result.image == image) is reaches_the_model
+    assert result.is_error is (not reaches_the_model)
+    assert isinstance(tool_message_of(gateway, 1)["content"], list) is reaches_the_model
+    assert len(shop.seen) == 1
+    assert stopped.after_side_effect
+
+
+def test_two_full_size_images_and_a_third_stop_the_turn_before_a_request_over_the_bound(shop):
+    shop.add_tool(
+        "look",
+        effect=ToolEffect.SIDE_EFFECTING,
+        answer=a_look("", a_tool_image(MAX_EVENT_BYTES)),
+    )
+
+    rounds = [tool_round(tool_call(f"c{number}", "look", {})) for number in range(5)]
+    _, stopped, gateway = shop.run(*rounds, max_tool_calls=100)
+
+    assert ending(stopped) == LIMIT_EXCEEDED
+    assert len(shop.seen) == 3
+    assert len(gateway.requests) == 3
+    assert max(len(request.content) for request in gateway.requests) <= 4 * MAX_EVENT_BYTES
 
 
 def test_a_selected_tool_without_a_handler_raises_before_any_request(shop):

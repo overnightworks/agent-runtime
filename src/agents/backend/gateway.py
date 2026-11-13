@@ -20,7 +20,7 @@ from enum import StrEnum
 from http import HTTPStatus
 from pathlib import Path
 from types import TracebackType
-from typing import Final, NotRequired, Required, TypedDict
+from typing import Final, Literal, NotRequired, Required, TypedDict
 
 import httpx2
 from pydantic import JsonValue, TypeAdapter, ValidationError
@@ -55,6 +55,7 @@ from agents.tools import (
 from agents.turn import (
     MAX_EVENT_BYTES,
     MAX_RUN_FILES_BYTES,
+    TOOL_IMAGE_MEDIA_TYPE,
     FailureCode,
     GatewayModelName,
     ModelKind,
@@ -65,6 +66,7 @@ from agents.turn import (
     loaded_json,
     model_kind_of,
     person_fingerprint,
+    written_base64,
 )
 from agents.turn_events import (
     AssistantTextEvent,
@@ -327,9 +329,23 @@ def _client(
     )
 
 
+class _TextPart(TypedDict):
+    type: Literal["text"]
+    text: str
+
+
+class _ImageUrl(TypedDict):
+    url: str
+
+
+class _ImagePart(TypedDict):
+    type: Literal["image_url"]
+    image_url: _ImageUrl
+
+
 class _Message(TypedDict):
     role: Required[str]
-    content: NotRequired[str | None]
+    content: NotRequired[str | list[_ImagePart | _TextPart] | None]
     tool_call_id: NotRequired[str]
     tool_calls: NotRequired[list[AssembledToolCall]]
 
@@ -426,8 +442,15 @@ def _opening_messages(request: TurnRequest) -> list[_Message]:
 
 
 def _result_message(result: ToolResultEvent) -> _Message:
-    content = _ERROR_PREFIX + result.content if result.is_error else result.content
-    return {"role": "tool", "tool_call_id": result.tool_use_id, "content": content}
+    text = _ERROR_PREFIX + result.content if result.is_error else result.content
+    if result.image is None:
+        return {"role": "tool", "tool_call_id": result.tool_use_id, "content": text}
+    # a text part the provider would refuse as blank is left out; the image goes first
+    url = f"data:{TOOL_IMAGE_MEDIA_TYPE};base64,{written_base64(result.image.content)}"
+    parts: list[_ImagePart | _TextPart] = [{"type": "image_url", "image_url": {"url": url}}]
+    if text.strip():
+        parts.append({"type": "text", "text": text})
+    return {"role": "tool", "tool_call_id": result.tool_use_id, "content": parts}
 
 
 def _body(request: TurnRequest, messages: list[_Message], user: str) -> str:

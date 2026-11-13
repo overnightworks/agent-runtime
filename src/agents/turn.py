@@ -235,14 +235,15 @@ def _read_canonical_base64(value: object) -> object:
     return content
 
 
-def _write_base64(content: bytes) -> str:
+def written_base64(content: bytes) -> str:
+    """The one spelling of ``content`` a JSON form and a wire part write."""
     return base64.b64encode(content).decode("ascii")
 
 
 Base64Content = Annotated[
     bytes,
     BeforeValidator(_read_canonical_base64),
-    PlainSerializer(_write_base64, return_type=str, when_used="json"),
+    PlainSerializer(written_base64, return_type=str, when_used="json"),
 ]
 
 

@@ -57,10 +57,16 @@ async def serve(
 
 def _result_event(call: RequestedCall, outcome: ToolOutcome) -> ToolResultEvent:
     event = ToolResultEvent.model_validate(
-        {"tool_use_id": call.id, "content": outcome.content, "is_error": outcome.is_error},
+        {
+            "tool_use_id": call.id,
+            "content": outcome.content,
+            "is_error": outcome.is_error,
+            "image": outcome.image,
+        },
         strict=True,
     )
-    if len(event.content.encode("utf-8")) > MAX_EVENT_BYTES:
+    image_bytes = 0 if event.image is None else len(event.image.content)
+    if len(event.content.encode("utf-8")) + image_bytes > MAX_EVENT_BYTES:
         return _failed_event(call, _RESULT_TOO_LARGE_TEXT)
     return event
 
