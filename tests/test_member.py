@@ -17,6 +17,10 @@ from agents.member import (
     AcceptInvitationArguments,
     AcceptInvitationRefusal,
     AcceptInvitationRefused,
+    DeclineInvitationArguments,
+    DeclineInvitationReason,
+    DeclineInvitationRefusal,
+    DeclineInvitationRefused,
     FigureRef,
     Invitation,
     MemberStanding,
@@ -296,6 +300,7 @@ def test_accept_invitation_arguments_take_the_place_straight_from_the_standing()
 
 
 ACCEPT_WIRE = {"place": {"kind": "room", "id": "r-1"}, "invitation": "i-1", "epoch": 3}
+DECLINE_WIRE = ACCEPT_WIRE | {"reason": "busy"}
 
 
 @pytest.mark.parametrize(
@@ -312,6 +317,53 @@ def test_accept_invitation_arguments_with_a_malformed_field_are_refused(
 
     with pytest.raises(ValidationError):
         AcceptInvitationArguments.model_validate_json(wire_text)
+
+
+def test_decline_invitation_arguments_take_the_place_from_the_standing_with_reason_busy() -> None:
+    standing = Standing(place=PLACE, state=StandingState.INVITED, invitation=INVITATION)
+    assert standing.invitation is not None
+
+    arguments = DeclineInvitationArguments(
+        place=standing.place,
+        invitation=standing.invitation.id,
+        epoch=standing.invitation.epoch,
+        reason=DeclineInvitationReason.BUSY,
+    )
+
+    assert json.loads(arguments.model_dump_json()) == DECLINE_WIRE
+    assert DeclineInvitationArguments.model_validate_json(arguments.model_dump_json()) == arguments
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"reason": None},
+        {"reason": "full"},
+        {"reason": "BUSY"},
+        {"epoch": -1},
+        {"invitation": ""},
+        {"extra": 1},
+    ],
+    ids=[
+        "no-reason",
+        "other-reason",
+        "upper-case-reason",
+        "negative-epoch",
+        "empty-invitation",
+        "unknown-member",
+    ],
+)
+def test_decline_invitation_arguments_with_a_malformed_field_are_refused(
+    fields: dict[str, Any],
+) -> None:
+    wire = DECLINE_WIRE | fields
+    if fields.get("reason", "") is None:
+        del wire["reason"]
+
+    wire_text = json.dumps(wire)
+
+    with pytest.raises(ValidationError):
+        DeclineInvitationArguments.model_validate_json(wire_text)
 
 
 FIGURE_WIRE = {"url": "https://figures.example/a.glb", "sha256": "ab12" * 16}
@@ -490,6 +542,12 @@ REFUSALS = [
         AcceptInvitationRefusal,
         ("stale_invitation", "two_seats", "sponsor_away", "busy"),
         id="accept-invitation",
+    ),
+    pytest.param(
+        DeclineInvitationRefused,
+        DeclineInvitationRefusal,
+        ("stale_invitation",),
+        id="decline-invitation",
     ),
 ]
 

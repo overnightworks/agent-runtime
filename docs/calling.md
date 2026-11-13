@@ -28,8 +28,9 @@ place that has no room for it.
 
 **CALLING-5.** While an invitation is open, only its inviter sees the agent, as inviting.
 
-**CALLING-25.** An agent's runner holds a listen on an app's standing only while it accepts
-invitations to that app's places.
+**CALLING-25.** An agent's runner holds a listen on an app's standing only while it answers
+invitations to that app's places, by accepting or declining them (letting one run out stays
+allowed, CALLING-8).
 
 ## Calling
 
@@ -41,8 +42,22 @@ side reads the invitation's `expires_at` and never that value.
 expiry), the owner is still present, and the bounds hold. The place then becomes active or the
 accept is refused with a code of `AcceptInvitationRefusal`.
 
-**CALLING-8.** An invitation that runs out unanswered, one to an agent busy elsewhere included, is
-a normal ending: the row is offered again and shows no refusal.
+**CALLING-8.** An invitation that runs out unanswered is a normal ending: the row is offered again
+and shows no refusal. A runner that lets an invitation run out instead of declining it stays valid.
+
+**CALLING-29.** An agent's runner that is at its own limit of how many places it may be in at once
+declines an invitation at once with `decline_invitation(place, invitation, epoch, reason)` and the
+reason `busy` of `DeclineInvitationReason`. The runner alone decides that it is at its limit; the
+app never computes it and does not check the reason.
+
+**CALLING-30.** The app checks a decline as it checks an accept's invitation: it is that member's
+invitation and still stands (id, epoch, expiry). A decline of one that no longer stands is refused
+with `stale_invitation` of `DeclineInvitationRefusal` and changes nothing. A standing decline ends
+the invitation at once, as its expiry does and without raising the epoch: the app takes the
+invitation from the agent's standing, signals the standing, and the row is offered again.
+
+**CALLING-31.** The app shows the decline's reason to the inviter only, mapped onto the control's
+reasons (CALLING-22), as it shows an accept's refusal. A declined agent may be called again at once.
 
 ## Sending away
 
@@ -119,28 +134,32 @@ streams. The standard adds no store, directory or list.
 
 - its place (the `PlaceRef` kind and id) and its presence rule;
 - what accepting and pausing mean at the place, and its bounds;
-- the invitation book, the accept checks, the send-away check and the leases;
+- the invitation book, the accept and decline checks, the send-away check and the leases;
 - the person routes for calling and sending away, which are never an MCP tool, so no agent can
   call or send away an agent;
 - the shared control and the AI mark, with a stable, opaque key of its own minting for each row,
   the same across the row's states;
-- the mapping of its refusal codes, many to one, onto the control's reasons;
+- the mapping of its refusal codes and decline reasons, many to one, onto the control's reasons;
 - its channel to its page; and
 - when its place lies inside another app's place, the `parent` of its standing (CALLING-27).
 
 ## The steps
 
 1. The agent's runner listens on the app's `member://standing`, so the agent is live (CALLING-1),
-   and does so only while it accepts invitations to the app's places (CALLING-25).
+   and does so only while it answers invitations to the app's places, by accepting or declining
+   them (CALLING-25).
 2. A person opens the place. The page shows the control at the place itself where CALLING-17 shows
    it, and lists agents per CALLING-1 to CALLING-5.
 3. **Call.** The person taps an available row. The page posts to the app's person route. The app
    reads the person's groups fresh, opens an invitation (CALLING-6), adds it to the agent's
    standing, with its `parent` where CALLING-27 applies, and signals it.
 4. The runner reads the standing and calls `accept_invitation(place, invitation, epoch)`. The app
-   checks it (CALLING-7) and makes the place active or refuses.
+   checks it (CALLING-7) and makes the place active or refuses. A runner at its limit calls
+   `decline_invitation(place, invitation, epoch, reason)` instead (CALLING-29); the app checks it
+   and ends the invitation or refuses (CALLING-30).
 5. The row moves: inviting, then here for those who may send away, or available again after the
-   invitation runs out (CALLING-8). A refusal shows the reason the app maps (CALLING-22).
+   invitation runs out (CALLING-8) or is declined (CALLING-30). A refusal shows the reason the app
+   maps (CALLING-22), and so does a decline's reason (CALLING-31).
 6. **Send away.** The person taps a here row. The page posts to the app's person route. The app
    checks the right (CALLING-9), takes the place from the standing, raises the epoch, signals the
    standing and tells the place's people (CALLING-10). The runner reads the standing and ends its
