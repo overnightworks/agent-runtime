@@ -448,9 +448,8 @@ which holds the bearer, `Host` and client address a handler replays. A name give
 `test_two_tools_of_one_name_are_refused_at_construction`. An outcome answers one `text` content
 block with its `content` and, with an `image`, an `image` content block after it, `mimeType`
 `image/jpeg` and the image as base64 `data`; a text that is blank or only whitespace beside an
-image is left out and the `image` block answers alone, as the gateway backend leaves such a text
-part out. A result whose text's UTF-8 bytes and image's bytes
-together pass `MAX_EVENT_BYTES` answers the one `isError` text block `the tool result was too
+image is left out and the `image` block answers alone. A result whose text's UTF-8 bytes and
+image's bytes together pass `MAX_EVENT_BYTES` answers the one `isError` text block `the tool result was too
 large`, as the gateway backend does. Proved by
 `test_the_sdk_client_gets_an_image_result_as_an_image_block_after_its_text`,
 `test_the_sdk_client_gets_an_image_alone_when_its_text_is_blank` and
