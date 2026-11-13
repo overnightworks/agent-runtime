@@ -159,7 +159,9 @@ def _written(outcome: ToolOutcome) -> CallToolResult:
     writable = _WritableOutcome.model_validate(
         {"content": outcome.content, "is_error": outcome.is_error, "image": outcome.image}
     )
-    blocks: list[JsonObject] = [{"type": "text", "text": writable.content}]
+    blocks: list[JsonObject] = []
+    if writable.image is None or writable.content.strip():
+        blocks.append({"type": "text", "text": writable.content})
     if writable.image is not None:
         data = written_base64(writable.image.content)
         blocks.append({"type": "image", "data": data, "mimeType": TOOL_IMAGE_MEDIA_TYPE})

@@ -593,6 +593,25 @@ def test_the_sdk_client_gets_an_image_result_as_an_image_block_after_its_text(
     assert base64.b64decode(image_block.data, validate=True) == image.content
 
 
+@pytest.mark.parametrize("blank", ["", "  \n\t "], ids=["empty", "whitespace only"])
+@pytest.mark.parametrize("is_error", [False, True])
+def test_the_sdk_client_gets_an_image_alone_when_its_text_is_blank(
+    front: McpPersonFront, person: Person, blank: str, is_error: bool
+) -> None:
+    image = a_tool_image()
+    person.outcome = ToolOutcome(blank, is_error=is_error, image=image)
+
+    async def called() -> Any:
+        async with sdk_client(front) as client:
+            return await client.call_tool("read_note", {})
+
+    result = asyncio.run(called())
+
+    (image_block,) = result.content
+    assert (result.is_error, image_block.type) == (is_error, "image")
+    assert base64.b64decode(image_block.data, validate=True) == image.content
+
+
 @pytest.mark.parametrize(
     ("image_bytes", "text_bytes", "reaches_the_client"),
     [
@@ -619,8 +638,9 @@ def test_an_image_result_over_the_event_bound_is_replaced_by_a_fixed_error(
 
     result = post(front, rpc_body("tools/call", call_params("read_note"))).json()["result"]
 
+    reached = ["image"] if text_bytes == 0 else ["text", "image"]
     assert [block["type"] for block in result["content"]] == (
-        ["text", "image"] if reaches_the_client else ["text"]
+        reached if reaches_the_client else ["text"]
     )
     assert result["isError"] is (not reaches_the_client)
     if not reaches_the_client:
