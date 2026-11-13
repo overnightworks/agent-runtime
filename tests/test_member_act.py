@@ -32,5 +32,7 @@ def test_a_line_that_is_no_act_dumps_without_the_key(spoken: bool) -> None:
 
 
 def test_a_spoken_line_is_refused_with_act() -> None:
+    spoken_act = {**an_act().model_dump(), "spoken": True}
+
     with pytest.raises(ValidationError):
-        PlaceEntry.model_validate({**an_act().model_dump(), "spoken": True})
+        PlaceEntry.model_validate(spoken_act)
