@@ -1,8 +1,0 @@
-claim_id = "ac5c8d0713da4352bb5fbf55eff147ee"
-agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
-role = "builder"
-base = "a9182575dd595cde659be7d9a9024b7a0dd625d4"
-branch = "claude/issue-915-spoken-without-length"
-scope = ["docs/connector.md", "docs/hearing.md", "src/agents/member.py", "tests"]
-opened_commit = "51bd8769a84a327e97446ca44ab416df6655e693"
-whole_reason = "The rule, the record type and its doc state one answer; one without the others contradicts it."
