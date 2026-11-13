@@ -41,8 +41,9 @@ side reads the invitation's `expires_at` and never that value.
 expiry), the owner is still present, and the bounds hold. The place then becomes active or the
 accept is refused with a code of `AcceptInvitationRefusal`.
 
-**CALLING-8.** An invitation that runs out unanswered is a normal ending: the row is offered again
-and shows no refusal. A runner that lets an invitation run out instead of declining it stays valid.
+**CALLING-8.** An invitation that runs out unanswered ends the call without a seat: the inviter's
+row shows the outcome no answer (CALLING-14), and no refusal. A runner that lets an invitation run
+out instead of declining it stays valid.
 
 **CALLING-29.** An agent's runner that is at its own limit of how many places it may be in at once
 declines an invitation at once with `decline_invitation(place, invitation, epoch, reason)` and the
@@ -55,8 +56,9 @@ with `stale_invitation` of `DeclineInvitationRefusal` and changes nothing. A sta
 the invitation at once, as its expiry does and without raising the epoch: the app takes the
 invitation from the agent's standing, signals the standing, and the row is offered again.
 
-**CALLING-31.** The app shows the decline's reason to the inviter only, mapped onto the control's
-reasons (CALLING-22), as it shows an accept's refusal. A declined agent may be called again at once.
+**CALLING-31.** A standing decline ends the call without a seat: the inviter's row shows the
+outcome busy (CALLING-14), mapped from the decline's reason (CALLING-22), and no refusal. A declined
+agent may be called again at once.
 
 ## Sending away
 
@@ -94,6 +96,9 @@ against a place it holds, and a parent that matches none counts as none. A paren
 
 **CALLING-14.** The control lists each agent in one of three states: available (the person may
 call it), inviting (no action) or here (the person may send it away). Inviting shows no deadline.
+A call that ends without a seat shows its outcome (no answer, busy, owner away) on the inviter's
+row for a time the shared kit owns, then the row is available again. A refusal above the rows
+answers only a refused press.
 
 **CALLING-15.** Neither calling nor sending away asks for confirmation or counts down: the tap is
 the act.
@@ -138,7 +143,7 @@ streams. The standard adds no store, directory or list.
   call or send away an agent;
 - the shared control and the AI mark, with a stable, opaque key of its own minting for each row,
   the same across the row's states;
-- the mapping of its refusal codes and decline reasons, many to one, onto the control's reasons;
+- the mapping of its refusal codes and decline reasons, many to one, onto the control's reasons and outcomes;
 - its channel to its page; and
 - when its place lies inside another app's place, the `parent` of its standing (CALLING-27).
 
@@ -156,9 +161,9 @@ streams. The standard adds no store, directory or list.
    checks it (CALLING-7) and makes the place active or refuses. A runner at its limit calls
    `decline_invitation(place, invitation, epoch, reason)` instead (CALLING-29); the app checks it
    and ends the invitation or refuses (CALLING-30).
-5. The row moves: inviting, then here for those who may send away, or available again after the
-   invitation runs out (CALLING-8) or is declined (CALLING-30). A refusal shows the reason the app
-   maps (CALLING-22), and so does a decline's reason (CALLING-31).
+5. The row moves: inviting, then here for those who may send away, or its outcome and then
+   available again after the invitation runs out (CALLING-8) or is declined (CALLING-31). A refusal
+   of a press shows the reason the app maps (CALLING-22).
 6. **Send away.** The person taps a here row. The page posts to the app's person route. The app
    checks the right (CALLING-9), takes the place from the standing, raises the epoch, signals the
    standing and tells the place's people (CALLING-10). The runner reads the standing and ends its
