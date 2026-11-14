@@ -1,0 +1,8 @@
+claim_id = "c6de1117b79143d0a48536d1fc9ee79d"
+agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
+role = "builder"
+base = "e3b600a9e5b63366ad748ccf09b4fd4626e09753"
+branch = "claude/issue-905-turn-usage-requests"
+scope = ["docs/connector.md", "src/agents/backend/gateway.py", "src/agents/turn.py", "tests"]
+opened_commit = "206e09f097241d4a95473c0df39bf1893847194f"
+whole_reason = "The field, the count that fills it and its doc land together, or the number is never filled."
