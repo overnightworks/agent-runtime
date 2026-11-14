@@ -4,6 +4,13 @@ Which kind of agent an app builds for an agent surface, and who owns each part o
 an app adds an agent surface and you must decide between a helper and a persona, or must know
 whether a part already has an owner before you build it.
 
+## Who it covers
+
+Every fleet app with an agent surface, an AI chat or any other place where an agent acts, follows
+this document. An app adopts it with the item that adds or re-cuts an agent surface; a surface no
+such item has touched stays as it is until then. Only the operator rules a deviation, and it is
+recorded here.
+
 ## Helper or persona
 
 Who acts, on whose budget, and whether the app must work without the runner decide the kind.
