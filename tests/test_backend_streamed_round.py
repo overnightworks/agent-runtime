@@ -17,7 +17,7 @@ from agents.backend.streamed_round import (
     read_round,
 )
 from agents.turn import MAX_EVENT_BYTES, TurnUsage
-from tests.support.gateway_turn_support import a_chunk, a_fragment, an_event_stream
+from tests.support.gateway_turn_support import a_chunk, a_fragment, a_turn_usage, an_event_stream
 
 ROUND_LIMIT = 4 * MAX_EVENT_BYTES
 DATA_BOUND = 6 * MAX_EVENT_BYTES + 65_536
@@ -341,15 +341,11 @@ def _usage_chunk(usage: object) -> dict:
                 "completion_tokens": 7,
                 "prompt_tokens_details": {"cached_tokens": 60, "cache_write_tokens": 30},
             },
-            TurnUsage(
-                input_tokens=100, cached_input_tokens=60, cache_write_tokens=30, output_tokens=7
-            ),
+            a_turn_usage(100, 7, cached_input_tokens=60, cache_write_tokens=30),
         ),
         (
             {"prompt_tokens": 100, "completion_tokens": 7},
-            TurnUsage(
-                input_tokens=100, cached_input_tokens=0, cache_write_tokens=0, output_tokens=7
-            ),
+            a_turn_usage(100, 7),
         ),
         (
             {
@@ -358,15 +354,11 @@ def _usage_chunk(usage: object) -> dict:
                 "prompt_tokens_details": {"cached_tokens": None},
                 "cache_creation_input_tokens": None,
             },
-            TurnUsage(
-                input_tokens=100, cached_input_tokens=0, cache_write_tokens=0, output_tokens=7
-            ),
+            a_turn_usage(100, 7),
         ),
         (
             {"prompt_tokens": 100, "completion_tokens": 7, "cache_creation_input_tokens": 40},
-            TurnUsage(
-                input_tokens=100, cached_input_tokens=0, cache_write_tokens=40, output_tokens=7
-            ),
+            a_turn_usage(100, 7, cache_write_tokens=40),
         ),
         (
             {
@@ -375,9 +367,7 @@ def _usage_chunk(usage: object) -> dict:
                 "prompt_tokens_details": {"cache_write_tokens": 30},
                 "cache_creation_input_tokens": 40,
             },
-            TurnUsage(
-                input_tokens=100, cached_input_tokens=0, cache_write_tokens=30, output_tokens=7
-            ),
+            a_turn_usage(100, 7, cache_write_tokens=30),
         ),
     ],
     ids=[
@@ -398,9 +388,7 @@ def test_usage_on_a_chunk_that_carries_a_choice_gives_the_rounds_usage():
 
     streamed = read(an_event_stream(a_chunk("ab"), finish))
 
-    assert streamed.usage == TurnUsage(
-        input_tokens=9, cached_input_tokens=0, cache_write_tokens=0, output_tokens=2
-    )
+    assert streamed.usage == a_turn_usage(9, 2)
 
 
 @pytest.mark.parametrize(
@@ -413,9 +401,7 @@ def test_a_usage_chunk_without_choices_gives_the_rounds_usage(choices_member):
 
     streamed = read(_answer_with(choices_member | {"usage": usage}))
 
-    assert streamed.usage == TurnUsage(
-        input_tokens=9, cached_input_tokens=0, cache_write_tokens=0, output_tokens=2
-    )
+    assert streamed.usage == a_turn_usage(9, 2)
 
 
 def test_a_later_chunk_with_null_usage_keeps_the_usage_already_read():
@@ -423,9 +409,7 @@ def test_a_later_chunk_with_null_usage_keeps_the_usage_already_read():
 
     streamed = read(_answer_with(_usage_chunk(usage), _usage_chunk(None)))
 
-    assert streamed.usage == TurnUsage(
-        input_tokens=9, cached_input_tokens=0, cache_write_tokens=0, output_tokens=2
-    )
+    assert streamed.usage == a_turn_usage(9, 2)
 
 
 def test_a_round_with_no_usage_chunk_carries_no_usage():
@@ -433,10 +417,19 @@ def test_a_round_with_no_usage_chunk_carries_no_usage():
 
 
 def test_a_turns_usage_refuses_a_count_assigned_after_it_was_made():
-    usage = TurnUsage(input_tokens=9, cached_input_tokens=0, cache_write_tokens=0, output_tokens=2)
+    usage = a_turn_usage(9, 2)
 
     with pytest.raises(ValidationError):
         usage.input_tokens = 10  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("requests", [None, 0, -1], ids=["missing", "zero", "negative"])
+def test_a_turns_usage_refuses_a_missing_or_non_positive_request_count(requests):
+    counts = {"input_tokens": 9, "cached_input_tokens": 0, "cache_write_tokens": 0}
+    counts |= {"output_tokens": 2} | ({} if requests is None else {"requests": requests})
+
+    with pytest.raises(ValidationError):
+        TurnUsage.model_validate(counts)
 
 
 @pytest.mark.parametrize(

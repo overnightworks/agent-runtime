@@ -71,8 +71,10 @@ them. An app that shows only judged text reads `FinalEvent`. Proved by
 `test_a_tool_rounds_pieces_come_before_its_calls_which_run_after_it_and_echo_whole` and
 `test_a_round_that_streams_text_then_fails_leaves_the_text_shown_and_runs_nothing`.
 
-`FinalEvent.usage` is a `TurnUsage` (`agents.turn`): four non-negative counts summed over every
-round of the turn. `input_tokens` is everything the model read, cached tokens included;
+`FinalEvent.usage` is a `TurnUsage` (`agents.turn`): four non-negative token counts and
+`requests`, all summed over every round of the turn. `requests` is a required positive count of the
+model requests the turn made: each round counts 1, so a turn with no tool round counts 1 and one
+with two tool rounds counts 3. `input_tokens` is everything the model read, cached tokens included;
 `cached_input_tokens` is the part read from the provider's cache, `cache_write_tokens` the part
 written to it, `output_tokens` what the model wrote. A round's usage is the gateway's last usage
 chunk: `prompt_tokens`, `prompt_tokens_details.cached_tokens` (absent: 0),
@@ -91,10 +93,12 @@ that ends with `TurnStopped` reports none, though its rounds were paid. Proved b
 `test_a_usage_chunk_without_choices_gives_the_rounds_usage`,
 `test_a_later_chunk_with_null_usage_keeps_the_usage_already_read`,
 `test_an_event_that_is_no_chunk_is_malformed_with_no_context` and
-`test_unreadable_usage_gives_a_round_with_no_usage_and_the_same_message`; and by
+`test_unreadable_usage_gives_a_round_with_no_usage_and_the_same_message` and
+`test_a_turns_usage_refuses_a_missing_or_non_positive_request_count`; and by
 `tests/test_backend_gateway_usage.py`: `test_the_final_event_carries_the_usage_the_gateway_sent`,
 `test_a_usage_chunk_without_choices_gives_the_turn_its_usage`,
 `test_the_final_events_usage_sums_the_usage_of_every_round`,
+`test_the_final_events_usage_counts_one_request_per_round`,
 `test_a_turn_whose_round_has_no_readable_usage_ends_with_no_usage_and_the_same_text`,
 `test_a_turn_with_a_round_that_has_no_usage_ends_with_no_usage` and
 `test_a_turn_that_stops_after_a_paid_round_yields_what_it_yields_without_usage`.

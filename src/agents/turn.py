@@ -299,6 +299,7 @@ class Turn(StrictModel):
 
 
 TokenCount = Annotated[int, Field(ge=0)]
+RequestCount = Annotated[int, Field(ge=1)]
 
 
 class TurnUsage(StrictModel):
@@ -306,12 +307,14 @@ class TurnUsage(StrictModel):
 
     ``input_tokens`` is everything the model read, cached tokens included; ``cached_input_tokens``
     is the part read from the provider's cache and ``cache_write_tokens`` the part written to it.
+    ``requests`` is how many model requests made up these counts: one per round.
     """
 
     input_tokens: TokenCount
     cached_input_tokens: TokenCount
     cache_write_tokens: TokenCount
     output_tokens: TokenCount
+    requests: RequestCount
 
     def __add__(self, other: TurnUsage) -> TurnUsage:
         return TurnUsage(
@@ -319,6 +322,7 @@ class TurnUsage(StrictModel):
             cached_input_tokens=self.cached_input_tokens + other.cached_input_tokens,
             cache_write_tokens=self.cache_write_tokens + other.cache_write_tokens,
             output_tokens=self.output_tokens + other.output_tokens,
+            requests=self.requests + other.requests,
         )
 
 

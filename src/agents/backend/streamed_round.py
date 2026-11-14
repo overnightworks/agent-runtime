@@ -275,6 +275,7 @@ def _usage_of(usage: JsonValue) -> TurnUsage | None:
                     details.get("cache_write_tokens"), usage.get("cache_creation_input_tokens")
                 ),
                 "output_tokens": usage.get("completion_tokens"),
+                "requests": 1,
             }
         )
     except ValidationError:

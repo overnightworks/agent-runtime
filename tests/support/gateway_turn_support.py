@@ -32,6 +32,7 @@ from agents.turn import (
     Turn,
     TurnMessage,
     TurnRole,
+    TurnUsage,
 )
 from tests.support.virtual_time import VirtualTimeLoop
 
@@ -144,6 +145,23 @@ def an_event_stream(*events: dict | str, done: bool = True) -> bytes:
     lines = [event if isinstance(event, str) else json.dumps(event) for event in events]
     lines += ["[DONE]"] if done else []
     return "".join(f"data: {line}\n\n" for line in lines).encode()
+
+
+def a_turn_usage(
+    input_tokens: int,
+    output_tokens: int,
+    *,
+    cached_input_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    requests: int = 1,
+) -> TurnUsage:
+    return TurnUsage(
+        input_tokens=input_tokens,
+        cached_input_tokens=cached_input_tokens,
+        cache_write_tokens=cache_write_tokens,
+        output_tokens=output_tokens,
+        requests=requests,
+    )
 
 
 def ending(stopped: TurnStopped | None):

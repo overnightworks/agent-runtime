@@ -8,10 +8,10 @@ import pytest
 
 from agents.backend import TurnStopKind
 from agents.backend.fake_gateway import Reply, completion, tool_call, tool_round
-from agents.turn import FailureCode, TurnUsage
+from agents.turn import FailureCode
 from agents.turn_events import AssistantTextEvent, FinalEvent, ToolCallEvent, ToolResultEvent
 from tests.support import gateway_turn_support
-from tests.support.gateway_turn_support import a_chunk, an_event_stream, ending
+from tests.support.gateway_turn_support import a_chunk, a_turn_usage, an_event_stream, ending
 
 shop = gateway_turn_support.shop
 
@@ -41,9 +41,7 @@ def test_the_final_event_carries_the_usage_the_gateway_sent(shop):
         AssistantTextEvent(text="The answer."),
         FinalEvent(
             text="The answer.",
-            usage=TurnUsage(
-                input_tokens=120, cached_input_tokens=80, cache_write_tokens=25, output_tokens=9
-            ),
+            usage=a_turn_usage(120, 9, cached_input_tokens=80, cache_write_tokens=25),
         ),
     ]
 
@@ -79,9 +77,7 @@ def test_a_usage_chunk_without_choices_gives_the_turn_its_usage(shop):
     assert stopped is None
     assert events[-1] == FinalEvent(
         text="ab",
-        usage=TurnUsage(
-            input_tokens=120, cached_input_tokens=0, cache_write_tokens=0, output_tokens=9
-        ),
+        usage=a_turn_usage(120, 9),
     )
 
 
@@ -134,9 +130,26 @@ def test_the_final_events_usage_sums_the_usage_of_every_round(shop):
     )
 
     assert stopped is None
-    assert events[-1].usage == TurnUsage(
-        input_tokens=230, cached_input_tokens=90, cache_write_tokens=90, output_tokens=13
+    assert events[-1].usage == a_turn_usage(
+        230, 13, cached_input_tokens=90, cache_write_tokens=90, requests=2
     )
+
+
+@pytest.mark.parametrize(
+    ("tool_rounds", "requests"),
+    [(0, 1), (2, 3)],
+    ids=["no-tool-round", "two-tool-rounds"],
+)
+def test_the_final_events_usage_counts_one_request_per_round(shop, tool_rounds, requests):
+    rounds = [
+        tool_round(tool_call(f"c{number}", "lookup", {}), usage=usage_sent(100, 5))
+        for number in range(tool_rounds)
+    ]
+
+    events, stopped, _ = run(shop, *rounds, completion("Done.", usage=usage_sent(100, 5)))
+
+    assert stopped is None
+    assert events[-1].usage == a_turn_usage(100 * requests, 5 * requests, requests=requests)
 
 
 @pytest.mark.parametrize(
