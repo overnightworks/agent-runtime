@@ -1,0 +1,7 @@
+claim_id = "05733daf63954194bbfbc8df8c244f18"
+agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
+role = "builder"
+base = "cfe8e036d63f75e7a399e2c5a62ff581430e28f4"
+branch = "docs/agent-kinds-scope"
+scope = ["docs/agent-kinds.md"]
+opened_commit = "6a08473375333896d1095000cf4c389723911eab"
