@@ -36,7 +36,22 @@ _JSON: Final = "application/json"
 _PROBLEM_JSON: Final = "application/problem+json"
 _SCHEMA_REFERENCE: Final = "#/components/schemas/"
 _ANNOTATIONS: Final = frozenset({"title", "description", "default", "examples", "deprecated"})
-_SCHEMA_VALUED: Final = frozenset({"items", "additionalProperties", "not", "contains"})
+_SCHEMA_VALUED: Final = frozenset(
+    {
+        "items",
+        "additionalProperties",
+        "unevaluatedProperties",
+        "unevaluatedItems",
+        "propertyNames",
+        "not",
+        "contains",
+        "if",
+        "then",
+        "else",
+        "contentSchema",
+    }
+)
+_SCHEMA_MAPPED: Final = frozenset({"properties", "patternProperties", "dependentSchemas"})
 _SCHEMA_LISTED: Final = frozenset({"anyOf", "allOf", "oneOf", "prefixItems"})
 _BODY_KEYWORDS: Final = _ANNOTATIONS | {"type", "properties", "required", "additionalProperties"}
 
@@ -138,7 +153,7 @@ def _untitled(node: JsonValue) -> JsonValue:
     for key, value in node.items():
         if key == "title":
             continue
-        if key == "properties" and isinstance(value, dict):
+        if key in _SCHEMA_MAPPED and isinstance(value, dict):
             kept[key] = {name: _untitled(schema) for name, schema in value.items()}
         elif key in _SCHEMA_VALUED or key in _SCHEMA_LISTED:
             kept[key] = _untitled(value)

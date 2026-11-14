@@ -2,6 +2,7 @@
 
 from typing import Any
 
+import pytest
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
@@ -69,5 +70,33 @@ def test_a_title_beside_a_reference_is_accepted_and_dropped() -> None:
     spec = app.openapi()
     body = spec["components"]["schemas"]["Folder"]["properties"]
     body["stamp"] = {**body["stamp"], "title": "Stamp"}
+
+    assert titles_left(parameters_of(app, spec)) == []
+
+
+@pytest.mark.parametrize(
+    ("keyword", "wrap"),
+    [
+        ("patternProperties", lambda schema: {"^a": schema}),
+        ("dependentSchemas", lambda schema: {"stamp": schema}),
+        ("propertyNames", lambda schema: schema),
+        ("if", lambda schema: schema),
+        ("then", lambda schema: schema),
+        ("else", lambda schema: schema),
+        ("unevaluatedProperties", lambda schema: schema),
+    ],
+)
+def test_a_title_inside_any_schema_keyword_is_dropped(keyword: str, wrap: Any) -> None:
+    app = folder_app()
+    spec = app.openapi()
+    titled = {
+        "type": "object",
+        "title": "Stamp",
+        "properties": {"label": {"type": "string", "title": "Label"}},
+    }
+    spec["components"]["schemas"]["Folder"]["properties"]["stamp"] = {
+        "type": "object",
+        keyword: wrap(titled),
+    }
 
     assert titles_left(parameters_of(app, spec)) == []
