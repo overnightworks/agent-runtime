@@ -29,7 +29,7 @@ from pydantic import (
     model_validator,
 )
 
-from agents.turn import JsonObject, NonEmptyUnicodeText, StrictModel, UnicodeText
+from agents.turn import JsonObject, NonEmptyUnicodeText, StopOutcome, StrictModel, UnicodeText
 
 __all__ = [
     "ACCEPT_INVITATION_TOOL",
@@ -38,6 +38,7 @@ __all__ = [
     "LEASE_SECONDS",
     "LISTEN_ALLOWANCE_SECONDS",
     "LISTEN_BOUND_SECONDS",
+    "SET_TURN_STATE_TOOL",
     "SPEAK_TOOL",
     "STANDING_URI",
     "STOP_SPEAKING_TOOL",
@@ -57,6 +58,9 @@ __all__ = [
     "PlaceRef",
     "PlaceView",
     "PlaceWindow",
+    "SetTurnStateArguments",
+    "SetTurnStateRefusal",
+    "SetTurnStateRefused",
     "SpeakAnswer",
     "SpeakArguments",
     "SpeakRefusal",
@@ -98,6 +102,8 @@ SPEAK_TOOL: Final = "speak"
 """The name of the tool that says one sentence aloud in a place."""
 STOP_SPEAKING_TOOL: Final = "stop_speaking"
 """The name of the tool that cuts the member's current sentence and its queue."""
+SET_TURN_STATE_TOOL: Final = "set_turn_state"
+"""The name of the tool that states whether the member's turns at a place answer."""
 STANDING_URI: Final = "member://standing"
 """The resource that answers with the member's ``MemberStanding``."""
 _PLACE_WINDOW_URI_PREFIX: Final = f"{STANDING_URI}/places/"
@@ -375,6 +381,29 @@ class StopSpeakingRefused(StrictModel):
     """What ``stop_speaking`` answers on a refusal, as JSON in an ``is_error`` result."""
 
     refused: Annotated[StopSpeakingRefusal, Field(strict=False)]
+
+
+class SetTurnStateArguments(StrictModel):
+    """The arguments of ``set_turn_state``: the place and why the member's turns there stop; an
+    absent ``stopped`` states that they answer. The value is a closed outcome, never free text."""
+
+    place: PlaceRef
+    stopped: Annotated[StopOutcome, Field(strict=False)] | None = Field(
+        default=None, exclude_if=_is_none
+    )
+
+
+class SetTurnStateRefusal(StrEnum):
+    """Why the app does not take a statement: ``not_held`` when the caller holds no seat, active or
+    paused, at the place."""
+
+    NOT_HELD = "not_held"
+
+
+class SetTurnStateRefused(StrictModel):
+    """What ``set_turn_state`` answers on a refusal, as JSON in an ``is_error`` result."""
+
+    refused: Annotated[SetTurnStateRefusal, Field(strict=False)]
 
 
 class PartialSpeech(StrictModel):

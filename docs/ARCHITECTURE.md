@@ -156,6 +156,8 @@ malformed value fails loud.
   comes from the page of the inviter, so it is untrusted. Forged, it needs an inviter in the
   adder group, the owner present and the opaque id of a call the agent really holds, and at most
   makes that agent accept an unrelated place; it yields no data and no right.
+- *A member's stated turn state grants nothing.* A member that misstates it affects only how it is
+  itself shown; the value is a closed enum (`StopOutcome`) that carries no data and no right.
 
 **Proof strategy.** Behaviour is proven through the real entry points: `GatewayBackend.run`
 against `FakeGateway`'s scripted transport, `load_agent` against files, and the person front

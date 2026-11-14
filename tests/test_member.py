@@ -25,6 +25,9 @@ from agents.member import (
     PlaceRef,
     PlaceView,
     PlaceWindow,
+    SetTurnStateArguments,
+    SetTurnStateRefusal,
+    SetTurnStateRefused,
     SpeakArguments,
     SpeakRefusal,
     SpeakRefused,
@@ -37,7 +40,8 @@ from agents.member import (
     place_view_uri,
     place_window_uri,
 )
-from tests.support.member_wire import entry, speak_wire, window_from
+from agents.turn import StopOutcome
+from tests.support.member_wire import entry, speak_wire, turn_state_wire, window_from
 
 PLACE = PlaceRef(kind="room", id="r-1")
 INVITATION = Invitation(id="i-1", epoch=3, expires_at=datetime(2026, 11, 8, 12, tzinfo=UTC))
@@ -337,6 +341,12 @@ REFUSALS = [
         id="stop-speaking",
     ),
     pytest.param(
+        SetTurnStateRefused,
+        SetTurnStateRefusal,
+        ("not_held",),
+        id="set-turn-state",
+    ),
+    pytest.param(
         AcceptInvitationRefused,
         AcceptInvitationRefusal,
         ("stale_invitation", "two_seats", "sponsor_away", "busy"),
@@ -622,3 +632,49 @@ def test_the_parent_place_record_is_exported() -> None:
     import agents.member
 
     assert "ParentPlace" in agents.member.__all__
+
+
+def test_turn_state_arguments_without_an_outcome_state_that_turns_answer() -> None:
+    wire = turn_state_wire()
+
+    arguments = SetTurnStateArguments.model_validate_json(json.dumps(wire))
+
+    assert arguments.stopped is None
+    assert json.loads(arguments.model_dump_json()) == wire
+
+
+@pytest.mark.parametrize("outcome", list(StopOutcome), ids=lambda outcome: outcome.value)
+def test_turn_state_arguments_carry_each_stop_outcome_unchanged(outcome: StopOutcome) -> None:
+    wire = turn_state_wire(stopped=outcome.value)
+
+    arguments = SetTurnStateArguments.model_validate_json(json.dumps(wire))
+
+    assert arguments.stopped is outcome
+    assert json.loads(arguments.model_dump_json()) == wire
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"stopped": "limit_exceeded"},
+        {"stopped": "Busy"},
+        {"stopped": ""},
+        {"extra": 1},
+        {"reason": "the budget of Ann is spent"},
+        {"place": {"kind": "room"}},
+    ],
+    ids=["unknown-outcome", "upper-case", "empty", "unknown-member", "free-text", "no-id"],
+)
+def test_turn_state_arguments_with_a_malformed_field_are_refused(fields: dict[str, object]) -> None:
+    wire_text = json.dumps(turn_state_wire() | fields)
+
+    with pytest.raises(ValidationError):
+        SetTurnStateArguments.model_validate_json(wire_text)
+
+
+def test_the_turn_state_tool_and_its_records_are_exported() -> None:
+    import agents.member
+
+    assert {"SET_TURN_STATE_TOOL", "SetTurnStateArguments", "SetTurnStateRefused"} <= set(
+        agents.member.__all__
+    )
