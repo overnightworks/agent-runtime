@@ -619,8 +619,8 @@ unknown tool, and the runner lets the invitation run out ([calling.md](calling.m
 app's part is CALLING-29 to CALLING-31. Proved by `tests/test_member.py`.
 
 `set_turn_state` takes `SetTurnStateArguments(place, stopped)`: the place, and `stopped`, a
-`StopOutcome` of `agents.turn` that says why the member's turns there stop; an absent key states
-that they answer, and a dump leaves it out. The value is a closed enum, never free text. Success is
+`StopOutcome` of `agents.turn` that says why the member's turns there stop; an absent or null
+`stopped` states that they answer, and a dump leaves it out. The value is a closed enum, never free text. Success is
 a result without `is_error` whose content no record pins. A refusal is an `is_error` result whose
 content is `SetTurnStateRefused(refused)` as JSON with the one `SetTurnStateRefusal` code
 `not_held` (the caller holds no seat, active or paused, at the place). An app that does not serve

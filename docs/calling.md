@@ -137,10 +137,12 @@ place lies inside another app's page. No app fetches an agent into another app's
 
 - After each turn end at a place, it states none if the turn answered, else the turn's
   `StopOutcome` from `outcome_of_stop`. It may leave out a statement that repeats the last one the
-  app accepted at that seat in this run. Statements at one seat are made in order, and a seat whose
+  app accepted at that seat in this run. A new seat at the same place starts with nothing stated,
+  for the runner and the app alike. Statements at one seat are made in order, and a seat whose
   turn is running is left to that turn's end.
 - A runner that has stated nothing at a seat since it started states after its first turn end
-  there. So a restarted runner states none after its first answered turn at each seat.
+  there. So a restarted runner states none after its first answered turn at each seat. A value
+  stated before the restart stays until that first turn end.
 - A `busy` stop is stated like any other.
 - Once it has stopped taking turns in an app where it holds seats (suspend or backoff), it states
   `unavailable` at each of them where the app still answers; it may wait before doing so (for
@@ -148,7 +150,8 @@ place lies inside another app's page. No app fetches an agent into another app's
   nothing. Once a full pass of standing, accepts and windows goes through again, it states at each
   held seat what its last turn end there in this run called for: that turn's outcome if it
   stopped, none if it answered or there was none.
-- It states no cancelled turn, and no other failure of its own calls.
+- It states no cancelled turn, and no other failure of its own calls. A cancelled turn is no turn
+  end: the last turn end at that seat stays the one before it.
 - An app that does not serve the tool answers an unknown tool. A refused or failed statement is
   logged, and the runner goes on.
 
@@ -165,9 +168,9 @@ ends, and keeps no other state about it.
 - With nothing stated, the part shows nothing extra. The display asks nothing of the realm.
 
 **CALLING-36.** A runner that cannot reach the app states nothing. It is shown by the lease and the
-offer (CALLING-1, "The lease" in [connector.md](connector.md#the-standard-path)). An app infers no failure from
-silence or from timers. An app that admits a member's calls but fails them keeps the seat unmarked;
-that is the app's own failure, not this rule's.
+offer (CALLING-1, "The lease" in [connector.md](connector.md#the-standard-path)). An app infers no
+failure from silence or from timers. An app that admits a member's calls but fails them keeps the
+seat unmarked; that is the app's own failure, not this rule's.
 
 ## The group
 
