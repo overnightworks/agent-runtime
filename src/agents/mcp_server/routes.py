@@ -36,6 +36,8 @@ _JSON: Final = "application/json"
 _PROBLEM_JSON: Final = "application/problem+json"
 _SCHEMA_REFERENCE: Final = "#/components/schemas/"
 _ANNOTATIONS: Final = frozenset({"title", "description", "default", "examples", "deprecated"})
+_SCHEMA_VALUED: Final = frozenset({"items", "additionalProperties", "not", "contains"})
+_SCHEMA_LISTED: Final = frozenset({"anyOf", "allOf", "oneOf", "prefixItems"})
 _BODY_KEYWORDS: Final = _ANNOTATIONS | {"type", "properties", "required", "additionalProperties"}
 
 
@@ -126,9 +128,28 @@ def _inlined(node: JsonValue, components: JsonObject, seen: tuple[str, ...] = ()
     return {**resolved, **siblings}
 
 
+def _untitled(node: JsonValue) -> JsonValue:
+    """The schema without ``title`` at any depth; a property named ``title`` and data stay."""
+    if isinstance(node, list):
+        return [_untitled(item) for item in node]
+    if not isinstance(node, dict):
+        return node
+    kept: JsonObject = {}
+    for key, value in node.items():
+        if key == "title":
+            continue
+        if key == "properties" and isinstance(value, dict):
+            kept[key] = {name: _untitled(schema) for name, schema in value.items()}
+        elif key in _SCHEMA_VALUED or key in _SCHEMA_LISTED:
+            kept[key] = _untitled(value)
+        else:
+            kept[key] = value
+    return kept
+
+
 def _schema(node: JsonValue, components: JsonObject, where: str) -> JsonObject:
-    """The node as a schema object with every reference inlined; any other node is a breach."""
-    return _object(_inlined(node, components), where)
+    """The node as a schema object with every reference inlined and no title; else a breach."""
+    return _object(_untitled(_inlined(node, components)), where)
 
 
 def _scalar(schema: JsonObject) -> bool:
