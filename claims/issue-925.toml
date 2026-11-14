@@ -1,8 +1,0 @@
-claim_id = "f7a88c549fc147fdbc1efa06928b8486"
-agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
-role = "builder"
-base = "20c52009f73e3264fb884834e889ee2eefa117bd"
-branch = "claude/issue-925-person-front-schemas-no-title"
-scope = ["docs/connector.md", "src/agents/mcp_server/routes.py", "tests"]
-opened_commit = "6b2540b0cce71a8eb90341a0c3bb384b7144ad45"
-whole_reason = "One keyword dropped in one generator, with its test and its doc line."
