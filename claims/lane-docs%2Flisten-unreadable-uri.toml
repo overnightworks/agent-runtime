@@ -1,0 +1,7 @@
+claim_id = "cfb0579d23f14fcdb2569c711c9c5abf"
+agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
+role = "builder"
+base = "c8a5a4290638d60c997297cbe63cbe5026b98404"
+branch = "docs/listen-unreadable-uri"
+scope = ["docs/connector.md"]
+opened_commit = "6731790f716da3539372f724798a24739bf5458b"
