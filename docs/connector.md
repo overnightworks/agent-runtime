@@ -650,17 +650,17 @@ answers `-32603` with one fixed text and logs only the exception's type. Both ca
 `tests/test_mcp_server_resources.py`.
 
 **The runner** listens with `resourceSubscriptions`, waits for the acknowledgement, which is the
-first frame and holds the requested URIs in `current(principal)`, retains what arrives and only
-then reads, so a change in a gap between streams is never lost. A requested URI that `current` does
-not hold when the listen opens is not honoured on that stream, and the acknowledgement leaves it
-out: a runner that listens on one place before its seat appears listens again once it does, while a
-listen on `member://standing` also covers a window or view that appears later. A notification
-says only that something changed: `MemberStanding` is the whole standing, so after a lost,
-repeated or late one the next read shows today's truth. A subscriber of `member://standing` also
-receives the URI of a place window or view `current` holds; a subscriber of one place gets that
-place alone. The stream ends after `LISTEN_BOUND_SECONDS` with a completion result carrying the
-subscription id; a stream cut without one is `SubscriptionLost` at the SDK's client. After either
-the runner listens again, and reads again once acknowledged. A listen needs an SSE `Accept`, else it is `406`. The SDK's
+first frame and holds the requested URIs in `current(principal)`, retains what arrives and only then
+reads, so a change in a gap between streams is never lost. A requested URI that `current` does not
+hold when the listen opens is not honoured on that stream, and the acknowledgement leaves it out: a
+runner that listens on one place before its seat appears listens again once it does, while a listen
+on `member://standing` also covers a window or view that appears later. A notification says only
+that something changed: `MemberStanding` is the whole standing, so after a lost, repeated or late
+one the next read shows today's truth. A subscriber of `member://standing` also receives the URI of
+a place window or view `current` holds; a subscriber of one place gets that place alone. The stream
+ends after `LISTEN_BOUND_SECONDS` with a completion result carrying the subscription id; a stream
+cut without one is `SubscriptionLost` at the SDK's client. After either the runner listens again,
+and reads again once acknowledged. A listen needs an SSE `Accept`, else it is `406`. The SDK's
 `Client.listen` holds no task group, so whatever the runner's own loop body raises arrives bare at
 its `yield`: a runner that maps the stream's failures maps only the stream's own, which are the
 opening, `SubscriptionLost` during iteration and its deadline.
