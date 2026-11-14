@@ -856,7 +856,8 @@ without asking. Parameters are string path parameters and scalar query parameter
 integer, number or boolean, with or without `enum`, inline or by `$ref`, nullable through `anyOf
 [x, null]`); the one body is a required `application/json` object whose fields are flattened
 beside the parameters; `$ref` is inlined from `components`, and an annotation beside a reference
-is kept and wins over the component's own; every success response is JSON, and an error status may
+is kept and wins over the component's own; no `title` is left in the tool's input schema at any
+depth; every success response is JSON, and an error status may
 also declare RFC 9457 problem details (`application/problem+json`), beside or instead of JSON. A
 success without JSON content, such as a `204`, is refused: such a route is excluded or answers
 JSON. The tool's description is the operation's `description` (the route's docstring) and is
