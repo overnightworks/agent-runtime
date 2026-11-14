@@ -43,3 +43,7 @@ def written_wire(**fields: Any) -> dict[str, Any]:
 
 def speak_wire(**fields: Any) -> dict[str, Any]:
     return {"place": {"kind": "room", "id": "r-1"}, "text": "Shall we start?"} | fields
+
+
+def turn_state_wire(**fields: object) -> dict[str, object]:
+    return {"place": {"kind": "room", "id": "r-1"}} | fields

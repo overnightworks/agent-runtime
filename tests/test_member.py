@@ -41,7 +41,7 @@ from agents.member import (
     place_window_uri,
 )
 from agents.turn import StopOutcome
-from tests.support.member_wire import entry, speak_wire, window_from
+from tests.support.member_wire import entry, speak_wire, turn_state_wire, window_from
 
 PLACE = PlaceRef(kind="room", id="r-1")
 INVITATION = Invitation(id="i-1", epoch=3, expires_at=datetime(2026, 11, 8, 12, tzinfo=UTC))
@@ -634,19 +634,18 @@ def test_the_parent_place_record_is_exported() -> None:
     assert "ParentPlace" in agents.member.__all__
 
 
-PLACE_WIRE = {"kind": "room", "id": "r-1"}
-
-
 def test_turn_state_arguments_without_an_outcome_state_that_turns_answer() -> None:
-    arguments = SetTurnStateArguments.model_validate_json(json.dumps({"place": PLACE_WIRE}))
+    wire = turn_state_wire()
+
+    arguments = SetTurnStateArguments.model_validate_json(json.dumps(wire))
 
     assert arguments.stopped is None
-    assert json.loads(arguments.model_dump_json()) == {"place": PLACE_WIRE}
+    assert json.loads(arguments.model_dump_json()) == wire
 
 
 @pytest.mark.parametrize("outcome", list(StopOutcome), ids=lambda outcome: outcome.value)
 def test_turn_state_arguments_carry_each_stop_outcome_unchanged(outcome: StopOutcome) -> None:
-    wire = {"place": PLACE_WIRE, "stopped": outcome.value}
+    wire = turn_state_wire(stopped=outcome.value)
 
     arguments = SetTurnStateArguments.model_validate_json(json.dumps(wire))
 
@@ -666,8 +665,8 @@ def test_turn_state_arguments_carry_each_stop_outcome_unchanged(outcome: StopOut
     ],
     ids=["unknown-outcome", "upper-case", "empty", "unknown-member", "free-text", "no-id"],
 )
-def test_turn_state_arguments_with_a_malformed_field_are_refused(fields: dict[str, Any]) -> None:
-    wire_text = json.dumps({"place": PLACE_WIRE} | fields)
+def test_turn_state_arguments_with_a_malformed_field_are_refused(fields: dict[str, object]) -> None:
+    wire_text = json.dumps(turn_state_wire() | fields)
 
     with pytest.raises(ValidationError):
         SetTurnStateArguments.model_validate_json(wire_text)
