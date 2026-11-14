@@ -1,0 +1,8 @@
+claim_id = "148c889b4bd94336b710087251a432d7"
+agent = "Claude 0eb5ffa7-a58d-40a9-94aa-ac0c8b9e50bb"
+role = "builder"
+base = "20c52009f73e3264fb884834e889ee2eefa117bd"
+branch = "claude/issue-924-turn-state-per-place"
+scope = ["docs/ARCHITECTURE.md", "docs/calling.md", "docs/connector.md", "src/agents/member.py", "tests/test_member.py"]
+opened_commit = "66fd5195f35decdc07629f9c34eb16544f3aee94"
+whole_reason = "The turn-state records and the rules every app follows are one contract; a record without its rules shows nothing, and rules without the record have nothing to show."
