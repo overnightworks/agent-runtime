@@ -439,8 +439,7 @@ def _limit_exceeded() -> TurnStopped:
 def _opening_messages(request: TurnRequest) -> list[_Message]:
     messages: list[_Message] = [{"role": "system", "content": request.turn.system}]
     messages += [
-        _Message(role=message.role.value, content=message.text)
-        for message in request.turn.messages
+        _Message(role=message.role.value, content=message.text) for message in request.turn.messages
     ]
     return messages
 
@@ -489,11 +488,11 @@ def _body(request: TurnRequest, messages: list[_Message], user: str) -> str:
 
 def _summed(usages: list[TurnUsage | None]) -> TurnUsage | None:
     """The turn's usage: its rounds' summed, or ``None`` when any round has none."""
-    total = TurnUsage(input_tokens=0, cached_input_tokens=0, cache_write_tokens=0, output_tokens=0)
+    total: TurnUsage | None = None
     for usage in usages:
         if usage is None:
             return None
-        total += usage
+        total = usage if total is None else total + usage
     return total
 
 
